@@ -2,6 +2,28 @@
 
 A comprehensive authentication and user management microservice providing secure account creation, verification, authentication, and user lifecycle management capabilities for both merchants and regular users.
 
+## 🚨 Recent Updates
+
+### Field Naming Convention Change
+The API has been updated to use **snake_case** field naming convention instead of camelCase:
+- `firstName` → `first_name`
+- `lastName` → `last_name`
+- `userType` → `user_type`
+- `emailVerified` → `email_verified`
+- `phoneVerified` → `phone_verified`
+- `createdAt` → `created_at`
+- `updatedAt` → `updated_at`
+- `lastLoginAt` → `last_login_at`
+- `failedLoginAttempts` → `failed_login_attempts`
+- `lockedUntil` → `locked_until`
+- `userMerchantId` → `user_merchant_id`
+
+### User Registration Changes
+- **Removed**: Independent user registration
+- **Required**: Users must now register under a merchant using `user_merchant_id`
+- **Simplified**: Removed `dateOfBirth` and `address` fields from user registration
+- **Added**: `country` field is now required for all users
+
 ## Features
 
 ### ✅ Implemented
@@ -70,6 +92,115 @@ A comprehensive authentication and user management microservice providing secure
 
 4. Update the `.env` file with your configuration values.
 
+## Environment Variables
+
+The application requires the following environment variables. Create a `.env` file in the project root with these settings:
+
+### Core Configuration
+```bash
+# Application Environment
+NODE_ENV=development                    # Options: development, production, test
+PORT=3000                              # Server port (default: 3000)
+```
+
+### Database Configuration
+```bash
+# PostgreSQL Database
+DATABASE_URL=postgresql://user:password@localhost:5432/auth_db  # Required
+DATABASE_SSL=false                     # Enable SSL for database connection (default: false)
+
+# Redis Cache
+REDIS_URL=redis://localhost:6379      # Required
+REDIS_PASSWORD=                        # Optional redis password
+```
+
+### Security Configuration
+```bash
+# JWT Authentication
+JWT_SECRET=your-super-secure-secret-key-minimum-32-characters  # Required (min 32 chars)
+JWT_EXPIRES_IN=1h                      # JWT token expiration (default: 1h)
+JWT_REFRESH_EXPIRES_IN=7d              # Refresh token expiration (default: 7d)
+
+# Password Hashing
+BCRYPT_ROUNDS=12                       # Password hashing rounds (10-15, default: 12)
+
+# Rate Limiting
+RATE_LIMIT_WINDOW_MS=900000            # Rate limit window in ms (default: 15 minutes)
+RATE_LIMIT_MAX_REQUESTS=100            # Max requests per window (default: 100)
+
+# Account Security
+ACCOUNT_LOCKOUT_ATTEMPTS=5             # Failed login attempts before lockout (default: 5)
+ACCOUNT_LOCKOUT_DURATION=1800          # Account lockout duration in seconds (default: 30 min)
+
+# CORS Settings
+CORS_ALLOWED_ORIGINS=http://localhost:3000  # Comma-separated allowed origins
+```
+
+### Email Configuration
+```bash
+# SMTP Settings (Required for email verification)
+SMTP_HOST=smtp.gmail.com               # Required
+SMTP_PORT=587                          # Default: 587
+SMTP_SECURE=false                      # Use TLS (default: false)
+SMTP_USER=your-email@gmail.com         # Required
+SMTP_PASS=your-app-password            # Required
+FROM_EMAIL=noreply@yourapp.com         # Required
+```
+
+### SMS Configuration (Optional - Twilio)
+```bash
+# Twilio Settings (Optional for SMS OTP)
+TWILIO_ACCOUNT_SID=your-twilio-sid     # Optional
+TWILIO_AUTH_TOKEN=your-twilio-token    # Optional
+TWILIO_PHONE_NUMBER=+1234567890        # Optional
+```
+
+### OTP Configuration
+```bash
+# OTP Settings
+OTP_EXPIRES_IN=300                     # OTP expiration in seconds (default: 5 min)
+OTP_MAX_ATTEMPTS=3                     # Max OTP verification attempts (default: 3)
+OTP_LOCKOUT_DURATION=900               # OTP lockout duration in seconds (default: 15 min)
+```
+
+### Verification Settings
+```bash
+# Email/Password Reset
+EMAIL_VERIFICATION_EXPIRES_IN=86400    # Email verification expiry in seconds (default: 24 hours)
+PASSWORD_RESET_EXPIRES_IN=3600         # Password reset token expiry in seconds (default: 1 hour)
+```
+
+### Validation Rules
+- **JWT_SECRET**: Must be at least 32 characters long
+- **BCRYPT_ROUNDS**: Must be between 10-15 (higher = more secure but slower)
+- **EMAIL fields**: Must be valid email format
+- **PORT**: Must be a valid port number
+- **Duration fields**: Must be positive integers (in seconds)
+
+### Example .env File
+```bash
+# Core
+NODE_ENV=development
+PORT=3000
+
+# Database
+DATABASE_URL=postgresql://postgres:password@localhost:5432/auth_db
+REDIS_URL=redis://localhost:6379
+
+# Security
+JWT_SECRET=your-super-secure-secret-key-at-least-32-characters-long
+BCRYPT_ROUNDS=12
+
+# Email
+SMTP_HOST=smtp.gmail.com
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-app-password
+FROM_EMAIL=noreply@yourapp.com
+
+# CORS
+CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
+```
+
 5. Build the project:
    ```bash
    npm run build
@@ -117,14 +248,16 @@ You can test the implemented endpoints using curl or any API testing tool:
 # Health check
 curl http://localhost:3000/health
 
-# Register a user
+# Register a user (must include user_merchant_id)
 curl -X POST http://localhost:3000/api/v1/auth/register/user \
   -H "Content-Type: application/json" \
   -d '{
     "email": "test@example.com",
     "password": "SecurePass123!",
-    "firstName": "John",
-    "lastName": "Doe"
+    "first_name": "John",
+    "last_name": "Doe",
+    "user_merchant_id": "merchant_001",
+    "country": "USA"
   }'
 ```
 
@@ -166,22 +299,18 @@ The service provides the following API endpoints:
 ### User Registration
 **`POST /api/v1/auth/register/user`**
 
+**Note**: Users must register under a merchant with a valid `user_merchant_id`.
+
 **Request Body:**
 ```json
 {
   "email": "john.doe@example.com",
   "password": "SecurePass123!",
-  "firstName": "John",
-  "lastName": "Doe",
+  "first_name": "John",
+  "last_name": "Doe",
   "phone": "+1234567890",
-  "dateOfBirth": "1990-01-01",
-  "address": {
-    "street": "123 Main Street",
-    "city": "New York",
-    "state": "NY",
-    "country": "USA",
-    "postalCode": "10001"
-  }
+  "user_merchant_id": "merchant_001",
+  "country": "USA"
 }
 ```
 
@@ -194,12 +323,12 @@ The service provides the following API endpoints:
     "user": {
       "id": "550e8400-e29b-41d4-a716-446655440000",
       "email": "john.doe@example.com",
-      "firstName": "John",
-      "lastName": "Doe",
-      "userType": "user",
+      "first_name": "John",
+      "last_name": "Doe",
+      "user_type": "user",
       "status": "pending",
-      "emailVerified": false,
-      "createdAt": "2025-01-10T09:00:00.000Z"
+      "email_verified": false,
+      "created_at": "2025-01-10T09:00:00.000Z"
     }
   }
 }
@@ -221,21 +350,11 @@ The service provides the following API endpoints:
 {
   "email": "merchant@example.com",
   "password": "SecurePass123!",
-  "firstName": "John",
-  "lastName": "Smith",
+  "first_name": "John",
+  "last_name": "Smith",
   "phone": "+1234567890",
-  "businessName": "Smith Electronics",
-  "businessType": "Electronics Retail",
-  "businessRegistrationNumber": "REG123456789",
-  "businessAddress": {
-    "street": "456 Business Ave",
-    "city": "Los Angeles",
-    "state": "CA",
-    "country": "USA",
-    "postalCode": "90210"
-  },
-  "website": "https://smithelectronics.com",
-  "description": "Leading electronics retailer"
+  "user_merchant_id": "merchant_001",
+  "country": "USA"
 }
 ```
 
@@ -248,14 +367,14 @@ The service provides the following API endpoints:
     "merchant": {
       "id": "550e8400-e29b-41d4-a716-446655440000",
       "email": "merchant@example.com",
-      "firstName": "John",
-      "lastName": "Smith",
-      "userType": "merchant",
+      "first_name": "John",
+      "last_name": "Smith",
+      "user_type": "merchant",
       "status": "pending",
-      "emailVerified": false,
-      "businessName": "Smith Electronics",
-      "businessType": "Electronics Retail",
-      "createdAt": "2025-01-10T09:00:00.000Z"
+      "email_verified": false,
+      "user_merchant_id": "merchant_001",
+      "country": "USA",
+      "created_at": "2025-01-10T09:00:00.000Z"
     }
   }
 }
@@ -296,52 +415,36 @@ interface BaseUser {
   id: string;
   email: string;
   password: string;
-  firstName: string;
-  lastName: string;
+  first_name: string;
+  last_name: string;
   phone?: string;
-  userType: UserType;
+  user_type: UserType;
   status: AccountStatus;
-  emailVerified: boolean;
-  phoneVerified: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-  lastLoginAt?: Date;
-  failedLoginAttempts: number;
-  lockedUntil?: Date;
+  email_verified: boolean;
+  phone_verified: boolean;
+  created_at: Date;
+  updated_at: Date;
+  last_login_at?: Date;
+  failed_login_attempts: number;
+  locked_until?: Date;
 }
 ```
 
 ### User Interface
 ```typescript
 interface User extends BaseUser {
-  userType: UserType.USER;
-  dateOfBirth?: Date;
-  address?: {
-    street: string;
-    city: string;
-    state: string;
-    country: string;
-    postalCode: string;
-  };
+  user_type: UserType.USER;
+  user_merchant_id: string;
+  country: string;
 }
 ```
 
 ### Merchant Interface
 ```typescript
 interface Merchant extends BaseUser {
-  userType: UserType.MERCHANT;
-  businessName: string;
-  businessType: string;
-  businessRegistrationNumber?: string;
-  businessAddress: {
-    street: string;
-    city: string;
-    state: string;
-    country: string;
-    postalCode: string;
-  };
-  website?: string;
-  description?: string;
+  user_type: UserType.MERCHANT;
+  user_merchant_id: string;
+  country: string;
 }
 ```
 
@@ -363,12 +466,14 @@ interface Merchant extends BaseUser {
 - Must be in international format (e.g., +1234567890)
 - Optional field for both users and merchants
 
-### Business Requirements (Merchants)
-- Business name: 2-200 characters
-- Business type: 2-100 characters
-- Business address: Required with all fields
-- Website: Must be valid URL format (optional)
-- Description: Maximum 1000 characters (optional)
+### User Requirements
+- Must be associated with a valid merchant via `user_merchant_id`
+- Country: Required field indicating user's location
+- Phone: Optional field in international format
+
+### Merchant Requirements
+- User Merchant ID: Required, unique identifier for merchant
+- Country: Required, user's country location
 
 ## Error Handling
 

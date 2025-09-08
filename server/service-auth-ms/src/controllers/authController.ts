@@ -53,12 +53,12 @@ export class AuthController {
           user: {
             id: result.user!.id,
             email: result.user!.email,
-            firstName: result.user!.firstName,
-            lastName: result.user!.lastName,
-            userType: result.user!.userType,
+            first_name: result.user!.first_name,
+            last_name: result.user!.last_name,
+            user_type: result.user!.user_type,
             status: result.user!.status,
-            emailVerified: result.user!.emailVerified,
-            createdAt: result.user!.createdAt
+            email_verified: result.user!.email_verified,
+            created_at: result.user!.created_at
           }
         }
       });
@@ -97,7 +97,7 @@ export class AuthController {
       logger.info('Merchant registration successful', {
         userId: result.merchant!.id,
         email: result.merchant!.email,
-        businessName: result.merchant!.businessName
+        user_merchant_id: result.merchant!.user_merchant_id
       });
 
       res.status(201).json({
@@ -107,14 +107,14 @@ export class AuthController {
           merchant: {
             id: result.merchant!.id,
             email: result.merchant!.email,
-            firstName: result.merchant!.firstName,
-            lastName: result.merchant!.lastName,
-            userType: result.merchant!.userType,
+            first_name: result.merchant!.first_name,
+            last_name: result.merchant!.last_name,
+            user_type: result.merchant!.user_type,
             status: result.merchant!.status,
-            emailVerified: result.merchant!.emailVerified,
-            businessName: result.merchant!.businessName,
-            businessType: result.merchant!.businessType,
-            createdAt: result.merchant!.createdAt
+            email_verified: result.merchant!.email_verified,
+            user_merchant_id: result.merchant!.user_merchant_id,
+            country: result.merchant!.country,
+            created_at: result.merchant!.created_at
           }
         }
       });

@@ -12,17 +12,11 @@ describe('AuthController - Registration', () => {
     const validUserData = {
       email: 'john.doe@example.com',
       password: 'SecurePass123!',
-      firstName: 'John',
-      lastName: 'Doe',
+      first_name: 'John',
+      last_name: 'Doe',
       phone: '+1234567890',
-      dateOfBirth: '1990-01-01',
-      address: {
-        street: '123 Main Street',
-        city: 'New York',
-        state: 'NY',
-        country: 'USA',
-        postalCode: '10001'
-      }
+      user_merchant_id: 'merchant_001',
+      country: 'USA'
     };
 
     it('should register a new user successfully', async () => {
@@ -38,12 +32,12 @@ describe('AuthController - Registration', () => {
           user: {
             id: expect.any(String),
             email: validUserData.email,
-            firstName: validUserData.firstName,
-            lastName: validUserData.lastName,
-            userType: 'user',
+            first_name: validUserData.first_name,
+            last_name: validUserData.last_name,
+            user_type: 'user',
             status: 'pending',
-            emailVerified: false,
-            createdAt: expect.any(String)
+            email_verified: false,
+            created_at: expect.any(String)
           }
         }
       });
@@ -53,8 +47,10 @@ describe('AuthController - Registration', () => {
       const minimalUserData = {
         email: 'jane.doe@example.com',
         password: 'SecurePass123!',
-        firstName: 'Jane',
-        lastName: 'Doe'
+        first_name: 'Jane',
+        last_name: 'Doe',
+        user_merchant_id: 'merchant_002',
+        country: 'USA'
       };
 
       const response = await request(app)
@@ -136,21 +132,11 @@ describe('AuthController - Registration', () => {
     const validMerchantData = {
       email: 'merchant@example.com',
       password: 'SecurePass123!',
-      firstName: 'John',
-      lastName: 'Smith',
+      first_name: 'John',
+      last_name: 'Smith',
       phone: '+1234567890',
-      businessName: 'Smith Electronics',
-      businessType: 'Electronics Retail',
-      businessRegistrationNumber: 'REG123456789',
-      businessAddress: {
-        street: '456 Business Ave',
-        city: 'Los Angeles',
-        state: 'CA',
-        country: 'USA',
-        postalCode: '90210'
-      },
-      website: 'https://smithelectronics.com',
-      description: 'Leading electronics retailer'
+      user_merchant_id: 'merchant_001',
+      country: 'USA'
     };
 
     it('should register a new merchant successfully', async () => {
@@ -166,14 +152,14 @@ describe('AuthController - Registration', () => {
           merchant: {
             id: expect.any(String),
             email: validMerchantData.email,
-            firstName: validMerchantData.firstName,
-            lastName: validMerchantData.lastName,
-            userType: 'merchant',
+            first_name: validMerchantData.first_name,
+            last_name: validMerchantData.last_name,
+            user_type: 'merchant',
             status: 'pending',
-            emailVerified: false,
-            businessName: validMerchantData.businessName,
-            businessType: validMerchantData.businessType,
-            createdAt: expect.any(String)
+            email_verified: false,
+            user_merchant_id: validMerchantData.user_merchant_id,
+            country: validMerchantData.country,
+            created_at: expect.any(String)
           }
         }
       });
@@ -183,17 +169,10 @@ describe('AuthController - Registration', () => {
       const minimalMerchantData = {
         email: 'minimal@merchant.com',
         password: 'SecurePass123!',
-        firstName: 'Jane',
-        lastName: 'Business',
-        businessName: 'Jane Business Co',
-        businessType: 'Consulting',
-        businessAddress: {
-          street: '789 Business St',
-          city: 'Chicago',
-          state: 'IL',
-          country: 'USA',
-          postalCode: '60601'
-        }
+        first_name: 'Jane',
+        last_name: 'Business',
+        user_merchant_id: 'merchant_003',
+        country: 'USA'
       };
 
       const response = await request(app)
@@ -202,7 +181,7 @@ describe('AuthController - Registration', () => {
         .expect(201);
 
       expect(response.body.success).toBe(true);
-      expect(response.body.data.merchant.businessName).toBe(minimalMerchantData.businessName);
+      expect(response.body.data.merchant.user_merchant_id).toBe(minimalMerchantData.user_merchant_id);
     });
 
     it('should reject merchant registration with duplicate email', async () => {
@@ -224,13 +203,13 @@ describe('AuthController - Registration', () => {
       });
     });
 
-    it('should reject merchant registration with missing business fields', async () => {
+    it('should reject merchant registration with missing required fields', async () => {
       const invalidData = {
         email: 'test@merchant.com',
         password: 'SecurePass123!',
-        firstName: 'Test',
-        lastName: 'Merchant'
-        // Missing business fields
+        first_name: 'Test',
+        last_name: 'Merchant'
+        // Missing user_merchant_id and country
       };
 
       const response = await request(app)
@@ -242,20 +221,7 @@ describe('AuthController - Registration', () => {
       expect(response.body.error).toBe('Validation failed');
     });
 
-    it('should reject merchant registration with invalid website URL', async () => {
-      const invalidData = {
-        ...validMerchantData,
-        website: 'not-a-valid-url'
-      };
 
-      const response = await request(app)
-        .post('/api/v1/auth/register/merchant')
-        .send(invalidData)
-        .expect(400);
-
-      expect(response.body.success).toBe(false);
-      expect(response.body.error).toBe('Validation failed');
-    });
   });
 
   describe('Cross-type email uniqueness', () => {
@@ -263,24 +229,19 @@ describe('AuthController - Registration', () => {
       const userData = {
         email: 'shared@example.com',
         password: 'SecurePass123!',
-        firstName: 'John',
-        lastName: 'Doe'
+        first_name: 'John',
+        last_name: 'Doe',
+        user_merchant_id: 'merchant_001',
+        country: 'USA'
       };
 
       const merchantData = {
         email: 'shared@example.com',
         password: 'SecurePass123!',
-        firstName: 'Jane',
-        lastName: 'Business',
-        businessName: 'Jane Business Co',
-        businessType: 'Consulting',
-        businessAddress: {
-          street: '789 Business St',
-          city: 'Chicago',
-          state: 'IL',
-          country: 'USA',
-          postalCode: '60601'
-        }
+        first_name: 'Jane',
+        last_name: 'Business',
+        user_merchant_id: 'merchant_002',
+        country: 'USA'
       };
 
       // Register user first

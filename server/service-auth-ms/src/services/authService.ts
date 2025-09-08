@@ -6,37 +6,21 @@ import { logger } from '../utils/logger';
 export interface UserRegistrationData {
   email: string;
   password: string;
-  firstName: string;
-  lastName: string;
+  first_name: string;
+  last_name: string;
   phone?: string;
-  dateOfBirth?: Date;
-  address?: {
-    street: string;
-    city: string;
-    state: string;
-    country: string;
-    postalCode: string;
-  };
+  user_merchant_id: string;
+  country: string;
 }
 
 export interface MerchantRegistrationData {
   email: string;
   password: string;
-  firstName: string;
-  lastName: string;
+  first_name: string;
+  last_name: string;
   phone?: string;
-  businessName: string;
-  businessType: string;
-  businessRegistrationNumber?: string;
-  businessAddress: {
-    street: string;
-    city: string;
-    state: string;
-    country: string;
-    postalCode: string;
-  };
-  website?: string;
-  description?: string;
+  user_merchant_id: string;
+  country: string;
 }
 
 export class AuthService {
@@ -58,18 +42,18 @@ export class AuthService {
       const hashedPassword = await hashPassword(userData.password);
 
       // Create user object
-      const userToCreate: Omit<User, 'id' | 'createdAt' | 'updatedAt' | 'failedLoginAttempts'> = {
+      const userToCreate: Omit<User, 'id' | 'created_at' | 'updated_at' | 'failed_login_attempts'> = {
         email: userData.email.toLowerCase(),
         password: hashedPassword,
-        firstName: userData.firstName,
-        lastName: userData.lastName,
-        phone: userData.phone,
-        userType: UserType.USER,
+        first_name: userData.first_name,
+        last_name: userData.last_name,
+        user_type: UserType.USER,
         status: AccountStatus.PENDING,
-        emailVerified: false,
-        phoneVerified: false,
-        ...(userData.dateOfBirth && { dateOfBirth: userData.dateOfBirth }),
-        ...(userData.address && { address: userData.address })
+        email_verified: false,
+        phone_verified: false,
+        user_merchant_id: userData.user_merchant_id,
+        country: userData.country,
+        ...(userData.phone && { phone: userData.phone })
       };
 
       const createdUser = await mockDb.createUser(userToCreate) as User;
@@ -77,7 +61,7 @@ export class AuthService {
       logger.info('User registered successfully', {
         userId: createdUser.id,
         email: createdUser.email,
-        userType: createdUser.userType
+        user_type: createdUser.user_type
       });
 
       // Remove password from response
@@ -115,22 +99,18 @@ export class AuthService {
       const hashedPassword = await hashPassword(merchantData.password);
 
       // Create merchant object
-      const merchantToCreate: Omit<Merchant, 'id' | 'createdAt' | 'updatedAt' | 'failedLoginAttempts'> = {
+      const merchantToCreate: Omit<Merchant, 'id' | 'created_at' | 'updated_at' | 'failed_login_attempts'> = {
         email: merchantData.email.toLowerCase(),
         password: hashedPassword,
-        firstName: merchantData.firstName,
-        lastName: merchantData.lastName,
-        userType: UserType.MERCHANT,
+        first_name: merchantData.first_name,
+        last_name: merchantData.last_name,
+        user_type: UserType.MERCHANT,
         status: AccountStatus.PENDING,
-        emailVerified: false,
-        phoneVerified: false,
-        businessName: merchantData.businessName,
-        businessType: merchantData.businessType,
-        businessAddress: merchantData.businessAddress,
-        ...(merchantData.phone && { phone: merchantData.phone }),
-        ...(merchantData.businessRegistrationNumber && { businessRegistrationNumber: merchantData.businessRegistrationNumber }),
-        ...(merchantData.website && { website: merchantData.website }),
-        ...(merchantData.description && { description: merchantData.description })
+        email_verified: false,
+        phone_verified: false,
+        user_merchant_id: merchantData.user_merchant_id,
+        country: merchantData.country,
+        ...(merchantData.phone && { phone: merchantData.phone })
       };
 
       const createdMerchant = await mockDb.createUser(merchantToCreate) as Merchant;
@@ -138,8 +118,8 @@ export class AuthService {
       logger.info('Merchant registered successfully', {
         userId: createdMerchant.id,
         email: createdMerchant.email,
-        userType: createdMerchant.userType,
-        businessName: createdMerchant.businessName
+        user_type: createdMerchant.user_type,
+        user_merchant_id: createdMerchant.user_merchant_id
       });
 
       // Remove password from response

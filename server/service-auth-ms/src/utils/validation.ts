@@ -33,26 +33,22 @@ const addressSchema = Joi.object({
 export const userRegistrationSchema = Joi.object({
   email: emailSchema,
   password: passwordSchema,
-  firstName: nameSchema,
-  lastName: nameSchema,
+  first_name: nameSchema,
+  last_name: nameSchema,
   phone: phoneSchema,
-  dateOfBirth: Joi.date().max('now').optional(),
-  address: addressSchema.optional()
+  user_merchant_id: Joi.string().min(5).max(50).required(),
+  country: Joi.string().min(2).max(100).required()
 });
 
 // Merchant registration validation schema
 export const merchantRegistrationSchema = Joi.object({
   email: emailSchema,
   password: passwordSchema,
-  firstName: nameSchema,
-  lastName: nameSchema,
+  first_name: nameSchema,
+  last_name: nameSchema,
   phone: phoneSchema,
-  businessName: Joi.string().min(2).max(200).required(),
-  businessType: Joi.string().min(2).max(100).required(),
-  businessRegistrationNumber: Joi.string().min(5).max(50).optional(),
-  businessAddress: addressSchema.required(),
-  website: Joi.string().uri().optional(),
-  description: Joi.string().max(1000).optional()
+  user_merchant_id: Joi.string().min(5).max(50).required(),
+  country: Joi.string().min(2).max(100).required()
 });
 
 // Validation helper function
@@ -63,7 +59,7 @@ export const validateInput = <T>(schema: Joi.ObjectSchema, data: any): { error?:
   });
   
   if (error) {
-    const errorMessage = error.details.map(detail => detail.message).join(', ');
+    const errorMessage = error.details.map((detail: any) => detail.message).join(', ');
     return { error: errorMessage };
   }
   

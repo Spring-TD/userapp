@@ -25,16 +25,16 @@ class MockDatabase {
   /**
    * Create a new user
    */
-  async createUser(userData: Omit<UserAccount, 'id' | 'createdAt' | 'updatedAt' | 'failedLoginAttempts'>): Promise<UserAccount> {
+  async createUser(userData: Omit<UserAccount, 'id' | 'created_at' | 'updated_at' | 'failed_login_attempts'>): Promise<UserAccount> {
     const id = uuidv4();
     const now = new Date();
     
     const user: UserAccount = {
       ...userData,
       id,
-      createdAt: now,
-      updatedAt: now,
-      failedLoginAttempts: 0
+      created_at: now,
+      updated_at: now,
+      failed_login_attempts: 0
     } as UserAccount;
 
     this.users.set(id, user);
@@ -53,7 +53,7 @@ class MockDatabase {
     const updatedUser = {
       ...user,
       ...updates,
-      updatedAt: new Date()
+      updated_at: new Date()
     } as UserAccount;
 
     this.users.set(id, updatedUser);
