@@ -68,7 +68,7 @@ A comprehensive authentication and user management microservice providing secure
    cp .env.example .env
    ```
 
-4. Update the `.env` file with your configuration values (see Environment Variables section).
+4. Update the `.env` file with your configuration values.
 
 5. Build the project:
    ```bash
@@ -435,79 +435,6 @@ The service currently uses an in-memory mock database for development and testin
 - CRUD operations for user management
 - Email uniqueness validation
 - Data persistence during runtime (resets on restart)
-
-## Environment Variables
-
-The following environment variables are required:
-
-### Core Configuration
-```bash
-NODE_ENV=development|production|test
-PORT=3000
-```
-
-### Database Configuration
-```bash
-DATABASE_URL=postgresql://username:password@localhost:5432/database_name
-DATABASE_SSL=false
-```
-
-### JWT Configuration
-```bash
-JWT_SECRET=your-super-secure-jwt-secret-key-minimum-32-characters
-JWT_EXPIRES_IN=1h
-JWT_REFRESH_EXPIRES_IN=7d
-```
-
-### Password Security
-```bash
-BCRYPT_ROUNDS=12
-```
-
-### Rate Limiting
-```bash
-RATE_LIMIT_WINDOW_MS=900000  # 15 minutes
-RATE_LIMIT_MAX_REQUESTS=100
-```
-
-### OTP Configuration
-```bash
-OTP_EXPIRES_IN=300  # 5 minutes
-OTP_MAX_ATTEMPTS=3
-OTP_LOCKOUT_DURATION=900  # 15 minutes
-```
-
-### Email Configuration (SMTP)
-```bash
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_SECURE=false
-SMTP_USER=your-email@gmail.com
-SMTP_PASS=your-app-password
-FROM_EMAIL=noreply@yourapp.com
-```
-
-### SMS Configuration (Twilio) - Optional
-```bash
-TWILIO_ACCOUNT_SID=your-twilio-account-sid
-TWILIO_AUTH_TOKEN=your-twilio-auth-token
-TWILIO_PHONE_NUMBER=+1234567890
-```
-
-### CORS Configuration
-```bash
-CORS_ALLOWED_ORIGINS=http://localhost:3000,https://yourapp.com
-```
-
-### Security Settings
-```bash
-ACCOUNT_LOCKOUT_ATTEMPTS=5
-ACCOUNT_LOCKOUT_DURATION=1800  # 30 minutes
-EMAIL_VERIFICATION_EXPIRES_IN=86400  # 24 hours
-PASSWORD_RESET_EXPIRES_IN=3600  # 1 hour
-```
-
-**Note**: Create a `.env` file in the project root and populate these variables. Never commit the `.env` file to version control.
 
 ## Project Structure
 
