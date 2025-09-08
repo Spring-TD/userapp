@@ -5,17 +5,11 @@ describe('Validation Utilities', () => {
     const validUserData = {
       email: 'test@example.com',
       password: 'SecurePass123!',
-      firstName: 'John',
-      lastName: 'Doe',
+      first_name: 'John',
+      last_name: 'Doe',
       phone: '+1234567890',
-      dateOfBirth: '1990-01-01',
-      address: {
-        street: '123 Main St',
-        city: 'New York',
-        state: 'NY',
-        country: 'USA',
-        postalCode: '10001'
-      }
+      user_merchant_id: 'merchant_001',
+      country: 'USA'
     };
 
     it('should validate correct user data', () => {
@@ -29,8 +23,10 @@ describe('Validation Utilities', () => {
       const minimalData = {
         email: 'test@example.com',
         password: 'SecurePass123!',
-        firstName: 'John',
-        lastName: 'Doe'
+        first_name: 'John',
+        last_name: 'Doe',
+        user_merchant_id: 'merchant_001',
+        country: 'USA'
       };
 
       const { error, value } = validateInput(userRegistrationSchema, minimalData);
@@ -56,58 +52,35 @@ describe('Validation Utilities', () => {
       expect(error).toContain('Phone number');
     });
 
-    it('should reject future date of birth', () => {
-      const futureDate = new Date();
-      futureDate.setFullYear(futureDate.getFullYear() + 1);
-      const invalidData = { ...validUserData, dateOfBirth: futureDate.toISOString() };
-      const { error } = validateInput(userRegistrationSchema, invalidData);
-      expect(error).toBeDefined();
-    });
+
   });
 
   describe('Merchant Registration Validation', () => {
     const validMerchantData = {
       email: 'merchant@example.com',
       password: 'SecurePass123!',
-      firstName: 'John',
-      lastName: 'Smith',
+      first_name: 'John',
+      last_name: 'Smith',
       phone: '+1234567890',
-      businessName: 'Smith Electronics',
-      businessType: 'Electronics',
-      businessRegistrationNumber: 'REG123456789',
-      businessAddress: {
-        street: '456 Business Ave',
-        city: 'Los Angeles',
-        state: 'CA',
-        country: 'USA',
-        postalCode: '90210'
-      },
-      website: 'https://smithelectronics.com',
-      description: 'Electronics retailer'
+      user_merchant_id: 'merchant_001',
+      country: 'USA'
     };
 
     it('should validate correct merchant data', () => {
       const { error, value } = validateInput(merchantRegistrationSchema, validMerchantData);
       expect(error).toBeUndefined();
       expect(value).toBeDefined();
-      expect(value?.businessName).toBe(validMerchantData.businessName);
+      expect(value?.user_merchant_id).toBe(validMerchantData.user_merchant_id);
     });
 
     it('should validate minimal merchant data', () => {
       const minimalData = {
         email: 'merchant@example.com',
         password: 'SecurePass123!',
-        firstName: 'John',
-        lastName: 'Smith',
-        businessName: 'Smith Co',
-        businessType: 'Retail',
-        businessAddress: {
-          street: '456 Business Ave',
-          city: 'Los Angeles',
-          state: 'CA',
-          country: 'USA',
-          postalCode: '90210'
-        }
+        first_name: 'John',
+        last_name: 'Smith',
+        user_merchant_id: 'merchant_002',
+        country: 'USA'
       };
 
       const { error, value } = validateInput(merchantRegistrationSchema, minimalData);
@@ -115,30 +88,20 @@ describe('Validation Utilities', () => {
       expect(value).toBeDefined();
     });
 
-    it('should reject missing business name', () => {
+    it('should reject missing user_merchant_id', () => {
       const invalidData = { ...validMerchantData };
-      delete (invalidData as any).businessName;
+      delete (invalidData as any).user_merchant_id;
       const { error } = validateInput(merchantRegistrationSchema, invalidData);
-      expect(error).toContain('businessName');
+      expect(error).toContain('user_merchant_id');
     });
 
-    it('should reject missing business address', () => {
+    it('should reject missing country', () => {
       const invalidData = { ...validMerchantData };
-      delete (invalidData as any).businessAddress;
+      delete (invalidData as any).country;
       const { error } = validateInput(merchantRegistrationSchema, invalidData);
-      expect(error).toContain('businessAddress');
+      expect(error).toContain('country');
     });
 
-    it('should reject invalid website URL', () => {
-      const invalidData = { ...validMerchantData, website: 'not-a-url' };
-      const { error } = validateInput(merchantRegistrationSchema, invalidData);
-      expect(error).toContain('uri');
-    });
 
-    it('should accept valid website URL', () => {
-      const validData = { ...validMerchantData, website: 'https://example.com' };
-      const { error } = validateInput(merchantRegistrationSchema, validData);
-      expect(error).toBeUndefined();
-    });
   });
 });
