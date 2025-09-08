@@ -14,14 +14,14 @@ A comprehensive authentication and user management microservice providing secure
 - Structured logging and error handling
 - Comprehensive test coverage
 
-### 🚧 Planned Implementation
+### Planned Implementation
 - Email/SMS verification
 - JWT-based authentication
 - OTP (One-Time Password) support
 - Password management and reset
 - User profile management
 - Administrative account operations
-- Database integration (PostgreSQL + Prisma)
+- Database integration (MongoDB)
 - Redis caching
 - Comprehensive audit trails
 
@@ -29,7 +29,7 @@ A comprehensive authentication and user management microservice providing secure
 
 - **Runtime**: Node.js 18+
 - **Framework**: Express.js with TypeScript
-- **Database**: PostgreSQL 14+ (configured, currently using mock database)
+- **Database**: MongoDB (configured, currently using mock database)
 - **Cache**: Redis 7+ (configured, not yet implemented)
 - **Authentication**: JWT (JSON Web Tokens) - *planned implementation*
 - **Password Hashing**: bcrypt ✅
@@ -45,10 +45,10 @@ A comprehensive authentication and user management microservice providing secure
 
 - Node.js 18 or higher
 - npm or yarn
-- PostgreSQL 14+ (for production)
+- MongoDB 4+ (for production)
 - Redis 7+ (for production)
 
-**Note**: For development, the service uses a mock in-memory database, so PostgreSQL and Redis are not required initially.
+**Note**: For development, the service uses a mock in-memory database, so MongoDB not required initially.
 
 ### Installation
 
@@ -424,7 +424,7 @@ All errors follow a consistent format:
 - Password reset functionality
 - OTP generation and verification
 - User profile management
-- Database integration (PostgreSQL + Prisma)
+- Database integration (MongoDB)
 - Redis caching implementation
 - Email/SMS notification services
 
@@ -450,12 +450,6 @@ PORT=3000
 ```bash
 DATABASE_URL=postgresql://username:password@localhost:5432/database_name
 DATABASE_SSL=false
-```
-
-### Redis Configuration
-```bash
-REDIS_URL=redis://localhost:6379
-REDIS_PASSWORD=  # Optional
 ```
 
 ### JWT Configuration
