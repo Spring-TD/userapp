@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+<<<<<<< HEAD
 import { AuthService } from '../services/authService';
 import { passwordResetRequestSchema, passwordResetSchema, passwordChangeSchema, validateInput } from '../utils/validation';
 import { logger } from '../utils/logger';
@@ -145,5 +146,28 @@ export class PasswordController {
       logger.error('Error in change password controller', { error: error instanceof Error ? error.message : 'Unknown error' });
       next(error);
     }
+=======
+
+// Placeholder for PasswordController
+// Will be implemented in task 12: Password management API endpoints
+
+export class PasswordController {
+  // POST /api/v1/password/forgot
+  static async forgot(_req: Request, res: Response, _next: NextFunction) {
+    // To be implemented
+    res.status(501).json({ message: 'Not implemented yet' });
+  }
+
+  // POST /api/v1/password/reset
+  static async reset(_req: Request, res: Response, _next: NextFunction) {
+    // To be implemented
+    res.status(501).json({ message: 'Not implemented yet' });
+  }
+
+  // PUT /api/v1/password/change
+  static async change(_req: Request, res: Response, _next: NextFunction) {
+    // To be implemented
+    res.status(501).json({ message: 'Not implemented yet' });
+>>>>>>> 61b77a379aa21ff00899f7fb6df7b19f71b6190b
   }
 }

@@ -1,5 +1,6 @@
 import { User, Merchant, UserType, AccountStatus, UserAccount } from '../models/User';
 import { mockDb } from '../utils/mockDatabase';
+<<<<<<< HEAD
 import { hashPassword, comparePassword, generateAccessToken, generateRefreshToken, verifyEmailVerificationToken, generatePasswordResetToken, verifyPasswordResetToken } from '../utils/crypto';
 import { logger } from '../utils/logger';
 import { config } from '../config/environment';
@@ -8,6 +9,10 @@ import { emailService } from './emailService';
 
 // Type for user response without password
 export type UserResponse = Omit<UserAccount, 'password'>;
+=======
+import { hashPassword } from '../utils/crypto';
+import { logger } from '../utils/logger';
+>>>>>>> 61b77a379aa21ff00899f7fb6df7b19f71b6190b
 
 export interface UserRegistrationData {
   email: string;
@@ -166,6 +171,7 @@ export class AuthService {
   static async getUserById(id: string): Promise<UserAccount | null> {
     return mockDb.findUserById(id);
   }
+<<<<<<< HEAD
 
   /**
    * Login user with email and password
@@ -616,4 +622,6 @@ export class AuthService {
       };
     }
   }
+=======
+>>>>>>> 61b77a379aa21ff00899f7fb6df7b19f71b6190b
 }

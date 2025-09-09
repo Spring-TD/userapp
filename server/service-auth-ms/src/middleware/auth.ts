@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+<<<<<<< HEAD
 import { verifyToken, JWTPayload } from '../utils/crypto';
 import { logger } from '../utils/logger';
 import { tokenBlacklistService } from '../services/tokenBlacklistService';
@@ -114,4 +115,20 @@ export const optionalAuth = (req: Request, _res: Response, next: NextFunction): 
     // Continue without authentication
     next();
   }
+=======
+
+// Placeholder for authentication middleware
+// Will be implemented in task 5: Authentication utilities and JWT management
+
+export const authenticate = (_req: Request, _res: Response, next: NextFunction) => {
+  // To be implemented
+  next();
+};
+
+export const authorize = (_roles: string[]) => {
+  return (_req: Request, _res: Response, next: NextFunction) => {
+    // To be implemented
+    next();
+  };
+>>>>>>> 61b77a379aa21ff00899f7fb6df7b19f71b6190b
 };

@@ -20,6 +20,18 @@ const phoneSchema = Joi.string()
 
 const nameSchema = Joi.string().min(2).max(50).required();
 
+<<<<<<< HEAD
+=======
+// Address validation schema
+const addressSchema = Joi.object({
+  street: Joi.string().min(5).max(200).required(),
+  city: Joi.string().min(2).max(100).required(),
+  state: Joi.string().min(2).max(100).required(),
+  country: Joi.string().min(2).max(100).required(),
+  postalCode: Joi.string().min(3).max(20).required()
+});
+
+>>>>>>> 61b77a379aa21ff00899f7fb6df7b19f71b6190b
 // User registration validation schema
 export const userRegistrationSchema = Joi.object({
   email: emailSchema,
@@ -42,6 +54,7 @@ export const merchantRegistrationSchema = Joi.object({
   country: Joi.string().min(2).max(100).required()
 });
 
+<<<<<<< HEAD
 // Login validation schema
 export const loginSchema = Joi.object({
   email: emailSchema,
@@ -80,6 +93,8 @@ export const passwordChangeSchema = Joi.object({
   newPassword: passwordSchema
 });
 
+=======
+>>>>>>> 61b77a379aa21ff00899f7fb6df7b19f71b6190b
 // Validation helper function
 export const validateInput = <T>(schema: Joi.ObjectSchema, data: any): { error?: string; value?: T } => {
   const { error, value } = schema.validate(data, { 

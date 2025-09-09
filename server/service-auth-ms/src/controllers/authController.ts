@@ -1,6 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthService, UserRegistrationData, MerchantRegistrationData } from '../services/authService';
+<<<<<<< HEAD
 import { userRegistrationSchema, merchantRegistrationSchema, loginSchema, emailVerificationSchema, refreshTokenSchema, logoutSchema, validateInput } from '../utils/validation';
+=======
+import { userRegistrationSchema, merchantRegistrationSchema, validateInput } from '../utils/validation';
+>>>>>>> 61b77a379aa21ff00899f7fb6df7b19f71b6190b
 import { logger } from '../utils/logger';
 
 // Extend Request interface to include body typing
@@ -125,6 +129,7 @@ export class AuthController {
   }
 
   // POST /api/v1/auth/verify-account
+<<<<<<< HEAD
   static async verifyAccount(req: TypedRequest<{ token: string }>, res: ExpressResponse, next: NextFunction): Promise<void> {
     try {
       // Validate input data
@@ -314,5 +319,28 @@ export class AuthController {
       logger.error('Error in refresh controller', { error: error instanceof Error ? error.message : 'Unknown error' });
       next(error);
     }
+=======
+  static async verifyAccount(_req: Request, res: ExpressResponse, _next: NextFunction) {
+    // To be implemented in task 9: Account verification system
+    res.status(501).json({ message: 'Not implemented yet' });
+  }
+
+  // POST /api/v1/auth/login
+  static async login(_req: Request, res: ExpressResponse, _next: NextFunction) {
+    // To be implemented in task 10: Authentication endpoints implementation
+    res.status(501).json({ message: 'Not implemented yet' });
+  }
+
+  // POST /api/v1/auth/logout
+  static async logout(_req: Request, res: ExpressResponse, _next: NextFunction) {
+    // To be implemented in task 10: Authentication endpoints implementation
+    res.status(501).json({ message: 'Not implemented yet' });
+  }
+
+  // POST /api/v1/auth/refresh
+  static async refresh(_req: Request, res: ExpressResponse, _next: NextFunction) {
+    // To be implemented in task 10: Authentication endpoints implementation
+    res.status(501).json({ message: 'Not implemented yet' });
+>>>>>>> 61b77a379aa21ff00899f7fb6df7b19f71b6190b
   }
 }

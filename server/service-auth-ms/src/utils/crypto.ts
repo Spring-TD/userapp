@@ -1,7 +1,11 @@
 import bcrypt from 'bcrypt';
+<<<<<<< HEAD
 import jwt from 'jsonwebtoken';
 import { config } from '../config/environment';
 import { UserAccount, UserType } from '../models/User';
+=======
+import { config } from '../config/environment';
+>>>>>>> 61b77a379aa21ff00899f7fb6df7b19f71b6190b
 
 /**
  * Hash a password using bcrypt
@@ -27,6 +31,7 @@ export const generateRandomString = (length: number = 32): string => {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return result;
+<<<<<<< HEAD
 };
 
 /**
@@ -160,4 +165,6 @@ export const verifyPasswordResetToken = (token: string): { userId: string; email
   } catch (error) {
     return null;
   }
+=======
+>>>>>>> 61b77a379aa21ff00899f7fb6df7b19f71b6190b
 };
