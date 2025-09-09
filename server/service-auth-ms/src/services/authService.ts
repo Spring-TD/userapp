@@ -1,7 +1,13 @@
 import { User, Merchant, UserType, AccountStatus, UserAccount } from '../models/User';
 import { mockDb } from '../utils/mockDatabase';
-import { hashPassword } from '../utils/crypto';
+import { hashPassword, comparePassword, generateAccessToken, generateRefreshToken, verifyEmailVerificationToken, generatePasswordResetToken, verifyPasswordResetToken } from '../utils/crypto';
 import { logger } from '../utils/logger';
+import { config } from '../config/environment';
+import { tokenBlacklistService } from './tokenBlacklistService';
+import { emailService } from './emailService';
+
+// Type for user response without password
+export type UserResponse = Omit<UserAccount, 'password'>;
 
 export interface UserRegistrationData {
   email: string;
@@ -159,5 +165,455 @@ export class AuthService {
    */
   static async getUserById(id: string): Promise<UserAccount | null> {
     return mockDb.findUserById(id);
+  }
+
+  /**
+   * Login user with email and password
+   */
+  static async login(email: string, password: string): Promise<{ success: boolean; user?: UserResponse; accessToken?: string; refreshToken?: string; error?: string }> {
+    try {
+      // Find user by email
+      const user = await mockDb.findUserByEmail(email.toLowerCase());
+      if (!user) {
+        return {
+          success: false,
+          error: 'Invalid email or password'
+        };
+      }
+
+      // Check if account is locked
+      if (user.locked_until && new Date() < user.locked_until) {
+        const lockoutTime = Math.ceil((user.locked_until.getTime() - Date.now()) / 60000);
+        return {
+          success: false,
+          error: `Account is locked. Please try again in ${lockoutTime} minutes.`
+        };
+      }
+
+      // Check if account is active
+      if (user.status !== AccountStatus.ACTIVE) {
+        return {
+          success: false,
+          error: 'Account is not active. Please verify your email first.'
+        };
+      }
+
+      // Verify password
+      const isPasswordValid = await comparePassword(password, user.password);
+      if (!isPasswordValid) {
+        // Increment failed login attempts
+        const failedAttempts = (user.failed_login_attempts || 0) + 1;
+        const shouldLockAccount = failedAttempts >= config.security.accountLockoutAttempts;
+        
+        await mockDb.updateUser(user.id, {
+          failed_login_attempts: failedAttempts,
+          ...(shouldLockAccount && {
+            locked_until: new Date(Date.now() + config.security.accountLockoutDuration * 1000)
+          })
+        });
+
+        return {
+          success: false,
+          error: shouldLockAccount 
+            ? `Account locked due to too many failed attempts. Please try again in ${config.security.accountLockoutDuration / 60} minutes.`
+            : 'Invalid email or password'
+        };
+      }
+
+      // Reset failed login attempts on successful login
+      await mockDb.updateUser(user.id, {
+        failed_login_attempts: 0,
+        last_login_at: new Date()
+      });
+
+      // Generate tokens
+      const accessToken = generateAccessToken(user);
+      const refreshToken = generateRefreshToken(user);
+
+      logger.info('User login successful', {
+        userId: user.id,
+        email: user.email,
+        userType: user.user_type
+      });
+
+      // Remove password from response
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password: _, ...userResponse } = user;
+
+      return {
+        success: true,
+        user: userResponse as UserResponse,
+        accessToken,
+        refreshToken
+      };
+    } catch (error) {
+      logger.error('Error during login', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error during login'
+      };
+    }
+  }
+
+  /**
+   * Verify email account with token
+   */
+  static async verifyAccount(token: string): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
+    try {
+      // Verify the token
+      const tokenData = verifyEmailVerificationToken(token);
+      if (!tokenData) {
+        return {
+          success: false,
+          error: 'Invalid or expired verification token'
+        };
+      }
+
+      // Find user by ID
+      const user = await mockDb.findUserById(tokenData.userId);
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not found'
+        };
+      }
+
+      // Check if email matches
+      if (user.email !== tokenData.email) {
+        return {
+          success: false,
+          error: 'Invalid verification token'
+        };
+      }
+
+      // Check if already verified
+      if (user.email_verified) {
+        return {
+          success: false,
+          error: 'Email is already verified'
+        };
+      }
+
+      // Update user verification status
+      await mockDb.updateUser(user.id, {
+        email_verified: true,
+        status: AccountStatus.ACTIVE
+      });
+
+      // Get updated user
+      const updatedUser = await mockDb.findUserById(user.id);
+      if (!updatedUser) {
+        return {
+          success: false,
+          error: 'Failed to update user verification status'
+        };
+      }
+
+      logger.info('Email verification successful', {
+        userId: user.id,
+        email: user.email
+      });
+
+      // Remove password from response
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password, ...userResponse } = updatedUser;
+
+      return {
+        success: true,
+        user: userResponse as UserResponse
+      };
+    } catch (error) {
+      logger.error('Error during email verification', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error during verification'
+      };
+    }
+  }
+
+  /**
+   * Refresh access token using refresh token
+   */
+  static async refreshAccessToken(refreshToken: string): Promise<{ success: boolean; accessToken?: string; error?: string }> {
+    try {
+      // Verify refresh token
+      const { verifyToken } = await import('../utils/crypto');
+      const tokenData = verifyToken(refreshToken);
+      if (!tokenData) {
+        return {
+          success: false,
+          error: 'Invalid or expired refresh token'
+        };
+      }
+
+      // Find user by ID
+      const user = await mockDb.findUserById(tokenData.userId);
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not found'
+        };
+      }
+
+      // Check if user is still active
+      if (user.status !== AccountStatus.ACTIVE) {
+        return {
+          success: false,
+          error: 'Account is not active'
+        };
+      }
+
+      // Generate new access token
+      const accessToken = generateAccessToken(user);
+
+      logger.info('Token refresh successful', {
+        userId: user.id,
+        email: user.email
+      });
+
+      return {
+        success: true,
+        accessToken
+      };
+    } catch (error) {
+      logger.error('Error during token refresh', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error during token refresh'
+      };
+    }
+  }
+
+  /**
+   * Logout user (invalidate refresh token)
+   */
+  static async logout(refreshToken?: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      if (refreshToken) {
+        // Verify the refresh token to get expiration time
+        const { verifyToken } = await import('../utils/crypto');
+        const tokenData = verifyToken(refreshToken);
+        
+        if (tokenData) {
+          // Add refresh token to blacklist
+          const expirationTime = tokenData.exp ? tokenData.exp * 1000 : undefined;
+          await tokenBlacklistService.addToBlacklist(refreshToken, expirationTime);
+          
+          logger.info('User logout', {
+            userId: tokenData.userId,
+            email: tokenData.email
+          });
+        }
+      }
+
+      return {
+        success: true
+      };
+    } catch (error) {
+      logger.error('Error during logout', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error during logout'
+      };
+    }
+  }
+
+  /**
+   * Initiate password reset process
+   */
+  static async initiatePasswordReset(email: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Find user by email
+      const user = await mockDb.findUserByEmail(email.toLowerCase());
+      if (!user) {
+        // Don't reveal if email exists for security
+        return {
+          success: true
+        };
+      }
+
+      // Check if account is active
+      if (user.status !== AccountStatus.ACTIVE) {
+        return {
+          success: false,
+          error: 'Account is not active'
+        };
+      }
+
+      // Generate password reset token
+      const resetToken = generatePasswordResetToken(user.id, user.email);
+
+      // Send password reset email
+      const emailSent = await emailService.sendPasswordResetEmail(
+        user.email,
+        resetToken,
+        `${user.first_name} ${user.last_name}`
+      );
+
+      if (!emailSent) {
+        return {
+          success: false,
+          error: 'Failed to send password reset email'
+        };
+      }
+
+      logger.info('Password reset initiated', {
+        userId: user.id,
+        email: user.email
+      });
+
+      return {
+        success: true
+      };
+    } catch (error) {
+      logger.error('Error during password reset initiation', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error during password reset'
+      };
+    }
+  }
+
+  /**
+   * Reset password using token
+   */
+  static async resetPassword(token: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Verify the reset token
+      const tokenData = verifyPasswordResetToken(token);
+      if (!tokenData) {
+        return {
+          success: false,
+          error: 'Invalid or expired reset token'
+        };
+      }
+
+      // Find user by ID
+      const user = await mockDb.findUserById(tokenData.userId);
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not found'
+        };
+      }
+
+      // Check if email matches
+      if (user.email !== tokenData.email) {
+        return {
+          success: false,
+          error: 'Invalid reset token'
+        };
+      }
+
+      // Check if account is active
+      if (user.status !== AccountStatus.ACTIVE) {
+        return {
+          success: false,
+          error: 'Account is not active'
+        };
+      }
+
+      // Hash new password
+      const hashedPassword = await hashPassword(newPassword);
+
+      // Update user password
+      await mockDb.updateUser(user.id, {
+        password: hashedPassword,
+        failed_login_attempts: 0
+      });
+
+      // Send password change notification
+      await emailService.sendPasswordChangeNotification(
+        user.email,
+        `${user.first_name} ${user.last_name}`
+      );
+
+      logger.info('Password reset successful', {
+        userId: user.id,
+        email: user.email
+      });
+
+      return {
+        success: true
+      };
+    } catch (error) {
+      logger.error('Error during password reset', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error during password reset'
+      };
+    }
+  }
+
+  /**
+   * Change password for authenticated user
+   */
+  static async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Find user by ID
+      const user = await mockDb.findUserById(userId);
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not found'
+        };
+      }
+
+      // Check if account is active
+      if (user.status !== AccountStatus.ACTIVE) {
+        return {
+          success: false,
+          error: 'Account is not active'
+        };
+      }
+
+      // Verify current password
+      const isCurrentPasswordValid = await comparePassword(currentPassword, user.password);
+      if (!isCurrentPasswordValid) {
+        return {
+          success: false,
+          error: 'Current password is incorrect'
+        };
+      }
+
+      // Check if new password is different from current password
+      const isSamePassword = await comparePassword(newPassword, user.password);
+      if (isSamePassword) {
+        return {
+          success: false,
+          error: 'New password must be different from current password'
+        };
+      }
+
+      // Hash new password
+      const hashedPassword = await hashPassword(newPassword);
+
+      // Update user password
+      await mockDb.updateUser(user.id, {
+        password: hashedPassword,
+        failed_login_attempts: 0
+      });
+
+      // Send password change notification
+      await emailService.sendPasswordChangeNotification(
+        user.email,
+        `${user.first_name} ${user.last_name}`
+      );
+
+      logger.info('Password change successful', {
+        userId: user.id,
+        email: user.email
+      });
+
+      return {
+        success: true
+      };
+    } catch (error) {
+      logger.error('Error during password change', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error during password change'
+      };
+    }
   }
 }

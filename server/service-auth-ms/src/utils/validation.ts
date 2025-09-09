@@ -20,15 +20,6 @@ const phoneSchema = Joi.string()
 
 const nameSchema = Joi.string().min(2).max(50).required();
 
-// Address validation schema
-const addressSchema = Joi.object({
-  street: Joi.string().min(5).max(200).required(),
-  city: Joi.string().min(2).max(100).required(),
-  state: Joi.string().min(2).max(100).required(),
-  country: Joi.string().min(2).max(100).required(),
-  postalCode: Joi.string().min(3).max(20).required()
-});
-
 // User registration validation schema
 export const userRegistrationSchema = Joi.object({
   email: emailSchema,
@@ -49,6 +40,44 @@ export const merchantRegistrationSchema = Joi.object({
   phone: phoneSchema,
   user_merchant_id: Joi.string().min(5).max(50).required(),
   country: Joi.string().min(2).max(100).required()
+});
+
+// Login validation schema
+export const loginSchema = Joi.object({
+  email: emailSchema,
+  password: Joi.string().required()
+});
+
+// Email verification validation schema
+export const emailVerificationSchema = Joi.object({
+  token: Joi.string().required()
+});
+
+// Refresh token validation schema
+export const refreshTokenSchema = Joi.object({
+  refreshToken: Joi.string().required()
+});
+
+// Logout validation schema
+export const logoutSchema = Joi.object({
+  refreshToken: Joi.string().optional()
+});
+
+// Password reset request validation schema
+export const passwordResetRequestSchema = Joi.object({
+  email: emailSchema
+});
+
+// Password reset validation schema
+export const passwordResetSchema = Joi.object({
+  token: Joi.string().required(),
+  password: passwordSchema
+});
+
+// Password change validation schema
+export const passwordChangeSchema = Joi.object({
+  currentPassword: Joi.string().required(),
+  newPassword: passwordSchema
 });
 
 // Validation helper function
