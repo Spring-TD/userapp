@@ -1,23 +1,46 @@
 import { Request, Response, NextFunction } from 'express';
-<<<<<<< HEAD
 import { AuthService } from '../services/authService';
-import { passwordResetRequestSchema, passwordResetSchema, passwordChangeSchema, validateInput } from '../utils/validation';
+import { validateInput } from '../utils/validation';
 import { logger } from '../utils/logger';
+import Joi from 'joi';
 
-// Extend Request interface to include body typing
-interface TypedRequest<T> extends Request {
-  body: T;
-}
+// Request interface extension is handled in middleware/auth.ts
 
-// Type the Response to ensure status method is available
-type ExpressResponse = Response & {
-  status(code: number): ExpressResponse;
-  json(body?: unknown): ExpressResponse;
-};
+// Validation schemas for password management
+const passwordResetRequestSchema = Joi.object({
+  email: Joi.string().email().required()
+});
+
+const passwordResetSchema = Joi.object({
+  token: Joi.string().required(),
+  newPassword: Joi.string()
+    .min(8)
+    .max(128)
+    .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
+    .required()
+    .messages({
+      'string.pattern.base': 'Password must contain at least one lowercase letter, one uppercase letter, one number, and one special character'
+    })
+});
+
+const passwordChangeSchema = Joi.object({
+  currentPassword: Joi.string().required(),
+  newPassword: Joi.string()
+    .min(8)
+    .max(128)
+    .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
+    .required()
+    .messages({
+      'string.pattern.base': 'Password must contain at least one lowercase letter, one uppercase letter, one number, and one special character'
+    })
+});
 
 export class PasswordController {
-  // POST /api/v1/password/forgot
-  static async forgot(req: TypedRequest<{ email: string }>, res: ExpressResponse, next: NextFunction): Promise<void> {
+  /**
+   * POST /api/v1/password/forgot
+   * Initiate password reset process
+   */
+  static async forgot(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       // Validate input data
       const { error, value } = validateInput<{ email: string }>(passwordResetRequestSchema, req.body);
@@ -56,11 +79,14 @@ export class PasswordController {
     }
   }
 
-  // POST /api/v1/password/reset
-  static async reset(req: TypedRequest<{ token: string; password: string }>, res: ExpressResponse, next: NextFunction): Promise<void> {
+  /**
+   * POST /api/v1/password/reset
+   * Reset password using token
+   */
+  static async reset(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       // Validate input data
-      const { error, value } = validateInput<{ token: string; password: string }>(passwordResetSchema, req.body);
+      const { error, value } = validateInput<{ token: string; newPassword: string }>(passwordResetSchema, req.body);
 
       if (error) {
         res.status(400).json({
@@ -72,7 +98,7 @@ export class PasswordController {
       }
 
       // Reset password
-      const result = await AuthService.resetPassword(value!.token, value!.password);
+      const result = await AuthService.resetPassword(value!.token, value!.newPassword);
 
       if (!result.success) {
         res.status(400).json({
@@ -94,8 +120,11 @@ export class PasswordController {
     }
   }
 
-  // PUT /api/v1/password/change
-  static async change(req: TypedRequest<{ currentPassword: string; newPassword: string }>, res: ExpressResponse, next: NextFunction): Promise<void> {
+  /**
+   * PUT /api/v1/password/change
+   * Change password for authenticated user
+   */
+  static async change(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       // Validate input data
       const { error, value } = validateInput<{ currentPassword: string; newPassword: string }>(passwordChangeSchema, req.body);
@@ -146,28 +175,5 @@ export class PasswordController {
       logger.error('Error in change password controller', { error: error instanceof Error ? error.message : 'Unknown error' });
       next(error);
     }
-=======
-
-// Placeholder for PasswordController
-// Will be implemented in task 12: Password management API endpoints
-
-export class PasswordController {
-  // POST /api/v1/password/forgot
-  static async forgot(_req: Request, res: Response, _next: NextFunction) {
-    // To be implemented
-    res.status(501).json({ message: 'Not implemented yet' });
-  }
-
-  // POST /api/v1/password/reset
-  static async reset(_req: Request, res: Response, _next: NextFunction) {
-    // To be implemented
-    res.status(501).json({ message: 'Not implemented yet' });
-  }
-
-  // PUT /api/v1/password/change
-  static async change(_req: Request, res: Response, _next: NextFunction) {
-    // To be implemented
-    res.status(501).json({ message: 'Not implemented yet' });
->>>>>>> 61b77a379aa21ff00899f7fb6df7b19f71b6190b
   }
 }

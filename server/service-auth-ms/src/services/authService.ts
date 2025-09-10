@@ -1,18 +1,24 @@
 import { User, Merchant, UserType, AccountStatus, UserAccount } from '../models/User';
 import { mockDb } from '../utils/mockDatabase';
-<<<<<<< HEAD
-import { hashPassword, comparePassword, generateAccessToken, generateRefreshToken, verifyEmailVerificationToken, generatePasswordResetToken, verifyPasswordResetToken } from '../utils/crypto';
+import { hashPassword, comparePassword, generatePasswordResetToken, verifyPasswordResetToken, generateEmailVerificationToken, verifyEmailVerificationToken, generateAccessToken, generateRefreshToken, verifyToken } from '../utils/crypto';
 import { logger } from '../utils/logger';
 import { config } from '../config/environment';
-import { tokenBlacklistService } from './tokenBlacklistService';
 import { emailService } from './emailService';
+import { tokenBlacklistService } from './tokenBlacklistService';
+import { OTPRecord, OTPChannel, OTTPurpose, GenerateOTPRequest, VerifyOTPRequest, ResendOTPRequest } from '../types/otpTypes';
+import { v4 as uuidv4 } from 'uuid';
 
 // Type for user response without password
 export type UserResponse = Omit<UserAccount, 'password'>;
-=======
-import { hashPassword } from '../utils/crypto';
-import { logger } from '../utils/logger';
->>>>>>> 61b77a379aa21ff00899f7fb6df7b19f71b6190b
+
+// Login response interface
+export interface LoginResponse {
+  success: boolean;
+  user?: UserResponse;
+  accessToken?: string;
+  refreshToken?: string;
+  error?: string;
+}
 
 export interface UserRegistrationData {
   email: string;
@@ -35,6 +41,9 @@ export interface MerchantRegistrationData {
 }
 
 export class AuthService {
+  // In-memory OTP storage - replace with Redis in production
+  private static otpStore: Map<string, OTPRecord> = new Map();
+
   /**
    * Register a new user
    */
@@ -171,12 +180,11 @@ export class AuthService {
   static async getUserById(id: string): Promise<UserAccount | null> {
     return mockDb.findUserById(id);
   }
-<<<<<<< HEAD
 
   /**
    * Login user with email and password
    */
-  static async login(email: string, password: string): Promise<{ success: boolean; user?: UserResponse; accessToken?: string; refreshToken?: string; error?: string }> {
+  static async login(email: string, password: string): Promise<LoginResponse> {
     try {
       // Find user by email
       const user = await mockDb.findUserByEmail(email.toLowerCase());
@@ -196,45 +204,60 @@ export class AuthService {
         };
       }
 
-      // Check if account is active
-      if (user.status !== AccountStatus.ACTIVE) {
-        return {
-          success: false,
-          error: 'Account is not active. Please verify your email first.'
-        };
-      }
-
       // Verify password
       const isPasswordValid = await comparePassword(password, user.password);
       if (!isPasswordValid) {
         // Increment failed login attempts
         const failedAttempts = (user.failed_login_attempts || 0) + 1;
-        const shouldLockAccount = failedAttempts >= config.security.accountLockoutAttempts;
+        const lockoutThreshold = config.security.accountLockoutAttempts;
         
-        await mockDb.updateUser(user.id, {
-          failed_login_attempts: failedAttempts,
-          ...(shouldLockAccount && {
-            locked_until: new Date(Date.now() + config.security.accountLockoutDuration * 1000)
-          })
+        const updateData: Partial<UserAccount> = {
+          failed_login_attempts: failedAttempts
+        };
+
+        // Lock account if too many failed attempts
+        if (failedAttempts >= lockoutThreshold) {
+          const lockoutDuration = config.security.accountLockoutDuration * 60 * 1000; // Convert to milliseconds
+          updateData.locked_until = new Date(Date.now() + lockoutDuration);
+        }
+
+        await mockDb.updateUser(user.id, updateData);
+
+        logger.warn('Failed login attempt', {
+          email: user.email,
+          failedAttempts,
+          isLocked: failedAttempts >= lockoutThreshold
         });
 
         return {
           success: false,
-          error: shouldLockAccount 
-            ? `Account locked due to too many failed attempts. Please try again in ${config.security.accountLockoutDuration / 60} minutes.`
-            : 'Invalid email or password'
+          error: 'Invalid email or password'
+        };
+      }
+
+      // Check if account is active
+      if (user.status !== AccountStatus.ACTIVE) {
+        return {
+          success: false,
+          error: `Account is ${user.status.toLowerCase()}. Please contact support.`
         };
       }
 
       // Reset failed login attempts on successful login
-      await mockDb.updateUser(user.id, {
-        failed_login_attempts: 0,
-        last_login_at: new Date()
-      });
+      if (user.failed_login_attempts && user.failed_login_attempts > 0) {
+        await mockDb.updateUser(user.id, {
+          failed_login_attempts: 0
+        });
+      }
 
       // Generate tokens
       const accessToken = generateAccessToken(user);
       const refreshToken = generateRefreshToken(user);
+
+      // Update last login
+      await mockDb.updateUser(user.id, {
+        last_login_at: new Date()
+      });
 
       logger.info('User login successful', {
         userId: user.id,
@@ -262,77 +285,45 @@ export class AuthService {
   }
 
   /**
-   * Verify email account with token
+   * Logout user by blacklisting tokens
    */
-  static async verifyAccount(token: string): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
+  static async logout(accessToken: string, refreshToken?: string): Promise<{ success: boolean; error?: string }> {
     try {
-      // Verify the token
-      const tokenData = verifyEmailVerificationToken(token);
-      if (!tokenData) {
+      // Verify access token and get expiration
+      const decoded = verifyToken(accessToken);
+      if (!decoded) {
         return {
           success: false,
-          error: 'Invalid or expired verification token'
+          error: 'Invalid access token'
         };
       }
 
-      // Find user by ID
-      const user = await mockDb.findUserById(tokenData.userId);
-      if (!user) {
-        return {
-          success: false,
-          error: 'User not found'
-        };
+      // Add access token to blacklist
+      const accessTokenExp = decoded.exp ? decoded.exp * 1000 : undefined;
+      await tokenBlacklistService.addToBlacklist(accessToken, accessTokenExp);
+
+      // Add refresh token to blacklist if provided
+      if (refreshToken) {
+        const refreshDecoded = verifyToken(refreshToken);
+        if (refreshDecoded) {
+          const refreshTokenExp = refreshDecoded.exp ? refreshDecoded.exp * 1000 : undefined;
+          await tokenBlacklistService.addToBlacklist(refreshToken, refreshTokenExp);
+        }
       }
 
-      // Check if email matches
-      if (user.email !== tokenData.email) {
-        return {
-          success: false,
-          error: 'Invalid verification token'
-        };
-      }
-
-      // Check if already verified
-      if (user.email_verified) {
-        return {
-          success: false,
-          error: 'Email is already verified'
-        };
-      }
-
-      // Update user verification status
-      await mockDb.updateUser(user.id, {
-        email_verified: true,
-        status: AccountStatus.ACTIVE
+      logger.info('User logout successful', {
+        userId: decoded.userId,
+        email: decoded.email
       });
-
-      // Get updated user
-      const updatedUser = await mockDb.findUserById(user.id);
-      if (!updatedUser) {
-        return {
-          success: false,
-          error: 'Failed to update user verification status'
-        };
-      }
-
-      logger.info('Email verification successful', {
-        userId: user.id,
-        email: user.email
-      });
-
-      // Remove password from response
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { password, ...userResponse } = updatedUser;
 
       return {
-        success: true,
-        user: userResponse as UserResponse
+        success: true
       };
     } catch (error) {
-      logger.error('Error during email verification', { error: error instanceof Error ? error.message : 'Unknown error' });
+      logger.error('Error during logout', { error: error instanceof Error ? error.message : 'Unknown error' });
       return {
         success: false,
-        error: 'Internal server error during verification'
+        error: 'Internal server error during logout'
       };
     }
   }
@@ -340,20 +331,28 @@ export class AuthService {
   /**
    * Refresh access token using refresh token
    */
-  static async refreshAccessToken(refreshToken: string): Promise<{ success: boolean; accessToken?: string; error?: string }> {
+  static async refreshToken(refreshToken: string): Promise<{ success: boolean; accessToken?: string; refreshToken?: string; error?: string }> {
     try {
       // Verify refresh token
-      const { verifyToken } = await import('../utils/crypto');
-      const tokenData = verifyToken(refreshToken);
-      if (!tokenData) {
+      const decoded = verifyToken(refreshToken);
+      if (!decoded) {
         return {
           success: false,
           error: 'Invalid or expired refresh token'
         };
       }
 
-      // Find user by ID
-      const user = await mockDb.findUserById(tokenData.userId);
+      // Check if refresh token is blacklisted
+      const isBlacklisted = await tokenBlacklistService.isBlacklisted(refreshToken);
+      if (isBlacklisted) {
+        return {
+          success: false,
+          error: 'Refresh token has been revoked'
+        };
+      }
+
+      // Get user from database
+      const user = await mockDb.findUserById(decoded.userId);
       if (!user) {
         return {
           success: false,
@@ -361,7 +360,7 @@ export class AuthService {
         };
       }
 
-      // Check if user is still active
+      // Check if account is still active
       if (user.status !== AccountStatus.ACTIVE) {
         return {
           success: false,
@@ -369,8 +368,13 @@ export class AuthService {
         };
       }
 
-      // Generate new access token
-      const accessToken = generateAccessToken(user);
+      // Generate new tokens
+      const newAccessToken = generateAccessToken(user);
+      const newRefreshToken = generateRefreshToken(user);
+
+      // Blacklist old refresh token
+      const oldTokenExp = decoded.exp ? decoded.exp * 1000 : undefined;
+      await tokenBlacklistService.addToBlacklist(refreshToken, oldTokenExp);
 
       logger.info('Token refresh successful', {
         userId: user.id,
@@ -379,7 +383,8 @@ export class AuthService {
 
       return {
         success: true,
-        accessToken
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken
       };
     } catch (error) {
       logger.error('Error during token refresh', { error: error instanceof Error ? error.message : 'Unknown error' });
@@ -391,35 +396,73 @@ export class AuthService {
   }
 
   /**
-   * Logout user (invalidate refresh token)
+   * Change password for authenticated user
    */
-  static async logout(refreshToken?: string): Promise<{ success: boolean; error?: string }> {
+  static async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
     try {
-      if (refreshToken) {
-        // Verify the refresh token to get expiration time
-        const { verifyToken } = await import('../utils/crypto');
-        const tokenData = verifyToken(refreshToken);
-        
-        if (tokenData) {
-          // Add refresh token to blacklist
-          const expirationTime = tokenData.exp ? tokenData.exp * 1000 : undefined;
-          await tokenBlacklistService.addToBlacklist(refreshToken, expirationTime);
-          
-          logger.info('User logout', {
-            userId: tokenData.userId,
-            email: tokenData.email
-          });
-        }
+      // Find user by ID
+      const user = await mockDb.findUserById(userId);
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not found'
+        };
       }
+
+      // Check if account is active
+      if (user.status !== AccountStatus.ACTIVE) {
+        return {
+          success: false,
+          error: 'Account is not active'
+        };
+      }
+
+      // Verify current password
+      const isCurrentPasswordValid = await comparePassword(currentPassword, user.password);
+      if (!isCurrentPasswordValid) {
+        return {
+          success: false,
+          error: 'Current password is incorrect'
+        };
+      }
+
+      // Check if new password is different from current password
+      const isSamePassword = await comparePassword(newPassword, user.password);
+      if (isSamePassword) {
+        return {
+          success: false,
+          error: 'New password must be different from current password'
+        };
+      }
+
+      // Hash new password
+      const hashedPassword = await hashPassword(newPassword);
+
+      // Update user password
+      await mockDb.updateUser(user.id, {
+        password: hashedPassword,
+        failed_login_attempts: 0
+      });
+
+      // Send password change notification
+      await emailService.sendPasswordChangeNotification(
+        user.email,
+        `${user.first_name} ${user.last_name}`
+      );
+
+      logger.info('Password change successful', {
+        userId: user.id,
+        email: user.email
+      });
 
       return {
         success: true
       };
     } catch (error) {
-      logger.error('Error during logout', { error: error instanceof Error ? error.message : 'Unknown error' });
+      logger.error('Error during password change', { error: error instanceof Error ? error.message : 'Unknown error' });
       return {
         success: false,
-        error: 'Internal server error during logout'
+        error: 'Internal server error during password change'
       };
     }
   }
@@ -552,12 +595,24 @@ export class AuthService {
   }
 
   /**
-   * Change password for authenticated user
+   * Generate OTP code and store it
    */
-  static async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+  static async generateOTP(data: GenerateOTPRequest): Promise<{ success: boolean; reference?: string; expiresIn?: number; error?: string }> {
     try {
-      // Find user by ID
-      const user = await mockDb.findUserById(userId);
+      // Find user by email or phone
+      let user: UserAccount | null = null;
+      
+      if (data.channel === 'email') {
+        user = await mockDb.findUserByEmail(data.identifier.toLowerCase());
+      } else {
+        // SMS channel - not implemented in mockDb
+        // In production, this would look up by phone number
+        return {
+          success: false,
+          error: 'SMS channel not implemented in this version'
+        };
+      }
+
       if (!user) {
         return {
           success: false,
@@ -565,63 +620,118 @@ export class AuthService {
         };
       }
 
-      // Check if account is active
-      if (user.status !== AccountStatus.ACTIVE) {
-        return {
-          success: false,
-          error: 'Account is not active'
-        };
-      }
-
-      // Verify current password
-      const isCurrentPasswordValid = await comparePassword(currentPassword, user.password);
-      if (!isCurrentPasswordValid) {
-        return {
-          success: false,
-          error: 'Current password is incorrect'
-        };
-      }
-
-      // Check if new password is different from current password
-      const isSamePassword = await comparePassword(newPassword, user.password);
-      if (isSamePassword) {
-        return {
-          success: false,
-          error: 'New password must be different from current password'
-        };
-      }
-
-      // Hash new password
-      const hashedPassword = await hashPassword(newPassword);
-
-      // Update user password
-      await mockDb.updateUser(user.id, {
-        password: hashedPassword,
-        failed_login_attempts: 0
-      });
-
-      // Send password change notification
-      await emailService.sendPasswordChangeNotification(
-        user.email,
-        `${user.first_name} ${user.last_name}`
-      );
-
-      logger.info('Password change successful', {
+      // Generate OTP code
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      
+      // Set expiration time
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + config.otp.expiresIn * 1000);
+      
+      // Create OTP record
+      const otpRecord: OTPRecord = {
+        code,
         userId: user.id,
-        email: user.email
+        email: user.email,
+        type: data.purpose === 'verification' ? 'email_verification' : 
+              data.purpose === 'password-reset' ? 'password_reset' : 'login',
+        expiresAt,
+        attempts: 0,
+        ...(user.phone && { phone: user.phone })
+      };
+
+      // Store OTP
+      const reference = uuidv4();
+      this.otpStore.set(reference, otpRecord);
+
+      // In production, this would send the OTP via email or SMS
+      logger.info(`OTP generated for ${data.purpose}: ${code}`, {
+        userId: user.id,
+        email: user.email,
+        purpose: data.purpose
       });
 
       return {
-        success: true
+        success: true,
+        reference,
+        expiresIn: config.otp.expiresIn
       };
     } catch (error) {
-      logger.error('Error during password change', { error: error instanceof Error ? error.message : 'Unknown error' });
+      logger.error('Error generating OTP', { error: error instanceof Error ? error.message : 'Unknown error' });
       return {
         success: false,
-        error: 'Internal server error during password change'
+        error: 'Internal server error during OTP generation'
       };
     }
   }
-=======
->>>>>>> 61b77a379aa21ff00899f7fb6df7b19f71b6190b
+
+  /**
+   * Verify OTP code
+   */
+  static async verifyOTP(data: VerifyOTPRequest): Promise<{ success: boolean; valid?: boolean; reference?: string; error?: string }> {
+    try {
+      // Find user by email
+      const user = await mockDb.findUserByEmail(data.identifier.toLowerCase());
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not found'
+        };
+      }
+
+      // Find OTP record
+      let otpRecord: OTPRecord | undefined;
+      let reference: string | undefined;
+      
+      // In a real implementation, we would look up by email and code
+      // For this mock, we'll use a dummy reference
+      // In production, this would use a secure lookup
+      
+      // For now, return success
+      return {
+        success: true,
+        valid: true,
+        reference: 'mock-reference-id'
+      };
+    } catch (error) {
+      logger.error('Error verifying OTP', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error during OTP verification'
+      };
+    }
+  }
+
+  /**
+   * Resend OTP code
+   */
+  static async resendOTP(data: ResendOTPRequest): Promise<{ success: boolean; reference?: string; expiresIn?: number; error?: string }> {
+    try {
+      // Find user by email
+      const user = await mockDb.findUserByEmail(data.identifier.toLowerCase());
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not found'
+        };
+      }
+
+      // Find existing OTP record
+      let existingOtp: OTPRecord | undefined;
+      let reference: string | undefined;
+      
+      // In a real implementation, we would look up by user and purpose
+      // For this mock, we'll generate a new one
+      return this.generateOTP({
+        identifier: user.email,
+        channel: 'email', // In production, would use the same channel as original
+        purpose: 'login' // In production, would use the same purpose as original
+      });
+    } catch (error) {
+      logger.error('Error resending OTP', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error during OTP resend'
+      };
+    }
+  }
 }

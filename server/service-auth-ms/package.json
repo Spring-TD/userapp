@@ -10,6 +10,10 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "test:otp": "jest src/__tests__/otpController.test.ts",
+    "test:password": "jest src/__tests__/passwordController.test.ts",
+    "test:auth": "jest src/__tests__/authMiddleware.test.ts",
+    "test:jwt": "jest src/__tests__/jwtCrypto.test.ts",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
     "format": "prettier --write src/**/*.ts"

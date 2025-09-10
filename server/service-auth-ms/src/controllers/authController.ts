@@ -1,26 +1,42 @@
 import { Request, Response, NextFunction } from 'express';
-import { AuthService, UserRegistrationData, MerchantRegistrationData } from '../services/authService';
-<<<<<<< HEAD
-import { userRegistrationSchema, merchantRegistrationSchema, loginSchema, emailVerificationSchema, refreshTokenSchema, logoutSchema, validateInput } from '../utils/validation';
-=======
+import { AuthService, UserRegistrationData, MerchantRegistrationData, LoginResponse } from '../services/authService';
 import { userRegistrationSchema, merchantRegistrationSchema, validateInput } from '../utils/validation';
->>>>>>> 61b77a379aa21ff00899f7fb6df7b19f71b6190b
 import { logger } from '../utils/logger';
+import Joi from 'joi';
 
-// Extend Request interface to include body typing
-interface TypedRequest<T> extends Request {
-  body: T;
+// Extend Request interface to include token
+declare global {
+  namespace Express {
+    interface Request {
+      token?: string;
+    }
+  }
 }
 
-// Type the Response to ensure status method is available
-type ExpressResponse = Response & {
-  status(code: number): ExpressResponse;
-  json(body?: unknown): ExpressResponse;
-};
+// Validation schemas
+const loginSchema = Joi.object({
+  email: Joi.string().email().required(),
+  password: Joi.string().required()
+});
+
+const refreshTokenSchema = Joi.object({
+  refreshToken: Joi.string().required()
+});
+
+const emailVerificationSchema = Joi.object({
+  token: Joi.string().required()
+});
+
+const logoutSchema = Joi.object({
+  refreshToken: Joi.string().optional()
+});
 
 export class AuthController {
-  // POST /api/v1/auth/register/user
-  static async registerUser(req: TypedRequest<UserRegistrationData>, res: ExpressResponse, next: NextFunction): Promise<void> {
+  /**
+   * POST /api/v1/auth/register/user
+   * Register a new user account
+   */
+  static async registerUser(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       // Validate input data
       const { error, value } = validateInput<UserRegistrationData>(userRegistrationSchema, req.body);
@@ -72,8 +88,11 @@ export class AuthController {
     }
   }
 
-  // POST /api/v1/auth/register/merchant
-  static async registerMerchant(req: TypedRequest<MerchantRegistrationData>, res: ExpressResponse, next: NextFunction): Promise<void> {
+  /**
+   * POST /api/v1/auth/register/merchant
+   * Register a new merchant account
+   */
+  static async registerMerchant(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       // Validate input data
       const { error, value } = validateInput<MerchantRegistrationData>(merchantRegistrationSchema, req.body);
@@ -128,62 +147,11 @@ export class AuthController {
     }
   }
 
-  // POST /api/v1/auth/verify-account
-<<<<<<< HEAD
-  static async verifyAccount(req: TypedRequest<{ token: string }>, res: ExpressResponse, next: NextFunction): Promise<void> {
-    try {
-      // Validate input data
-      const { error, value } = validateInput<{ token: string }>(emailVerificationSchema, req.body);
-
-      if (error) {
-        res.status(400).json({
-          success: false,
-          error: 'Validation failed',
-          details: error
-        });
-        return;
-      }
-
-      // Verify account
-      const result = await AuthService.verifyAccount(value!.token);
-
-      if (!result.success) {
-        res.status(400).json({
-          success: false,
-          error: result.error
-        });
-        return;
-      }
-
-      logger.info('Account verification successful', {
-        userId: result.user!.id,
-        email: result.user!.email
-      });
-
-      res.status(200).json({
-        success: true,
-        message: 'Account verified successfully',
-        data: {
-          user: {
-            id: result.user!.id,
-            email: result.user!.email,
-            first_name: result.user!.first_name,
-            last_name: result.user!.last_name,
-            user_type: result.user!.user_type,
-            status: result.user!.status,
-            email_verified: result.user!.email_verified,
-            created_at: result.user!.created_at
-          }
-        }
-      });
-    } catch (error) {
-      logger.error('Error in verifyAccount controller', { error: error instanceof Error ? error.message : 'Unknown error' });
-      next(error);
-    }
-  }
-
-  // POST /api/v1/auth/login
-  static async login(req: TypedRequest<{ email: string; password: string }>, res: ExpressResponse, next: NextFunction): Promise<void> {
+  /**
+   * POST /api/v1/auth/login
+   * Authenticate user and return tokens
+   */
+  static async login(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       // Validate input data
       const { error, value } = validateInput<{ email: string; password: string }>(loginSchema, req.body);
@@ -197,8 +165,8 @@ export class AuthController {
         return;
       }
 
-      // Login user
-      const result = await AuthService.login(value!.email, value!.password);
+      // Authenticate user
+      const result: LoginResponse = await AuthService.login(value!.email, value!.password);
 
       if (!result.success) {
         res.status(401).json({
@@ -209,9 +177,8 @@ export class AuthController {
       }
 
       logger.info('User login successful', {
-        userId: result.user!.id,
-        email: result.user!.email,
-        userType: result.user!.user_type
+        userId: result.user?.id,
+        email: result.user?.email
       });
 
       res.status(200).json({
@@ -242,26 +209,28 @@ export class AuthController {
     }
   }
 
-  // POST /api/v1/auth/logout
-  static async logout(req: TypedRequest<{ refreshToken?: string }>, res: ExpressResponse, next: NextFunction): Promise<void> {
+  /**
+   * POST /api/v1/auth/logout
+   * Logout user by blacklisting tokens
+   */
+  static async logout(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      // Validate input data
-      const { error, value } = validateInput<{ refreshToken?: string }>(logoutSchema, req.body);
+      const accessToken = req.token;
+      const { refreshToken } = req.body;
 
-      if (error) {
+      if (!accessToken) {
         res.status(400).json({
           success: false,
-          error: 'Validation failed',
-          details: error
+          error: 'Access token is required'
         });
         return;
       }
 
       // Logout user
-      const result = await AuthService.logout(value?.refreshToken);
+      const result = await AuthService.logout(accessToken, refreshToken);
 
       if (!result.success) {
-        res.status(500).json({
+        res.status(400).json({
           success: false,
           error: result.error
         });
@@ -280,8 +249,11 @@ export class AuthController {
     }
   }
 
-  // POST /api/v1/auth/refresh
-  static async refresh(req: TypedRequest<{ refreshToken: string }>, res: ExpressResponse, next: NextFunction): Promise<void> {
+  /**
+   * POST /api/v1/auth/refresh
+   * Refresh access token using refresh token
+   */
+  static async refresh(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       // Validate input data
       const { error, value } = validateInput<{ refreshToken: string }>(refreshTokenSchema, req.body);
@@ -295,8 +267,8 @@ export class AuthController {
         return;
       }
 
-      // Refresh access token
-      const result = await AuthService.refreshAccessToken(value!.refreshToken);
+      // Refresh tokens
+      const result = await AuthService.refreshToken(value!.refreshToken);
 
       if (!result.success) {
         res.status(401).json({
@@ -310,37 +282,116 @@ export class AuthController {
 
       res.status(200).json({
         success: true,
-        message: 'Token refreshed successfully',
+        message: 'Token refresh successful',
         data: {
-          accessToken: result.accessToken
+          accessToken: result.accessToken,
+          refreshToken: result.refreshToken
         }
       });
     } catch (error) {
-      logger.error('Error in refresh controller', { error: error instanceof Error ? error.message : 'Unknown error' });
+      logger.error('Error in refresh token controller', { error: error instanceof Error ? error.message : 'Unknown error' });
       next(error);
     }
-=======
-  static async verifyAccount(_req: Request, res: ExpressResponse, _next: NextFunction) {
-    // To be implemented in task 9: Account verification system
-    res.status(501).json({ message: 'Not implemented yet' });
   }
 
-  // POST /api/v1/auth/login
-  static async login(_req: Request, res: ExpressResponse, _next: NextFunction) {
-    // To be implemented in task 10: Authentication endpoints implementation
-    res.status(501).json({ message: 'Not implemented yet' });
+  /**
+   * GET /api/v1/auth/me
+   * Get current user profile
+   */
+  static async me(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      // Get user from database
+      const user = await AuthService.getUserById(req.user.userId);
+      if (!user) {
+        res.status(404).json({
+          success: false,
+          error: 'User not found'
+        });
+        return;
+      }
+
+      // Remove password from response
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password, ...userResponse } = user;
+
+      res.status(200).json({
+        success: true,
+        data: {
+          user: userResponse
+        }
+      });
+    } catch (error) {
+      logger.error('Error in me controller', { error: error instanceof Error ? error.message : 'Unknown error' });
+      next(error);
+    }
   }
 
-  // POST /api/v1/auth/logout
-  static async logout(_req: Request, res: ExpressResponse, _next: NextFunction) {
-    // To be implemented in task 10: Authentication endpoints implementation
-    res.status(501).json({ message: 'Not implemented yet' });
+  /**
+   * POST /api/v1/auth/verify-token
+   * Verify if token is valid and not blacklisted
+   */
+  static async verifyToken(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const accessToken = req.token;
+
+      if (!accessToken) {
+        res.status(400).json({
+          success: false,
+          error: 'Access token is required'
+        });
+        return;
+      }
+
+      // Token is already verified by extractToken middleware
+      // If we reach here, token is valid
+      res.status(200).json({
+        success: true,
+        message: 'Token is valid',
+        data: {
+          user: req.user
+        }
+      });
+    } catch (error) {
+      logger.error('Error in verify token controller', { error: error instanceof Error ? error.message : 'Unknown error' });
+      next(error);
+    }
   }
 
-  // POST /api/v1/auth/refresh
-  static async refresh(_req: Request, res: ExpressResponse, _next: NextFunction) {
-    // To be implemented in task 10: Authentication endpoints implementation
-    res.status(501).json({ message: 'Not implemented yet' });
->>>>>>> 61b77a379aa21ff00899f7fb6df7b19f71b6190b
+  /**
+   * GET /api/v1/auth/email-exists/:email
+   * Check if email already exists
+   */
+  static async checkEmailExists(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { email } = req.params;
+
+      if (!email) {
+        res.status(400).json({
+          success: false,
+          error: 'Email parameter is required'
+        });
+        return;
+      }
+
+      const exists = await AuthService.emailExists(email);
+
+      res.status(200).json({
+        success: true,
+        data: {
+          exists
+        }
+      });
+    } catch (error) {
+      logger.error('Error in checkEmailExists controller', { error: error instanceof Error ? error.message : 'Unknown error' });
+      next(error);
+    }
   }
 }

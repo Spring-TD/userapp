@@ -1,11 +1,19 @@
 import bcrypt from 'bcrypt';
-<<<<<<< HEAD
 import jwt from 'jsonwebtoken';
 import { config } from '../config/environment';
 import { UserAccount, UserType } from '../models/User';
-=======
-import { config } from '../config/environment';
->>>>>>> 61b77a379aa21ff00899f7fb6df7b19f71b6190b
+
+/**
+ * JWT Token Payload Interface
+ */
+export interface JWTPayload {
+  userId: string;
+  email: string;
+  userType: UserType;
+  userMerchantId?: string;
+  iat?: number;
+  exp?: number;
+}
 
 /**
  * Hash a password using bcrypt
@@ -31,20 +39,7 @@ export const generateRandomString = (length: number = 32): string => {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return result;
-<<<<<<< HEAD
 };
-
-/**
- * JWT Token Payload Interface
- */
-export interface JWTPayload {
-  userId: string;
-  email: string;
-  userType: UserType;
-  userMerchantId?: string;
-  iat?: number;
-  exp?: number;
-}
 
 /**
  * Generate JWT access token
@@ -165,6 +160,44 @@ export const verifyPasswordResetToken = (token: string): { userId: string; email
   } catch (error) {
     return null;
   }
-=======
->>>>>>> 61b77a379aa21ff00899f7fb6df7b19f71b6190b
+};
+
+/**
+ * Extract token from Authorization header
+ */
+export const extractTokenFromHeader = (authHeader: string | undefined): string | null => {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+  return authHeader.substring(7); // Remove 'Bearer ' prefix
+};
+
+/**
+ * Check if token is expired
+ */
+export const isTokenExpired = (token: string): boolean => {
+  try {
+    const decoded = jwt.decode(token) as any;
+    if (!decoded || !decoded.exp) {
+      return true;
+    }
+    return Date.now() >= decoded.exp * 1000;
+  } catch (error) {
+    return true;
+  }
+};
+
+/**
+ * Get token expiration time
+ */
+export const getTokenExpiration = (token: string): Date | null => {
+  try {
+    const decoded = jwt.decode(token) as any;
+    if (!decoded || !decoded.exp) {
+      return null;
+    }
+    return new Date(decoded.exp * 1000);
+  } catch (error) {
+    return null;
+  }
 };

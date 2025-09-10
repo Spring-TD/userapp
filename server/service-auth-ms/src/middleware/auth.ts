@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-<<<<<<< HEAD
-import { verifyToken, JWTPayload } from '../utils/crypto';
+import { verifyToken, extractTokenFromHeader } from '../utils/crypto';
 import { logger } from '../utils/logger';
 import { tokenBlacklistService } from '../services/tokenBlacklistService';
 
@@ -8,7 +7,14 @@ import { tokenBlacklistService } from '../services/tokenBlacklistService';
 declare global {
   namespace Express {
     interface Request {
-      user?: JWTPayload;
+      user?: {
+        userId: string;
+        email: string;
+        userType: string;
+        userMerchantId?: string;
+        iat?: number;
+        exp?: number;
+      };
     }
   }
 }
@@ -23,18 +29,29 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       res.status(401).json({
         success: false,
-        error: 'Access token required'
+        error: 'Access token required',
+        message: 'Please provide a valid Bearer token in the Authorization header'
       });
       return;
     }
 
-    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-    const decoded = verifyToken(token);
+    const token = extractTokenFromHeader(authHeader);
+    if (!token) {
+      res.status(401).json({
+        success: false,
+        error: 'Invalid token format',
+        message: 'Token must be in Bearer format'
+      });
+      return;
+    }
 
+    // Verify the JWT token
+    const decoded = verifyToken(token);
     if (!decoded) {
       res.status(401).json({
         success: false,
-        error: 'Invalid or expired token'
+        error: 'Invalid or expired token',
+        message: 'The provided token is invalid or has expired'
       });
       return;
     }
@@ -44,19 +61,32 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     if (isBlacklisted) {
       res.status(401).json({
         success: false,
-        error: 'Token has been revoked'
+        error: 'Token has been revoked',
+        message: 'This token has been invalidated and cannot be used'
       });
       return;
     }
 
     // Attach user data to request
     req.user = decoded;
+    
+    logger.debug('User authenticated successfully', {
+      userId: decoded.userId,
+      email: decoded.email,
+      userType: decoded.userType
+    });
+
     next();
   } catch (error) {
-    logger.error('Authentication middleware error', { error: error instanceof Error ? error.message : 'Unknown error' });
+    logger.error('Authentication middleware error', { 
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    });
+    
     res.status(401).json({
       success: false,
-      error: 'Authentication failed'
+      error: 'Authentication failed',
+      message: 'An error occurred during authentication'
     });
   }
 };
@@ -70,25 +100,44 @@ export const authorize = (allowedRoles: string[]) => {
       if (!req.user) {
         res.status(401).json({
           success: false,
-          error: 'Authentication required'
+          error: 'Authentication required',
+          message: 'You must be authenticated to access this resource'
         });
         return;
       }
 
       if (!allowedRoles.includes(req.user.userType)) {
+        logger.warn('Authorization failed - insufficient permissions', {
+          userId: req.user.userId,
+          userType: req.user.userType,
+          requiredRoles: allowedRoles
+        });
+
         res.status(403).json({
           success: false,
-          error: 'Insufficient permissions'
+          error: 'Insufficient permissions',
+          message: `Access denied. Required roles: ${allowedRoles.join(', ')}`
         });
         return;
       }
 
+      logger.debug('User authorized successfully', {
+        userId: req.user.userId,
+        userType: req.user.userType,
+        allowedRoles
+      });
+
       next();
     } catch (error) {
-      logger.error('Authorization middleware error', { error: error instanceof Error ? error.message : 'Unknown error' });
+      logger.error('Authorization middleware error', { 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      
       res.status(403).json({
         success: false,
-        error: 'Authorization failed'
+        error: 'Authorization failed',
+        message: 'An error occurred during authorization'
       });
     }
   };
@@ -96,39 +145,98 @@ export const authorize = (allowedRoles: string[]) => {
 
 /**
  * Optional authentication middleware (doesn't fail if no token)
+ * Useful for endpoints that work with both authenticated and anonymous users
  */
-export const optionalAuth = (req: Request, _res: Response, next: NextFunction): void => {
+export const optionalAuth = async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
   try {
     const authHeader = req.headers.authorization;
     
     if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
-      const decoded = verifyToken(token);
+      const token = extractTokenFromHeader(authHeader);
       
-      if (decoded) {
-        req.user = decoded;
+      if (token) {
+        const decoded = verifyToken(token);
+        
+        if (decoded) {
+          // Check if token is blacklisted
+          const isBlacklisted = await tokenBlacklistService.isBlacklisted(token);
+          
+          if (!isBlacklisted) {
+            req.user = decoded;
+            logger.debug('Optional authentication successful', {
+              userId: decoded.userId,
+              email: decoded.email
+            });
+          }
+        }
       }
     }
     
     next();
   } catch (error) {
-    // Continue without authentication
+    logger.warn('Optional authentication error, continuing without auth', { 
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    
+    // Continue without authentication for optional auth
     next();
   }
-=======
-
-// Placeholder for authentication middleware
-// Will be implemented in task 5: Authentication utilities and JWT management
-
-export const authenticate = (_req: Request, _res: Response, next: NextFunction) => {
-  // To be implemented
-  next();
 };
 
-export const authorize = (_roles: string[]) => {
-  return (_req: Request, _res: Response, next: NextFunction) => {
-    // To be implemented
+/**
+ * Admin-only authorization middleware
+ */
+export const adminOnly = authorize(['ADMIN']);
+
+/**
+ * Merchant-only authorization middleware
+ */
+export const merchantOnly = authorize(['MERCHANT', 'ADMIN']);
+
+/**
+ * User or higher authorization middleware
+ */
+export const userOrHigher = authorize(['USER', 'MERCHANT', 'ADMIN']);
+
+/**
+ * Middleware to extract and validate token without full authentication
+ * Useful for logout endpoints where we need to blacklist tokens
+ */
+export const extractToken = (req: Request, res: Response, next: NextFunction): void => {
+  try {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      res.status(400).json({
+        success: false,
+        error: 'Access token required',
+        message: 'Please provide a valid Bearer token in the Authorization header'
+      });
+      return;
+    }
+
+    const token = extractTokenFromHeader(authHeader);
+    if (!token) {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid token format',
+        message: 'Token must be in Bearer format'
+      });
+      return;
+    }
+
+    // Attach token to request for use in controllers
+    (req as any).token = token;
     next();
-  };
->>>>>>> 61b77a379aa21ff00899f7fb6df7b19f71b6190b
+  } catch (error) {
+    logger.error('Token extraction error', { 
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    
+    res.status(400).json({
+      success: false,
+      error: 'Token extraction failed',
+      message: 'Unable to extract token from request'
+    });
+  }
 };
