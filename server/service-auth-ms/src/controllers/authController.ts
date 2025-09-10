@@ -366,6 +366,63 @@ export class AuthController {
   }
 
   /**
+   * POST /api/v1/auth/verify-account
+   * Verify user account using email verification token
+   */
+  static async verifyAccount(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      // Validate input data
+      const { error, value } = validateInput<{ token: string }>(emailVerificationSchema, req.body);
+
+      if (error) {
+        res.status(400).json({
+          success: false,
+          error: 'Validation failed',
+          details: error
+        });
+        return;
+      }
+
+      // Verify account
+      const result = await AuthService.verifyAccount(value!.token);
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: result.error
+        });
+        return;
+      }
+
+      logger.info('Account verification successful', {
+        userId: result.user?.id,
+        email: result.user?.email
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Account verified successfully',
+        data: {
+          user: {
+            id: result.user!.id,
+            email: result.user!.email,
+            first_name: result.user!.first_name,
+            last_name: result.user!.last_name,
+            user_type: result.user!.user_type,
+            status: result.user!.status,
+            email_verified: result.user!.email_verified,
+            phone_verified: result.user!.phone_verified,
+            created_at: result.user!.created_at
+          }
+        }
+      });
+    } catch (error) {
+      logger.error('Error in verify account controller', { error: error instanceof Error ? error.message : 'Unknown error' });
+      next(error);
+    }
+  }
+
+  /**
    * GET /api/v1/auth/email-exists/:email
    * Check if email already exists
    */

@@ -8,6 +8,9 @@ const router = Router();
 router.post('/register/user', AuthController.registerUser);
 router.post('/register/merchant', AuthController.registerMerchant);
 
+// Account verification
+router.post('/verify-account', AuthController.verifyAccount);
+
 // Authentication routes
 router.post('/login', AuthController.login);
 router.post('/logout', extractToken, AuthController.logout);

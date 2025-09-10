@@ -268,7 +268,7 @@ The service provides the following API endpoints:
 ### Authentication
 - `POST /api/v1/auth/register/user` - Register user account ✅ **Implemented**
 - `POST /api/v1/auth/register/merchant` - Register merchant account ✅ **Implemented**
-- `POST /api/v1/auth/verify-account` - Verify account with token 🚧 **Under Development**
+- `POST /api/v1/auth/verify-account` - Verify account with token ✅ **Implemented**
 - `POST /api/v1/auth/login` - User/merchant login 🚧 **Under Development**
 - `POST /api/v1/auth/logout` - Logout and invalidate session 🚧 **Under Development**
 - `POST /api/v1/auth/refresh` - Refresh JWT token 🚧 **Under Development**
@@ -389,6 +389,45 @@ The service provides the following API endpoints:
   "status": "healthy",
   "timestamp": "2025-01-10T09:00:00.000Z",
   "service": "client-auth-microservice"
+}
+```
+
+### Account Verification
+**`POST /api/v1/auth/verify-account`**
+
+**Request Body:**
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Account verified successfully",
+  "data": {
+    "user": {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "email": "user@example.com",
+      "first_name": "John",
+      "last_name": "Doe",
+      "user_type": "user",
+      "status": "active",
+      "email_verified": true,
+      "phone_verified": false,
+      "created_at": "2025-01-10T09:00:00.000Z"
+    }
+  }
+}
+```
+
+**Error Response (400 Bad Request):**
+```json
+{
+  "success": false,
+  "error": "Invalid or expired verification token"
 }
 ```
 

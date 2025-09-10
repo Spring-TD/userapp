@@ -78,6 +78,14 @@ export class AuthService {
 
       const createdUser = await mockDb.createUser(userToCreate) as User;
 
+      // Generate and send email verification token
+      const verificationToken = generateEmailVerificationToken(createdUser.id, createdUser.email);
+      await emailService.sendEmailVerificationEmail(
+        createdUser.email,
+        verificationToken,
+        `${createdUser.first_name} ${createdUser.last_name}`
+      );
+
       logger.info('User registered successfully', {
         userId: createdUser.id,
         email: createdUser.email,
@@ -135,6 +143,14 @@ export class AuthService {
 
       const createdMerchant = await mockDb.createUser(merchantToCreate) as Merchant;
 
+      // Generate and send email verification token
+      const verificationToken = generateEmailVerificationToken(createdMerchant.id, createdMerchant.email);
+      await emailService.sendEmailVerificationEmail(
+        createdMerchant.email,
+        verificationToken,
+        `${createdMerchant.first_name} ${createdMerchant.last_name}`
+      );
+
       logger.info('Merchant registered successfully', {
         userId: createdMerchant.id,
         email: createdMerchant.email,
@@ -155,6 +171,83 @@ export class AuthService {
       return {
         success: false,
         error: 'Internal server error during registration'
+      };
+    }
+  }
+
+  /**
+   * Verify account using email verification token
+   */
+  static async verifyAccount(token: string): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
+    try {
+      // Verify the email verification token
+      const tokenData = verifyEmailVerificationToken(token);
+      if (!tokenData) {
+        return {
+          success: false,
+          error: 'Invalid or expired verification token'
+        };
+      }
+
+      // Find user by ID
+      const user = await mockDb.findUserById(tokenData.userId);
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not found'
+        };
+      }
+
+      // Check if email matches
+      if (user.email !== tokenData.email) {
+        return {
+          success: false,
+          error: 'Invalid verification token'
+        };
+      }
+
+      // Check if account is already verified
+      if (user.email_verified) {
+        return {
+          success: false,
+          error: 'Account is already verified'
+        };
+      }
+
+      // Update user to mark email as verified and activate account
+      await mockDb.updateUser(user.id, {
+        email_verified: true,
+        status: AccountStatus.ACTIVE
+      });
+
+      // Get updated user
+      const updatedUser = await mockDb.findUserById(user.id);
+      if (!updatedUser) {
+        return {
+          success: false,
+          error: 'Failed to retrieve updated user'
+        };
+      }
+
+      logger.info('Account verification successful', {
+        userId: updatedUser.id,
+        email: updatedUser.email,
+        userType: updatedUser.user_type
+      });
+
+      // Remove password from response
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password, ...userResponse } = updatedUser;
+
+      return {
+        success: true,
+        user: userResponse as UserResponse
+      };
+    } catch (error) {
+      logger.error('Error during account verification', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error during account verification'
       };
     }
   }
