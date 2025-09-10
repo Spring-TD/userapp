@@ -26,8 +26,8 @@ const mockRequest = (body: any = {}) => {
 
 const mockResponse = () => {
   const res = {} as Response;
-  res.status = jest.fn().mockReturnValue(res);
-  res.json = jest.fn().mockReturnValue(res);
+  res.status = jest.fn().mockReturnValue(res) as any;
+  res.json = jest.fn().mockReturnValue(res) as any;
   return res;
 };
 
@@ -63,7 +63,11 @@ describe('Account Verification', () => {
         status: AccountStatus.ACTIVE,
         email_verified: true,
         phone_verified: false,
-        created_at: new Date()
+        user_merchant_id: 'merchant-123',
+        country: 'USA',
+        created_at: new Date(),
+        updated_at: new Date(),
+        failed_login_attempts: 0
       };
       
       req = mockRequest(verifyRequest);
@@ -229,9 +233,9 @@ describe('Account Verification', () => {
       
       const mockFindUserById = jest.fn()
         .mockResolvedValueOnce(mockUser)  // First call for verification
-        .mockResolvedValueOnce(updatedUser); // Second call after update
+        .mockResolvedValueOnce(updatedUser) as jest.MockedFunction<any>; // Second call after update
         
-      const mockUpdateUser = jest.fn().mockResolvedValue(undefined);
+      const mockUpdateUser = jest.fn().mockResolvedValue(undefined) as jest.MockedFunction<any>;
       
       (mockDb as any).findUserById = mockFindUserById;
       (mockDb as any).updateUser = mockUpdateUser;
@@ -279,7 +283,7 @@ describe('Account Verification', () => {
         email
       });
       
-      const mockFindUserById = jest.fn().mockResolvedValue(null);
+      const mockFindUserById = jest.fn().mockResolvedValue(null) as jest.MockedFunction<any>;
       (mockDb as any).findUserById = mockFindUserById;
       
       // Act
@@ -309,7 +313,7 @@ describe('Account Verification', () => {
         email: tokenEmail
       });
       
-      const mockFindUserById = jest.fn().mockResolvedValue(mockUser);
+      const mockFindUserById = jest.fn().mockResolvedValue(mockUser) as jest.MockedFunction<any>;
       (mockDb as any).findUserById = mockFindUserById;
       
       // Act
@@ -338,7 +342,7 @@ describe('Account Verification', () => {
         email
       });
       
-      const mockFindUserById = jest.fn().mockResolvedValue(mockUser);
+      const mockFindUserById = jest.fn().mockResolvedValue(mockUser) as jest.MockedFunction<any>;
       (mockDb as any).findUserById = mockFindUserById;
       
       // Act

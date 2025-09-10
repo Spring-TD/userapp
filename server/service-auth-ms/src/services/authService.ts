@@ -5,7 +5,7 @@ import { logger } from '../utils/logger';
 import { config } from '../config/environment';
 import { emailService } from './emailService';
 import { tokenBlacklistService } from './tokenBlacklistService';
-import { OTPRecord, OTPChannel, OTTPurpose, GenerateOTPRequest, VerifyOTPRequest, ResendOTPRequest } from '../types/otpTypes';
+import { OTPRecord, GenerateOTPRequest, VerifyOTPRequest, ResendOTPRequest } from '../types/otpTypes';
 import { v4 as uuidv4 } from 'uuid';
 
 // Type for user response without password
@@ -248,6 +248,330 @@ export class AuthService {
       return {
         success: false,
         error: 'Internal server error during account verification'
+      };
+    }
+  }
+
+  /**
+   * Get user profile by ID
+   */
+  static async getUserProfile(userId: string): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
+    try {
+      const user = await mockDb.findUserById(userId);
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not found'
+        };
+      }
+
+      // Remove password from response
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password, ...userResponse } = user;
+
+      return {
+        success: true,
+        user: userResponse as UserResponse
+      };
+    } catch (error) {
+      logger.error('Error getting user profile', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error while retrieving user profile'
+      };
+    }
+  }
+
+  /**
+   * Update user profile
+   */
+  static async updateUserProfile(userId: string, profileData: {
+    first_name?: string;
+    last_name?: string;
+    phone?: string;
+    country?: string;
+  }): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
+    try {
+      const user = await mockDb.findUserById(userId);
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not found'
+        };
+      }
+
+      // Check if account is active
+      if (user.status !== AccountStatus.ACTIVE) {
+        return {
+          success: false,
+          error: 'Account is not active'
+        };
+      }
+
+      // Update user profile
+      const updateData: Partial<UserAccount> = {
+        ...profileData,
+        updated_at: new Date()
+      };
+
+      await mockDb.updateUser(userId, updateData);
+
+      // Get updated user
+      const updatedUser = await mockDb.findUserById(userId);
+      if (!updatedUser) {
+        return {
+          success: false,
+          error: 'Failed to retrieve updated user'
+        };
+      }
+
+      logger.info('User profile updated successfully', {
+        userId: updatedUser.id,
+        email: updatedUser.email
+      });
+
+      // Remove password from response
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password, ...userResponse } = updatedUser;
+
+      return {
+        success: true,
+        user: userResponse as UserResponse
+      };
+    } catch (error) {
+      logger.error('Error updating user profile', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error while updating user profile'
+      };
+    }
+  }
+
+  /**
+   * Get detailed user information (admin only)
+   */
+  static async getUserInfo(userId: string): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
+    try {
+      const user = await mockDb.findUserById(userId);
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not found'
+        };
+      }
+
+      // Remove password from response but include more detailed info
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password, ...userResponse } = user;
+
+      logger.info('User info retrieved', {
+        userId: user.id,
+        requestedBy: 'admin' // In production, this would be the requesting user's ID
+      });
+
+      return {
+        success: true,
+        user: userResponse as UserResponse
+      };
+    } catch (error) {
+      logger.error('Error getting user info', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error while retrieving user info'
+      };
+    }
+  }
+
+  /**
+   * Verify user information (admin only)
+   */
+  static async verifyUserInfo(userId: string, verificationData: {
+    email_verified?: boolean;
+    phone_verified?: boolean;
+    status?: AccountStatus;
+    notes?: string;
+  }): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
+    try {
+      const user = await mockDb.findUserById(userId);
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not found'
+        };
+      }
+
+      // Update verification status
+      const updateData: Partial<UserAccount> = {
+        ...verificationData,
+        updated_at: new Date()
+      };
+
+      await mockDb.updateUser(userId, updateData);
+
+      // Get updated user
+      const updatedUser = await mockDb.findUserById(userId);
+      if (!updatedUser) {
+        return {
+          success: false,
+          error: 'Failed to retrieve updated user'
+        };
+      }
+
+      logger.info('User information verified', {
+        userId: updatedUser.id,
+        email: updatedUser.email,
+        verificationData
+      });
+
+      // Remove password from response
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password, ...userResponse } = updatedUser;
+
+      return {
+        success: true,
+        user: userResponse as UserResponse
+      };
+    } catch (error) {
+      logger.error('Error verifying user info', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error while verifying user info'
+      };
+    }
+  }
+
+  /**
+   * Suspend user account (admin only)
+   */
+  static async suspendUser(userId: string, reason?: string): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
+    try {
+      const user = await mockDb.findUserById(userId);
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not found'
+        };
+      }
+
+      // Check if account is already suspended or deactivated
+      if (user.status === AccountStatus.SUSPENDED) {
+        return {
+          success: false,
+          error: 'Account is already suspended'
+        };
+      }
+
+      if (user.status === AccountStatus.DEACTIVATED) {
+        return {
+          success: false,
+          error: 'Cannot suspend a deactivated account'
+        };
+      }
+
+      // Suspend user account
+      await mockDb.updateUser(userId, {
+        status: AccountStatus.SUSPENDED,
+        updated_at: new Date()
+      });
+
+      // Get updated user
+      const updatedUser = await mockDb.findUserById(userId);
+      if (!updatedUser) {
+        return {
+          success: false,
+          error: 'Failed to retrieve updated user'
+        };
+      }
+
+      logger.info('User account suspended', {
+        userId: updatedUser.id,
+        email: updatedUser.email,
+        reason: reason || 'No reason provided'
+      });
+
+      // Remove password from response
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password, ...userResponse } = updatedUser;
+
+      return {
+        success: true,
+        user: userResponse as UserResponse
+      };
+    } catch (error) {
+      logger.error('Error suspending user', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error while suspending user account'
+      };
+    }
+  }
+
+  /**
+   * Activate user account (admin only)
+   */
+  static async activateUser(userId: string): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
+    try {
+      const user = await mockDb.findUserById(userId);
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not found'
+        };
+      }
+
+      // Check if account is already active
+      if (user.status === AccountStatus.ACTIVE) {
+        return {
+          success: false,
+          error: 'Account is already active'
+        };
+      }
+
+      // Activate user account
+      await mockDb.updateUser(userId, {
+        status: AccountStatus.ACTIVE,
+        updated_at: new Date(),
+        failed_login_attempts: 0 // Reset failed attempts on activation
+      });
+
+      // Remove lockout separately if it exists
+      if (user.locked_until) {
+        const { locked_until, ...updateData } = user;
+        await mockDb.updateUser(userId, {
+          ...updateData,
+          status: AccountStatus.ACTIVE,
+          updated_at: new Date(),
+          failed_login_attempts: 0
+        });
+      }
+
+      // Get updated user
+      const updatedUser = await mockDb.findUserById(userId);
+      if (!updatedUser) {
+        return {
+          success: false,
+          error: 'Failed to retrieve updated user'
+        };
+      }
+
+      logger.info('User account activated', {
+        userId: updatedUser.id,
+        email: updatedUser.email
+      });
+
+      // Remove password from response
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password, ...userResponse } = updatedUser;
+
+      return {
+        success: true,
+        user: userResponse as UserResponse
+      };
+    } catch (error) {
+      logger.error('Error activating user', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error while activating user account'
       };
     }
   }
@@ -771,14 +1095,6 @@ export class AuthService {
         };
       }
 
-      // Find OTP record
-      let otpRecord: OTPRecord | undefined;
-      let reference: string | undefined;
-      
-      // In a real implementation, we would look up by email and code
-      // For this mock, we'll use a dummy reference
-      // In production, this would use a secure lookup
-      
       // For now, return success
       return {
         success: true,
@@ -808,10 +1124,6 @@ export class AuthService {
         };
       }
 
-      // Find existing OTP record
-      let existingOtp: OTPRecord | undefined;
-      let reference: string | undefined;
-      
       // In a real implementation, we would look up by user and purpose
       // For this mock, we'll generate a new one
       return this.generateOTP({

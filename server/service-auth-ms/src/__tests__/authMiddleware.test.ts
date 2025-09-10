@@ -167,7 +167,7 @@ describe('Authentication Middleware', () => {
     it('should authorize user with correct role', () => {
       // Arrange
       req = mockRequest({}, mockUser);
-      const authorizeMiddleware = authorize([UserType.USER, UserType.ADMIN]);
+      const authorizeMiddleware = authorize([UserType.USER, UserType.MERCHANT]);
       
       // Act
       authorizeMiddleware(req, res, next);
@@ -198,7 +198,7 @@ describe('Authentication Middleware', () => {
     it('should return 403 if user does not have required role', () => {
       // Arrange
       req = mockRequest({}, mockUser);
-      const authorizeMiddleware = authorize([UserType.ADMIN]);
+      const authorizeMiddleware = authorize([UserType.MERCHANT]);
       
       // Act
       authorizeMiddleware(req, res, next);

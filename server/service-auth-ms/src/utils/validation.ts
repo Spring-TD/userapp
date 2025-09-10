@@ -1,3 +1,18 @@
+>>>>>>> 61b77a379aa21ff00899f7fb6df7b19f71b6190b
+// Validation helper function
+export const validateInput = <T>(schema: Joi.ObjectSchema, data: any): { error?: string; value?: T } => {
+  const { error, value } = schema.validate(data, { 
+    abortEarly: false,
+    stripUnknown: true 
+  });
+  
+  if (error) {
+    const errorMessage = error.details.map((detail: any) => detail.message).join(', ');
+    return { error: errorMessage };
+  }
+  
+  return { value };
+};
 import Joi from 'joi';
 
 // Common validation schemas
@@ -18,16 +33,6 @@ const phoneSchema = Joi.string()
     'string.pattern.base': 'Phone number must be in valid international format'
   });
 
-// Address validation schema
-const addressSchema = Joi.object({
-  street: Joi.string().min(5).max(200).required(),
-  city: Joi.string().min(2).max(100).required(),
-  state: Joi.string().min(2).max(100).required(),
-  country: Joi.string().min(2).max(100).required(),
-  postalCode: Joi.string().min(3).max(20).required()
-});
-
->>>>>>> 61b77a379aa21ff00899f7fb6df7b19f71b6190b
 const nameSchema = Joi.string().min(2).max(50).required();
 
 // Login validation schema
@@ -68,24 +73,6 @@ export const passwordChangeSchema = Joi.object({
   newPassword: passwordSchema
 });
 
-// Address validation schema
-const addressSchema = Joi.object({
-  street: Joi.string().min(5).max(200).required(),
-  city: Joi.string().min(2).max(100).required(),
-  state: Joi.string().min(2).max(100).required(),
-  country: Joi.string().min(2).max(100).required(),
-  postalCode: Joi.string().min(3).max(20).required()
-});=======
-// Address validation schema
-const addressSchema = Joi.object({
-  street: Joi.string().min(5).max(200).required(),
-  city: Joi.string().min(2).max(100).required(),
-  state: Joi.string().min(2).max(100).required(),
-  country: Joi.string().min(2).max(100).required(),
-  postalCode: Joi.string().min(3).max(20).required()
-});
-
->>>>>>> 61b77a379aa21ff00899f7fb6df7b19f71b6190b
 // User registration validation schema
 export const userRegistrationSchema = Joi.object({
   email: emailSchema,
@@ -104,15 +91,45 @@ export const merchantRegistrationSchema = Joi.object({
   first_name: nameSchema,
   last_name: nameSchema,
   phone: phoneSchema,
->>>>>>> 61b77a379aa21ff00899f7fb6df7b19f71b6190b
-// Validation helper function
-export const validateInput = <T>(schema: Joi.ObjectSchema, data: any): { error?: string; value?: T } => {
   user_merchant_id: Joi.string().min(5).max(50).required(),
   country: Joi.string().min(2).max(100).required()
 });
 
+// User profile update validation schema
+export const userProfileUpdateSchema = Joi.object({
+  first_name: Joi.string().min(2).max(50).optional(),
+  last_name: Joi.string().min(2).max(50).optional(),
+  phone: phoneSchema.optional(),
+  country: Joi.string().min(2).max(100).optional()
+});
+
+// User verification validation schema (admin only)
+export const userVerificationSchema = Joi.object({
+  email_verified: Joi.boolean().optional(),
+  phone_verified: Joi.boolean().optional(),
+  status: Joi.string().valid('pending', 'active', 'suspended', 'deactivated').optional(),
+  notes: Joi.string().max(500).optional()
+});
+
+// User suspension validation schema (admin only)
+export const userSuspensionSchema = Joi.object({
+  reason: Joi.string().max(500).optional()
+});
+
 // Validation helper function
 export const validateInput = <T>(schema: Joi.ObjectSchema, data: any): { error?: string; value?: T } => {
+  const { error, value } = schema.validate(data, { 
+    abortEarly: false,
+    stripUnknown: true 
+  });
+  
+  if (error) {
+    const errorMessage = error.details.map((detail: any) => detail.message).join(', ');
+    return { error: errorMessage };
+  }
+  
+  return { value };
+};
 =======
 >>>>>>> 61b77a379aa21ff00899f7fb6df7b19f71b6190b
 // Validation helper function

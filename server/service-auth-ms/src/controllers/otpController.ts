@@ -105,7 +105,7 @@ export class OTPController {
    */
   static async resend(req: Request, res: Response, next: NextFunction) {
     try {
-      const { reference } = req.body as ResendOTPRequest;
+      const { identifier } = req.body as ResendOTPRequest;
       
       // Validate required parameter
       if (!reference) {
@@ -116,7 +116,7 @@ export class OTPController {
       }
       
       // Resend OTP
-      const result = await AuthService.resendOTP({ reference });
+      const result = await AuthService.resendOTP({ identifier });
       
       if (!result.success) {
         return res.status(500).json({ 

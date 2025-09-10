@@ -1,14 +1,20 @@
 import { Router } from 'express';
 import { UserController } from '../controllers/userController';
+import { authenticate } from '../middleware/auth';
 
 const router = Router();
 
-// User management routes
+// All user routes require authentication
+router.use(authenticate);
+
+// User profile management routes
 router.get('/profile', UserController.getProfile);
 router.put('/profile', UserController.updateProfile);
-router.get('/info', UserController.getInfo);
-router.post('/verify-info', UserController.verifyInfo);
-router.put('/suspend', UserController.suspend);
-router.put('/activate', UserController.activate);
+
+// Admin user management routes
+router.get('/info/:userId', UserController.getInfo);
+router.post('/verify-info/:userId', UserController.verifyInfo);
+router.put('/suspend/:userId', UserController.suspend);
+router.put('/activate/:userId', UserController.activate);
 
 export { router as userRoutes };

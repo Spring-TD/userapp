@@ -15,6 +15,7 @@
     "test:auth": "jest src/__tests__/authMiddleware.test.ts",
     "test:jwt": "jest src/__tests__/jwtCrypto.test.ts",
     "test:verification": "jest src/__tests__/accountVerification.test.ts",
+    "test:user": "jest src/__tests__/userController.test.ts",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
     "format": "prettier --write src/**/*.ts"

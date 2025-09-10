@@ -13,8 +13,8 @@ const mockRequest = (body: any = {}) => {
 
 const mockResponse = () => {
   const res = {} as Response;
-  res.status = jest.fn().mockReturnValue(res);
-  res.json = jest.fn().mockReturnValue(res);
+  res.status = jest.fn().mockReturnValue(res) as any;
+  res.json = jest.fn().mockReturnValue(res) as any;
   return res;
 };
 
@@ -222,7 +222,7 @@ describe('OTPController', () => {
     it('should resend OTP successfully', async () => {
       // Arrange
       const resendRequest: ResendOTPRequest = {
-        reference: 'mock-reference-id'
+        identifier: 'mock-reference-id'
       };
       
       req = mockRequest(resendRequest);
@@ -267,7 +267,7 @@ describe('OTPController', () => {
     it('should handle server errors', async () => {
       // Arrange
       const resendRequest: ResendOTPRequest = {
-        reference: 'mock-reference-id'
+        identifier: 'mock-reference-id'
       };
       
       req = mockRequest(resendRequest);
