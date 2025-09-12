@@ -9,6 +9,7 @@ import { logger } from '../utils/logger';
 export class TokenBlacklistService {
   private redisClient: RedisClientType | null = null;
   private isConnected = false;
+  private fallbackBlacklist = new Map<string, number>();
 
   constructor() {
     this.initializeRedis();
@@ -53,7 +54,7 @@ export class TokenBlacklistService {
     try {
       if (!this.isConnected || !this.redisClient) {
         logger.warn('Redis not connected, using fallback blacklist');
-        return this.fallbackBlacklistMethods.add(token, expirationTime);
+        return this.fallbackAdd(token, expirationTime);
       }
 
       const key = `blacklist:${token}`;
@@ -64,7 +65,7 @@ export class TokenBlacklistService {
       return true;
     } catch (error) {
       logger.error('Failed to add token to blacklist', { error: error instanceof Error ? error.message : 'Unknown error' });
-      return this.fallbackBlacklist.add(token, expirationTime);
+      return this.fallbackAdd(token, expirationTime);
     }
   }
 
@@ -75,7 +76,7 @@ export class TokenBlacklistService {
     try {
       if (!this.isConnected || !this.redisClient) {
         logger.warn('Redis not connected, using fallback blacklist');
-        return this.fallbackBlacklistMethods.has(token);
+        return this.fallbackHas(token);
       }
 
       const key = `blacklist:${token}`;
@@ -83,7 +84,7 @@ export class TokenBlacklistService {
       return result !== null;
     } catch (error) {
       logger.error('Failed to check token blacklist', { error: error instanceof Error ? error.message : 'Unknown error' });
-      return this.fallbackBlacklist.has(token);
+      return this.fallbackHas(token);
     }
   }
 
@@ -93,7 +94,7 @@ export class TokenBlacklistService {
   async removeFromBlacklist(token: string): Promise<boolean> {
     try {
       if (!this.isConnected || !this.redisClient) {
-        return this.fallbackBlacklistMethods.delete(token);
+        return this.fallbackDelete(token);
       }
 
       const key = `blacklist:${token}`;
@@ -101,7 +102,7 @@ export class TokenBlacklistService {
       return result > 0;
     } catch (error) {
       logger.error('Failed to remove token from blacklist', { error: error instanceof Error ? error.message : 'Unknown error' });
-      return this.fallbackBlacklist.delete(token);
+      return this.fallbackDelete(token);
     }
   }
 
@@ -111,7 +112,7 @@ export class TokenBlacklistService {
   async clearBlacklist(): Promise<void> {
     try {
       if (!this.isConnected || !this.redisClient) {
-        this.fallbackBlacklistMethods.clear();
+        this.fallbackClear();
         return;
       }
 
@@ -121,7 +122,7 @@ export class TokenBlacklistService {
       }
     } catch (error) {
       logger.error('Failed to clear blacklist', { error: error instanceof Error ? error.message : 'Unknown error' });
-      this.fallbackBlacklist.clear();
+      this.fallbackClear();
     }
   }
 
@@ -132,7 +133,7 @@ export class TokenBlacklistService {
     try {
       if (!this.isConnected || !this.redisClient) {
         return {
-          count: this.fallbackBlacklistMethods.size,
+          count: this.fallbackSize(),
           isRedisConnected: false
         };
       }
@@ -145,7 +146,7 @@ export class TokenBlacklistService {
     } catch (error) {
       logger.error('Failed to get blacklist stats', { error: error instanceof Error ? error.message : 'Unknown error' });
       return {
-        count: this.fallbackBlacklist.size,
+        count: this.fallbackSize(),
         isRedisConnected: false
       };
     }
@@ -166,58 +167,49 @@ export class TokenBlacklistService {
   }
 
   /**
-   * Fallback in-memory blacklist for when Redis is unavailable
+   * Fallback in-memory blacklist methods
    */
-  private fallbackBlacklist = new Map<string, number>();
+  private fallbackAdd(token: string, expirationTime?: number): boolean {
+    const exp = expirationTime || (Date.now() + 86400000); // Default 24 hours
+    this.fallbackBlacklist.set(token, exp);
+    
+    // Clean up expired tokens
+    this.cleanupExpiredTokens();
+    
+    return true;
+  }
 
-  private fallbackBlacklistMethods = {
-    add: (token: string, expirationTime?: number): boolean => {
-      const exp = expirationTime || (Date.now() + 86400000); // Default 24 hours
-      this.fallbackBlacklist.set(token, exp);
-      
-      // Clean up expired tokens
-      const now = Date.now();
-      for (const [key, expTime] of this.fallbackBlacklist.entries()) {
-        if (expTime < now) {
-          this.fallbackBlacklist.delete(key);
-        }
-      }
-      
-      return true;
-    },
-
-    has: (token: string): boolean => {
-      const expTime = this.fallbackBlacklist.get(token);
-      if (!expTime) return false;
-      
-      if (expTime < Date.now()) {
-        this.fallbackBlacklist.delete(token);
-        return false;
-      }
-      
-      return true;
-    },
-
-    delete: (token: string): boolean => {
-      return this.fallbackBlacklist.delete(token);
-    },
-
-    clear: (): void => {
-      this.fallbackBlacklist.clear();
-    },
-
-    get size(): number {
-      // Clean up expired tokens first
-      const now = Date.now();
-      for (const [key, expTime] of this.fallbackBlacklist.entries()) {
-        if (expTime < now) {
-          this.fallbackBlacklist.delete(key);
-        }
-      }
-      return this.fallbackBlacklist.size;
+  private fallbackHas(token: string): boolean {
+    const expTime = this.fallbackBlacklist.get(token);
+    if (!expTime) return false;
+    
+    if (expTime < Date.now()) {
+      this.fallbackBlacklist.delete(token);
+      return false;
     }
-  };
-}
+    
+    return true;
+  }
 
-// Export singleton instance
-export const tokenBlacklistService = new TokenBlacklistService();
+  private fallbackDelete(token: string): boolean {
+    return this.fallbackBlacklist.delete(token);
+  }
+
+  private fallbackClear(): void {
+    this.fallbackBlacklist.clear();
+  }
+
+  private fallbackSize(): number {
+    this.cleanupExpiredTokens();
+    return this.fallbackBlacklist.size;
+  }
+
+  private cleanupExpiredTokens(): void {
+    const now = Date.now();
+    for (const [key, expTime] of this.fallbackBlacklist.entries()) {
+      if (expTime < now) {
+        this.fallbackBlacklist.delete(key);
+      }
+    }
+  }
+}

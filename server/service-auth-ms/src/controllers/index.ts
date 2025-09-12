@@ -3,3 +3,6 @@ export * from './authController';
 export * from './otpController';
 export * from './passwordController';
 export * from './userController';
+export * from './serviceController';
+export * from './whitelistController';
+export * from './credentialController';

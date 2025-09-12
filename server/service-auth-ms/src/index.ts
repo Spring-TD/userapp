@@ -9,6 +9,10 @@ import { authRoutes } from './routes/authRoutes';
 import { otpRoutes } from './routes/otpRoutes';
 import { passwordRoutes } from './routes/passwordRoutes';
 import { userRoutes } from './routes/userRoutes';
+import { samsRoutes } from './routes/samsRoutes';
+import { credentialRoutes } from './routes/credentialRoutes';
+import { SAMSService } from './services/samsService';
+import { redisCacheService } from './services/redisCacheService';
 import { logger } from './utils/logger';
 
 const app = express();
@@ -54,6 +58,10 @@ app.use('/api/v1/otp', otpRoutes);
 app.use('/api/v1/password', passwordRoutes);
 app.use('/api/v1/user', userRoutes);
 
+// SAMS (Service Authentication Microservice) routes
+app.use('/api/v1/services', samsRoutes);
+app.use('/api/v1/credentials', credentialRoutes);
+
 // Error handling middleware (must be last)
 app.use(errorHandler);
 
@@ -61,9 +69,19 @@ app.use(errorHandler);
 if (require.main === module) {
   const PORT = config.server.port || 3000;
 
-  app.listen(PORT, () => {
-    logger.info(`Client Auth Microservice running on port ${PORT}`);
-    logger.info(`Environment: ${config.env}`);
+  // Redis cache service is automatically initialized through the singleton
+  logger.info('Redis cache service initialized');
+
+  // Initialize SAMS service
+  SAMSService.initialize().then(() => {
+    app.listen(PORT, () => {
+      logger.info(`Client Auth Microservice running on port ${PORT}`);
+      logger.info(`Environment: ${config.env}`);
+      logger.info('SAMS (Service Authentication Microservice) initialized');
+    });
+  }).catch((error) => {
+    logger.error('Failed to initialize SAMS service', { error });
+    process.exit(1);
   });
 }
 

@@ -42,6 +42,30 @@ export const generateRandomString = (length: number = 32): string => {
 };
 
 /**
+ * Generate a cryptographically secure token for SAMS credentials
+ */
+export const generateSecureToken = (length: number = 32): string => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+  let result = '';
+  
+  // Use crypto.randomInt for better security if available
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const array = new Uint8Array(length);
+    crypto.getRandomValues(array);
+    for (let i = 0; i < length; i++) {
+      result += chars.charAt(array[i] % chars.length);
+    }
+  } else {
+    // Fallback to Math.random
+    for (let i = 0; i < length; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+  }
+  
+  return result;
+};
+
+/**
  * Generate JWT access token
  */
 export const generateAccessToken = (user: UserAccount): string => {

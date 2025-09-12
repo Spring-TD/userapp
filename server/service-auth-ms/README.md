@@ -1,6 +1,6 @@
-# Client Authentication Microservice
+# Service Authentication Microservice
 
-A comprehensive authentication and user management microservice providing secure account creation, verification, authentication, and user lifecycle management capabilities for both merchants and regular users.
+A comprehensive authentication and user management microservice providing secure account creation, verification, authentication, and user lifecycle management capabilities for both merchants and regular users. **Now includes SAMS (Service Authentication Microservice) for inter-service authentication and management.**
 
 ## 🚨 Recent Updates
 
@@ -35,16 +35,15 @@ The API has been updated to use **snake_case** field naming convention instead o
 - Rate limiting and security headers
 - Structured logging and error handling
 - Comprehensive test coverage
+- JWT-based authentication ✅
+- Redis caching ✅
 
 ### Planned Implementation
 - Email/SMS verification
-- JWT-based authentication
-- OTP (One-Time Password) support
 - Password management and reset
 - User profile management
 - Administrative account operations
 - Database integration (MongoDB)
-- Redis caching
 - Comprehensive audit trails
 
 ## Technology Stack
@@ -52,8 +51,8 @@ The API has been updated to use **snake_case** field naming convention instead o
 - **Runtime**: Node.js 18+
 - **Framework**: Express.js with TypeScript
 - **Database**: MongoDB (configured, currently using mock database)
-- **Cache**: Redis 7+ (configured, not yet implemented)
-- **Authentication**: JWT (JSON Web Tokens) - *planned implementation*
+- **Cache**: Redis 7+ ✅ (now fully implemented)
+- **Authentication**: JWT (JSON Web Tokens) ✅
 - **Password Hashing**: bcrypt ✅
 - **Validation**: Joi ✅
 - **ORM**: Prisma (configured, not yet connected)
@@ -269,9 +268,9 @@ The service provides the following API endpoints:
 - `POST /api/v1/auth/register/user` - Register user account ✅ **Implemented**
 - `POST /api/v1/auth/register/merchant` - Register merchant account ✅ **Implemented**
 - `POST /api/v1/auth/verify-account` - Verify account with token ✅ **Implemented**
-- `POST /api/v1/auth/login` - User/merchant login 🚧 **Under Development**
-- `POST /api/v1/auth/logout` - Logout and invalidate session 🚧 **Under Development**
-- `POST /api/v1/auth/refresh` - Refresh JWT token 🚧 **Under Development**
+- `POST /api/v1/auth/login` - User/merchant login ✅ **Implemented**
+- `POST /api/v1/auth/logout` - Logout and invalidate session ✅ **Implemented**
+- `POST /api/v1/auth/refresh` - Refresh JWT token ✅ **Implemented**
 
 ### OTP Management
 - `POST /api/v1/otp/generate` - Generate OTP code 🚧 **Under Development**
@@ -293,6 +292,27 @@ The service provides the following API endpoints:
 
 ### Health Check
 - `GET /health` - Service health status ✅ **Implemented**
+
+## SAMS (Service Authentication Microservice) API
+
+**NEW:** The service now includes comprehensive service-to-service authentication and management capabilities.
+
+### Service Management
+- `POST /api/v1/services/create` - Create new service registration ✅ **Implemented**
+- `GET /api/v1/services` - Get all registered services ✅ **Implemented**
+- `GET /api/v1/services/:serviceId` - Get specific service by ID ✅ **Implemented**
+- `GET /api/v1/services/health` - Get SAMS system health ✅ **Implemented**
+
+### IP Whitelisting
+- `POST /api/v1/services/:serviceId/whitelist-ip` - Whitelist IP addresses for service ✅ **Implemented**
+- `GET /api/v1/services/:serviceId/whitelist-ip` - Get whitelisted IPs for service ✅ **Implemented**
+- `POST /api/v1/services/:serviceId/check-ip` - Check if IP is whitelisted ✅ **Implemented**
+
+### Credential Management
+- `POST /api/v1/services/:serviceId/credentials` - Create credentials for service ✅ **Implemented**
+- `GET /api/v1/services/:serviceId/credentials` - Get service credentials ✅ **Implemented**
+- `POST /api/v1/credentials/validate` - Validate credential ✅ **Implemented**
+- `POST /api/v1/credentials/void/:credentialId` - Void/revoke credential ✅ **Implemented**
 
 ## Implemented Endpoints
 
@@ -561,15 +581,14 @@ All errors follow a consistent format:
 - Security middleware (helmet, CORS, rate limiting)
 - Structured logging with Winston
 - Error handling middleware
+- JWT-based authentication
+- Redis caching implementation ✅
 
 ### 🚧 Under Development
-- Account verification system
-- JWT-based authentication
+- Email/SMS verification
 - Password reset functionality
 - OTP generation and verification
-- User profile management
 - Database integration (MongoDB)
-- Redis caching implementation
 - Email/SMS notification services
 
 ## Current Database
@@ -604,3 +623,169 @@ src/
 - Input sanitization and validation
 - SQL injection prevention
 - XSS protection headers
+- Redis-based token blacklisting
+- Comprehensive data caching
+
+## Redis Caching Implementation ✅
+
+The service now includes comprehensive Redis caching capabilities:
+
+### Features
+- **User Data Caching**: User profiles and authentication data are cached for improved performance
+- **Token Blacklisting**: JWT tokens are blacklisted using Redis with automatic expiration
+- **Fallback Support**: In-memory caching when Redis is unavailable
+- **Automatic Cleanup**: Expired cache entries are automatically cleaned up
+- **Connection Management**: Robust Redis connection handling with reconnection logic
+
+### Cache Keys
+- `user:{userId}` - User profile data
+- `email:{email}` - User lookup by email
+- `blacklist:{token}` - Blacklisted JWT tokens
+
+### Performance Benefits
+- Reduced database queries for frequently accessed user data
+- Faster authentication token validation
+- Improved response times for user profile endpoints
+- Scalable token blacklist management
+
+### Configuration
+Redis caching is configured through environment variables:
+```bash
+REDIS_URL=redis://localhost:6379
+REDIS_PASSWORD=your-redis-password  # Optional
+```
+
+### Cache TTL (Time To Live)
+- User data: 1 hour (3600 seconds)
+- Token blacklist: Based on token expiration time
+- Custom TTL can be set per cache operation
+
+## SAMS (Service Authentication Microservice) Documentation
+
+### Overview
+
+SAMS provides comprehensive service-to-service authentication and management capabilities, enabling secure communication between microservices through:
+
+- **Service Registration**: Register and manage microservices
+- **IP Whitelisting**: Control access based on IP addresses
+- **Credential Management**: Create, validate, and revoke authentication credentials
+- **Service Discovery**: Find and manage registered services
+
+### SAMS API Endpoints
+
+#### Service Management
+
+**Create Service - `POST /api/v1/services/create`**
+Returns `service_id` for a new microservice registration.
+
+```bash
+curl -X POST "http://localhost:3000/api/v1/services/create" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Mortgage Calculation MS",
+    "description": "A microservice for calculating mortgage rates and payments",
+    "version": "1.0.0",
+    "endpoint_url": "http://localhost:3001",
+    "health_check_url": "http://localhost:3001/health",
+    "owner_email": "dev@example.com",
+    "tags": ["mortgage", "calculation", "finance"]
+  }'
+```
+
+**Get All Services - `GET /api/v1/services`**
+Returns all registered services.
+
+**Get Service - `GET /api/v1/services/:serviceId`**
+Returns specific service details with whitelisted IPs and credential count.
+
+#### IP Whitelisting
+
+**Whitelist IP - `POST /api/v1/services/:serviceId/whitelist-ip`**
+Restricts service access to specific IP addresses or ranges.
+
+```bash
+curl -X POST "http://localhost:3000/api/v1/services/{serviceId}/whitelist-ip" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ip_addresses": ["192.168.1.100", "10.0.0.0/24"],
+    "description": "Allow access from internal network"
+  }'
+```
+
+#### Credential Management
+
+**Create Credential - `POST /api/v1/services/:serviceId/credentials`**
+Generates secure credentials for service-to-service authentication.
+
+```bash
+curl -X POST "http://localhost:3000/api/v1/services/{serviceId}/credentials" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "credential_type": "api_key",
+    "expires_in": 86400,
+    "permissions": ["read", "write"],
+    "rate_limit": 1000
+  }'
+```
+
+**Validate Credential - `POST /api/v1/credentials/validate`**
+Verifies if a credential is active and authorized.
+
+```bash
+curl -X POST "http://localhost:3000/api/v1/credentials/validate" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "credential_value": "sams_Q6OrmkzcEbE7wWXOiGRYvcRrT1QAbUSZ",
+    "service_id": "72018112-bedb-42bf-8697-9bef5fb4eb19",
+    "requested_permissions": ["read"]
+  }'
+```
+
+**Void Credential - `POST /api/v1/credentials/void/:credentialId`**
+Revokes a credential, making it inactive.
+
+### SAMS Usage Workflow
+
+1. **Service Registration**: Register your microservice to get a `service_id`
+2. **IP Whitelisting**: Define which servers can access your service
+3. **Credential Creation**: Generate credentials for other services to authenticate
+4. **Credential Validation**: Target services validate incoming credentials
+5. **Credential Management**: Void compromised or unused credentials
+
+### SAMS Features
+
+- **Secure Credential Generation**: Uses cryptographically secure random tokens
+- **Multiple Credential Types**: API keys, JWT tokens, client secrets
+- **Flexible Permissions**: Define granular access permissions
+- **Rate Limiting**: Control request rates per credential
+- **IP-based Access Control**: CIDR notation support for IP ranges
+- **Automatic Cleanup**: Expired credentials are automatically marked
+- **Comprehensive Logging**: All operations are logged for audit trails
+
+### Integration Example
+
+```javascript
+// Microservice A requests access to Microservice B
+const response = await fetch('http://microservice-b/api/data', {
+  headers: {
+    'Authorization': 'Bearer sams_Q6OrmkzcEbE7wWXOiGRYvcRrT1QAbUSZ',
+    'X-Service-ID': 'service-a-id'
+  }
+});
+
+// Microservice B validates the credential
+const validation = await fetch('http://sams:3000/api/v1/credentials/validate', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    credential_value: 'sams_Q6OrmkzcEbE7wWXOiGRYvcRrT1QAbUSZ',
+    service_id: 'service-b-id',
+    requested_permissions: ['read']
+  })
+});
+
+if (validation.valid) {
+  // Process the request
+} else {
+  // Reject with 401 Unauthorized
+}

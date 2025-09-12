@@ -5,6 +5,7 @@ import { logger } from '../utils/logger';
 import { config } from '../config/environment';
 import { emailService } from './emailService';
 import { tokenBlacklistService } from './tokenBlacklistService';
+import { redisCacheService } from '../services/redisCacheService';
 import { OTPRecord, GenerateOTPRequest, VerifyOTPRequest, ResendOTPRequest } from '../types/otpTypes';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -257,6 +258,16 @@ export class AuthService {
    */
   static async getUserProfile(userId: string): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
     try {
+      // First check Redis cache
+      const cachedUser = await redisCacheService.get<UserResponse>(`user:${userId}`);
+      if (cachedUser) {
+        return {
+          success: true,
+          user: cachedUser
+        };
+      }
+
+      // If not in cache, get from database
       const user = await mockDb.findUserById(userId);
       if (!user) {
         return {
@@ -268,6 +279,9 @@ export class AuthService {
       // Remove password from response
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { password, ...userResponse } = user;
+
+      // Store in Redis cache for 1 hour
+      await redisCacheService.set(`user:${userId}`, userResponse);
 
       return {
         success: true,
@@ -325,6 +339,9 @@ export class AuthService {
         };
       }
 
+      // Update Redis cache
+      await redisCacheService.set(`user:${userId}`, updatedUser);
+
       logger.info('User profile updated successfully', {
         userId: updatedUser.id,
         email: updatedUser.email
@@ -352,6 +369,16 @@ export class AuthService {
    */
   static async getUserInfo(userId: string): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
     try {
+      // First check Redis cache
+      const cachedUser = await redisCacheService.get<UserResponse>(`user:${userId}`);
+      if (cachedUser) {
+        return {
+          success: true,
+          user: cachedUser
+        };
+      }
+
+      // If not in cache, get from database
       const user = await mockDb.findUserById(userId);
       if (!user) {
         return {
@@ -360,13 +387,16 @@ export class AuthService {
         };
       }
 
-      // Remove password from response but include more detailed info
+      // Update Redis cache
+      await redisCacheService.set(`user:${userId}`, user);
+
+      // Remove password from response
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { password, ...userResponse } = user;
 
       logger.info('User info retrieved', {
         userId: user.id,
-        requestedBy: 'admin' // In production, this would be the requesting user's ID
+        requestedBy: 'admin'
       });
 
       return {
@@ -588,14 +618,40 @@ export class AuthService {
    * Get user by email
    */
   static async getUserByEmail(email: string): Promise<UserAccount | null> {
-    return mockDb.findUserByEmail(email);
+    // First check Redis cache
+    const cachedUser = await redisCacheService.get<UserAccount>(`email:${email}`);
+    if (cachedUser) {
+      return cachedUser;
+    }
+
+    // If not in cache, get from database
+    const user = await mockDb.findUserByEmail(email);
+    if (user) {
+      // Cache user by email
+      await redisCacheService.set(`email:${email}`, user);
+    }
+
+    return user;
   }
 
   /**
    * Get user by ID
    */
   static async getUserById(id: string): Promise<UserAccount | null> {
-    return mockDb.findUserById(id);
+    // First check Redis cache
+    const cachedUser = await redisCacheService.get<UserAccount>(`user:${id}`);
+    if (cachedUser) {
+      return cachedUser;
+    }
+
+    // If not in cache, get from database
+    const user = await mockDb.findUserById(id);
+    if (user) {
+      // Cache user by ID
+      await redisCacheService.set(`user:${id}`, user);
+    }
+
+    return user;
   }
 
   /**
@@ -604,7 +660,7 @@ export class AuthService {
   static async login(email: string, password: string): Promise<LoginResponse> {
     try {
       // Find user by email
-      const user = await mockDb.findUserByEmail(email.toLowerCase());
+      const user = await this.getUserByEmail(email.toLowerCase());
       if (!user) {
         return {
           success: false,
@@ -638,6 +694,7 @@ export class AuthService {
           updateData.locked_until = new Date(Date.now() + lockoutDuration);
         }
 
+        // Update user record
         await mockDb.updateUser(user.id, updateData);
 
         logger.warn('Failed login attempt', {
@@ -656,7 +713,7 @@ export class AuthService {
       if (user.status !== AccountStatus.ACTIVE) {
         return {
           success: false,
-          error: `Account is ${user.status.toLowerCase()}. Please contact support.`
+          error: `Account is ${user.status}. Please contact support.`
         };
       }
 
@@ -667,24 +724,33 @@ export class AuthService {
         });
       }
 
-      // Generate tokens
-      const accessToken = generateAccessToken(user);
-      const refreshToken = generateRefreshToken(user);
-
-      // Update last login
+      // Update last login time
       await mockDb.updateUser(user.id, {
         last_login_at: new Date()
       });
 
+      // Get updated user
+      const updatedUser = await this.getUserById(user.id);
+      if (!updatedUser) {
+        return {
+          success: false,
+          error: 'User not found after login'
+        };
+      }
+
+      // Generate tokens
+      const accessToken = generateAccessToken(updatedUser);
+      const refreshToken = generateRefreshToken(updatedUser);
+
       logger.info('User login successful', {
-        userId: user.id,
-        email: user.email,
-        userType: user.user_type
+        userId: updatedUser.id,
+        email: updatedUser.email,
+        userType: updatedUser.user_type
       });
 
       // Remove password from response
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { password: _, ...userResponse } = user;
+      const { password: userPassword, ...userResponse } = updatedUser;
 
       return {
         success: true,
