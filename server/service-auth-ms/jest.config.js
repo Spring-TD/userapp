@@ -1,10 +1,15 @@
 module.exports = {
-  preset: 'ts-jest/presets/js-with-ts-esm',
+  preset: 'ts-jest',
   testEnvironment: 'node',
   roots: ['<rootDir>/src'],
   testMatch: ['**/__tests__/**/*.ts', '**/?(*.)+(spec|test).ts'],
   transform: {
     '^.+\\.ts$': 'ts-jest',
+  },
+  globals: {
+    'ts-jest': {
+      tsconfig: 'tsconfig.json'
+    }
   },
   collectCoverageFrom: [
     'src/**/*.ts',

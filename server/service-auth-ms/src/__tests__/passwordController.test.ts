@@ -172,7 +172,8 @@ describe('PasswordController', () => {
       // Assert
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith({
-        success: false,\n        error: 'Validation failed',
+        success: false,
+        error: 'Validation failed',
         details: expect.stringContaining('newPassword')
       });
     });
@@ -253,7 +254,8 @@ describe('PasswordController', () => {
         success: true,
         message: 'Password has been changed successfully'
       });
-      expect(AuthService.changePassword).toHaveBeenCalledWith(\n        'user-123',
+      expect(AuthService.changePassword).toHaveBeenCalledWith(
+        'user-123',
         'OldPassword123!',
         'NewSecurePass123!'
       );

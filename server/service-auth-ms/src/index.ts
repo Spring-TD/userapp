@@ -69,18 +69,19 @@ app.use(errorHandler);
 if (require.main === module) {
   const PORT = config.server.port || 3000;
 
-  // Redis cache service is automatically initialized through the singleton
-  logger.info('Redis cache service initialized');
-
-  // Initialize SAMS service
-  SAMSService.initialize().then(() => {
+  // Initialize services
+  Promise.all([
+    redisCacheService.getStats(), // This ensures Redis connection is established
+    SAMSService.initialize()
+  ]).then(() => {
+    logger.info('Redis cache service initialized');
     app.listen(PORT, () => {
       logger.info(`Client Auth Microservice running on port ${PORT}`);
       logger.info(`Environment: ${config.env}`);
       logger.info('SAMS (Service Authentication Microservice) initialized');
     });
   }).catch((error) => {
-    logger.error('Failed to initialize SAMS service', { error });
+    logger.error('Failed to initialize services', { error });
     process.exit(1);
   });
 }

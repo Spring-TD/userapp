@@ -213,3 +213,6 @@ export class TokenBlacklistService {
     }
   }
 }
+
+// Export singleton instance
+export const tokenBlacklistService = new TokenBlacklistService();

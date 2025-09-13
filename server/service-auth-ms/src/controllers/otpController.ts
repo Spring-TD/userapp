@@ -52,12 +52,13 @@ export class OTPController {
         success: true,
         message: 'OTP sent successfully',
         data: {
-          reference: result.reference,
-          expiresIn: result.expiresIn
+          reference: result.reference || '',
+          expiresIn: result.expiresIn || 300
         }
       });
     } catch (error) {
       next(error);
+      return;
     }
   }
 
@@ -96,6 +97,7 @@ export class OTPController {
       });
     } catch (error) {
       next(error);
+      return;
     }
   }
 
@@ -108,10 +110,10 @@ export class OTPController {
       const { identifier } = req.body as ResendOTPRequest;
       
       // Validate required parameter
-      if (!reference) {
+      if (!identifier) {
         return res.status(400).json({ 
           success: false,
-          error: 'Missing required parameter: reference is required'
+          error: 'Missing required parameter: identifier is required'
         });
       }
       
@@ -129,12 +131,13 @@ export class OTPController {
         success: true,
         message: 'OTP resent successfully',
         data: {
-          reference: result.reference,
-          expiresIn: result.expiresIn
+          reference: result.reference || '',
+          expiresIn: result.expiresIn || 300
         }
       });
     } catch (error) {
       next(error);
+      return;
     }
   }
 }

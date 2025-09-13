@@ -200,3 +200,6 @@ export class RedisCacheService {
     }
   }
 }
+
+// Export singleton instance
+export const redisCacheService = new RedisCacheService();
