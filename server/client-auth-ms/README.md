@@ -1,15 +1,19 @@
 # Client Authentication Microservice
 
 ## Overview
-The Client Authentication Microservice (client-auth-ms) is responsible for collecting registration form data from frontend clients and forwarding it to the service-auth-ms for account creation. It provides form validation, data formatting, and API gateway functionality.
+The Client Authentication Microservice (client-auth-ms) is a comprehensive API gateway that handles all client-facing authentication operations. It acts as the single entry point for frontend applications, providing form validation, request forwarding, and seamless integration with the backend authentication service (service-auth-ms). This service now supports the complete authentication workflow including registration, login, password management, OTP verification, and user profile management.
 
 ## Features
-- **Merchant Registration Form**: Collects merchant signup data
-- **User Registration Form**: Collects user signup data under a merchant
-- **Form Validation**: Client-side validation with detailed error messages
-- **API Gateway**: Forwards validated data to service-auth-ms
-- **CORS Support**: Configured for frontend integration
-- **Health Check**: Service monitoring endpoint
+- **✅ Registration Forms**: Merchant and user signup with validation
+- **✅ Authentication**: Complete login/logout/refresh token flow  
+- **✅ Account Verification**: Email-based account verification
+- **✅ OTP Management**: Generate, verify, and resend OTP codes
+- **✅ Password Management**: Forgot password, reset, and change operations
+- **✅ User Profile**: Get and update user profile information
+- **✅ Administrative Operations**: User suspension and activation
+- **✅ API Gateway**: Centralized routing and validation
+- **✅ CORS Support**: Configured for frontend integration
+- **✅ Health Check**: Service monitoring endpoint
 
 ## API Endpoints
 
@@ -18,13 +22,15 @@ The Client Authentication Microservice (client-auth-ms) is responsible for colle
 GET /health
 ```
 
-### Registration Forms Schema
+### Registration Endpoints
+
+#### Registration Forms Schema
 ```
 GET /api/v1/registration/forms
 ```
 Returns the form schemas for both merchant and user registration.
 
-### Merchant Registration
+#### Merchant Registration
 ```
 POST /api/v1/registration/merchant
 Content-Type: application/json
@@ -39,7 +45,7 @@ Content-Type: application/json
 }
 ```
 
-### User Registration
+#### User Registration
 ```
 POST /api/v1/registration/user
 Content-Type: application/json
@@ -53,6 +59,191 @@ Content-Type: application/json
   "country": "United States",
   "password": "SecurePass123!"
 }
+```
+
+### Authentication Endpoints ✅
+
+#### Account Verification
+```
+POST /api/v1/auth/verify-account
+Content-Type: application/json
+
+{
+  "token": "verification-token-string"
+}
+```
+
+#### User Login
+```
+POST /api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "SecurePass123!"
+}
+```
+
+#### User Logout
+```
+POST /api/v1/auth/logout
+Authorization: Bearer <jwt-token>
+```
+
+#### Refresh Token
+```
+POST /api/v1/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "refresh-token-string"
+}
+```
+
+#### Get Current User
+```
+GET /api/v1/auth/me
+Authorization: Bearer <jwt-token>
+```
+
+#### Verify Token
+```
+POST /api/v1/auth/verify-token
+Authorization: Bearer <jwt-token>
+```
+
+#### Check Email Exists
+```
+GET /api/v1/auth/email-exists/{email}
+```
+
+### OTP Management Endpoints ✅
+
+#### Generate OTP
+```
+POST /api/v1/otp/generate
+Content-Type: application/json
+
+{
+  "identifier": "user@example.com",
+  "channel": "email",
+  "purpose": "verification"
+}
+```
+
+#### Verify OTP
+```
+POST /api/v1/otp/verify
+Content-Type: application/json
+
+{
+  "identifier": "user@example.com",
+  "code": "123456"
+}
+```
+
+#### Resend OTP
+```
+POST /api/v1/otp/resend
+Content-Type: application/json
+
+{
+  "identifier": "user@example.com",
+  "channel": "email",
+  "purpose": "verification"
+}
+```
+
+### Password Management Endpoints ✅
+
+#### Forgot Password
+```
+POST /api/v1/password/forgot
+Content-Type: application/json
+
+{
+  "email": "user@example.com"
+}
+```
+
+#### Reset Password
+```
+POST /api/v1/password/reset
+Content-Type: application/json
+
+{
+  "token": "reset-token-string",
+  "password": "NewSecurePass123!"
+}
+```
+
+#### Change Password
+```
+PUT /api/v1/password/change
+Content-Type: application/json
+Authorization: Bearer <jwt-token>
+
+{
+  "currentPassword": "OldPass123!",
+  "newPassword": "NewSecurePass123!"
+}
+```
+
+### User Management Endpoints ✅
+
+#### Get User Profile
+```
+GET /api/v1/user/profile
+Authorization: Bearer <jwt-token>
+```
+
+#### Update User Profile
+```
+PUT /api/v1/user/profile
+Content-Type: application/json
+Authorization: Bearer <jwt-token>
+
+{
+  "first_name": "UpdatedName",
+  "last_name": "UpdatedLastName",
+  "phone": "+1234567890"
+}
+```
+
+#### Get User Info (Admin)
+```
+GET /api/v1/user/info/{userId}
+Authorization: Bearer <admin-jwt-token>
+```
+
+#### Verify User Info (Admin)
+```
+POST /api/v1/user/verify-info/{userId}
+Content-Type: application/json
+Authorization: Bearer <admin-jwt-token>
+
+{
+  "verificationData": {
+    "field": "value"
+  }
+}
+```
+
+#### Suspend User (Admin)
+```
+PUT /api/v1/user/suspend/{userId}
+Content-Type: application/json
+Authorization: Bearer <admin-jwt-token>
+
+{
+  "reason": "Policy violation"
+}
+```
+
+#### Activate User (Admin)
+```
+PUT /api/v1/user/activate/{userId}
+Authorization: Bearer <admin-jwt-token>
 ```
 
 ## Form Field Specifications
@@ -127,10 +318,10 @@ Content-Type: application/json
 ## Architecture
 
 ### Microservice Communication
-The client-auth-ms acts as a frontend-facing API gateway that validates form data before forwarding to service-auth-ms:
+The client-auth-ms acts as a comprehensive API gateway that handles all client-facing authentication operations:
 
 ```
-Frontend → client-auth-ms (port 3001) → service-auth-ms (port 3000) → Database
+Frontend → client-auth-ms (port 3001) → service-auth-ms (port 3000) → Database/Redis
 ```
 
 ### Communication Protocol
@@ -138,16 +329,21 @@ Frontend → client-auth-ms (port 3001) → service-auth-ms (port 3000) → Data
 - **Data Format**: JSON
 - **Client Port**: 3001 (configurable via PORT env var)
 - **Service Port**: 3000 (configurable via SERVICE_AUTH_URL env var)
-- **Endpoints**: 
-  - Merchant: `POST /api/v1/auth/register/merchant`
-  - User: `POST /api/v1/auth/register/user`
+- **Complete API Coverage**: 
+  - Registration: `POST /api/v1/registration/*`
+  - Authentication: `POST /api/v1/auth/*`
+  - OTP Management: `POST /api/v1/otp/*`
+  - Password Operations: `POST|PUT /api/v1/password/*`
+  - User Management: `GET|PUT|POST /api/v1/user/*`
 
 ### Data Flow
-1. Frontend submits form data to client-auth-ms
-2. client-auth-ms validates form data using Joi schemas
-3. On successful validation, data is forwarded to service-auth-ms
-4. service-auth-ms processes registration and returns response
-5. client-auth-ms forwards response back to frontend
+1. Frontend submits requests to client-auth-ms endpoints
+2. client-auth-ms validates request data and extracts authentication tokens
+3. Validated requests are forwarded to appropriate service-auth-ms endpoints
+4. service-auth-ms processes the request (registration, authentication, etc.)
+5. client-auth-ms forwards the response back to frontend
+6. All authentication state is managed by service-auth-ms
+7. client-auth-ms acts as a transparent proxy with validation
 
 ## Data Structure & Models
 
@@ -230,3 +426,29 @@ interface Merchant extends BaseUser {
 - Phone numbers must be in international format
 - All required fields must be provided
 - Field length limits are enforced
+- JWT tokens must be valid for authenticated endpoints
+- OTP codes must be 6 digits
+- Password reset tokens must be valid and not expired
+
+## Complete API Gateway Coverage ✅
+
+The client-auth-ms now provides complete coverage of all authentication operations:
+
+| Category | Endpoints | Status |
+|----------|-----------|--------|
+| **Registration** | Merchant/User registration, Forms schema | ✅ Complete |
+| **Authentication** | Login, Logout, Refresh, Verify account | ✅ Complete |
+| **Token Management** | JWT verification, Email existence check | ✅ Complete |
+| **OTP Operations** | Generate, Verify, Resend OTP codes | ✅ Complete |
+| **Password Management** | Forgot, Reset, Change password | ✅ Complete |
+| **User Profile** | Get/Update profile, User information | ✅ Complete |
+| **Administration** | Suspend/Activate users, Verify info | ✅ Complete |
+| **Health & Monitoring** | Health check endpoint | ✅ Complete |
+
+### Frontend Integration Benefits
+- **Single Entry Point**: All authentication operations through one service
+- **Consistent API**: Uniform request/response patterns across all endpoints
+- **Built-in Validation**: Request validation at the gateway level
+- **Error Handling**: Standardized error responses
+- **Token Management**: Centralized JWT token handling
+- **CORS Support**: Pre-configured for frontend integration
