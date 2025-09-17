@@ -215,8 +215,20 @@ export class AuthController {
    */
   static async logout(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      // Validate input data
+      const { error, value } = validateInput<{ refreshToken?: string }>(logoutSchema, req.body);
+
+      if (error) {
+        res.status(400).json({
+          success: false,
+          error: 'Validation failed',
+          details: error
+        });
+        return;
+      }
+
       const accessToken = req.token;
-      const { refreshToken } = req.body;
+      const refreshToken = value?.refreshToken;
 
       if (!accessToken) {
         res.status(400).json({

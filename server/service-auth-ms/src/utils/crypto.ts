@@ -53,7 +53,7 @@ export const generateSecureToken = (length: number = 32): string => {
     const array = new Uint8Array(length);
     crypto.getRandomValues(array);
     for (let i = 0; i < length; i++) {
-      result += chars.charAt(array[i] % chars.length);
+      result += chars.charAt((array[i] ?? 0) % chars.length);
     }
   } else {
     // Fallback to Math.random

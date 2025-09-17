@@ -1,7 +1,7 @@
 {
-  "name": "client-auth-microservice",
+  "name": "service-auth-microservice",
   "version": "1.0.0",
-  "description": "Client Authentication Microservice for secure user and merchant account management",
+  "description": "Service Authentication Microservice for secure user and merchant account management",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
