@@ -4,8 +4,7 @@ import { Header } from "@/components/header";
 
 export default function VerifyEmailPage() {
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
+    <div className="">
       <main className="flex items-center justify-center px-6 py-12">
         <EmailVerificationInstruction />
       </main>

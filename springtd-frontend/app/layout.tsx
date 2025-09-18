@@ -6,11 +6,13 @@ import { Analytics } from "@vercel/analytics/next"
 import { Suspense } from "react"
 import "./globals.css"
 import { Header } from "@/components/header"
+import { ToastContainer } from "react-toastify"
+import "react-toastify/dist/ReactToastify.css"
 
 export const metadata: Metadata = {
-  title: "v0 App",
-  description: "Created with v0",
-  generator: "v0.app",
+  title: "SpringTD",
+  description: "SpringTD is a fintech company that provides innovative financial solutions.",
+  generator: "Next.js",
 }
 
 export default function RootLayout({
@@ -26,11 +28,15 @@ export default function RootLayout({
           backgroundImage: "url('/images/clip-path-group.png')",
           backgroundRepeat: "repeat",
           backgroundSize: "400px 400px",
+          backgroundAttachment: "fixed",
+          backgroundPosition: "center",
         }}
       >
-                <Header />
-
-        <Suspense fallback={null}>{children}</Suspense>
+        <Header />
+        <Suspense fallback={null}>
+          {children}
+          <ToastContainer position="top-right" autoClose={3000} />
+          </Suspense>
         <Analytics />
       </body>
     </html>

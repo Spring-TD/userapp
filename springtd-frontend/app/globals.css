@@ -118,6 +118,13 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
