@@ -2,9 +2,10 @@
 import request from 'supertest';
 import { app } from '../index';
 import { KYCProfileModel } from '../models/kycModels';
-import { KYCStatus } from '../types/kycTypes';
+import { KYCStatus, UserType, DocumentType } from '../types/kycTypes';
 import mongoose from 'mongoose';
 import { logger } from '../utils/logger';
+import { MockKYCProfileModel } from '../utils/mockDb';
 
 // Mock the KYCService
 jest.mock('../services/kycService');
@@ -18,16 +19,110 @@ const mockKycId = new mongoose.Types.ObjectId().toString();
 // Test KYC submission
 const mockKYCSubmission = {
   userId: mockUserId,
-  userType: 'individual',
+  userType: UserType.INDIVIDUAL,
   documents: [
     {
-      type: 'identity',
+      type: DocumentType.IDENTITY,
       fileName: 'id_document.jpg',
       fileType: 'image/jpeg',
       fileSize: 2000000,
       fileUrl: 'https://example.com/documents/id_document.jpg'
     }
   ]
+};
+
+// Test Business KYC submission with Business Survey
+const mockBusinessKYCSubmission = {
+  userId: mockMerchantId,
+  userType: UserType.MERCHANT,
+  businessInfo: {
+    legalName: 'Test Business Inc.',
+    tradingName: 'Test Business',
+    registrationNumber: 'REG123456',
+    incorporationDate: new Date('2020-01-01'),
+    jurisdiction: 'US',
+    businessType: 'corporation',
+    industry: 'Technology',
+    website: 'https://testbusiness.com',
+    physicalAddress: '123 Main St, City, State 12345',
+    mailingAddress: '123 Main St, City, State 12345'
+  },
+  businessSurvey: {
+    annualTurnover: 1000000,
+    expectedTransactionVolume: 500000,
+    expectedTransactionValue: 1000,
+    sourceOfFunds: 'Business revenue',
+    businessPurpose: 'Software development and consulting',
+    numberOfEmployees: 50,
+    operatingSince: new Date('2020-01-01'),
+    websiteTraffic: 10000,
+    socialMediaPresence: true,
+    marketingChannels: 'Digital marketing, SEO, Social media',
+    paymentMethods: 'Credit card, Bank transfer',
+    businessModelDescription: 'We provide software development services to clients worldwide',
+    customerBaseDescription: 'Small to medium businesses in technology sector',
+    geographicMarkets: 'North America, Europe',
+    regulatoryLicenses: 'ISO 27001',
+    insuranceCoverage: 'General liability, Professional indemnity',
+    previousBankingRelationship: 'Previous bank was XYZ Bank',
+    reasonForOpeningAccount: 'To expand our business operations'
+  },
+  beneficialOwners: [
+    {
+      firstName: 'John',
+      lastName: 'Doe',
+      dateOfBirth: new Date('1980-01-01'),
+      nationality: 'US',
+      ownershipPercentage: 50,
+      isPoliticallyExposed: false
+    }
+  ],
+  directors: [
+    {
+      firstName: 'John',
+      lastName: 'Doe',
+      position: 'CEO',
+      dateOfBirth: new Date('1980-01-01'),
+      nationality: 'US'
+    }
+  ],
+  documents: [
+    {
+      type: DocumentType.BUSINESS_REGISTRATION,
+      fileName: 'business_reg.pdf',
+      fileType: 'application/pdf',
+      fileSize: 3000000,
+      fileUrl: 'https://example.com/documents/business_reg.pdf'
+    },
+    {
+      type: DocumentType.BENEFICIAL_OWNERSHIP,
+      fileName: 'beneficial_owners.pdf',
+      fileType: 'application/pdf',
+      fileSize: 2000000,
+      fileUrl: 'https://example.com/documents/beneficial_owners.pdf'
+    },
+    {
+      type: DocumentType.DIRECTOR_IDENTIFICATION,
+      fileName: 'director_id.pdf',
+      fileType: 'application/pdf',
+      fileSize: 2000000,
+      fileUrl: 'https://example.com/documents/director_id.pdf'
+    },
+    {
+      type: DocumentType.BANK,
+      fileName: 'bank_statement.pdf',
+      fileType: 'application/pdf',
+      fileSize: 2500000,
+      fileUrl: 'https://example.com/documents/bank_statement.pdf'
+    }
+  ],
+  riskAssessment: {
+    annualTurnover: 1000000,
+    expectedTransactionVolume: 500000,
+    highRiskJurisdiction: false,
+    sanctionListCheck: false,
+    adverseMediaCheck: false
+  }
 };
 
 // Test KYC review
@@ -47,7 +142,10 @@ describe('KYC Controller Tests', () => {
 
   afterAll(async () => {
     // Clean up database
-    await KYCProfileModel.deleteMany({});
+    // Since we're using a mock database, we'll just reset the arrays
+    const mockDb = require('../utils/mockDb');
+    mockDb.mockDb.kycProfiles = [];
+    mockDb.mockDb.documents = [];
     await mongoose.disconnect();
     logger.info('Disconnected from MongoDB after testing');
   });
@@ -76,7 +174,7 @@ describe('KYC Controller Tests', () => {
         ...mockKYCSubmission,
         documents: [
           {
-            type: 'invalid_type',
+            type: 'invalid_type' as any,
             fileName: 'id_document.jpg',
             fileType: 'image/jpeg',
             fileSize: 2000000,
@@ -117,13 +215,13 @@ describe('KYC Controller Tests', () => {
   describe('GET /api/v1/kyc/status/:userId', () => {
     it('should retrieve KYC status for a user', async () => {
       // Create a KYC profile in the database
-      const kycProfile = new KYCProfileModel({
+      const kycProfile = {
         userId: mockUserId,
-        userType: 'individual',
-        documents: mockKYCSubmission.documents.map(doc => ({ ...doc, status: KYCStatus.PENDING })),
+        userType: UserType.INDIVIDUAL,
+        documents: mockKYCSubmission.documents.map(doc => ({ ...doc, status: KYCStatus.PENDING, uploadDate: new Date() })),
         status: KYCStatus.PENDING
-      });
-      await kycProfile.save();
+      };
+      await MockKYCProfileModel.save(kycProfile);
       
       const response = await request(app)
         .get(`/api/v1/kyc/status/${mockUserId}`)
@@ -153,16 +251,16 @@ describe('KYC Controller Tests', () => {
   describe('POST /api/v1/kyc/document/:userId', () => {
     it('should upload a document successfully', async () => {
       // Create a KYC profile in the database
-      const kycProfile = new KYCProfileModel({
+      const kycProfile = {
         userId: mockUserId,
-        userType: 'individual',
+        userType: UserType.INDIVIDUAL,
         documents: [],
         status: KYCStatus.PENDING
-      });
-      await kycProfile.save();
+      };
+      await MockKYCProfileModel.save(kycProfile);
       
       const documentData = {
-        type: 'identity',
+        type: DocumentType.IDENTITY,
         fileName: 'new_id_document.jpg',
         fileType: 'image/jpeg',
         fileSize: 2500000,
@@ -183,16 +281,16 @@ describe('KYC Controller Tests', () => {
 
     it('should return error for invalid document type', async () => {
       // Create a KYC profile in the database
-      const kycProfile = new KYCProfileModel({
+      const kycProfile = {
         userId: mockUserId,
-        userType: 'individual',
+        userType: UserType.INDIVIDUAL,
         documents: [],
         status: KYCStatus.PENDING
-      });
-      await kycProfile.save();
+      };
+      await MockKYCProfileModel.save(kycProfile);
       
       const documentData = {
-        type: 'invalid_type',
+        type: 'invalid_type' as any,
         fileName: 'new_id_document.jpg',
         fileType: 'image/jpeg',
         fileSize: 2500000,
@@ -214,22 +312,23 @@ describe('KYC Controller Tests', () => {
   describe('DELETE /api/v1/kyc/document/:userId/:documentId', () => {
     it('should delete a document successfully', async () => {
       // Create a KYC profile with a document in the database
-      const kycProfile = new KYCProfileModel({
+      const kycProfile = {
         userId: mockUserId,
-        userType: 'individual',
+        userType: UserType.INDIVIDUAL,
         documents: [{
-          type: 'identity',
+          type: DocumentType.IDENTITY,
           fileName: 'id_document.jpg',
           fileType: 'image/jpeg',
           fileSize: 2000000,
-          status: KYCStatus.PENDING
-        }],
+          status: KYCStatus.PENDING,
+          uploadDate: new Date()
+        } as any],
         status: KYCStatus.PENDING
-      });
-      await kycProfile.save();
+      };
+      const savedProfile = await MockKYCProfileModel.save(kycProfile);
       
-      // Get the document ID
-      const documentId = kycProfile.documents[0]._id.toString();
+      // Get the document ID from the saved profile
+      const documentId = (savedProfile.documents[0] as any)._id.toString();
       
       const response = await request(app)
         .delete(`/api/v1/kyc/document/${mockUserId}/${documentId}`)
@@ -240,19 +339,19 @@ describe('KYC Controller Tests', () => {
       expect(response.body.message).toBe('Document deleted successfully');
       
       // Verify document was deleted
-      const updatedProfile = await KYCProfileModel.findOne({ userId: mockUserId });
+      const updatedProfile = await MockKYCProfileModel.findOne({ userId: mockUserId });
       expect(updatedProfile?.documents.length).toBe(0);
     });
 
     it('should return error for non-existent document', async () => {
       // Create a KYC profile without documents in the database
-      const kycProfile = new KYCProfileModel({
+      const kycProfile = {
         userId: mockUserId,
-        userType: 'individual',
+        userType: UserType.INDIVIDUAL,
         documents: [],
         status: KYCStatus.PENDING
-      });
-      await kycProfile.save();
+      };
+      await MockKYCProfileModel.save(kycProfile);
       
       const nonExistentDocumentId = new mongoose.Types.ObjectId().toString();
       
@@ -270,16 +369,16 @@ describe('KYC Controller Tests', () => {
   describe('PUT /api/v1/kyc/:kycId/status', () => {
     it('should update KYC status to APPROVED', async () => {
       // Create a KYC profile in the database
-      const kycProfile = new KYCProfileModel({
+      const kycProfile = {
         userId: mockUserId,
-        userType: 'individual',
-        documents: mockKYCSubmission.documents.map(doc => ({ ...doc, status: KYCStatus.PENDING })),
+        userType: UserType.INDIVIDUAL,
+        documents: mockKYCSubmission.documents.map(doc => ({ ...doc, status: KYCStatus.PENDING, uploadDate: new Date() })),
         status: KYCStatus.PENDING
-      });
-      await kycProfile.save();
+      };
+      const savedProfile = await MockKYCProfileModel.save(kycProfile);
       
       const response = await request(app)
-        .put(`/api/v1/kyc/${kycProfile._id}/status`)
+        .put(`/api/v1/kyc/${savedProfile._id}/status`)
         .set('Authorization', `Bearer ${mockAdminId}`)
         .send({
           status: KYCStatus.APPROVED,
@@ -291,26 +390,26 @@ describe('KYC Controller Tests', () => {
       expect(response.body.data.status).toBe(KYCStatus.APPROVED);
       
       // Verify KYC profile was updated
-      const updatedProfile = await KYCProfileModel.findById(kycProfile._id);
+      const updatedProfile = await MockKYCProfileModel.findById(savedProfile._id);
       expect(updatedProfile?.status).toBe(KYCStatus.APPROVED);
       expect(updatedProfile?.reviewedBy).toBe(mockAdminId);
     });
 
     it('should return error for invalid KYC status', async () => {
       // Create a KYC profile in the database
-      const kycProfile = new KYCProfileModel({
+      const kycProfile = {
         userId: mockUserId,
-        userType: 'individual',
-        documents: mockKYCSubmission.documents.map(doc => ({ ...doc, status: KYCStatus.PENDING })),
+        userType: UserType.INDIVIDUAL,
+        documents: mockKYCSubmission.documents.map(doc => ({ ...doc, status: KYCStatus.PENDING, uploadDate: new Date() })),
         status: KYCStatus.PENDING
-      });
-      await kycProfile.save();
+      };
+      const savedProfile = await MockKYCProfileModel.save(kycProfile);
       
       const response = await request(app)
-        .put(`/api/v1/kyc/${kycProfile._id}/status`)
+        .put(`/api/v1/kyc/${savedProfile._id}/status`)
         .set('Authorization', `Bearer ${mockAdminId}`)
         .send({
-          status: 'invalid_status',
+          status: 'invalid_status' as any,
           reviewedBy: mockAdminId
         });
       
@@ -324,22 +423,23 @@ describe('KYC Controller Tests', () => {
   describe('PUT /api/v1/kyc/document/:kycId/status', () => {
     it('should update document status to APPROVED', async () => {
       // Create a KYC profile with a document in the database
-      const kycProfile = new KYCProfileModel({
+      const kycProfile = {
         userId: mockUserId,
-        userType: 'individual',
+        userType: UserType.INDIVIDUAL,
         documents: [{
-          type: 'identity',
+          type: DocumentType.IDENTITY,
           fileName: 'id_document.jpg',
           fileType: 'image/jpeg',
           fileSize: 2000000,
-          status: KYCStatus.PENDING
-        }],
+          status: KYCStatus.PENDING,
+          uploadDate: new Date()
+        } as any],
         status: KYCStatus.PENDING
-      });
-      await kycProfile.save();
+      };
+      const savedProfile = await MockKYCProfileModel.save(kycProfile);
       
-      // Get the document ID
-      const documentId = kycProfile.documents[0]._id.toString();
+      // Get the document ID from the saved profile
+      const documentId = (savedProfile.documents[0] as any)._id.toString();
       
       const response = await request(app)
         .put(`/api/v1/kyc/document/${documentId}/status`)
@@ -354,7 +454,7 @@ describe('KYC Controller Tests', () => {
       expect(response.body.data.status).toBe(KYCStatus.APPROVED);
       
       // Verify document status was updated
-      const updatedProfile = await KYCProfileModel.findById(kycProfile._id);
+      const updatedProfile = await MockKYCProfileModel.findById(savedProfile._id);
       expect(updatedProfile?.documents[0].status).toBe(KYCStatus.APPROVED);
     });
 
@@ -374,4 +474,87 @@ describe('KYC Controller Tests', () => {
       expect(response.body.error).toBeDefined();
     });
   });
+
+  // Test Business KYC submission endpoint
+  describe('POST /api/v1/kyc/business/submit', () => {
+    it('should submit Business KYC with Business Survey', async () => {
+      const response = await request(app)
+        .post('/api/v1/kyc/business/submit')
+        .set('Authorization', `Bearer ${mockMerchantId}`)
+        .send(mockBusinessKYCSubmission);
+      
+      expect(response.status).toBe(201);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.userId).toBe(mockBusinessKYCSubmission.userId);
+      expect(response.body.data.status).toBe(KYCStatus.PENDING);
+      expect(response.body.data.beneficialOwnerCount).toBe(mockBusinessKYCSubmission.beneficialOwners.length);
+    });
+
+    it('should return error for invalid Business Survey data', async () => {
+      const invalidSubmission = {
+        ...mockBusinessKYCSubmission,
+        businessSurvey: {
+          ...mockBusinessKYCSubmission.businessSurvey,
+          annualTurnover: -1000 // Invalid negative value
+        }
+      };
+      
+      const response = await request(app)
+        .post('/api/v1/kyc/business/submit')
+        .set('Authorization', `Bearer ${mockMerchantId}`)
+        .send(invalidSubmission);
+      
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+      expect(response.body.error).toBeDefined();
+    });
+  });
+
+  // Test Business Survey endpoint
+  describe('GET /api/v1/kyc/business/business-survey', () => {
+    it('should retrieve Business Survey for a merchant user', async () => {
+      // Create a Business KYC profile in the database
+      const kycProfile = {
+        userId: mockMerchantId,
+        userType: UserType.MERCHANT,
+        businessInfo: mockBusinessKYCSubmission.businessInfo,
+        businessSurvey: mockBusinessKYCSubmission.businessSurvey,
+        beneficialOwners: mockBusinessKYCSubmission.beneficialOwners,
+        directors: mockBusinessKYCSubmission.directors,
+        documents: mockBusinessKYCSubmission.documents.map(doc => ({ ...doc, status: KYCStatus.PENDING, uploadDate: new Date() })),
+        status: KYCStatus.PENDING
+      };
+      await MockKYCProfileModel.save(kycProfile);
+      
+      const response = await request(app)
+        .get('/api/v1/kyc/business/business-survey')
+        .set('Authorization', `Bearer ${mockMerchantId}`);
+      
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toBeDefined();
+      expect(response.body.data.annualTurnover).toBe(mockBusinessKYCSubmission.businessSurvey.annualTurnover);
+      expect(response.body.data.businessPurpose).toBe(mockBusinessKYCSubmission.businessSurvey.businessPurpose);
+    });
+
+    it('should return error for non-existent Business Survey', async () => {
+      // Create a KYC profile without Business Survey in the database
+      const kycProfile = {
+        userId: mockUserId,
+        userType: UserType.INDIVIDUAL,
+        documents: mockKYCSubmission.documents.map(doc => ({ ...doc, status: KYCStatus.PENDING, uploadDate: new Date() })),
+        status: KYCStatus.PENDING
+      };
+      await MockKYCProfileModel.save(kycProfile);
+      
+      const response = await request(app)
+        .get('/api/v1/kyc/business/business-survey')
+        .set('Authorization', `Bearer ${mockUserId}`);
+      
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+      expect(response.body.error).toBe('User is not a business customer');
+    });
+  });
+
 });

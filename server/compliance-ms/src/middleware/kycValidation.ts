@@ -1,10 +1,11 @@
 // src/middleware/kycValidation.ts
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
-import { KYCStatus } from '../types/kycTypes';
+import { KYCStatus, DocumentType } from '../types/kycTypes';
+import { validateKYCSubmission as validateKYCSubmissionUtil } from '../utils/validation';
 
 // Middleware to validate KYC status
-export const validateKYCStatus = (req: Request, res: Response, next: NextFunction) => {
+export const validateKYCStatus = (req: Request, res: Response, next: NextFunction): any => {
   try {
     // Get status from request
     const { status } = req.body;
@@ -20,7 +21,7 @@ export const validateKYCStatus = (req: Request, res: Response, next: NextFunctio
       });
     }
     
-    next();
+    return next();
   } catch (error) {
     logger.error('Error in KYC status validation', {
       error: error instanceof Error ? error.message : 'Unknown error'
@@ -34,7 +35,7 @@ export const validateKYCStatus = (req: Request, res: Response, next: NextFunctio
 };
 
 // Middleware to validate document type
-export const validateDocumentType = (req: Request, res: Response, next: NextFunction) => {
+export const validateDocumentType = (req: Request, res: Response, next: NextFunction): any => {
   try {
     // Get document type from request
     const { type } = req.body;
@@ -50,7 +51,7 @@ export const validateDocumentType = (req: Request, res: Response, next: NextFunc
       });
     }
     
-    next();
+    return next();
   } catch (error) {
     logger.error('Error in document type validation', {
       error: error instanceof Error ? error.message : 'Unknown error'
@@ -64,26 +65,26 @@ export const validateDocumentType = (req: Request, res: Response, next: NextFunc
 };
 
 // Middleware to validate KYC submission
-export const validateKYCSubmission = (req: Request, res: Response, next: NextFunction) => {
+export const validateKYCSubmission = (req: Request, res: Response, next: NextFunction): any => {
   try {
     // Validate KYC submission data
-    const { error, value } = validateKYCSubmission(req.body);
+    const { error, value } = validateKYCSubmissionUtil(req.body);
     
     if (error) {
       logger.warn('KYC submission validation failed', {
-        error: error.details.map(detail => detail.message)
+        error: (error as any).details?.map((detail: any) => detail.message)
       });
       return res.status(400).json({
         success: false,
         error: 'Validation failed',
-        details: error.details.map(detail => detail.message)
+        details: (error as any).details?.map((detail: any) => detail.message)
       });
     }
     
     // Attach validated data to request
     req.body = value;
     
-    next();
+    return next();
   } catch (error) {
     logger.error('Error in KYC submission validation', {
       error: error instanceof Error ? error.message : 'Unknown error'

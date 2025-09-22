@@ -1,0 +1,21 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.individualKycRoutes = void 0;
+const express_1 = require("express");
+const auth_1 = require("../middleware/auth");
+const audit_1 = require("../middleware/audit");
+const complianceMiddleware_1 = require("../middleware/complianceMiddleware");
+const kycController_1 = require("../controllers/kycController");
+const router = (0, express_1.Router)();
+exports.individualKycRoutes = router;
+router.use(audit_1.auditLog);
+router.use(auth_1.authenticate);
+router.use(complianceMiddleware_1.requireIndividualCustomer);
+router.post('/submit', complianceMiddleware_1.validateDocumentRequirements, kycController_1.KYCController.submitIndividualKYC);
+router.get('/status', kycController_1.KYCController.getKYCStatus);
+router.get('/documents', kycController_1.KYCController.getAllKYCDocuments);
+router.get('/document/:documentId', kycController_1.KYCController.getKYCDocument);
+router.get('/risk-assessment', kycController_1.KYCController.getIndividualRiskAssessment);
+router.put('/personal-info', kycController_1.KYCController.updatePersonalInfo);
+router.get('/enhanced-verification', complianceMiddleware_1.requireHighRiskApproval, kycController_1.KYCController.getEnhancedVerificationStatus);
+//# sourceMappingURL=individualKycRoutes.js.map

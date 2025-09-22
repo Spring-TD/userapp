@@ -1,28 +1,6 @@
 # Service Authentication Microservice
 
-A comprehensive authentication and user management microservice providing secure account creation, verification, authentication, and user lifecycle management capabilities for both merchants and regular users. **Now includes SAMS (Service Authentication Microservice) for inter-service authentication and management.**
-
-## 🚨 Recent Updates
-
-### Field Naming Convention Change
-The API has been updated to use **snake_case** field naming convention instead of camelCase:
-- `firstName` → `first_name`
-- `lastName` → `last_name`
-- `userType` → `user_type`
-- `emailVerified` → `email_verified`
-- `phoneVerified` → `phone_verified`
-- `createdAt` → `created_at`
-- `updatedAt` → `updated_at`
-- `lastLoginAt` → `last_login_at`
-- `failedLoginAttempts` → `failed_login_attempts`
-- `lockedUntil` → `locked_until`
-- `userMerchantId` → `user_merchant_id`
-
-### User Registration Changes
-- **Removed**: Independent user registration
-- **Required**: Users must now register under a merchant using `user_merchant_id`
-- **Simplified**: Removed `dateOfBirth` and `address` fields from user registration
-- **Added**: `country` field is now required for all users
+A comprehensive authentication and user management microservice providing secure account creation, verification, authentication, and user lifecycle management capabilities for both merchants and regular users. **Now includes inter-service authentication and management.**
 
 ## Features
 
@@ -37,14 +15,13 @@ The API has been updated to use **snake_case** field naming convention instead o
 - Comprehensive test coverage
 - JWT-based authentication ✅
 - Redis caching ✅
-
-### Planned Implementation
-- Email/SMS verification
-- Password management and reset
-- User profile management
-- Administrative account operations
-- Database integration (MongoDB)
-- Comprehensive audit trails
+- Email verification ✅ 
+- Password management and reset ✅
+- User profile management ✅
+- Administrative account operations ✅
+- OTP generation and verification ✅
+- Database integration (MongoDB) 🛠️ (configured, using mock database)
+- Comprehensive audit trails 🚧 (structured logging implemented)
 
 ## Technology Stack
 
@@ -103,10 +80,7 @@ PORT=3000                              # Server port (default: 3000)
 ```
 
 ### Database Configuration
-```bash
-# PostgreSQL Database
-DATABASE_URL=postgresql://user:password@localhost:5432/auth_db  # Required
-DATABASE_SSL=false                     # Enable SSL for database connection (default: false)
+```
 
 # Redis Cache
 REDIS_URL=redis://localhost:6379      # Required
@@ -183,8 +157,10 @@ NODE_ENV=development
 PORT=3000
 
 # Database
-DATABASE_URL=postgresql://postgres:password@localhost:5432/auth_db
-REDIS_URL=redis://localhost:6379
+DATABASE_URL=mongodb://localhost:27017/auth_db  # Required
+MONGODB_SSL=false                     # Enable SSL for database connection (default: false)
+MONGODB_REPLICASET=                   # Optional replica set name
+MONGODB_AUTH_SOURCE=                  # Optional authentication database
 
 # Security
 JWT_SECRET=your-super-secure-secret-key-at-least-32-characters-long
@@ -273,22 +249,22 @@ The service provides the following API endpoints:
 - `POST /api/v1/auth/refresh` - Refresh JWT token ✅ **Implemented**
 
 ### OTP Management
-- `POST /api/v1/otp/generate` - Generate OTP code 🚧 **Under Development**
-- `POST /api/v1/otp/verify` - Verify OTP code 🚧 **Under Development**
-- `POST /api/v1/otp/resend` - Resend OTP code 🚧 **Under Development**
+- `POST /api/v1/otp/generate` - Generate OTP code ✅ **Implemented**
+- `POST /api/v1/otp/verify` - Verify OTP code ✅ **Implemented**
+- `POST /api/v1/otp/resend` - Resend OTP code ✅ **Implemented**
 
 ### Password Management
-- `POST /api/v1/password/forgot` - Initiate password reset 🚧 **Under Development**
-- `POST /api/v1/password/reset` - Reset password with token 🚧 **Under Development**
-- `PUT /api/v1/password/change` - Change password (authenticated) 🚧 **Under Development**
+- `POST /api/v1/password/forgot` - Initiate password reset ✅ **Implemented**
+- `POST /api/v1/password/reset` - Reset password with token ✅ **Implemented**
+- `PUT /api/v1/password/change` - Change password (authenticated) ✅ **Implemented**
 
 ### User Management
-- `GET /api/v1/user/profile` - Get user profile 🚧 **Under Development**
-- `PUT /api/v1/user/profile` - Update user profile 🚧 **Under Development**
-- `GET /api/v1/user/info` - Get detailed user information 🚧 **Under Development**
-- `POST /api/v1/user/verify-info` - Verify user information 🚧 **Under Development**
-- `PUT /api/v1/user/suspend` - Suspend user account (admin) 🚧 **Under Development**
-- `PUT /api/v1/user/activate` - Activate suspended account (admin) 🚧 **Under Development**
+- `GET /api/v1/user/profile` - Get user profile ✅ **Implemented**
+- `PUT /api/v1/user/profile` - Update user profile ✅ **Implemented**
+- `GET /api/v1/user/info` - Get detailed user information ✅ **Implemented**
+- `POST /api/v1/user/verify-info` - Verify user information ✅ **Implemented**
+- `PUT /api/v1/user/suspend` - Suspend user account (admin) ✅ **Implemented**
+- `PUT /api/v1/user/activate` - Activate suspended account (admin) ✅ **Implemented**
 
 ### Health Check
 - `GET /health` - Service health status ✅ **Implemented**
@@ -583,13 +559,13 @@ All errors follow a consistent format:
 - Error handling middleware
 - JWT-based authentication
 - Redis caching implementation ✅
+- Email verification system ✅
+- Password management and reset ✅
+- OTP generation and verification ✅
+- User profile management ✅
+- Administrative account operations ✅
+- SAMS (Service Authentication Microservice) ✅
 
-### 🚧 Under Development
-- Email/SMS verification
-- Password reset functionality
-- OTP generation and verification
-- Database integration (MongoDB)
-- Email/SMS notification services
 
 ## Current Database
 

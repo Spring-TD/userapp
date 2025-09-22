@@ -1,32 +1,265 @@
 // src/utils/validation.ts
 import Joi from 'joi';
-import { KYCSubmissionRequest } from '../types/kycTypes';
+import { 
+  DocumentType, 
+  UserType, 
+  BusinessType, 
+  RiskLevel,
+  BusinessDocumentType,
+  INDIVIDUAL_REQUIRED_DOCUMENTS,
+  INDIVIDUAL_OPTIONAL_DOCUMENTS,
+  BUSINESS_REQUIRED_DOCUMENTS,
+  BUSINESS_OPTIONAL_DOCUMENTS
+} from '../types/kycTypes';
 import { logger } from './logger';
 
-// Validation schema for KYC submission
+// Individual KYC submission validation schema
+export const individualKYCSubmissionSchema = Joi.object({
+  userId: Joi.string().required(),
+  userType: Joi.string().valid(UserType.INDIVIDUAL).required(),
+  personalInfo: Joi.object({
+    firstName: Joi.string().min(2).max(50).required(),
+    lastName: Joi.string().min(2).max(50).required(),
+    dateOfBirth: Joi.date().max('now').required(),
+    nationality: Joi.string().min(2).max(3).required(),
+    occupation: Joi.string().min(2).max(100).required(),
+    sourceOfFunds: Joi.string().min(5).max(200).required()
+  }).required(),
+  documents: Joi.array().items(
+    Joi.object({
+      type: Joi.string().valid(
+        DocumentType.IDENTITY,
+        DocumentType.ADDRESS,
+        DocumentType.INCOME_PROOF,
+        DocumentType.BANK
+      ).required(),
+      fileName: Joi.string().required(),
+      fileType: Joi.string().required(),
+      fileSize: Joi.number().positive().max(10 * 1024 * 1024).required(),
+      fileUrl: Joi.string().uri().required()
+    })
+  ).min(2).required(), // At least identity and address
+  riskAssessment: Joi.object({
+    politicallyExposed: Joi.boolean().required(),
+    sanctionListCheck: Joi.boolean().required()
+  }).optional()
+});
+
+// Business Document validation schema for the 8 required documents
+export const businessDocumentSchema = Joi.object({
+  type: Joi.string().valid(...Object.values(BusinessDocumentType)).required(),
+  fileName: Joi.string().required(),
+  fileType: Joi.string().valid('application/pdf').required(), // Must be PDF
+  fileSize: Joi.number().positive().max(5 * 1024 * 1024).required(), // Max 5MB
+  fileUrl: Joi.string().uri().required(),
+  uploadedAt: Joi.date().required(),
+  status: Joi.string().valid(...Object.values(RiskLevel)).required()
+});
+
+// Business KYC submission validation schema with dedicated business documents
+export const businessKYCSubmissionSchema = Joi.object({
+  userId: Joi.string().required(),
+  userType: Joi.string().valid(UserType.MERCHANT).required(),
+  businessInfo: Joi.object({
+    legalName: Joi.string().min(2).max(200).required(),
+    tradingName: Joi.string().min(2).max(200).optional(),
+    registrationNumber: Joi.string().min(5).max(50).required(),
+    incorporationDate: Joi.date().max('now').required(),
+    jurisdiction: Joi.string().min(2).max(100).required(),
+    businessType: Joi.string().valid(...Object.values(BusinessType)).required(),
+    industry: Joi.string().min(2).max(100).required(),
+    website: Joi.string().uri().optional(),
+    physicalAddress: Joi.string().min(10).max(500).required(),
+    mailingAddress: Joi.string().min(10).max(500).optional()
+  }).required(),
+  businessSurvey: Joi.object({
+    annualTurnover: Joi.number().min(0).required(),
+    expectedTransactionVolume: Joi.number().min(0).required(),
+    expectedTransactionValue: Joi.number().min(0).required(),
+    sourceOfFunds: Joi.string().min(5).max(200).required(),
+    businessPurpose: Joi.string().min(5).max(500).required(),
+    numberOfEmployees: Joi.number().min(0).required(),
+    operatingSince: Joi.date().max('now').required(),
+    websiteTraffic: Joi.number().min(0).optional(),
+    socialMediaPresence: Joi.boolean().optional(),
+    marketingChannels: Joi.string().min(2).max(200).optional(),
+    paymentMethods: Joi.string().min(2).max(200).optional(),
+    businessModelDescription: Joi.string().min(10).max(1000).required(),
+    customerBaseDescription: Joi.string().min(10).max(1000).required(),
+    geographicMarkets: Joi.string().min(2).max(200).required(),
+    regulatoryLicenses: Joi.string().min(2).max(500).optional(),
+    insuranceCoverage: Joi.string().min(2).max(500).optional(),
+    previousBankingRelationship: Joi.string().min(2).max(500).optional(),
+    reasonForOpeningAccount: Joi.string().min(5).max(500).required()
+  }).required(),
+  beneficialOwners: Joi.array().items(
+    Joi.object({
+      firstName: Joi.string().min(2).max(50).required(),
+      lastName: Joi.string().min(2).max(50).required(),
+      dateOfBirth: Joi.date().max('now').required(),
+      nationality: Joi.string().min(2).max(3).required(),
+      ownershipPercentage: Joi.number().min(0).max(100).required(),
+      isPoliticallyExposed: Joi.boolean().required()
+    })
+  ).min(1).required(),
+  directors: Joi.array().items(
+    Joi.object({
+      firstName: Joi.string().min(2).max(50).required(),
+      lastName: Joi.string().min(2).max(50).required(),
+      position: Joi.string().min(2).max(100).required(),
+      dateOfBirth: Joi.date().max('now').required(),
+      nationality: Joi.string().min(2).max(3).required()
+    })
+  ).min(1).required(),
+  // Replace documents with businessDocuments
+  businessDocuments: Joi.array().items(businessDocumentSchema).min(8).required(), // Must have all 8 documents
+  riskAssessment: Joi.object({
+    annualTurnover: Joi.number().min(0).required(),
+    expectedTransactionVolume: Joi.number().min(0).required(),
+    highRiskJurisdiction: Joi.boolean().required(),
+    sanctionListCheck: Joi.boolean().required(),
+    adverseMediaCheck: Joi.boolean().required()
+  }).required()
+});
+
+// Generic KYC submission validation schema (for backward compatibility)
 export const kycSubmissionSchema = Joi.object({
   userId: Joi.string().required(),
-  userType: Joi.string().valid('individual', 'merchant').required(),
-  documents: Joi.array().items(Joi.object({
-    type: Joi.string().valid('identity', 'address', 'business', 'tax', 'bank').required(),
-    fileName: Joi.string().required(),
-    fileType: Joi.string().required(),
-    fileSize: Joi.number().positive().required(),
-    fileUrl: Joi.string().uri().required()
-  })).min(1).required(),
+  userType: Joi.string().valid(...Object.values(UserType)).required(),
+  documents: Joi.array().items(
+    Joi.object({
+      type: Joi.string().valid(...Object.values(DocumentType)).required(),
+      fileName: Joi.string().required(),
+      fileType: Joi.string().required(),
+      fileSize: Joi.number().positive().max(10 * 1024 * 1024).required(),
+      fileUrl: Joi.string().uri().required()
+    })
+  ).min(1).required(),
   additionalInfo: Joi.object().optional()
 });
 
-// Validate KYC submission data
-export const validateKYCSubmission = (data: KYCSubmissionRequest) => {
-  const { error, value } = kycSubmissionSchema.validate(data, { abortEarly: false });
+// KYC status update validation schema
+export const kycStatusUpdateSchema = Joi.object({
+  status: Joi.string().valid('pending', 'in_progress', 'completed', 'failed', 'review', 'approved', 'rejected').required(),
+  rejectionReason: Joi.string().when('status', {
+    is: 'rejected',
+    then: Joi.required(),
+    otherwise: Joi.optional()
+  })
+});
+
+// Document upload validation schema
+export const documentUploadSchema = Joi.object({
+  type: Joi.string().valid(...Object.values(DocumentType)).required(),
+  fileName: Joi.string().required(),
+  fileType: Joi.string().required(),
+  fileSize: Joi.number().positive().max(10 * 1024 * 1024).required(),
+  fileUrl: Joi.string().uri().required()
+});
+
+// Enhanced validation functions
+export const validateIndividualKYCSubmission = (data: any) => {
+  const { error, value } = individualKYCSubmissionSchema.validate(data, { abortEarly: false });
   
   if (error) {
-    logger.warn('KYC submission validation failed', {
+    logger.warn('Individual KYC submission validation failed', {
       error: error.details.map(detail => detail.message)
     });
     return { error };
   }
   
+  // Additional validation for required documents
+  const documentTypes = value.documents.map((doc: any) => doc.type);
+  const hasRequiredDocs = INDIVIDUAL_REQUIRED_DOCUMENTS.every(reqType => 
+    documentTypes.includes(reqType)
+  );
+  
+  if (!hasRequiredDocs) {
+    const missing = INDIVIDUAL_REQUIRED_DOCUMENTS.filter(reqType => 
+      !documentTypes.includes(reqType)
+    );
+    logger.warn('Individual KYC missing required documents', { missing });
+    return { 
+      error: { 
+        message: `Missing required documents: ${missing.join(', ')}` 
+      } 
+    };
+  }
+  
   return { value };
+};
+
+// validation functions for business documents
+export const validateBusinessKYCSubmission = (data: any) => {
+  const { error, value } = businessKYCSubmissionSchema.validate(data, { abortEarly: false });
+  
+  if (error) {
+    logger.warn('Business KYC submission validation failed', {
+      error: error.details.map(detail => detail.message)
+    });
+    return { error };
+  }
+  
+  // Validate that all 8 required business document types are present
+  const documentTypes = value.businessDocuments.map((doc: any) => doc.type);
+  const requiredDocumentTypes = Object.values(BusinessDocumentType);
+  
+  const missingDocuments = requiredDocumentTypes.filter(type => 
+    !documentTypes.includes(type)
+  );
+  
+  if (missingDocuments.length > 0) {
+    logger.warn('Business KYC missing required business documents', { missingDocuments });
+    return { 
+      error: { 
+        message: `Missing required business documents: ${missingDocuments.join(', ')}` 
+      } 
+    };
+  }
+  
+  // Validate beneficial ownership total
+  const totalOwnership = value.beneficialOwners.reduce(
+    (sum: number, owner: any) => sum + owner.ownershipPercentage, 
+    0
+  );
+  
+  if (totalOwnership > 100) {
+    logger.warn('Business KYC beneficial ownership exceeds 100%', { totalOwnership });
+    return { 
+      error: { 
+        message: 'Total beneficial ownership cannot exceed 100%' 
+      } 
+    };
+  }
+  
+  return { value };
+};
+
+// Generic KYC submission validation (backward compatibility)
+export const validateKYCSubmission = (data: any) => {
+  if (data.userType === UserType.INDIVIDUAL) {
+    return validateIndividualKYCSubmission(data);
+  } else if (data.userType === UserType.MERCHANT) {
+    return validateBusinessKYCSubmission(data);
+  } else {
+    // Fallback to generic validation
+    const { error, value } = kycSubmissionSchema.validate(data, { abortEarly: false });
+    
+    if (error) {
+      logger.warn('KYC submission validation failed', {
+        error: error.details.map(detail => detail.message)
+      });
+      return { error };
+    }
+    
+    return { value };
+  }
+};
+
+export const validateKYCStatusUpdate = (data: any) => {
+  return kycStatusUpdateSchema.validate(data, { abortEarly: false });
+};
+
+export const validateDocumentUpload = (data: any) => {
+  return documentUploadSchema.validate(data, { abortEarly: false });
 };

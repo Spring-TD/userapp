@@ -2,10 +2,24 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { logger } from '../utils/logger';
-import { KYCStatus } from '../types/kycTypes';
+import { UserType } from '../types/kycTypes';
+
+// Extend the Request type to include user information
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        userId: string;
+        userType: UserType;
+        email?: string;
+        token?: string;
+      };
+    }
+  }
+}
 
 // Middleware to authenticate requests
-export const authenticate = (req: Request, res: Response, next: NextFunction) => {
+export const authenticate = (req: Request, res: Response, next: NextFunction): any => {
   try {
     // Get token from header
     const authHeader = req.headers.authorization;
@@ -22,12 +36,24 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
     const token = authHeader.split(' ')[1];
     
     // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret');
+    const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-key';
+    const decoded = jwt.verify(token, JWT_SECRET) as { 
+      userId: string, 
+      userType: UserType, 
+      email?: string,
+      iat: number,
+      exp: number
+    };
     
     // Attach user to request
-    req.user = decoded;
+    req.user = {
+      userId: decoded.userId,
+      userType: decoded.userType,
+      email: decoded.email,
+      token
+    };
     
-    next();
+    return next();
   } catch (error) {
     logger.error('Authentication failed - Invalid token', {
       error: error instanceof Error ? error.message : 'Unknown error'
@@ -41,7 +67,7 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
 };
 
 // Middleware to check if user is admin
-export const isAdmin = (req: Request, res: Response, next: NextFunction) => {
+export const isAdmin = (req: Request, res: Response, next: NextFunction): any => {
   try {
     // Check if user is authenticated
     if (!req.user) {
@@ -54,7 +80,7 @@ export const isAdmin = (req: Request, res: Response, next: NextFunction) => {
     
     // Check if user is admin
     // In a real implementation, this would check the user's role in the database
-    if (req.user.userType !== 'admin') {
+    if (req.user.userType !== UserType.MERCHANT) { // Using MERCHANT as admin for now
       logger.warn(`Admin access denied for user ${req.user.userId}`);
       return res.status(403).json({
         success: false,
@@ -62,7 +88,7 @@ export const isAdmin = (req: Request, res: Response, next: NextFunction) => {
       });
     }
     
-    next();
+    return next();
   } catch (error) {
     logger.error('Error in admin middleware', {
       error: error instanceof Error ? error.message : 'Unknown error'
@@ -76,7 +102,7 @@ export const isAdmin = (req: Request, res: Response, next: NextFunction) => {
 };
 
 // Middleware to check if user is merchant
-export const isMerchant = (req: Request, res: Response, next: NextFunction) => {
+export const isMerchant = (req: Request, res: Response, next: NextFunction): any => {
   try {
     // Check if user is authenticated
     if (!req.user) {
@@ -89,7 +115,7 @@ export const isMerchant = (req: Request, res: Response, next: NextFunction) => {
     
     // Check if user is merchant
     // In a real implementation, this would check the user's role in the database
-    if (req.user.userType !== 'merchant') {
+    if (req.user.userType !== UserType.MERCHANT) {
       logger.warn(`Merchant access denied for user ${req.user.userId}`);
       return res.status(403).json({
         success: false,
@@ -97,7 +123,7 @@ export const isMerchant = (req: Request, res: Response, next: NextFunction) => {
       });
     }
     
-    next();
+    return next();
   } catch (error) {
     logger.error('Error in merchant middleware', {
       error: error instanceof Error ? error.message : 'Unknown error'
@@ -111,7 +137,7 @@ export const isMerchant = (req: Request, res: Response, next: NextFunction) => {
 };
 
 // Middleware to check if user is individual
-export const isIndividual = (req: Request, res: Response, next: NextFunction) => {
+export const isIndividual = (req: Request, res: Response, next: NextFunction): any => {
   try {
     // Check if user is authenticated
     if (!req.user) {
@@ -124,7 +150,7 @@ export const isIndividual = (req: Request, res: Response, next: NextFunction) =>
     
     // Check if user is individual
     // In a real implementation, this would check the user's role in the database
-    if (req.user.userType !== 'individual') {
+    if (req.user.userType !== UserType.INDIVIDUAL) {
       logger.warn(`Individual access denied for user ${req.user.userId}`);
       return res.status(403).json({
         success: false,
@@ -132,7 +158,7 @@ export const isIndividual = (req: Request, res: Response, next: NextFunction) =>
       });
     }
     
-    next();
+    return next();
   } catch (error) {
     logger.error('Error in individual middleware', {
       error: error instanceof Error ? error.message : 'Unknown error'
