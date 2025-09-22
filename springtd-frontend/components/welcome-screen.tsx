@@ -9,13 +9,13 @@ export function WelcomeScreen() {
 
   const handleProceed = () => {
     // Navigate to dashboard or main app
-    console.log("[v0] User proceeding from welcome screen")
+  
     // For now, redirect back to login as a placeholder
     router.push("/login")
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-stone-200 px-6">
+    <div className="flex items-center justify-center h-screen px-6">
       <Card className="w-full max-w-md min-h-80 bg-white shadow-lg">
         <CardContent className="p-12 text-center space-y-8 flex flex-col justify-center h-full">
           <div className="space-y-2">
