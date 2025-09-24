@@ -14,7 +14,8 @@ export enum KYCStatus {
 // User types
 export enum UserType {
   INDIVIDUAL = 'individual',
-  MERCHANT = 'merchant'
+  MERCHANT = 'merchant',
+  ADMIN = 'admin'
 }
 
 // KYC document types
@@ -76,6 +77,8 @@ export interface KYCProfile {
     sentAt: Date;
     read: boolean;
   }>;
+  // Updated from beneficialOwners to shareholders
+  shareholders?: Array<Shareholder>;
 }
 
 // Enhanced KYC profile interface
@@ -149,20 +152,52 @@ export interface BusinessDocumentData {
   rejectionReason?: string;
 }
 
+// Shareholder interface for business KYC
+export interface Shareholder {
+  fullName: string;
+  email?: string;
+  phoneNumber?: string;
+  bvn?: string;
+  bankAccount?: string;
+  ownershipPercentage: number;
+  submittedAt?: Date;
+  uboDocument?: {
+    fileName: string;
+    fileType: string;
+    fileSize: number;
+    fileUrl: string;
+    uploadDate: Date;
+  };
+  bankStatement: {
+    fileName: string;
+    fileType: string;
+    fileSize: number;
+    fileUrl: string;
+    uploadDate: Date;
+  };
+  status: KYCStatus;
+  // Added kyc field for liveness test link
+  kyc: {
+    url: string; // The URL for the liveness test
+    expiresAt: Date; // When the link expires
+    status: 'pending' | 'active' | 'expired' | 'completed' | 'failed'; // Current status of the link
+    providerReference?: string; // Reference ID from the 3rd party provider
+    result?: {
+      success: boolean;
+      score?: number;
+      details?: string;
+      completedAt?: Date;
+    };
+  };
+}
+
 // Business KYC submission request with dedicated business documents
 export interface BusinessKYCSubmissionRequest {
   userId: string;
   userType: UserType.MERCHANT;
   businessInfo: AboutTheBusinessData;
   businessSurvey: BusinessSurveyData;
-  beneficialOwners: Array<{
-    firstName: string;
-    lastName: string;
-    dateOfBirth: Date;
-    nationality: string;
-    ownershipPercentage: number;
-    isPoliticallyExposed: boolean;
-  }>;
+  shareholders: Shareholder[];
   directors: Array<{
     firstName: string;
     lastName: string;

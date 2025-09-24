@@ -529,6 +529,79 @@ class KYCController {
             next(error);
         }
     }
+    static async createShareholderData(req, res, next) {
+        try {
+            const { merchantId } = req.params;
+            const shareholderData = req.body;
+            if (!shareholderData || Object.keys(shareholderData).length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Shareholder data is required'
+                });
+            }
+            logger_1.logger.info('Shareholder data created', {
+                merchantId,
+                shareholderData
+            });
+            return res.status(201).json({
+                success: true,
+                message: 'Shareholder data created successfully',
+                data: {
+                    merchantId,
+                    ...shareholderData
+                }
+            });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    static async getShareholderData(req, res, next) {
+        try {
+            const { merchantId } = req.params;
+            logger_1.logger.info('Shareholder data retrieved', {
+                merchantId
+            });
+            return res.status(200).json({
+                success: true,
+                message: 'Shareholder data retrieved successfully',
+                data: {
+                    merchantId,
+                    shareholders: []
+                }
+            });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    static async updateShareholderData(req, res, next) {
+        try {
+            const { merchantId } = req.params;
+            const shareholderData = req.body;
+            if (!shareholderData || Object.keys(shareholderData).length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Shareholder data is required'
+                });
+            }
+            logger_1.logger.info('Shareholder data updated', {
+                merchantId,
+                shareholderData
+            });
+            return res.status(200).json({
+                success: true,
+                message: 'Shareholder data updated successfully',
+                data: {
+                    merchantId,
+                    ...shareholderData
+                }
+            });
+        }
+        catch (error) {
+            next(error);
+        }
+    }
     static async getEnhancedVerificationStatus(req, res, next) {
         try {
             const userId = req.user?.userId || req.params.userId;

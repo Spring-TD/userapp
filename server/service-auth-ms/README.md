@@ -6,6 +6,7 @@ A comprehensive authentication and user management microservice providing secure
 
 ### ✅ Implemented
 - User and merchant account registration
+- Admin account registration 
 - Input validation and sanitization
 - Password complexity requirements
 - Email uniqueness validation
@@ -243,6 +244,7 @@ The service provides the following API endpoints:
 ### Authentication
 - `POST /api/v1/auth/register/user` - Register user account ✅ **Implemented**
 - `POST /api/v1/auth/register/merchant` - Register merchant account ✅ **Implemented**
+- `POST /api/v1/auth/register/admin` - Register admin account  ✅ **Implemented**
 - `POST /api/v1/auth/verify-account` - Verify account with token ✅ **Implemented**
 - `POST /api/v1/auth/login` - User/merchant login ✅ **Implemented**
 - `POST /api/v1/auth/logout` - Logout and invalidate session ✅ **Implemented**
@@ -376,6 +378,42 @@ The service provides the following API endpoints:
 }
 ```
 
+### Admin Registration
+**`POST /api/v1/auth/register/admin`**
+
+**Request Body:**
+```json
+{
+  "email": "admin@example.com",
+  "password": "SecurePass123!",
+  "first_name": "Admin",
+  "last_name": "User",
+  "phone": "+1234567890",
+  "country": "USA"
+}
+```
+
+**Success Response (201 Created):**
+```json
+{
+  "success": true,
+  "message": "Admin registered successfully.",
+  "data": {
+    "user": {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "email": "admin@example.com",
+      "first_name": "Admin",
+      "last_name": "User",
+      "user_type": "admin",
+      "status": "active",
+      "email_verified": true,
+      "phone_verified": false,
+      "created_at": "2025-01-10T09:00:00.000Z"
+    }
+  }
+}
+```
+
 ### Health Check
 **`GET /health`**
 
@@ -433,7 +471,8 @@ The service provides the following API endpoints:
 ```typescript
 enum UserType {
   USER = 'user',
-  MERCHANT = 'merchant'
+  MERCHANT = 'merchant',
+  ADMIN = 'admin'
 }
 
 enum AccountStatus {
@@ -483,6 +522,15 @@ interface Merchant extends BaseUser {
 }
 ```
 
+### Admin Interface
+```typescript
+interface Admin extends BaseUser {
+  user_type: UserType.ADMIN;
+  user_merchant_id: 'admin';
+  country: string;
+}
+```
+
 ## Validation Rules
 
 ### Password Requirements
@@ -509,6 +557,12 @@ interface Merchant extends BaseUser {
 ### Merchant Requirements
 - User Merchant ID: Required, unique identifier for merchant
 - Country: Required, user's country location
+
+### Admin Requirements
+- Country: Required, user's country location
+- Phone: Optional field in international format
+- Email verified by default
+- Status set to active by default
 
 ## Error Handling
 
@@ -550,6 +604,7 @@ All errors follow a consistent format:
 ### ✅ Completed Features
 - User registration with validation
 - Merchant registration with validation
+- Admin registration with validation 
 - Password hashing with bcrypt
 - Input validation using Joi
 - Mock database layer
@@ -565,7 +620,6 @@ All errors follow a consistent format:
 - User profile management ✅
 - Administrative account operations ✅
 - SAMS (Service Authentication Microservice) ✅
-
 
 ## Current Database
 
@@ -765,3 +819,4 @@ if (validation.valid) {
 } else {
   // Reject with 401 Unauthorized
 }
+```

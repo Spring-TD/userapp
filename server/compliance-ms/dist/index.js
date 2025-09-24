@@ -13,6 +13,7 @@ const kycRoutes_1 = require("./routes/kycRoutes");
 const errorHandler_1 = require("./middleware/errorHandler");
 const logger_1 = require("./utils/logger");
 const mockDb_1 = require("./utils/mockDb");
+const RedisCacheService_1 = require("./services/RedisCacheService");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 exports.app = app;
@@ -28,13 +29,21 @@ app.use((0, morgan_1.default)('combined', {
     stream: { write: (message) => logger_1.logger.info(message.trim()) }
 }));
 (0, mockDb_1.seedMockData)();
-app.get('/health', (req, res) => {
+app.get('/health', async (req, res) => {
     const stats = (0, mockDb_1.getDbStats)();
+    let cacheStats = { count: 0, isRedisConnected: false };
+    try {
+        cacheStats = await RedisCacheService_1.redisCacheService.getStats();
+    }
+    catch (error) {
+        logger_1.logger.error('Failed to get cache stats', { error });
+    }
     res.json({
         status: 'healthy',
         service: 'compliance-ms',
         timestamp: new Date().toISOString(),
         database: 'mock',
+        cache: cacheStats,
         stats
     });
 });
@@ -47,12 +56,24 @@ app.use('*', (req, res) => {
     });
 });
 app.use(errorHandler_1.errorHandler);
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
     logger_1.logger.info('SIGTERM received, shutting down gracefully');
+    try {
+        await RedisCacheService_1.redisCacheService.clear();
+    }
+    catch (error) {
+        logger_1.logger.error('Error clearing cache on shutdown', { error });
+    }
     process.exit(0);
 });
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
     logger_1.logger.info('SIGINT received, shutting down gracefully');
+    try {
+        await RedisCacheService_1.redisCacheService.clear();
+    }
+    catch (error) {
+        logger_1.logger.error('Error clearing cache on shutdown', { error });
+    }
     process.exit(0);
 });
 app.listen(PORT, () => {

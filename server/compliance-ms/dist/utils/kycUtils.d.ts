@@ -1,12 +1,6 @@
-export declare const connectDB: () => Promise<void>;
-export declare const seedData: () => Promise<void>;
-import winston from 'winston';
-export declare const logger: winston.Logger;
-import Joi from 'joi';
-import { KYCSubmissionRequest } from '../types/kycTypes';
-export declare const kycSubmissionSchema: Joi.ObjectSchema<any>;
-export declare const validateKYCSubmission: (data: KYCSubmissionRequest) => {
-    error: Joi.ValidationError;
+export declare const kycSubmissionSchema: (Joi: any) => any;
+export declare const validateKYCSubmission: (data: any, Joi: any) => {
+    error: any;
     value?: undefined;
 } | {
     value: any;

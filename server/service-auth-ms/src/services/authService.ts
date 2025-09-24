@@ -41,6 +41,15 @@ export interface MerchantRegistrationData {
   country: string;
 }
 
+export interface AdminRegistrationData {
+  email: string;
+  password: string;
+  first_name: string;
+  last_name: string;
+  phone?: string;
+  country: string;
+}
+
 export class AuthService {
   // In-memory OTP storage - replace with Redis in production
   private static otpStore: Map<string, OTPRecord> = new Map();
@@ -169,6 +178,63 @@ export class AuthService {
       };
     } catch (error) {
       logger.error('Error registering merchant', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error during registration'
+      };
+    }
+  }
+
+  /**
+   * Register a new admin user
+   */
+  static async registerAdmin(adminData: AdminRegistrationData): Promise<{ success: boolean; user?: User; error?: string }> {
+    try {
+      // Check if email already exists
+      const existingUser = await mockDb.findUserByEmail(adminData.email);
+      if (existingUser) {
+        return {
+          success: false,
+          error: 'Email address is already registered'
+        };
+      }
+
+      // Hash password
+      const hashedPassword = await hashPassword(adminData.password);
+
+      // Create admin object
+      const adminToCreate: Omit<User, 'id' | 'created_at' | 'updated_at' | 'failed_login_attempts'> = {
+        email: adminData.email.toLowerCase(),
+        password: hashedPassword,
+        first_name: adminData.first_name,
+        last_name: adminData.last_name,
+        user_type: UserType.ADMIN,
+        status: AccountStatus.ACTIVE, // Admin accounts are active by default
+        email_verified: true, // Admin accounts are verified by default
+        phone_verified: false,
+        user_merchant_id: 'admin', // Admin users don't belong to a merchant
+        country: adminData.country,
+        ...(adminData.phone && { phone: adminData.phone })
+      };
+
+      const createdAdmin = await mockDb.createUser(adminToCreate) as User;
+
+      logger.info('Admin registered successfully', {
+        userId: createdAdmin.id,
+        email: createdAdmin.email,
+        user_type: createdAdmin.user_type
+      });
+
+      // Remove password from response
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password, ...adminResponse } = createdAdmin;
+
+      return {
+        success: true,
+        user: adminResponse as User
+      };
+    } catch (error) {
+      logger.error('Error registering admin', { error: error instanceof Error ? error.message : 'Unknown error' });
       return {
         success: false,
         error: 'Internal server error during registration'

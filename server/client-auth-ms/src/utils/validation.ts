@@ -62,6 +62,15 @@ export const userRegistrationSchema = Joi.object({
   password: passwordSchema
 });
 
+export const adminRegistrationSchema = Joi.object({
+  first_name: nameSchema,
+  last_name: nameSchema,
+  email: emailSchema,
+  phone: phoneSchema,
+  country: countrySchema,
+  password: passwordSchema
+});
+
 export const validateForm = <T>(schema: Joi.ObjectSchema, data: any): { error?: string; value?: T } => {
   const { error, value } = schema.validate(data, { 
     abortEarly: false,

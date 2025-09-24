@@ -3,6 +3,7 @@ import { Request, Response, NextFunction } from 'express';
 import { kycService } from '../services/kycService';
 import { logger } from '../utils/logger';
 import { KYCStatus, UserType, RiskLevel, BusinessType, ComplianceWorkflowStatus } from '../types/kycTypes';
+import { livenessService } from '../services/livenessService';
 
 // Enhanced KYC controller with separated individual and business methods
 export class KYCController {
@@ -56,7 +57,7 @@ export class KYCController {
         userId: req.user?.userId,
         kycId: result.data?.kycId,
         riskLevel: result.data?.riskLevel,
-        beneficialOwnerCount: result.data?.beneficialOwnerCount
+        shareholderCount: result.data?.shareholderCount
       });
       
       return res.status(201).json(result);
@@ -647,6 +648,100 @@ export class KYCController {
       return res.status(200).json({
         success: true,
         message: 'Directors updated successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Add the missing shareholder methods
+  static async createShareholderData(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { merchantId } = req.params;
+      const shareholderData = req.body;
+
+      // Validate shareholder data
+      if (!shareholderData || Object.keys(shareholderData).length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Shareholder data is required'
+        });
+      }
+
+      // Generate liveness test URL for the shareholder
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const callbackUrl = `${baseUrl}/api/v1/liveness/webhook`;
+      
+      const initializedShareholder = await livenessService.initializeShareholderLiveness(
+        shareholderData,
+        callbackUrl
+      );
+
+      logger.info('Shareholder data created with liveness test', {
+        merchantId,
+        shareholderId: `${shareholderData.fullName}_${shareholderData.ownershipPercentage}`,
+        providerReference: initializedShareholder.kyc.providerReference
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: 'Shareholder data created successfully with liveness test',
+        data: {
+          merchantId,
+          shareholder: initializedShareholder
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getShareholderData(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { merchantId } = req.params;
+
+      logger.info('Shareholder data retrieved', {
+        merchantId
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: 'Shareholder data retrieved successfully',
+        data: {
+          merchantId,
+          shareholders: [] // In a real implementation, this would come from a database
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async updateShareholderData(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { merchantId } = req.params;
+      const shareholderData = req.body;
+
+      // Validate shareholder data
+      if (!shareholderData || Object.keys(shareholderData).length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Shareholder data is required'
+        });
+      }
+
+      logger.info('Shareholder data updated', {
+        merchantId,
+        shareholderData
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: 'Shareholder data updated successfully',
+        data: {
+          merchantId,
+          ...shareholderData
+        }
       });
     } catch (error) {
       next(error);

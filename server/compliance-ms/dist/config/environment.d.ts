@@ -55,4 +55,6 @@ export declare const KYC_REVIEW_NOTIFICATIONS_TEMPLATE_DELIMITER_UNESCAPE_ALL_RE
 export declare const CLOUDINARY_CLOUD_NAME: string;
 export declare const CLOUDINARY_API_KEY: string;
 export declare const CLOUDINARY_API_SECRET: string;
+export declare const REDIS_URL: string | undefined;
+export declare const REDIS_PASSWORD: string | undefined;
 //# sourceMappingURL=environment.d.ts.map

@@ -135,3 +135,7 @@ export const KYC_REVIEW_NOTIFICATIONS_TEMPLATE_DELIMITER_UNESCAPE_ALL_REGEX_GLOB
 export const CLOUDINARY_CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME as string;
 export const CLOUDINARY_API_KEY = process.env.CLOUDINARY_API_KEY as string;
 export const CLOUDINARY_API_SECRET = process.env.CLOUDINARY_API_SECRET as string;
+
+// Export Redis environment variables (optional)
+export const REDIS_URL = process.env.REDIS_URL as string | undefined;
+export const REDIS_PASSWORD = process.env.REDIS_PASSWORD as string | undefined;

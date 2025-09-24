@@ -1,6 +1,7 @@
 export enum UserType {
   USER = 'user',
-  MERCHANT = 'merchant'
+  MERCHANT = 'merchant',
+  ADMIN = 'admin'
 }
 
 export enum AccountStatus {
@@ -29,7 +30,7 @@ export interface BaseUser {
 }
 
 export interface User extends BaseUser {
-  user_type: UserType.USER;
+  user_type: UserType.USER | UserType.ADMIN;
   user_merchant_id: string;
   country: string;
 }

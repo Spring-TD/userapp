@@ -21,7 +21,7 @@ class KYCService {
             const kycProfileData = {
                 userId: data.userId,
                 userType: data.userType,
-                documents: data.documents.map(doc => ({
+                documents: data.documents.map((doc) => ({
                     type: doc.type,
                     fileName: doc.fileName,
                     fileType: doc.fileType,
@@ -82,7 +82,7 @@ class KYCService {
             const kycProfileData = {
                 userId: data.userId,
                 userType: data.userType,
-                documents: data.documents.map(doc => ({
+                documents: data.businessDocuments.map(doc => ({
                     type: doc.type,
                     fileName: doc.fileName,
                     fileType: doc.fileType,
@@ -103,17 +103,17 @@ class KYCService {
             const result = await mockDb_1.MockKYCProfileModel.save(kycProfileData);
             logger_1.logger.info('Business KYC submitted successfully', {
                 userId: data.userId,
-                businessType: data.businessInfo.businessType,
+                industry: data.businessInfo?.industry,
                 riskLevel,
-                documentCount: data.documents.length,
-                beneficialOwnerCount: data.beneficialOwners.length
+                documentCount: data.businessDocuments?.length,
+                beneficialOwnerCount: data.beneficialOwners?.length
             });
             (0, audit_1.auditLogger)('BUSINESS_KYC_SUBMISSION', data.userId, {
-                businessType: data.businessInfo.businessType,
+                industry: data.businessInfo?.industry,
                 riskLevel,
-                documentCount: data.documents.length,
-                beneficialOwnerCount: data.beneficialOwners.length,
-                highRiskJurisdiction: data.riskAssessment.highRiskJurisdiction
+                documentCount: data.businessDocuments?.length,
+                beneficialOwnerCount: data.beneficialOwners?.length,
+                highRiskJurisdiction: data.riskAssessment?.highRiskJurisdiction
             });
             return {
                 success: true,
@@ -162,34 +162,27 @@ class KYCService {
     }
     calculateBusinessRiskLevel(data) {
         let riskScore = 0;
-        if (data.riskAssessment.highRiskJurisdiction)
+        if (data.riskAssessment?.highRiskJurisdiction)
             riskScore += 3;
-        if (data.riskAssessment.adverseMediaCheck)
+        if (data.riskAssessment?.adverseMediaCheck)
             riskScore += 2;
-        if (data.riskAssessment.sanctionListCheck)
+        if (data.riskAssessment?.sanctionListCheck)
             riskScore += 5;
-        const highRiskBusinessTypes = [
-            kycTypes_1.BusinessType.NON_PROFIT,
-            kycTypes_1.BusinessType.GOVERNMENT_ENTITY
-        ];
-        if (highRiskBusinessTypes.includes(data.businessInfo.businessType)) {
-            riskScore += 2;
-        }
         const highRiskIndustries = ['gambling', 'cryptocurrency', 'arms', 'precious metals'];
-        if (highRiskIndustries.some(industry => data.businessInfo.industry.toLowerCase().includes(industry))) {
+        if (data.businessInfo?.industry && highRiskIndustries.some(industry => data.businessInfo.industry.toLowerCase().includes(industry))) {
             riskScore += 3;
         }
-        const pepOwners = data.beneficialOwners.filter(owner => owner.isPoliticallyExposed);
+        const pepOwners = data.beneficialOwners?.filter(owner => owner.isPoliticallyExposed) || [];
         if (pepOwners.length > 0) {
             riskScore += 2 + pepOwners.length;
         }
-        if (data.riskAssessment.expectedTransactionVolume > 1000000) {
+        if (data.riskAssessment?.expectedTransactionVolume > 1000000) {
             riskScore += 2;
         }
-        if (data.businessSurvey.annualTurnover > 10000000) {
+        if (data.businessSurvey?.annualTurnover > 10000000) {
             riskScore += 2;
         }
-        if (data.businessSurvey.numberOfEmployees > 1000) {
+        if (data.businessSurvey?.numberOfEmployees > 1000) {
             riskScore += 1;
         }
         if (riskScore >= 10)
@@ -216,29 +209,50 @@ class KYCService {
                         error: error.details?.[0]?.message || 'Validation error'
                     };
                 }
-                const kycProfileData = {
-                    userId: data.userId,
-                    userType: data.userType,
-                    documents: data.documents.map(doc => ({
+                let documents = [];
+                if ('documents' in data) {
+                    documents = data.documents.map((doc) => ({
                         type: doc.type,
                         fileName: doc.fileName,
                         fileType: doc.fileType,
                         fileSize: doc.fileSize,
                         uploadDate: new Date(),
                         status: kycTypes_1.KYCStatus.PENDING
-                    })),
+                    }));
+                }
+                else if ('businessDocuments' in data) {
+                    documents = data.businessDocuments.map((doc) => ({
+                        type: doc.type,
+                        fileName: doc.fileName,
+                        fileType: doc.fileType,
+                        fileSize: doc.fileSize,
+                        uploadDate: new Date(),
+                        status: kycTypes_1.KYCStatus.PENDING
+                    }));
+                }
+                const kycProfileData = {
+                    userId: data.userId,
+                    userType: data.userType,
+                    documents,
                     status: kycTypes_1.KYCStatus.PENDING,
                     submittedAt: new Date()
                 };
                 const result = await mockDb_1.MockKYCProfileModel.save(kycProfileData);
+                let documentCount = 0;
+                if ('documents' in data) {
+                    documentCount = data.documents.length;
+                }
+                else if ('businessDocuments' in data) {
+                    documentCount = data.businessDocuments.length;
+                }
                 logger_1.logger.info('KYC submitted successfully', {
                     userId: data.userId,
                     userType: data.userType,
-                    documentCount: data.documents.length
+                    documentCount
                 });
                 (0, audit_1.auditLogger)('KYC_SUBMISSION', data.userId, {
                     userType: data.userType,
-                    documentCount: data.documents.length
+                    documentCount
                 });
                 return {
                     success: true,

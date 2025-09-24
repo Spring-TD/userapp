@@ -6,6 +6,7 @@ import {
   BusinessType, 
   RiskLevel,
   BusinessDocumentType,
+  KYCStatus,
   INDIVIDUAL_REQUIRED_DOCUMENTS,
   INDIVIDUAL_OPTIONAL_DOCUMENTS,
   BUSINESS_REQUIRED_DOCUMENTS,
@@ -61,57 +62,82 @@ export const businessKYCSubmissionSchema = Joi.object({
   userId: Joi.string().required(),
   userType: Joi.string().valid(UserType.MERCHANT).required(),
   businessInfo: Joi.object({
-    legalName: Joi.string().min(2).max(200).required(),
-    tradingName: Joi.string().min(2).max(200).optional(),
-    registrationNumber: Joi.string().min(5).max(50).required(),
-    incorporationDate: Joi.date().max('now').required(),
-    jurisdiction: Joi.string().min(2).max(100).required(),
-    businessType: Joi.string().valid(...Object.values(BusinessType)).required(),
-    industry: Joi.string().min(2).max(100).required(),
-    website: Joi.string().uri().optional(),
-    physicalAddress: Joi.string().min(10).max(500).required(),
-    mailingAddress: Joi.string().min(10).max(500).optional()
+    companyName: Joi.string().min(2).max(100).required(),
+    industry: Joi.string().min(2).max(50).required(),
+    businessDescription: Joi.string().min(10).max(500).required(),
+    countryOfIncorporation: Joi.string().min(2).max(50).required(),
+    website: Joi.string().uri().required(),
+    companyRegId: Joi.string().min(5).max(50).required(),
+    companyLogoUrl: Joi.string().uri().required()
   }).required(),
   businessSurvey: Joi.object({
     annualTurnover: Joi.number().min(0).required(),
     expectedTransactionVolume: Joi.number().min(0).required(),
     expectedTransactionValue: Joi.number().min(0).required(),
     sourceOfFunds: Joi.string().min(5).max(200).required(),
-    businessPurpose: Joi.string().min(5).max(500).required(),
+    businessPurpose: Joi.string().min(5).max(200).required(),
     numberOfEmployees: Joi.number().min(0).required(),
     operatingSince: Joi.date().max('now').required(),
     websiteTraffic: Joi.number().min(0).optional(),
     socialMediaPresence: Joi.boolean().optional(),
-    marketingChannels: Joi.string().min(2).max(200).optional(),
-    paymentMethods: Joi.string().min(2).max(200).optional(),
-    businessModelDescription: Joi.string().min(10).max(1000).required(),
-    customerBaseDescription: Joi.string().min(10).max(1000).required(),
-    geographicMarkets: Joi.string().min(2).max(200).required(),
-    regulatoryLicenses: Joi.string().min(2).max(500).optional(),
-    insuranceCoverage: Joi.string().min(2).max(500).optional(),
-    previousBankingRelationship: Joi.string().min(2).max(500).optional(),
+    marketingChannels: Joi.string().optional(),
+    paymentMethods: Joi.string().optional(),
+    businessModelDescription: Joi.string().min(5).max(500).required(),
+    customerBaseDescription: Joi.string().min(5).max(500).required(),
+    geographicMarkets: Joi.string().min(5).max(500).required(),
+    regulatoryLicenses: Joi.string().optional(),
+    insuranceCoverage: Joi.string().optional(),
+    previousBankingRelationship: Joi.string().optional(),
     reasonForOpeningAccount: Joi.string().min(5).max(500).required()
   }).required(),
-  beneficialOwners: Joi.array().items(
+  shareholders: Joi.array().items(
     Joi.object({
-      firstName: Joi.string().min(2).max(50).required(),
-      lastName: Joi.string().min(2).max(50).required(),
-      dateOfBirth: Joi.date().max('now').required(),
-      nationality: Joi.string().min(2).max(3).required(),
+      fullName: Joi.string().min(2).max(100).required(),
+      email: Joi.string().email().optional(),
+      phoneNumber: Joi.string().min(10).max(20).optional(),
+      bvn: Joi.string().min(11).max(11).optional(), // BVN is 11 digits in Nigeria
+      bankAccount: Joi.string().min(10).max(20).optional(),
       ownershipPercentage: Joi.number().min(0).max(100).required(),
-      isPoliticallyExposed: Joi.boolean().required()
-    })
+      submittedAt: Joi.date().optional(),       
+      uboDocument: Joi.object({
+        fileName: Joi.string().required(),
+        fileType: Joi.string().required(),
+        fileSize: Joi.number().positive().max(5 * 1024 * 1024).required(), // Max 5MB
+        fileUrl: Joi.string().uri().required(),
+        uploadDate: Joi.date().required()
+      }).optional(),       
+      bankStatement: Joi.object({
+        fileName: Joi.string().required(),
+        fileType: Joi.string().required(),
+        fileSize: Joi.number().positive().max(5 * 1024 * 1024).required(), // Max 5MB
+        fileUrl: Joi.string().uri().required(),
+        uploadDate: Joi.date().required()
+      }).required(),
+      status: Joi.string().valid(...Object.values(KYCStatus)).required(), // Status must be one of the KYCStatus values
+      // Enhanced kyc field for liveness test link
+      kyc: Joi.object({
+        url: Joi.string().uri().required(), // The URL for the liveness test
+        expiresAt: Joi.date().required(), // When the link expires
+        status: Joi.string().valid('pending', 'active', 'expired', 'completed', 'failed').required(), // Current status of the link
+        providerReference: Joi.string().optional(), // Reference ID from the 3rd party provider
+        result: Joi.object({
+          success: Joi.boolean().required(),
+          score: Joi.number().min(0).max(100).optional(),
+          details: Joi.string().optional(),
+          completedAt: Joi.date().optional()
+        }).optional()
+      }).required() // Make the kyc field required
+    }).required()
   ).min(1).required(),
   directors: Joi.array().items(
     Joi.object({
       firstName: Joi.string().min(2).max(50).required(),
       lastName: Joi.string().min(2).max(50).required(),
-      position: Joi.string().min(2).max(100).required(),
+      position: Joi.string().min(2).max(50).required(),
       dateOfBirth: Joi.date().max('now').required(),
       nationality: Joi.string().min(2).max(3).required()
-    })
+    }).required()
   ).min(1).required(),
-  // Replace documents with businessDocuments
   businessDocuments: Joi.array().items(businessDocumentSchema).min(8).required(), // Must have all 8 documents
   riskAssessment: Joi.object({
     annualTurnover: Joi.number().min(0).required(),

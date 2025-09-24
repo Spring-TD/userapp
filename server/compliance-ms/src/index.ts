@@ -7,6 +7,7 @@ import { kycRoutes } from './routes/kycRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { logger } from './utils/logger';
 import { seedMockData, getDbStats } from './utils/mockDb';
+import { redisCacheService } from './services/RedisCacheService';
 
 // Load environment variables
 dotenv.config();
@@ -31,13 +32,22 @@ app.use(morgan('combined', {
 seedMockData();
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/health', async (req, res) => {
   const stats = getDbStats();
+  // Get Redis cache stats if available
+  let cacheStats = { count: 0, isRedisConnected: false };
+  try {
+    cacheStats = await redisCacheService.getStats();
+  } catch (error) {
+    logger.error('Failed to get cache stats', { error });
+  }
+  
   res.json({
     status: 'healthy',
     service: 'compliance-ms',
     timestamp: new Date().toISOString(),
     database: 'mock',
+    cache: cacheStats,
     stats
   });
 });
@@ -58,13 +68,25 @@ app.use('*', (req, res) => {
 app.use(errorHandler);
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully');
+  try {
+    // Clear cache on shutdown
+    await redisCacheService.clear();
+  } catch (error) {
+    logger.error('Error clearing cache on shutdown', { error });
+  }
   process.exit(0);
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   logger.info('SIGINT received, shutting down gracefully');
+  try {
+    // Clear cache on shutdown
+    await redisCacheService.clear();
+  } catch (error) {
+    logger.error('Error clearing cache on shutdown', { error });
+  }
   process.exit(0);
 });
 

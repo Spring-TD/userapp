@@ -80,6 +80,16 @@ export const merchantRegistrationSchema = Joi.object({
   country: Joi.string().min(2).max(100).required()
 });
 
+// Admin registration validation schema
+export const adminRegistrationSchema = Joi.object({
+  email: emailSchema,
+  password: passwordSchema,
+  first_name: nameSchema,
+  last_name: nameSchema,
+  phone: phoneSchema,
+  country: Joi.string().min(2).max(100).required()
+});
+
 // User profile update validation schema
 export const userProfileUpdateSchema = Joi.object({
   first_name: Joi.string().min(2).max(50).optional(),

@@ -19,6 +19,9 @@ export declare class KYCController {
     static updateBusinessInfo(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static updateBeneficialOwners(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static updateDirectors(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
+    static createShareholderData(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
+    static getShareholderData(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
+    static updateShareholderData(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static getEnhancedVerificationStatus(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static getEnhancedDueDiligence(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static getCorporateStructure(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;

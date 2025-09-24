@@ -7,6 +7,7 @@ import { KYCController } from '../controllers/kycController';
 import { individualKycRoutes } from './individualKycRoutes';
 import { businessKycRoutes } from './businessKycRoutes';
 import { complianceAdminRoutes } from './complianceAdminRoutes';
+import { livenessRoutes } from './livenessRoutes';
 
 const router = Router();
 
@@ -17,6 +18,7 @@ router.use(auditLog);
 router.use('/individual', individualKycRoutes);
 router.use('/business', businessKycRoutes);
 router.use('/admin', complianceAdminRoutes);
+router.use('/liveness', livenessRoutes);
 
 // Legacy/Generic KYC routes (for backward compatibility)
 router.post('/submit', authenticate, validateKYCSubmission, KYCController.submitKYC);

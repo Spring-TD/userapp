@@ -18,6 +18,15 @@ export interface UserRegistrationForm {
   password: string;
 }
 
+export interface AdminRegistrationForm {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  country: string;
+  password: string;
+}
+
 // ===== AUTHENTICATION TYPES =====
 export interface LoginRequest {
   email: string;

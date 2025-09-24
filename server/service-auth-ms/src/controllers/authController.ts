@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { AuthService, UserRegistrationData, MerchantRegistrationData, LoginResponse } from '../services/authService';
-import { userRegistrationSchema, merchantRegistrationSchema, validateInput } from '../utils/validation';
+import { AuthService, UserRegistrationData, MerchantRegistrationData, AdminRegistrationData, LoginResponse } from '../services/authService';
+import { userRegistrationSchema, merchantRegistrationSchema, adminRegistrationSchema, validateInput } from '../utils/validation';
 import { logger } from '../utils/logger';
 import Joi from 'joi';
 
@@ -143,6 +143,63 @@ export class AuthController {
       });
     } catch (error) {
       logger.error('Error in registerMerchant controller', { error: error instanceof Error ? error.message : 'Unknown error' });
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/auth/register/admin
+   * Register a new admin account
+   */
+  static async registerAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      // Validate input data
+      const { error, value } = validateInput<AdminRegistrationData>(adminRegistrationSchema, req.body);
+
+      if (error) {
+        res.status(400).json({
+          success: false,
+          error: 'Validation failed',
+          details: error
+        });
+        return;
+      }
+
+      // Register admin
+      const result = await AuthService.registerAdmin(value!);
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: result.error
+        });
+        return;
+      }
+
+      logger.info('Admin registration successful', {
+        userId: result.user!.id,
+        email: result.user!.email
+      });
+
+      res.status(201).json({
+        success: true,
+        message: 'Admin registered successfully.',
+        data: {
+          user: {
+            id: result.user!.id,
+            email: result.user!.email,
+            first_name: result.user!.first_name,
+            last_name: result.user!.last_name,
+            user_type: result.user!.user_type,
+            status: result.user!.status,
+            email_verified: result.user!.email_verified,
+            phone_verified: result.user!.phone_verified,
+            created_at: result.user!.created_at
+          }
+        }
+      });
+    } catch (error) {
+      logger.error('Error in registerAdmin controller', { error: error instanceof Error ? error.message : 'Unknown error' });
       next(error);
     }
   }

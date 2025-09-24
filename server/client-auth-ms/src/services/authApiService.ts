@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
 import { config } from '../config/environment';
-import { MerchantRegistrationForm, UserRegistrationForm, ApiResponse } from '../types/forms';
+import { MerchantRegistrationForm, UserRegistrationForm, AdminRegistrationForm, ApiResponse } from '../types/forms';
 
 class AuthApiService {
   private apiClient: AxiosInstance;
@@ -94,6 +94,24 @@ class AuthApiService {
       };
 
       const response: AxiosResponse<ApiResponse<any>> = await this.apiClient.post('/auth/register/user', payload);
+      return response.data;
+    } catch (error: any) {
+      return this.handleError(error);
+    }
+  }
+
+  async registerAdmin(formData: AdminRegistrationForm): Promise<ApiResponse<any>> {
+    try {
+      const payload = {
+        email: formData.email,
+        password: formData.password,
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        phone: formData.phone,
+        country: formData.country
+      };
+
+      const response: AxiosResponse<ApiResponse<any>> = await this.apiClient.post('/auth/register/admin', payload);
       return response.data;
     } catch (error: any) {
       return this.handleError(error);
