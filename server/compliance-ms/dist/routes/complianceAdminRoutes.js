@@ -32,6 +32,7 @@ router.post('/businesses/:userId/approve', kycController_1.KYCController.approve
 router.post('/businesses/:userId/message', kycController_1.KYCController.sendMessageToUser);
 router.post('/businesses/:userId/block', kycController_1.KYCController.blockUser);
 router.post('/businesses/:userId/unblock', kycController_1.KYCController.unblockUser);
+router.post('/businesses/:userId/verify-certificate', kycController_1.KYCController.verifyCertificateWithCAC);
 router.put('/document/:documentId/status', kycController_1.KYCController.updateKYCDocumentStatus);
 router.get('/document/:documentId', kycController_1.KYCController.getKYCDocument);
 router.put('/workflow/:kycId/status', kycController_1.KYCController.updateWorkflowStatus);

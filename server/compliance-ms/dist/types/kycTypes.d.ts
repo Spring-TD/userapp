@@ -9,7 +9,8 @@ export declare enum KYCStatus {
 }
 export declare enum UserType {
     INDIVIDUAL = "individual",
-    MERCHANT = "merchant"
+    MERCHANT = "merchant",
+    ADMIN = "admin"
 }
 export declare enum DocumentType {
     IDENTITY = "identity",
@@ -59,6 +60,7 @@ export interface KYCProfile {
         sentAt: Date;
         read: boolean;
     }>;
+    shareholders?: Array<Shareholder>;
 }
 export interface EnhancedKYCProfile extends KYCProfile {
     riskLevel: RiskLevel;
@@ -121,19 +123,48 @@ export interface BusinessDocumentData {
     status: KYCStatus;
     rejectionReason?: string;
 }
+export interface Shareholder {
+    fullName: string;
+    email?: string;
+    phoneNumber?: string;
+    bvn?: string;
+    bankAccount?: string;
+    ownershipPercentage: number;
+    submittedAt?: Date;
+    uboDocument?: {
+        fileName: string;
+        fileType: string;
+        fileSize: number;
+        fileUrl: string;
+        uploadDate: Date;
+    };
+    bankStatement: {
+        fileName: string;
+        fileType: string;
+        fileSize: number;
+        fileUrl: string;
+        uploadDate: Date;
+    };
+    status: KYCStatus;
+    kyc: {
+        url: string;
+        expiresAt: Date;
+        status: 'pending' | 'active' | 'expired' | 'completed' | 'failed';
+        providerReference?: string;
+        result?: {
+            success: boolean;
+            score?: number;
+            details?: string;
+            completedAt?: Date;
+        };
+    };
+}
 export interface BusinessKYCSubmissionRequest {
     userId: string;
     userType: UserType.MERCHANT;
     businessInfo: AboutTheBusinessData;
     businessSurvey: BusinessSurveyData;
-    beneficialOwners: Array<{
-        firstName: string;
-        lastName: string;
-        dateOfBirth: Date;
-        nationality: string;
-        ownershipPercentage: number;
-        isPoliticallyExposed: boolean;
-    }>;
+    shareholders: Shareholder[];
     directors: Array<{
         firstName: string;
         lastName: string;

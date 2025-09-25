@@ -9,6 +9,9 @@ import { redisCacheService } from '../services/redisCacheService';
 import { OTPRecord, GenerateOTPRequest, VerifyOTPRequest, ResendOTPRequest } from '../types/otpTypes';
 import { v4 as uuidv4 } from 'uuid';
 
+// Add axios for HTTP requests
+import axios from 'axios';
+
 // Type for user response without password
 export type UserResponse = Omit<UserAccount, 'password'>;
 
@@ -18,6 +21,23 @@ export interface LoginResponse {
   user?: UserResponse;
   accessToken?: string;
   refreshToken?: string;
+  error?: string;
+  needsCompliance?: boolean; // Add compliance fields
+  complianceStatus?: string; // Add compliance fields
+}
+
+// Add interface for compliance status response
+interface ComplianceStatusResponse {
+  success: boolean;
+  data?: {
+    userId: string;
+    userType: string;
+    status: string;
+    documentCount: number;
+    submittedAt?: string;
+    completedAt?: string;
+    riskLevel?: string;
+  };
   error?: string;
 }
 
@@ -804,6 +824,18 @@ export class AuthService {
         };
       }
 
+      // Check compliance status for merchants
+      let needsCompliance = false;
+      let complianceStatus = 'NOT_APPLICABLE';
+      
+      if (updatedUser.user_type === UserType.MERCHANT) {
+        const complianceCheck = await this.checkComplianceStatus(updatedUser.id, updatedUser.user_type);
+        if (complianceCheck.success) {
+          needsCompliance = complianceCheck.needsCompliance || false;
+          complianceStatus = complianceCheck.complianceStatus || 'UNKNOWN';
+        }
+      }
+
       // Generate tokens
       const accessToken = generateAccessToken(updatedUser);
       const refreshToken = generateRefreshToken(updatedUser);
@@ -811,7 +843,9 @@ export class AuthService {
       logger.info('User login successful', {
         userId: updatedUser.id,
         email: updatedUser.email,
-        userType: updatedUser.user_type
+        userType: updatedUser.user_type,
+        needsCompliance: needsCompliance,
+        complianceStatus: complianceStatus
       });
 
       // Remove password from response
@@ -822,7 +856,9 @@ export class AuthService {
         success: true,
         user: userResponse as UserResponse,
         accessToken,
-        refreshToken
+        refreshToken,
+        needsCompliance, // Add compliance info to response
+        complianceStatus // Add compliance status to response
       };
     } catch (error) {
       logger.error('Error during login', { error: error instanceof Error ? error.message : 'Unknown error' });
@@ -1073,201 +1109,77 @@ export class AuthService {
   }
 
   /**
-   * Reset password using token
+   * Check compliance status for a user
    */
-  static async resetPassword(token: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+  static async checkComplianceStatus(userId: string, userType: string): Promise<{ 
+    success: boolean; 
+    needsCompliance?: boolean; 
+    complianceStatus?: string;
+    error?: string 
+  }> {
     try {
-      // Verify the reset token
-      const tokenData = verifyPasswordResetToken(token);
-      if (!tokenData) {
+      // Only check compliance for merchants
+      if (userType !== 'MERCHANT') {
         return {
-          success: false,
-          error: 'Invalid or expired reset token'
+          success: true,
+          needsCompliance: false
         };
       }
 
-      // Find user by ID
-      const user = await mockDb.findUserById(tokenData.userId);
-      if (!user) {
-        return {
-          success: false,
-          error: 'User not found'
-        };
-      }
-
-      // Check if email matches
-      if (user.email !== tokenData.email) {
-        return {
-          success: false,
-          error: 'Invalid reset token'
-        };
-      }
-
-      // Check if account is active
-      if (user.status !== AccountStatus.ACTIVE) {
-        return {
-          success: false,
-          error: 'Account is not active'
-        };
-      }
-
-      // Hash new password
-      const hashedPassword = await hashPassword(newPassword);
-
-      // Update user password
-      await mockDb.updateUser(user.id, {
-        password: hashedPassword,
-        failed_login_attempts: 0
-      });
-
-      // Send password change notification
-      await emailService.sendPasswordChangeNotification(
-        user.email,
-        `${user.first_name} ${user.last_name}`
+      // Call compliance service to check KYC status
+      const complianceServiceUrl = config.compliance.serviceUrl;
+      const response = await axios.get<ComplianceStatusResponse>(
+        `${complianceServiceUrl}/api/v1/kyc/status/${userId}`,
+        {
+          timeout: 5000 // 5 second timeout
+        }
       );
 
-      logger.info('Password reset successful', {
-        userId: user.id,
-        email: user.email
-      });
+      if (response.data.success) {
+        const complianceData = response.data.data;
+        
+        // If no compliance profile exists, user needs to complete compliance
+        if (!complianceData) {
+          return {
+            success: true,
+            needsCompliance: true,
+            complianceStatus: 'NOT_STARTED'
+          };
+        }
 
-      return {
-        success: true
-      };
-    } catch (error) {
-      logger.error('Error during password reset', { error: error instanceof Error ? error.message : 'Unknown error' });
-      return {
-        success: false,
-        error: 'Internal server error during password reset'
-      };
-    }
-  }
-
-  /**
-   * Generate OTP code and store it
-   */
-  static async generateOTP(data: GenerateOTPRequest): Promise<{ success: boolean; reference?: string; expiresIn?: number; error?: string }> {
-    try {
-      // Find user by email or phone
-      let user: UserAccount | null = null;
-      
-      if (data.channel === 'email') {
-        user = await mockDb.findUserByEmail(data.identifier.toLowerCase());
+        // Check if compliance is completed
+        const isCompleted = complianceData.status === 'APPROVED' || complianceData.status === 'COMPLETED';
+        
+        return {
+          success: true,
+          needsCompliance: !isCompleted,
+          complianceStatus: complianceData.status
+        };
       } else {
-        // SMS channel - not implemented in mockDb
-        // In production, this would look up by phone number
+        // If compliance service returns an error, we'll assume user needs compliance
+        logger.warn('Compliance service returned error', {
+          userId,
+          error: response.data.error
+        });
+        
         return {
-          success: false,
-          error: 'SMS channel not implemented in this version'
+          success: true,
+          needsCompliance: true,
+          complianceStatus: 'SERVICE_ERROR'
         };
       }
-
-      if (!user) {
-        return {
-          success: false,
-          error: 'User not found'
-        };
-      }
-
-      // Generate OTP code
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
-      
-      // Set expiration time
-      const now = new Date();
-      const expiresAt = new Date(now.getTime() + config.otp.expiresIn * 1000);
-      
-      // Create OTP record
-      const otpRecord: OTPRecord = {
-        code,
-        userId: user.id,
-        email: user.email,
-        type: data.purpose === 'verification' ? 'email_verification' : 
-              data.purpose === 'password-reset' ? 'password_reset' : 'login',
-        expiresAt,
-        attempts: 0,
-        ...(user.phone && { phone: user.phone })
-      };
-
-      // Store OTP
-      const reference = uuidv4();
-      this.otpStore.set(reference, otpRecord);
-
-      // In production, this would send the OTP via email or SMS
-      logger.info(`OTP generated for ${data.purpose}: ${code}`, {
-        userId: user.id,
-        email: user.email,
-        purpose: data.purpose
+    } catch (error) {
+      // If we can't reach the compliance service, log the error but don't block login
+      logger.error('Error checking compliance status', { 
+        userId,
+        error: error instanceof Error ? error.message : 'Unknown error'
       });
-
+      
+      // Assume user needs compliance if we can't check
       return {
         success: true,
-        reference,
-        expiresIn: config.otp.expiresIn
-      };
-    } catch (error) {
-      logger.error('Error generating OTP', { error: error instanceof Error ? error.message : 'Unknown error' });
-      return {
-        success: false,
-        error: 'Internal server error during OTP generation'
-      };
-    }
-  }
-
-  /**
-   * Verify OTP code
-   */
-  static async verifyOTP(data: VerifyOTPRequest): Promise<{ success: boolean; valid?: boolean; reference?: string; error?: string }> {
-    try {
-      // Find user by email
-      const user = await mockDb.findUserByEmail(data.identifier.toLowerCase());
-      if (!user) {
-        return {
-          success: false,
-          error: 'User not found'
-        };
-      }
-
-      // For now, return success
-      return {
-        success: true,
-        valid: true,
-        reference: 'mock-reference-id'
-      };
-    } catch (error) {
-      logger.error('Error verifying OTP', { error: error instanceof Error ? error.message : 'Unknown error' });
-      return {
-        success: false,
-        error: 'Internal server error during OTP verification'
-      };
-    }
-  }
-
-  /**
-   * Resend OTP code
-   */
-  static async resendOTP(data: ResendOTPRequest): Promise<{ success: boolean; reference?: string; expiresIn?: number; error?: string }> {
-    try {
-      // Find user by email
-      const user = await mockDb.findUserByEmail(data.identifier.toLowerCase());
-      if (!user) {
-        return {
-          success: false,
-          error: 'User not found'
-        };
-      }
-
-      // In a real implementation, we would look up by user and purpose
-      // For this mock, we'll generate a new one
-      return this.generateOTP({
-        identifier: user.email,
-        channel: 'email', // In production, would use the same channel as original
-        purpose: 'login' // In production, would use the same purpose as original
-      });
-    } catch (error) {
-      logger.error('Error resending OTP', { error: error instanceof Error ? error.message : 'Unknown error' });
-      return {
-        success: false,
-        error: 'Internal server error during OTP resend'
+        needsCompliance: true,
+        complianceStatus: 'CHECK_FAILED'
       };
     }
   }

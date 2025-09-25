@@ -15,6 +15,7 @@ var UserType;
 (function (UserType) {
     UserType["INDIVIDUAL"] = "individual";
     UserType["MERCHANT"] = "merchant";
+    UserType["ADMIN"] = "admin";
 })(UserType || (exports.UserType = UserType = {}));
 var DocumentType;
 (function (DocumentType) {

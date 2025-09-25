@@ -4,6 +4,7 @@ exports.KYCController = void 0;
 const kycService_1 = require("../services/kycService");
 const logger_1 = require("../utils/logger");
 const kycTypes_1 = require("../types/kycTypes");
+const livenessService_1 = require("../services/livenessService");
 class KYCController {
     static async submitIndividualKYC(req, res, next) {
         try {
@@ -46,7 +47,7 @@ class KYCController {
                 userId: req.user?.userId,
                 kycId: result.data?.kycId,
                 riskLevel: result.data?.riskLevel,
-                beneficialOwnerCount: result.data?.beneficialOwnerCount
+                shareholderCount: result.data?.shareholderCount
             });
             return res.status(201).json(result);
         }
@@ -539,16 +540,20 @@ class KYCController {
                     error: 'Shareholder data is required'
                 });
             }
-            logger_1.logger.info('Shareholder data created', {
+            const baseUrl = `${req.protocol}://${req.get('host')}`;
+            const callbackUrl = `${baseUrl}/api/v1/liveness/webhook`;
+            const initializedShareholder = await livenessService_1.livenessService.initializeShareholderLiveness(shareholderData, callbackUrl);
+            logger_1.logger.info('Shareholder data created with liveness test', {
                 merchantId,
-                shareholderData
+                shareholderId: `${shareholderData.fullName}_${shareholderData.ownershipPercentage}`,
+                providerReference: initializedShareholder.kyc.providerReference
             });
             return res.status(201).json({
                 success: true,
-                message: 'Shareholder data created successfully',
+                message: 'Shareholder data created successfully with liveness test',
                 data: {
                     merchantId,
-                    ...shareholderData
+                    shareholder: initializedShareholder
                 }
             });
         }
@@ -1266,6 +1271,32 @@ class KYCController {
                 });
             }
             const result = await kycService_1.kycService.unblockUser(userId, req.user?.userId);
+            if (!result.success) {
+                return res.status(500).json(result);
+            }
+            return res.status(200).json(result);
+        }
+        catch (error) {
+            next(error);
+        }
+    }
+    static async verifyCertificateWithCAC(req, res, next) {
+        try {
+            const { userId } = req.params;
+            const { registrationNumber, companyName } = req.body;
+            if (!userId) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'User ID is required'
+                });
+            }
+            if (!registrationNumber || !companyName) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Registration number and company name are required'
+                });
+            }
+            const result = await kycService_1.kycService.verifyCertificateWithCAC(userId, registrationNumber, companyName, req.user?.userId);
             if (!result.success) {
                 return res.status(500).json(result);
             }

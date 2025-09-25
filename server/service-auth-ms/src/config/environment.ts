@@ -57,6 +57,9 @@ const envSchema = Joi.object({
   // Verification
   EMAIL_VERIFICATION_EXPIRES_IN: Joi.number().default(86400), // 24 hours
   PASSWORD_RESET_EXPIRES_IN: Joi.number().default(3600), // 1 hour
+  
+  // Compliance Service
+  COMPLIANCE_SERVICE_URL: Joi.string().default('http://localhost:3003'),
 }).unknown();
 
 const { error, value: envVars } = envSchema.validate(process.env);
@@ -125,4 +128,7 @@ export const config = {
     emailExpiresIn: envVars.EMAIL_VERIFICATION_EXPIRES_IN,
     passwordResetExpiresIn: envVars.PASSWORD_RESET_EXPIRES_IN,
   },
+  compliance: {
+    serviceUrl: envVars.COMPLIANCE_SERVICE_URL,
+  }
 };

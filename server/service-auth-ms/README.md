@@ -21,6 +21,7 @@ A comprehensive authentication and user management microservice providing secure
 - User profile management ✅
 - Administrative account operations ✅
 - OTP generation and verification ✅
+- Merchant compliance status checking ✅
 - Database integration (MongoDB) 🛠️ (configured, using mock database)
 - Comprehensive audit trails 🚧 (structured logging implemented)
 
@@ -142,6 +143,12 @@ OTP_LOCKOUT_DURATION=900               # OTP lockout duration in seconds (defaul
 # Email/Password Reset
 EMAIL_VERIFICATION_EXPIRES_IN=86400    # Email verification expiry in seconds (default: 24 hours)
 PASSWORD_RESET_EXPIRES_IN=3600         # Password reset token expiry in seconds (default: 1 hour)
+```
+
+### Compliance Service Configuration
+```bash
+# Compliance Service
+COMPLIANCE_SERVICE_URL=http://localhost:3003  # Compliance microservice URL (default: http://localhost:3003)
 ```
 
 ### Validation Rules
@@ -465,6 +472,81 @@ The service provides the following API endpoints:
 }
 ```
 
+### User/Merchant Login
+**`POST /api/v1/auth/login`**
+
+Authenticates a user or merchant and returns access/refresh tokens. For merchants, also checks compliance status with the compliance service.
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com",
+  "password": "SecurePass123!"
+}
+```
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Login successful",
+  "data": {
+    "user": {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "email": "user@example.com",
+      "first_name": "John",
+      "last_name": "Doe",
+      "user_type": "user",
+      "status": "active",
+      "email_verified": true,
+      "phone_verified": false,
+      "last_login_at": "2025-01-10T09:00:00.000Z",
+      "created_at": "2025-01-01T09:00:00.000Z"
+    },
+    "tokens": {
+      "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    },
+    "compliance": {
+      "needsCompliance": false,
+      "complianceStatus": "NOT_APPLICABLE"
+    }
+  }
+}
+```
+
+For merchants, the compliance section will indicate if compliance checks are needed:
+```json
+{
+  "success": true,
+  "message": "Login successful",
+  "data": {
+    // ... user and tokens data ...
+    "compliance": {
+      "needsCompliance": true,
+      "complianceStatus": "PENDING"
+    }
+  }
+}
+```
+
+**Error Response (401 Unauthorized):**
+```json
+{
+  "success": false,
+  "error": "Invalid email or password"
+}
+```
+
+**Error Response (400 Bad Request):**
+```json
+{
+  "success": false,
+  "error": "Validation failed",
+  "details": "email is required"
+}
+```
+
 ## Data Models
 
 ### User Types
@@ -620,6 +702,7 @@ All errors follow a consistent format:
 - User profile management ✅
 - Administrative account operations ✅
 - SAMS (Service Authentication Microservice) ✅
+- Merchant compliance status checking ✅
 
 ## Current Database
 

@@ -257,6 +257,11 @@ export class AuthController {
           tokens: {
             accessToken: result.accessToken,
             refreshToken: result.refreshToken
+          },
+          // Add compliance information to the response
+          compliance: {
+            needsCompliance: result.needsCompliance,
+            complianceStatus: result.complianceStatus
           }
         }
       });

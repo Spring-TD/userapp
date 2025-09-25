@@ -1,4 +1,5 @@
 import { KYCProfile, KYCStatus, KYCSubmissionRequest, IndividualKYCSubmissionRequest, BusinessKYCSubmissionRequest, RiskLevel, ComplianceWorkflowStatus } from '../types/kycTypes';
+import { CACVerificationResult } from './cacService';
 export declare class KYCService {
     submitIndividualKYC(data: IndividualKYCSubmissionRequest, userId?: string): Promise<{
         success: boolean;
@@ -21,7 +22,7 @@ export declare class KYCService {
             riskLevel: RiskLevel;
             submittedAt: Date | undefined;
             documents: any[];
-            beneficialOwnerCount: number;
+            shareholderCount: number;
         };
         error?: any;
     }>;
@@ -240,6 +241,17 @@ export declare class KYCService {
             unblockedAt: Date;
         };
         error?: undefined;
+    }>;
+    verifyCertificateWithCAC(userId: string, registrationNumber: string, companyName: string, verifiedBy?: string): Promise<{
+        success: boolean;
+        message?: string;
+        data?: {
+            verificationResult: CACVerificationResult;
+            userId: string;
+            verifiedBy?: string;
+            verifiedAt: Date;
+        };
+        error?: string;
     }>;
     updateKYCDocumentStatus(documentId: string, status: KYCStatus, rejectionReason?: string): Promise<{
         success: boolean;

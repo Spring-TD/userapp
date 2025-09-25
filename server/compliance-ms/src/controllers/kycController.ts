@@ -1582,6 +1582,43 @@ export class KYCController {
     }
   }
 
+  // Verify Certificate of Incorporation with CAC (new admin function)
+  static async verifyCertificateWithCAC(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { userId } = req.params;
+      const { registrationNumber, companyName } = req.body;
+      
+      if (!userId) {
+        return res.status(400).json({
+          success: false,
+          error: 'User ID is required'
+        });
+      }
+
+      if (!registrationNumber || !companyName) {
+        return res.status(400).json({
+          success: false,
+          error: 'Registration number and company name are required'
+        });
+      }
+
+      const result = await kycService.verifyCertificateWithCAC(
+        userId, 
+        registrationNumber, 
+        companyName, 
+        req.user?.userId
+      );
+      
+      if (!result.success) {
+        return res.status(500).json(result);
+      }
+
+      return res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // Get business survey
   static async getBusinessSurvey(req: Request, res: Response, next: NextFunction): Promise<any> {
     try {

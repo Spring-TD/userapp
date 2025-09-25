@@ -43,52 +43,77 @@ exports.businessKYCSubmissionSchema = joi_1.default.object({
     userId: joi_1.default.string().required(),
     userType: joi_1.default.string().valid(kycTypes_1.UserType.MERCHANT).required(),
     businessInfo: joi_1.default.object({
-        legalName: joi_1.default.string().min(2).max(200).required(),
-        tradingName: joi_1.default.string().min(2).max(200).optional(),
-        registrationNumber: joi_1.default.string().min(5).max(50).required(),
-        incorporationDate: joi_1.default.date().max('now').required(),
-        jurisdiction: joi_1.default.string().min(2).max(100).required(),
-        businessType: joi_1.default.string().valid(...Object.values(kycTypes_1.BusinessType)).required(),
-        industry: joi_1.default.string().min(2).max(100).required(),
-        website: joi_1.default.string().uri().optional(),
-        physicalAddress: joi_1.default.string().min(10).max(500).required(),
-        mailingAddress: joi_1.default.string().min(10).max(500).optional()
+        companyName: joi_1.default.string().min(2).max(100).required(),
+        industry: joi_1.default.string().min(2).max(50).required(),
+        businessDescription: joi_1.default.string().min(10).max(500).required(),
+        countryOfIncorporation: joi_1.default.string().min(2).max(50).required(),
+        website: joi_1.default.string().uri().required(),
+        companyRegId: joi_1.default.string().min(5).max(50).required(),
+        companyLogoUrl: joi_1.default.string().uri().required()
     }).required(),
     businessSurvey: joi_1.default.object({
         annualTurnover: joi_1.default.number().min(0).required(),
         expectedTransactionVolume: joi_1.default.number().min(0).required(),
         expectedTransactionValue: joi_1.default.number().min(0).required(),
         sourceOfFunds: joi_1.default.string().min(5).max(200).required(),
-        businessPurpose: joi_1.default.string().min(5).max(500).required(),
+        businessPurpose: joi_1.default.string().min(5).max(200).required(),
         numberOfEmployees: joi_1.default.number().min(0).required(),
         operatingSince: joi_1.default.date().max('now').required(),
         websiteTraffic: joi_1.default.number().min(0).optional(),
         socialMediaPresence: joi_1.default.boolean().optional(),
-        marketingChannels: joi_1.default.string().min(2).max(200).optional(),
-        paymentMethods: joi_1.default.string().min(2).max(200).optional(),
-        businessModelDescription: joi_1.default.string().min(10).max(1000).required(),
-        customerBaseDescription: joi_1.default.string().min(10).max(1000).required(),
-        geographicMarkets: joi_1.default.string().min(2).max(200).required(),
-        regulatoryLicenses: joi_1.default.string().min(2).max(500).optional(),
-        insuranceCoverage: joi_1.default.string().min(2).max(500).optional(),
-        previousBankingRelationship: joi_1.default.string().min(2).max(500).optional(),
+        marketingChannels: joi_1.default.string().optional(),
+        paymentMethods: joi_1.default.string().optional(),
+        businessModelDescription: joi_1.default.string().min(5).max(500).required(),
+        customerBaseDescription: joi_1.default.string().min(5).max(500).required(),
+        geographicMarkets: joi_1.default.string().min(5).max(500).required(),
+        regulatoryLicenses: joi_1.default.string().optional(),
+        insuranceCoverage: joi_1.default.string().optional(),
+        previousBankingRelationship: joi_1.default.string().optional(),
         reasonForOpeningAccount: joi_1.default.string().min(5).max(500).required()
     }).required(),
-    beneficialOwners: joi_1.default.array().items(joi_1.default.object({
-        firstName: joi_1.default.string().min(2).max(50).required(),
-        lastName: joi_1.default.string().min(2).max(50).required(),
-        dateOfBirth: joi_1.default.date().max('now').required(),
-        nationality: joi_1.default.string().min(2).max(3).required(),
+    shareholders: joi_1.default.array().items(joi_1.default.object({
+        fullName: joi_1.default.string().min(2).max(100).required(),
+        email: joi_1.default.string().email().optional(),
+        phoneNumber: joi_1.default.string().min(10).max(20).optional(),
+        bvn: joi_1.default.string().min(11).max(11).optional(),
+        bankAccount: joi_1.default.string().min(10).max(20).optional(),
         ownershipPercentage: joi_1.default.number().min(0).max(100).required(),
-        isPoliticallyExposed: joi_1.default.boolean().required()
-    })).min(1).required(),
+        submittedAt: joi_1.default.date().optional(),
+        uboDocument: joi_1.default.object({
+            fileName: joi_1.default.string().required(),
+            fileType: joi_1.default.string().required(),
+            fileSize: joi_1.default.number().positive().max(5 * 1024 * 1024).required(),
+            fileUrl: joi_1.default.string().uri().required(),
+            uploadDate: joi_1.default.date().required()
+        }).optional(),
+        bankStatement: joi_1.default.object({
+            fileName: joi_1.default.string().required(),
+            fileType: joi_1.default.string().required(),
+            fileSize: joi_1.default.number().positive().max(5 * 1024 * 1024).required(),
+            fileUrl: joi_1.default.string().uri().required(),
+            uploadDate: joi_1.default.date().required()
+        }).required(),
+        status: joi_1.default.string().valid(...Object.values(kycTypes_1.KYCStatus)).required(),
+        kyc: joi_1.default.object({
+            url: joi_1.default.string().uri().required(),
+            expiresAt: joi_1.default.date().required(),
+            status: joi_1.default.string().valid('pending', 'active', 'expired', 'completed', 'failed').required(),
+            providerReference: joi_1.default.string().optional(),
+            result: joi_1.default.object({
+                success: joi_1.default.boolean().required(),
+                score: joi_1.default.number().min(0).max(100).optional(),
+                details: joi_1.default.string().optional(),
+                completedAt: joi_1.default.date().optional()
+            }).optional()
+        }).required()
+    }).required()).min(1).required(),
     directors: joi_1.default.array().items(joi_1.default.object({
         firstName: joi_1.default.string().min(2).max(50).required(),
         lastName: joi_1.default.string().min(2).max(50).required(),
-        position: joi_1.default.string().min(2).max(100).required(),
+        position: joi_1.default.string().min(2).max(50).required(),
         dateOfBirth: joi_1.default.date().max('now').required(),
         nationality: joi_1.default.string().min(2).max(3).required()
-    })).min(1).required(),
+    }).required()).min(1).required(),
     businessDocuments: joi_1.default.array().items(exports.businessDocumentSchema).min(8).required(),
     riskAssessment: joi_1.default.object({
         annualTurnover: joi_1.default.number().min(0).required(),

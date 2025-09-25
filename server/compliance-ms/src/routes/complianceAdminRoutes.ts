@@ -38,6 +38,8 @@ router.post('/businesses/:userId/approve', KYCController.approveDisapproveUser);
 router.post('/businesses/:userId/message', KYCController.sendMessageToUser); // New route
 router.post('/businesses/:userId/block', KYCController.blockUser); // New route
 router.post('/businesses/:userId/unblock', KYCController.unblockUser); // New route
+// CAC verification route
+router.post('/businesses/:userId/verify-certificate', KYCController.verifyCertificateWithCAC);
 
 // Document management routes
 router.put('/document/:documentId/status', KYCController.updateKYCDocumentStatus);

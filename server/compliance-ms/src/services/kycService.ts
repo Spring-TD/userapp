@@ -21,6 +21,7 @@ import {
   validateIndividualKYCSubmission,
   validateBusinessKYCSubmission
 } from '../utils/validation';
+import { cacService, CACVerificationResult } from './cacService';
 
 // Service class for KYC operations
 export class KYCService {
@@ -1101,6 +1102,85 @@ export class KYCService {
       return {
         success: false,
         error: 'Error unblocking user'
+      };
+    }
+  }
+
+  // Verify Certificate of Incorporation with CAC (new admin function)
+  async verifyCertificateWithCAC(userId: string, registrationNumber: string, companyName: string, verifiedBy?: string): Promise<{
+    success: boolean;
+    message?: string;
+    data?: {
+      verificationResult: CACVerificationResult;
+      userId: string;
+      verifiedBy?: string;
+      verifiedAt: Date;
+    };
+    error?: string;
+  }> {
+    try {
+      // Find the user's KYC profile
+      const userProfile: any = await MockKYCProfileModel.findOne({ userId });
+      
+      if (!userProfile) {
+        return {
+          success: false,
+          error: 'User profile not found'
+        };
+      }
+
+      if (userProfile.userType !== UserType.MERCHANT) {
+        return {
+          success: false,
+          error: 'User is not a business customer'
+        };
+      }
+
+      // Perform CAC verification
+      const verificationResult = await cacService.verifyCertificateOfIncorporation(
+        registrationNumber,
+        companyName
+      );
+
+      // Log the verification attempt
+      logger.info('CAC Certificate verification attempted', {
+        userId,
+        registrationNumber,
+        companyName,
+        verifiedBy,
+        success: verificationResult.success,
+        valid: verificationResult.valid
+      });
+
+      auditLogger('CAC_CERTIFICATE_VERIFICATION', verifiedBy || 'system', {
+        userId,
+        registrationNumber,
+        companyName,
+        success: verificationResult.success,
+        valid: verificationResult.valid
+      });
+
+      return {
+        success: true,
+        message: 'Certificate verification completed',
+        data: {
+          verificationResult,
+          userId,
+          verifiedBy,
+          verifiedAt: new Date()
+        }
+      };
+    } catch (error) {
+      logger.error('Error verifying Certificate with CAC', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        userId,
+        registrationNumber,
+        companyName
+      });
+      
+      return {
+        success: false,
+        error: 'Error verifying Certificate with CAC'
       };
     }
   }

@@ -48,6 +48,7 @@ export declare class KYCController {
     static sendMessageToUser(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static blockUser(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static unblockUser(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
+    static verifyCertificateWithCAC(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static getBusinessSurvey(req: Request, res: Response, next: NextFunction): Promise<any>;
     static updateBusinessSurvey(req: Request, res: Response, next: NextFunction): Promise<any>;
 }

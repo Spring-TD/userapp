@@ -7,6 +7,7 @@ const logger_1 = require("../utils/logger");
 const audit_1 = require("../utils/audit");
 const mockDb_1 = require("../utils/mockDb");
 const validation_1 = require("../utils/validation");
+const cacService_1 = require("./cacService");
 class KYCService {
     async submitIndividualKYC(data, userId) {
         try {
@@ -94,7 +95,7 @@ class KYCService {
                 submittedAt: new Date(),
                 businessInfo: data.businessInfo,
                 businessSurvey: data.businessSurvey,
-                beneficialOwners: data.beneficialOwners,
+                shareholders: data.shareholders,
                 directors: data.directors,
                 riskAssessment: data.riskAssessment,
                 riskLevel,
@@ -106,13 +107,13 @@ class KYCService {
                 industry: data.businessInfo?.industry,
                 riskLevel,
                 documentCount: data.businessDocuments?.length,
-                beneficialOwnerCount: data.beneficialOwners?.length
+                shareholderCount: data.shareholders?.length
             });
             (0, audit_1.auditLogger)('BUSINESS_KYC_SUBMISSION', data.userId, {
                 industry: data.businessInfo?.industry,
                 riskLevel,
                 documentCount: data.businessDocuments?.length,
-                beneficialOwnerCount: data.beneficialOwners?.length,
+                shareholderCount: data.shareholders?.length,
                 highRiskJurisdiction: data.riskAssessment?.highRiskJurisdiction
             });
             return {
@@ -124,7 +125,7 @@ class KYCService {
                     riskLevel,
                     submittedAt: result.submittedAt,
                     documents: result.documents,
-                    beneficialOwnerCount: data.beneficialOwners.length
+                    shareholderCount: data.shareholders?.length
                 }
             };
         }
@@ -172,7 +173,7 @@ class KYCService {
         if (data.businessInfo?.industry && highRiskIndustries.some(industry => data.businessInfo.industry.toLowerCase().includes(industry))) {
             riskScore += 3;
         }
-        const pepOwners = data.beneficialOwners?.filter(owner => owner.isPoliticallyExposed) || [];
+        const pepOwners = [];
         if (pepOwners.length > 0) {
             riskScore += 2 + pepOwners.length;
         }
@@ -851,6 +852,61 @@ class KYCService {
             return {
                 success: false,
                 error: 'Error unblocking user'
+            };
+        }
+    }
+    async verifyCertificateWithCAC(userId, registrationNumber, companyName, verifiedBy) {
+        try {
+            const userProfile = await mockDb_1.MockKYCProfileModel.findOne({ userId });
+            if (!userProfile) {
+                return {
+                    success: false,
+                    error: 'User profile not found'
+                };
+            }
+            if (userProfile.userType !== kycTypes_1.UserType.MERCHANT) {
+                return {
+                    success: false,
+                    error: 'User is not a business customer'
+                };
+            }
+            const verificationResult = await cacService_1.cacService.verifyCertificateOfIncorporation(registrationNumber, companyName);
+            logger_1.logger.info('CAC Certificate verification attempted', {
+                userId,
+                registrationNumber,
+                companyName,
+                verifiedBy,
+                success: verificationResult.success,
+                valid: verificationResult.valid
+            });
+            (0, audit_1.auditLogger)('CAC_CERTIFICATE_VERIFICATION', verifiedBy || 'system', {
+                userId,
+                registrationNumber,
+                companyName,
+                success: verificationResult.success,
+                valid: verificationResult.valid
+            });
+            return {
+                success: true,
+                message: 'Certificate verification completed',
+                data: {
+                    verificationResult,
+                    userId,
+                    verifiedBy,
+                    verifiedAt: new Date()
+                }
+            };
+        }
+        catch (error) {
+            logger_1.logger.error('Error verifying Certificate with CAC', {
+                error: error instanceof Error ? error.message : 'Unknown error',
+                userId,
+                registrationNumber,
+                companyName
+            });
+            return {
+                success: false,
+                error: 'Error verifying Certificate with CAC'
             };
         }
     }
