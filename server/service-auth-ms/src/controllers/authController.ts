@@ -458,7 +458,7 @@ export class AuthController {
       }
 
       // Verify account
-      const result = await AuthService.verifyAccount(value!.token);
+      const result = await AuthService.verifyAccount({ token: value!.token });
 
       if (!result.success) {
         res.status(400).json({

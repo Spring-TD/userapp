@@ -21,7 +21,7 @@ export class WhitelistController {
    * POST /api/v1/services/:serviceId/whitelist-ip
    * Whitelist IP addresses for a service
    */
-  static async whitelistIPs(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async whitelistIPs(req: Request, res: Response): Promise<void> {
     try {
       // Validate service ID parameter
       const { error: paramError } = validateInput(serviceIdSchema, req.params);
@@ -47,8 +47,15 @@ export class WhitelistController {
         return;
       }
 
-      const { serviceId } = req.params;
-      const createdBy = req.user?.email || 'system';
+      const serviceId = req.params['serviceId'] as string;
+      if (!serviceId) {
+        res.status(400).json({
+          success: false,
+          error: 'Service ID is required'
+        });
+        return;
+      }
+      const createdBy = req.user?.email ?? 'system';
 
       // Whitelist IPs
       const result = await WhitelistService.whitelistIPs(serviceId, value!, createdBy);
@@ -74,7 +81,7 @@ export class WhitelistController {
    * GET /api/v1/services/:serviceId/whitelist-ip
    * Get whitelisted IPs for a service
    */
-  static async getWhitelistedIPs(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async getWhitelistedIPs(req: Request, res: Response): Promise<void> {
     try {
       // Validate service ID parameter
       const { error: paramError } = validateInput(serviceIdSchema, req.params);
@@ -89,7 +96,7 @@ export class WhitelistController {
       }
 
       const { serviceId } = req.params;
-      const whitelistedIPs = await WhitelistService.getWhitelistedIPs(serviceId);
+      const whitelistedIPs = await WhitelistService.getWhitelistedIPs(serviceId as string);
 
       res.status(200).json({
         success: true,
@@ -118,7 +125,7 @@ export class WhitelistController {
    * POST /api/v1/services/:serviceId/check-ip
    * Check if an IP address is whitelisted for a service
    */
-  static async checkIPAccess(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async checkIPAccess(req: Request, res: Response): Promise<void> {
     try {
       // Validate service ID parameter
       const { error: paramError } = validateInput(serviceIdSchema, req.params);
@@ -133,7 +140,15 @@ export class WhitelistController {
       }
 
       const { serviceId } = req.params;
-      const { ip_address } = req.body;
+      const ip_address = req.body['ip_address'] as string;
+      if (!ip_address) {
+        res.status(400).json({
+          success: false,
+          error: 'IP address is required',
+          details: 'Please provide ip_address in request body'
+        });
+        return;
+      }
 
       if (!ip_address) {
         res.status(400).json({
@@ -144,7 +159,7 @@ export class WhitelistController {
         return;
       }
 
-      const result = await WhitelistService.checkIPAccess(serviceId, ip_address);
+      const result = await WhitelistService.checkIPAccess(serviceId as string, ip_address as string);
 
       res.status(200).json({
         success: true,

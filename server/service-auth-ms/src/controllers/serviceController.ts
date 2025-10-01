@@ -3,7 +3,7 @@
  * Handles service registration, discovery, and management endpoints
  */
 
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 import { ServiceService } from '../services/samsService';
 import { 
   createServiceSchema, 
@@ -25,7 +25,7 @@ export class ServiceController {
    * POST /api/v1/services/create
    * Create a new service registration
    */
-  static async createService(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async createService(req: Request, res: Response): Promise<void> {
     try {
       // Validate input data
       const { error, value } = validateInput<CreateServiceRequest>(createServiceSchema, req.body);
@@ -62,7 +62,7 @@ export class ServiceController {
    * GET /api/v1/services
    * Get all registered services
    */
-  static async getAllServices(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async getAllServices(req: Request, res: Response): Promise<void> {
     try {
       const result = await ServiceService.getAllServices();
       
@@ -83,7 +83,7 @@ export class ServiceController {
    * GET /api/v1/services/:serviceId
    * Get a specific service by ID
    */
-  static async getServiceById(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async getServiceById(req: Request, res: Response): Promise<void> {
     try {
       // Validate service ID parameter
       const { error: paramError } = validateInput(serviceIdSchema, req.params);
@@ -98,6 +98,14 @@ export class ServiceController {
       }
 
       const { serviceId } = req.params;
+      if (!serviceId) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid service ID',
+          details: 'Service ID parameter is required'
+        });
+        return;
+      }
       const result = await ServiceService.getServiceById(serviceId);
 
       const statusCode = result.success ? 200 : 404;
@@ -117,7 +125,7 @@ export class ServiceController {
    * GET /api/v1/services/health
    * Get SAMS system health status
    */
-  static async getSystemHealth(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async getSystemHealth(req: Request, res: Response): Promise<void> {
     try {
       const healthStatus = {
         status: 'healthy',

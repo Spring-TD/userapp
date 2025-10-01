@@ -7,7 +7,6 @@ import { emailService } from './emailService';
 import { tokenBlacklistService } from './tokenBlacklistService';
 import { redisCacheService } from '../services/redisCacheService';
 import { OTPRecord, GenerateOTPRequest, VerifyOTPRequest, ResendOTPRequest } from '../types/otpTypes';
-import { v4 as uuidv4 } from 'uuid';
 
 // Add axios for HTTP requests
 import axios from 'axios';
@@ -68,6 +67,12 @@ export interface AdminRegistrationData {
   last_name: string;
   phone?: string;
   country: string;
+}
+
+// Interface for verify account request
+export interface VerifyAccountRequest {
+  token?: string;
+  verificationToken?: string;
 }
 
 export class AuthService {
@@ -263,12 +268,22 @@ export class AuthService {
   }
 
   /**
-   * Verify account using email verification token
+   * Verify account using either 'token' or 'verificationToken' field
    */
-  static async verifyAccount(token: string): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
+  static async verifyAccount(request: VerifyAccountRequest): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
     try {
+      // Use the token from either field
+      const verificationTokenToUse = request.token || request.verificationToken;
+      
+      if (!verificationTokenToUse) {
+        return {
+          success: false,
+          error: 'Verification token is required. Provide either "token" or "verificationToken" field.'
+        };
+      }
+
       // Verify the email verification token
-      const tokenData = verifyEmailVerificationToken(token);
+      const tokenData = verifyEmailVerificationToken(verificationTokenToUse);
       if (!tokenData) {
         return {
           success: false,
@@ -1109,6 +1124,86 @@ export class AuthService {
   }
 
   /**
+   * Reset password using token
+   */
+  static async resetPassword(token: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Verify the password reset token
+      const tokenData = verifyPasswordResetToken(token);
+      if (!tokenData) {
+        return {
+          success: false,
+          error: 'Invalid or expired password reset token'
+        };
+      }
+
+      // Find user by ID
+      const user = await mockDb.findUserById(tokenData.userId);
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not found'
+        };
+      }
+
+      // Check if email matches
+      if (user.email !== tokenData.email) {
+        return {
+          success: false,
+          error: 'Invalid password reset token'
+        };
+      }
+
+      // Check if account is active
+      if (user.status !== AccountStatus.ACTIVE) {
+        return {
+          success: false,
+          error: 'Account is not active'
+        };
+      }
+
+      // Check if new password is different from current password
+      const isSamePassword = await comparePassword(newPassword, user.password);
+      if (isSamePassword) {
+        return {
+          success: false,
+          error: 'New password must be different from current password'
+        };
+      }
+
+      // Hash new password
+      const hashedPassword = await hashPassword(newPassword);
+
+      // Update user password
+      await mockDb.updateUser(user.id, {
+        password: hashedPassword,
+        failed_login_attempts: 0 // Reset failed login attempts
+      });
+
+      // Send password change notification
+      await emailService.sendPasswordChangeNotification(
+        user.email,
+        `${user.first_name} ${user.last_name}`
+      );
+
+      logger.info('Password reset successful', {
+        userId: user.id,
+        email: user.email
+      });
+
+      return {
+        success: true
+      };
+    } catch (error) {
+      logger.error('Error during password reset', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error during password reset'
+      };
+    }
+  }
+
+  /**
    * Check compliance status for a user
    */
   static async checkComplianceStatus(userId: string, userType: string): Promise<{ 
@@ -1180,6 +1275,139 @@ export class AuthService {
         success: true,
         needsCompliance: true,
         complianceStatus: 'CHECK_FAILED'
+      };
+    }
+  }
+
+  /**
+   * Generate OTP for email verification, password reset, or login
+   */
+  static async generateOTP(request: GenerateOTPRequest): Promise<{ 
+    success: boolean; 
+    reference?: string; 
+    expiresIn?: number;
+    error?: string 
+  }> {
+    try {
+      // Mock implementation - in production, generate actual OTP and send via email/SMS
+      const { identifier, channel, purpose } = request;
+      
+      // Generate a 6-digit OTP code
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      
+      // Set expiration (5 minutes)
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+      
+      // Store OTP (in production, use Redis or database)
+      const otpRecord: OTPRecord = {
+        code,
+        userId: '', // Would be linked to actual user in real implementation
+        email: channel === 'email' ? identifier : '',
+        type: purpose === 'verification' ? 'email_verification' : 
+              purpose === 'password-reset' ? 'password_reset' : 'login',
+        expiresAt,
+        attempts: 0
+      };
+      
+      // Add phone property only if channel is SMS
+      if (channel === 'sms') {
+        otpRecord.phone = identifier;
+      }
+      
+      // In a real implementation, store this in Redis or database
+      // For now, we'll just log it
+      logger.info('OTP generated', { identifier, channel, purpose, code });
+      
+      // Send OTP via email or SMS (mock implementation)
+      if (channel === 'email') {
+        // In real implementation, send email with code
+        logger.info(`OTP ${code} sent to email ${identifier}`);
+      } else if (channel === 'sms') {
+        // In real implementation, send SMS with code
+        logger.info(`OTP ${code} sent to phone ${identifier}`);
+      }
+      
+      return {
+        success: true,
+        reference: `otp_${Date.now()}`, // Mock reference
+        expiresIn: 300 // 5 minutes in seconds
+      };
+    } catch (error) {
+      logger.error('Error generating OTP', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Failed to generate OTP'
+      };
+    }
+  }
+
+  /**
+   * Verify OTP code
+   */
+  static async verifyOTP(request: VerifyOTPRequest): Promise<{ 
+    success: boolean; 
+    valid: boolean;
+    error?: string 
+  }> {
+    try {
+      const { identifier, code } = request;
+      
+      // Mock implementation - in production, check against stored OTP
+      // This is just a placeholder that always returns success for demonstration
+      logger.info('OTP verification requested', { identifier, code });
+      
+      // In a real implementation, you would:
+      // 1. Retrieve stored OTP for identifier
+      // 2. Check if code matches
+      // 3. Check if OTP is expired
+      // 4. Increment attempt count
+      // 5. Handle locking after too many attempts
+      
+      return {
+        success: true,
+        valid: true // Mock response - always valid in this mock implementation
+      };
+    } catch (error) {
+      logger.error('Error verifying OTP', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        valid: false,
+        error: 'Failed to verify OTP'
+      };
+    }
+  }
+
+  /**
+   * Resend OTP code
+   */
+  static async resendOTP(request: ResendOTPRequest): Promise<{ 
+    success: boolean; 
+    reference?: string; 
+    expiresIn?: number;
+    error?: string 
+  }> {
+    try {
+      const { identifier } = request;
+      
+      // Mock implementation - in production, regenerate OTP with same parameters
+      logger.info('OTP resend requested', { identifier });
+      
+      // In a real implementation, you would:
+      // 1. Retrieve the original OTP request parameters
+      // 2. Generate a new code
+      // 3. Update the stored OTP record
+      // 4. Send the new code
+      
+      return {
+        success: true,
+        reference: `otp_${Date.now()}`, // Mock reference
+        expiresIn: 300 // 5 minutes in seconds
+      };
+    } catch (error) {
+      logger.error('Error resending OTP', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Failed to resend OTP'
       };
     }
   }

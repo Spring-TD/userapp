@@ -4,8 +4,6 @@ import { validateInput } from '../utils/validation';
 import { logger } from '../utils/logger';
 import Joi from 'joi';
 
-// Request interface extension is handled in middleware/auth.ts
-
 // Validation schemas for password management
 const passwordResetRequestSchema = Joi.object({
   email: Joi.string().email().required()

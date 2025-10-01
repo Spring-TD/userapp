@@ -3,7 +3,7 @@
  * Handles creation, validation, and management of service-to-service credentials
  */
 
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 import { CredentialService } from '../services/samsService';
 import { 
   serviceIdSchema, 
@@ -28,7 +28,7 @@ export class CredentialController {
    * POST /api/v1/services/:serviceId/credentials
    * Create credentials for a service
    */
-  static async createCredential(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async createCredential(req: Request, res: Response): Promise<void> {
     try {
       // Validate service ID parameter
       const { error: paramError } = validateInput(serviceIdSchema, req.params);
@@ -58,7 +58,7 @@ export class CredentialController {
       const createdBy = req.user?.email || 'system';
 
       // Create credential
-      const result = await CredentialService.createCredential(serviceId, value!, createdBy);
+      const result = await CredentialService.createCredential(serviceId || '', value!, createdBy || 'system');
 
       const statusCode = result.success ? 201 : 400;
       res.status(statusCode).json(result);
@@ -81,7 +81,7 @@ export class CredentialController {
    * POST /api/v1/credentials/validate
    * Validate a credential
    */
-  static async validateCredential(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async validateCredential(req: Request, res: Response): Promise<void> {
     try {
       // Validate credential validation data
       const { error, value } = validateInput<ValidateCredentialRequest>(validateCredentialSchema, req.body);
@@ -115,7 +115,7 @@ export class CredentialController {
    * POST /api/v1/credentials/void/:credentialId
    * Void/revoke a credential
    */
-  static async voidCredential(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async voidCredential(req: Request, res: Response): Promise<void> {
     try {
       // Validate credential ID parameter
       const { error: paramError } = validateInput(credentialIdSchema, req.params);
@@ -145,7 +145,7 @@ export class CredentialController {
       const voidedBy = req.user?.email || 'system';
 
       // Void credential
-      const result = await CredentialService.voidCredential(credentialId, value || {}, voidedBy);
+      const result = await CredentialService.voidCredential(credentialId || '', value || {}, voidedBy || 'system');
 
       const statusCode = result.success ? 200 : 404;
       res.status(statusCode).json(result);
@@ -168,7 +168,7 @@ export class CredentialController {
    * GET /api/v1/services/:serviceId/credentials
    * Get credentials for a service
    */
-  static async getServiceCredentials(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async getServiceCredentials(req: Request, res: Response): Promise<void> {
     try {
       // Validate service ID parameter
       const { error: paramError } = validateInput(serviceIdSchema, req.params);
@@ -183,7 +183,7 @@ export class CredentialController {
       }
 
       const { serviceId } = req.params;
-      const credentials = await CredentialService.getServiceCredentials(serviceId);
+      const credentials = await CredentialService.getServiceCredentials(serviceId || '');
 
       // Remove sensitive credential values from response
       const sanitizedCredentials = credentials.map(cred => {
