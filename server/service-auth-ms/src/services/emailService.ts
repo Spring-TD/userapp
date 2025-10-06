@@ -19,9 +19,8 @@ export class EmailService {
    */
   private async initializeTransporter(): Promise<void> {
     try {
-      // For development, we'll use a mock transporter
-      // In production, this would use the SMTP configuration
-      if (config.env === 'production') {
+      // Try to use real SMTP configuration if available
+      if (config.email.smtp.host && config.email.smtp.auth.user && config.email.smtp.auth.pass) {
         this.transporter = nodemailer.createTransport({
           host: config.email.smtp.host,
           port: config.email.smtp.port,
@@ -34,9 +33,9 @@ export class EmailService {
           await this.transporter.verify();
         }
         this.isConfigured = true;
-        logger.info('Email service configured successfully');
+        logger.info('Email service configured with SMTP');
       } else {
-        // Mock transporter for development
+        // Fall back to mock transporter for development
         this.transporter = nodemailer.createTransport({
           streamTransport: true,
           newline: 'unix',

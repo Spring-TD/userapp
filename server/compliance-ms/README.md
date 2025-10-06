@@ -13,6 +13,8 @@ A comprehensive compliance microservice providing Know Your Customer (KYC) verif
 - Administrative compliance management
 - API-based compliance checking
 - **CAC Certificate Verification** - Verify business registration with the Nigerian Corporate Affairs Commission
+- **AML Document Verification** - Verify business documents using third-party KYB/AML providers
+- **Sanctions List Checking** - Check individuals and businesses against international sanctions lists
 
 ## Technology Stack
 
@@ -26,6 +28,128 @@ A comprehensive compliance microservice providing Know Your Customer (KYC) verif
 - **Logging**: Winston
 
 ## API Documentation
+
+### Create Individual KYC Order
+**`POST /api/v1/kyc/individual/submit`**
+
+Submit KYC information for an individual customer to create a KYC order.
+
+**Authentication**: Requires valid JWT token for individual customers
+
+**Request Body:**
+```json
+{
+  "personalInfo": {
+    "firstName": "John",
+    "lastName": "Doe",
+    "dateOfBirth": "1990-01-01",
+    "nationality": "NG",
+    "address": {
+      "street": "123 Main St",
+      "city": "Lagos",
+      "state": "Lagos",
+      "postalCode": "100001",
+      "country": "NG"
+    }
+  },
+  "documents": [
+    {
+      "type": "passport",
+      "fileName": "passport.jpg",
+      "fileType": "image/jpeg",
+      "fileSize": 102400,
+      "fileData": "base64encodedfiledata"
+    }
+  ]
+}
+```
+
+**Success Response (201 Created):**
+```json
+{
+  "success": true,
+  "data": {
+    "kycId": "kyc-123",
+    "userId": "user-123",
+    "status": "PENDING",
+    "riskLevel": "LOW",
+    "submittedAt": "2025-01-10T09:00:00.000Z"
+  }
+}
+```
+
+### Create Business KYC Order
+**`POST /api/v1/kyc/business/submit`**
+
+Submit KYC information for a business customer to create a KYC order.
+
+**Authentication**: Requires valid JWT token for business customers
+
+**Request Body:**
+```json
+{
+  "businessInfo": {
+    "businessName": "Example Business Ltd",
+    "businessType": "CORPORATION",
+    "registrationNumber": "RC123456",
+    "industry": "Technology",
+    "address": {
+      "street": "456 Business Ave",
+      "city": "Lagos",
+      "state": "Lagos",
+      "postalCode": "100001",
+      "country": "NG"
+    }
+  },
+  "beneficialOwners": [
+    {
+      "fullName": "John Doe",
+      "dateOfBirth": "1985-05-15",
+      "nationality": "NG",
+      "ownershipPercentage": 60,
+      "address": {
+        "street": "123 Main St",
+        "city": "Lagos",
+        "state": "Lagos",
+        "postalCode": "100001",
+        "country": "NG"
+      }
+    }
+  ],
+  "directors": [
+    {
+      "fullName": "Jane Smith",
+      "position": "Managing Director",
+      "dateOfBirth": "1980-10-20",
+      "nationality": "NG"
+    }
+  ],
+  "documents": [
+    {
+      "type": "business_registration",
+      "fileName": "certificate_of_incorporation.pdf",
+      "fileType": "application/pdf",
+      "fileSize": 204800,
+      "fileData": "base64encodedfiledata"
+    }
+  ]
+}
+```
+
+**Success Response (201 Created):**
+```json
+{
+  "success": true,
+  "data": {
+    "kycId": "kyc-456",
+    "userId": "user-456",
+    "status": "PENDING",
+    "riskLevel": "MEDIUM",
+    "shareholderCount": 1,
+    "submittedAt": "2025-01-10T09:00:00.000Z"
+  }
+}
+```
 
 ### KYC Status Check
 **`GET /api/v1/kyc/status/:userId`**
@@ -75,101 +199,89 @@ Checks the KYC compliance status for a user or merchant.
 - `HIGH` - High risk customer
 - `VERY_HIGH` - Very high risk customer
 
-## Integration with Service Authentication Microservice
+### Get All Users
+**`GET /api/v1/kyc/admin/users`**
 
-This compliance service is integrated with the service authentication microservice to check merchant compliance status after login.
+Retrieves a list of all registered users in the compliance system.
 
-When a merchant logs in through service-auth-ms, the authentication service calls:
-`GET /api/v1/kyc/status/{userId}`
+**Authentication**: Requires valid JWT token with Compliance Officer role
 
-This endpoint returns the compliance status which is then included in the login response to inform client applications if additional compliance steps are needed.
+**Authorization**: This endpoint is restricted to Compliance Officers only. Regular users cannot access this endpoint.
 
-## CAC Certificate Verification
-
-Admin Compliance Officers can verify the Certificate of Incorporation document provided by business customers through a third-party API call to the Nigerian Corporate Affairs Commission.
-
-### Configuration
-To enable CAC verification, set the following environment variables:
-```env
-CAC_API_URL=https://api.cac.gov.ng
-CAC_API_KEY=your_api_key_here
-```
-
-### API Endpoint
-**`POST /api/v1/admin/businesses/{userId}/verify-certificate`**
-
-**Request Body:**
-```json
+**Success Response (200 OK):**
+``json
 {
-  "registrationNumber": "RC123456",
-  "companyName": "Example Company Limited"
+  "success": true,
+  "data": [
+    {
+      "userId": "user-123",
+      "userType": "merchant",
+      "status": "APPROVED",
+      "riskLevel": "LOW",
+      "submittedAt": "2025-01-10T09:00:00.000Z",
+      "completedAt": "2025-01-10T10:30:00.000Z",
+      "reviewedBy": "admin-456",
+      "reviewDate": "2025-01-10T10:30:00.000Z",
+      "isBlocked": false,
+      "blockedReason": null
+    }
+  ]
 }
 ```
 
-See [CAC Verification Documentation](docs/cac-verification.md) for detailed information.
-
-## Implementation Status
-
-### ✅ Completed Features
-- Individual KYC verification
-- Business KYC verification
-- Risk assessment and scoring
-- Document management
-- Compliance workflow management
-- Shareholder liveness testing
-- Administrative compliance management
-- API-based compliance checking
-- Service-to-service integration with auth microservice
-- **CAC Certificate Verification**
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 18 or higher
-- npm or yarn
-
-**Note**: For development, the service uses a mock in-memory database.
-
-### Installation
-
-1. Clone the repository and navigate to the project directory:
-   ```bash
-   cd server/compliance-ms
-   ```
-
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Build the project:
-   ```bash
-   npm run build
-   ```
-
-### Development
-
-Run the development server with hot reload:
-```bash
-npm run dev
+**Error Response (500 Internal Server Error):**
+```json
+{
+  "success": false,
+  "error": "Error retrieving all users"
+}
 ```
 
-The server will start on port 3003 (or the port specified in your configuration) and automatically restart when you make changes.
+**Response Fields:**
+- `userId`: The unique identifier of the user
+- `userType`: The type of user (individual or merchant)
+- `status`: The current KYC status of the user
+- `riskLevel`: The risk assessment level of the user
+- `submittedAt`: When the user submitted their KYC information
+- `completedAt`: When the KYC process was completed
+- `reviewedBy`: The admin who last reviewed the user's KYC
+- `reviewDate`: When the user's KYC was last reviewed
+- `isBlocked`: Whether the user account is currently blocked
+- `blockedReason`: The reason why the user account is blocked (if applicable)
 
-### Testing
+### Get All Compliance Documents
+**`GET /api/v1/kyc/admin/documents`**
 
-Run all tests:
-```bash
-npm test
+Retrieves all compliance documents from all user profiles in the system.
+
+**Authentication**: Requires valid JWT token with Compliance Officer role
+
+**Authorization**: This endpoint is restricted to Compliance Officers only. Regular users cannot access this endpoint.
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "documentId": "doc-123",
+      "userId": "user-456",
+      "userType": "individual",
+      "type": "passport",
+      "fileName": "passport.jpg",
+      "fileType": "image/jpeg",
+      "fileSize": 102400,
+      "uploadDate": "2025-01-10T09:00:00.000Z",
+      "status": "APPROVED",
+      "rejectionReason": null
+    }
+  ]
+}
 ```
 
-Run tests in watch mode:
-```bash
-npm run test:watch
+**Error Response (500 Internal Server Error):**
 ```
-
-Generate test coverage report:
-```bash
-npm run test:coverage
-```
+{
+  "success": false,
+  "error": "Error retrieving all documents"
+}

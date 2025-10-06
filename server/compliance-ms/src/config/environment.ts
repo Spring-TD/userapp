@@ -69,11 +69,14 @@ const requiredEnvVars = [
 ];
 
 // Check for missing environment variables
-const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+// Skip this check during testing
+if (process.env.NODE_ENV !== 'test') {
+  const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
-if (missingEnvVars.length > 0) {
-  logger.error(`Missing required environment variables: ${missingEnvVars.join(', ')}`);
-  process.exit(1);
+  if (missingEnvVars.length > 0) {
+    logger.error(`Missing required environment variables: ${missingEnvVars.join(', ')}`);
+    process.exit(1);
+  }
 }
 
 // Export environment variables
@@ -140,6 +143,9 @@ export const CLOUDINARY_API_SECRET = process.env.CLOUDINARY_API_SECRET as string
 // Export CAC API environment variables (optional)
 export const CAC_API_URL = process.env.CAC_API_URL as string | undefined;
 export const CAC_API_KEY = process.env.CAC_API_KEY as string | undefined;
+
+// Export OpenSanctions API environment variable (optional)
+export const OPENSANCTIONS_API_KEY = process.env.OPENSANCTIONS_API_KEY as string | undefined;
 
 // Export Redis environment variables (optional)
 export const REDIS_URL = process.env.REDIS_URL as string | undefined;

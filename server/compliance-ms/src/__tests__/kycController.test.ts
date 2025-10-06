@@ -134,10 +134,10 @@ const mockKYCReview = {
 
 describe('KYC Controller Tests', () => {
   beforeAll(async () => {
-    // Set up database connection
-    const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/compliance_db';
-    await mongoose.connect(MONGODB_URI);
-    logger.info('Connected to MongoDB for testing');
+    // Skip MongoDB connection for mock database tests
+    // const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/compliance_db';
+    // await mongoose.connect(MONGODB_URI);
+    // logger.info('Connected to MongoDB for testing');
   });
 
   afterAll(async () => {
@@ -146,8 +146,8 @@ describe('KYC Controller Tests', () => {
     const mockDb = require('../utils/mockDb');
     mockDb.mockDb.kycProfiles = [];
     mockDb.mockDb.documents = [];
-    await mongoose.disconnect();
-    logger.info('Disconnected from MongoDB after testing');
+    // await mongoose.disconnect();
+    // logger.info('Disconnected from MongoDB after testing');
   });
 
   beforeEach(() => {

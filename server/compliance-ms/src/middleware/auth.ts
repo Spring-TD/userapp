@@ -80,7 +80,7 @@ export const isAdmin = (req: Request, res: Response, next: NextFunction): any =>
     
     // Check if user is admin
     // In a real implementation, this would check the user's role in the database
-    if (req.user.userType !== UserType.MERCHANT) { // Using MERCHANT as admin for now
+    if (req.user.userType !== UserType.ADMIN) { 
       logger.warn(`Admin access denied for user ${req.user.userId}`);
       return res.status(403).json({
         success: false,

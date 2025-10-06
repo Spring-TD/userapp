@@ -10,7 +10,7 @@ const logFormat = winston.format.combine(
 export const logger = winston.createLogger({
   level: config.env === 'production' ? 'info' : 'debug',
   format: logFormat,
-  defaultMeta: { service: 'client-auth-microservice' },
+  defaultMeta: { service: 'service-auth-microservice' },
   transports: [
     new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
     new winston.transports.File({ filename: 'logs/combined.log' }),

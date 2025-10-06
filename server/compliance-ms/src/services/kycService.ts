@@ -15,7 +15,7 @@ import {
 } from '../types/kycTypes';
 import { logger } from '../utils/logger';
 import { auditLogger } from '../utils/audit';
-import { MockKYCProfileModel } from '../utils/mockDb';
+import { MockKYCProfileModel, MockKYCDocumentModel } from '../utils/mockDb';
 import { 
   validateKYCSubmission, 
   validateIndividualKYCSubmission,
@@ -1185,170 +1185,6 @@ export class KYCService {
     }
   }
 
-  // Update KYC document status
-  async updateKYCDocumentStatus(documentId: string, status: KYCStatus, rejectionReason?: string): Promise<{
-    success: boolean;
-    message?: string;
-    data?: {
-      documentId: string;
-      status: KYCStatus;
-      rejectionReason: string | undefined;
-    };
-    error?: string;
-  }> {
-    try {
-      const allProfiles = await MockKYCProfileModel.find({});
-      let targetProfile = null;
-      let documentIndex = -1;
-
-      for (const profile of allProfiles) {
-        const docIndex = profile.documents.findIndex((doc: any) => doc._id === documentId);
-        if (docIndex !== -1) {
-          targetProfile = profile;
-          documentIndex = docIndex;
-          break;
-        }
-      }
-
-      if (!targetProfile || documentIndex === -1) {
-        return {
-          success: false,
-          error: 'Document not found'
-        };
-      }
-
-      targetProfile.documents[documentIndex].status = status;
-      if (rejectionReason) {
-        (targetProfile.documents[documentIndex] as any).rejectionReason = rejectionReason;
-      }
-
-      await MockKYCProfileModel.findByIdAndUpdate(
-        targetProfile._id,
-        { documents: targetProfile.documents },
-        { new: true }
-      );
-
-      return {
-        success: true,
-        message: 'Document status updated successfully',
-        data: { documentId, status, rejectionReason }
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: 'Error updating document status'
-      };
-    }
-  }
-
-  // Get KYC document by ID
-  async getKYCDocument(documentId: string): Promise<{
-    success: boolean;
-    data?: {
-      userId: string;
-      type: any;
-      fileName: string;
-      fileType: string;
-      fileSize: number;
-      uploadDate: Date;
-      status: KYCStatus;
-      rejectionReason?: string;
-    };
-    error?: string;
-  }> {
-    try {
-      const allProfiles = await MockKYCProfileModel.find({});
-      let targetDocument = null;
-
-      for (const profile of allProfiles) {
-        const document = profile.documents.find((doc: any) => doc._id === documentId);
-        if (document) {
-          targetDocument = { ...document, userId: profile.userId };
-          break;
-        }
-      }
-
-      if (!targetDocument) {
-        return {
-          success: false,
-          error: 'Document not found'
-        };
-      }
-
-      return {
-        success: true,
-        data: targetDocument
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: 'Error retrieving document'
-      };
-    }
-  }
-
-  // Get all KYC documents for a user
-  async getAllKYCDocuments(userId: string): Promise<{
-    success: boolean;
-    data?: any[];
-    error?: string;
-  }> {
-    try {
-      const kycProfile = await MockKYCProfileModel.findOne({ userId });
-      
-      if (!kycProfile) {
-        return {
-          success: false,
-          error: 'KYC profile not found for this user'
-        };
-      }
-
-      return {
-        success: true,
-        data: kycProfile.documents
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: 'Error retrieving documents'
-      };
-    }
-  }
-
-  // Search KYC profiles
-  async searchKYCProfiles(filters: any): Promise<{
-    success: boolean;
-    data?: (KYCProfile & { _id: string })[];
-    error?: string;
-  }> {
-    try {
-      const query: any = {};
-      
-      if (filters.userId) query.userId = filters.userId;
-      if (filters.userType) query.userType = filters.userType;
-      if (filters.status) query.status = filters.status;
-      if (filters.riskLevel) query.riskLevel = filters.riskLevel;
-      
-      if (filters.startDate || filters.endDate) {
-        query.submittedAt = {};
-        if (filters.startDate) query.submittedAt.$gte = new Date(filters.startDate);
-        if (filters.endDate) query.submittedAt.$lte = new Date(filters.endDate);
-      }
-
-      const profiles = await MockKYCProfileModel.find(query);
-
-      return {
-        success: true,
-        data: profiles
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: 'Error searching KYC profiles'
-      };
-    }
-  }
-
   // Review KYC submission
   async reviewKYC(kycId: string, status: KYCStatus, rejectionReason?: string, reviewedBy?: string): Promise<{
     success: boolean;
@@ -1403,6 +1239,178 @@ export class KYCService {
       return {
         success: false,
         error: 'Error reviewing KYC submission'
+      };
+    }
+  }
+
+  // Update KYC document status
+  async updateKYCDocumentStatus(documentId: string, status: KYCStatus, rejectionReason?: string): Promise<{
+    success: boolean;
+    message?: string;
+    data?: {
+      documentId: string;
+      status: KYCStatus;
+      rejectionReason: string | undefined;
+    };
+    error?: string;
+  }> {
+    try {
+      // Find the document by ID
+      const document = await MockKYCDocumentModel.findById(documentId);
+      
+      if (!document) {
+        return {
+          success: false,
+          error: 'Document not found'
+        };
+      }
+      
+      // Update the document status
+      const updatedDocument = await MockKYCDocumentModel.findByIdAndUpdate(
+        documentId,
+        {
+          status,
+          ...(rejectionReason && { rejectionReason })
+        },
+        { new: true }
+      );
+      
+      if (!updatedDocument) {
+        return {
+          success: false,
+          error: 'Failed to update document status'
+        };
+      }
+      
+      auditLogger('DOCUMENT_STATUS_UPDATE', 'system', {
+        documentId,
+        newStatus: status,
+        rejectionReason
+      });
+      
+      return {
+        success: true,
+        message: 'Document status updated successfully',
+        data: {
+          documentId: updatedDocument._id,
+          status: updatedDocument.status,
+          rejectionReason: updatedDocument.rejectionReason
+        }
+      };
+    } catch (error) {
+      logger.error('Error updating KYC document status', {
+        documentId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      
+      return {
+        success: false,
+        error: 'Error updating document status'
+      };
+    }
+  }
+
+  // Get KYC document by ID
+  async getKYCDocument(documentId: string): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> {
+    try {
+      const document = await MockKYCDocumentModel.findById(documentId);
+      
+      if (!document) {
+        return {
+          success: false,
+          error: 'Document not found'
+        };
+      }
+      
+      return {
+        success: true,
+        data: document
+      };
+    } catch (error) {
+      logger.error('Error retrieving KYC document', {
+        documentId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      
+      return {
+        success: false,
+        error: 'Error retrieving document'
+      };
+    }
+  }
+
+  // Get all KYC documents for a user
+  async getAllKYCDocuments(userId: string): Promise<{
+    success: boolean;
+    data?: any[];
+    error?: string;
+  }> {
+    try {
+      // Find the KYC profile for the user
+      const profile: any = await MockKYCProfileModel.findOne({ userId });
+      
+      if (!profile) {
+        return {
+          success: false,
+          error: 'No KYC profile found for this user'
+        };
+      }
+      
+      return {
+        success: true,
+        data: profile.documents
+      };
+    } catch (error) {
+      logger.error('Error retrieving KYC documents', {
+        userId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      
+      return {
+        success: false,
+        error: 'Error retrieving documents'
+      };
+    }
+  }
+
+  // Search KYC profiles
+  async searchKYCProfiles(filters: any): Promise<{
+    success: boolean;
+    data?: (KYCProfile & { _id: string })[];
+    error?: string;
+  }> {
+    try {
+      const query: any = {};
+      
+      if (filters.userId) query.userId = filters.userId;
+      if (filters.userType) query.userType = filters.userType;
+      if (filters.status) query.status = filters.status;
+      if (filters.riskLevel) query.riskLevel = filters.riskLevel;
+      
+      if (filters.startDate || filters.endDate) {
+        query.submittedAt = {};
+        if (filters.startDate) query.submittedAt.$gte = new Date(filters.startDate);
+        if (filters.endDate) query.submittedAt.$lte = new Date(filters.endDate);
+      }
+
+      const profiles = await MockKYCProfileModel.find(query);
+
+      return {
+        success: true,
+        data: profiles
+      };
+    } catch (error) {
+      logger.error('Error searching KYC profiles', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      
+      return {
+        success: false,
+        error: 'Error searching KYC profiles'
       };
     }
   }

@@ -3,6 +3,7 @@ import { AuthService } from '../services/authService';
 import { userProfileUpdateSchema, userVerificationSchema, userSuspensionSchema, validateInput } from '../utils/validation';
 import { logger } from '../utils/logger';
 import { AccountStatus } from '../models/User';
+import { adminOnly } from '../middleware/auth';
 
 export class UserController {
   /**
@@ -119,8 +120,14 @@ export class UserController {
         return;
       }
 
-      // TODO: Add admin role check when role-based access control is implemented
-      // For now, any authenticated user can access this endpoint
+      // Check if user has admin role
+      if (req.user.userType !== 'ADMIN') {
+        res.status(403).json({
+          success: false,
+          error: 'Admin access required'
+        });
+        return;
+      }
       
       const { userId } = req.params;
       if (!userId) {
@@ -169,8 +176,14 @@ export class UserController {
         return;
       }
 
-      // TODO: Add admin role check when role-based access control is implemented
-      // For now, any authenticated user can access this endpoint
+      // Check if user has admin role
+      if (req.user.userType !== 'ADMIN') {
+        res.status(403).json({
+          success: false,
+          error: 'Admin access required'
+        });
+        return;
+      }
       
       const { userId } = req.params;
       if (!userId) {
@@ -243,8 +256,14 @@ export class UserController {
         return;
       }
 
-      // TODO: Add admin role check when role-based access control is implemented
-      // For now, any authenticated user can access this endpoint
+      // Check if user has admin role
+      if (req.user.userType !== 'ADMIN') {
+        res.status(403).json({
+          success: false,
+          error: 'Admin access required'
+        });
+        return;
+      }
       
       const { userId } = req.params;
       if (!userId) {
@@ -323,8 +342,14 @@ export class UserController {
         return;
       }
 
-      // TODO: Add admin role check when role-based access control is implemented
-      // For now, any authenticated user can access this endpoint
+      // Check if user has admin role
+      if (req.user.userType !== 'ADMIN') {
+        res.status(403).json({
+          success: false,
+          error: 'Admin access required'
+        });
+        return;
+      }
       
       const { userId } = req.params;
       if (!userId) {

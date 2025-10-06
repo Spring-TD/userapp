@@ -12,7 +12,7 @@ describe('Health Check', () => {
     expect(response.body).toEqual({
       status: 'healthy',
       timestamp: expect.any(String),
-      service: 'client-auth-microservice'
+      service: 'service-auth-microservice'
     });
   });
 });

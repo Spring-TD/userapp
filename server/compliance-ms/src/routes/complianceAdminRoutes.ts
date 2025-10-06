@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
 import { auditLog } from '../middleware/audit';
 import { requireComplianceOfficer } from '../middleware/complianceMiddleware';
+import { validateSanctionsCheck } from '../middleware/sanctionsValidation';
 import { KYCController } from '../controllers/kycController';
 
 const router = Router();
@@ -18,6 +19,9 @@ router.get('/profiles/pending-review', KYCController.getPendingReviews);
 router.get('/profiles/high-risk', KYCController.getHighRiskProfiles);
 router.get('/users', KYCController.getAllUsers); // New route
 router.get('/documents', KYCController.getAllComplianceDocuments); // New route
+
+// Sanctions check route
+router.post('/check-sanctions', validateSanctionsCheck, KYCController.checkSanctions);
 
 // Individual customer admin routes
 router.get('/individuals/:userId', KYCController.getIndividualProfile);
@@ -44,6 +48,8 @@ router.post('/businesses/:userId/verify-certificate', KYCController.verifyCertif
 // Document management routes
 router.put('/document/:documentId/status', KYCController.updateKYCDocumentStatus);
 router.get('/document/:documentId', KYCController.getKYCDocument);
+// AML verification route
+router.post('/document/:documentId/verify-aml', KYCController.verifyAMLDocument);
 
 // Workflow management routes
 router.put('/workflow/:kycId/status', KYCController.updateWorkflowStatus);

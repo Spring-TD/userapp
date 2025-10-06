@@ -224,9 +224,6 @@ export interface AboutTheBusinessData {
   // Industry
   industry: string;
   
-  // Business description
-  businessDescription: string;
-  
   // Country of incorporation
   countryOfIncorporation: string;
   

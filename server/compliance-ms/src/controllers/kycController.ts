@@ -4,6 +4,8 @@ import { kycService } from '../services/kycService';
 import { logger } from '../utils/logger';
 import { KYCStatus, UserType, RiskLevel, BusinessType, ComplianceWorkflowStatus } from '../types/kycTypes';
 import { livenessService } from '../services/livenessService';
+import { amlVerificationService, AMLVerificationResult } from '../services/amlVerificationService';
+import { sanctionsService, SanctionsCheckRequest } from '../services/sanctionsService';
 
 // Enhanced KYC controller with separated individual and business methods
 export class KYCController {
@@ -215,6 +217,97 @@ export class KYCController {
       });
       
       next();
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Verify AML document using third-party provider
+  static async verifyAMLDocument(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { documentId, provider } = req.body;
+      
+      // Get the document by ID
+      const documentResult = await kycService.getKYCDocument(documentId);
+      
+      if (!documentResult.success) {
+        logger.warn('AML document verification failed - document not found', {
+          documentId,
+          error: documentResult.error
+        });
+        
+        return res.status(404).json({
+          success: false,
+          error: documentResult.error || 'Document not found'
+        });
+      }
+      
+      const document = documentResult.data;
+      
+      // Verify the document using the AML provider
+      const verificationResult: AMLVerificationResult = await amlVerificationService.verifyDocument(document, provider);
+      
+      // Update document status based on verification result
+      const updateSuccess = await amlVerificationService.updateDocumentStatusBasedOnVerification(documentId, verificationResult);
+      
+      if (!updateSuccess) {
+        logger.error('Failed to update document status after AML verification', {
+          documentId,
+          verificationId: verificationResult.verificationId
+        });
+        
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to update document status after verification'
+        });
+      }
+      
+      logger.info('AML document verification completed', {
+        documentId,
+        provider: verificationResult.providerId,
+        approved: verificationResult.overallApproved,
+        suspicious: verificationResult.suspicious
+      });
+      
+      // If the document is suspicious, return a special response
+      if (verificationResult.suspicious) {
+        return res.status(200).json({
+          success: true,
+          message: 'Document verification completed but requires manual review',
+          data: {
+            documentId,
+            verificationResult,
+            status: KYCStatus.REVIEW,
+            message: 'Document flagged for manual review'
+          }
+        });
+      }
+      
+      // If the document is rejected
+      if (!verificationResult.overallApproved) {
+        return res.status(200).json({
+          success: true,
+          message: 'Document verification completed but rejected',
+          data: {
+            documentId,
+            verificationResult,
+            status: KYCStatus.REJECTED,
+            message: verificationResult.reason || 'Document did not pass verification'
+          }
+        });
+      }
+      
+      // Document approved
+      return res.status(200).json({
+        success: true,
+        message: 'Document verification completed and approved',
+        data: {
+          documentId,
+          verificationResult,
+          status: KYCStatus.APPROVED,
+          message: 'Document approved'
+        }
+      });
     } catch (error) {
       next(error);
     }
@@ -1698,6 +1791,55 @@ export class KYCController {
       });
     } catch (error) {
       return next(error);
+    }
+  }
+
+  // Check sanctions for an individual or business
+  static async checkSanctions(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { name, companyId, country } = req.body;
+      
+      // Validate input
+      if (!name) {
+        logger.warn('Sanctions check failed: name is required');
+        return res.status(400).json({
+          success: false,
+          error: 'Name is required for sanctions check'
+        });
+      }
+      
+      // Prepare the request
+      const sanctionsRequest: SanctionsCheckRequest = {
+        name,
+        companyId,
+        country
+      };
+      
+      // Perform the sanctions check
+      const result = await sanctionsService.checkSanctions(sanctionsRequest);
+      
+      logger.info('Sanctions check completed', {
+        name,
+        companyId,
+        country,
+        flagged: result.flagged,
+        matchCount: result.matches.length
+      });
+      
+      // Return the result
+      return res.status(200).json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      logger.error('Error during sanctions check', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      
+      return res.status(500).json({
+        success: false,
+        error: 'Internal server error during sanctions check'
+      });
     }
   }
 }
