@@ -7,9 +7,17 @@ export interface BaseWallet {
   status: WalletStatus;
 }
 
+// Define wallet types for merchants
+export enum MerchantWalletType {
+  TREASURY = 'TREASURY',     // Treasury Wallet
+  OPERATION = 'OPERATION',   // Operation Wallet
+  KYC = 'KYC'                // KYC Wallet
+}
+
 export interface MerchantWallet extends BaseWallet {
   merchantId: string;
   walletType: 'MERCHANT';
+  merchantWalletType: MerchantWalletType; // Specific type for merchant wallets
   name: string;
 }
 

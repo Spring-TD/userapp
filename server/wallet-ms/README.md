@@ -21,10 +21,47 @@ This microservice handles wallet functionality for merchants and their users.
 - `POST /api/v1/wallets/user` - Create user wallet
 - `GET /api/v1/wallets/user/:userId` - Get user wallet
 - `PUT /api/v1/wallets/user/:userId/balance` - Update user wallet balance
+- `GET /api/v1/wallets/merchant/:merchantId/users` - Get all user wallets for a merchant
 
 ### Transactions
-- `POST /api/v1/transactions` - Create transaction
-- `GET /api/v1/transactions/:walletId` - Get transaction history
+- `POST /api/v1/transactions` - Create transaction (Not yet implemented)
+- `GET /api/v1/transactions/:walletId` - Get transaction history (Not yet implemented)
+
+## Data Models
+
+### Merchant Wallet
+```typescript
+interface MerchantWallet extends BaseWallet {
+  merchantId: string;
+  walletType: 'MERCHANT';
+  name: string;
+}
+```
+
+### User Wallet
+```typescript
+interface UserWallet extends BaseWallet {
+  userId: string;
+  merchantId: string;
+  walletType: 'USER';
+  name: string;
+}
+```
+
+### Transaction
+```typescript
+interface Transaction {
+  id: string;
+  walletId: string;
+  amount: number;
+  type: TransactionType;
+  status: TransactionStatus;
+  description: string;
+  referenceId?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+```
 
 ## Setup
 
@@ -49,3 +86,13 @@ This microservice handles wallet functionality for merchants and their users.
    ```bash
    npm start
    ```
+
+## Implementation Status
+
+- [x] Merchant wallet creation and management
+- [x] User wallet creation and management
+- [x] Wallet balance updates
+- [ ] Transaction processing
+- [ ] Transaction history
+- [ ] Security enhancements
+- [ ] Database integration
