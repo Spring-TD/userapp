@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { WalletService } from '../services';
 import { logger } from '../utils/logger';
-import { validateInput, createMerchantWalletSchema, createUserWalletSchema, updateWalletBalanceSchema, filterTransactionSchema, transferOutSchema, debitWalletSchema } from '../utils/validation';
+import { validateInput, createMerchantWalletSchema, createUserWalletSchema, updateWalletBalanceSchema, filterTransactionSchema, transferOutSchema, debitWalletSchema, debitTreasurySchema } from '../utils/validation';
 import { MerchantWalletType, TransactionType } from '../models/Wallet';
 
 // Define interfaces for the validated data
@@ -36,6 +36,12 @@ interface TransferOutData {
 
 interface DebitWalletData {
   userId: string;
+  amount: number;
+  description: string;
+}
+
+interface DebitTreasuryData {
+  merchantId: string;
   amount: number;
   description: string;
 }
@@ -815,6 +821,78 @@ export class WalletController {
       });
     } catch (error) {
       logger.error('Error debiting user wallet', { error });
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/wallets/treasury/debit-merchant
+   * Debit the merchant's own Treasury Wallet (used for billing)
+   */
+  static async debitTreasuryWallet(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      const merchantId = req.user.merchantId || req.user.userId;
+
+      // Validate input data
+      const { error, value } = validateInput<DebitTreasuryData>(debitTreasurySchema, req.body);
+      if (error) {
+        res.status(400).json({
+          success: false,
+          error: 'Validation failed',
+          details: error
+        });
+        return;
+      }
+
+      const { amount, description } = value!;
+
+      // Verify that the merchantId in the request matches the authenticated merchant
+      if (value!.merchantId !== merchantId) {
+        res.status(403).json({
+          success: false,
+          error: 'You can only debit your own Treasury Wallet'
+        });
+        return;
+      }
+
+      // Perform the debit on the Treasury Wallet
+      const result = await WalletService.debitTreasuryWallet({
+        merchantId,
+        amount,
+        description
+      });
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: result.error
+        });
+        return;
+      }
+
+      logger.info('Treasury wallet debited by merchant', {
+        merchantId,
+        amount
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Treasury wallet debited successfully',
+        data: {
+          wallet: result.wallet,
+          transaction: result.transaction
+        }
+      });
+    } catch (error) {
+      logger.error('Error debiting Treasury wallet', { error });
       next(error);
     }
   }

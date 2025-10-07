@@ -104,6 +104,12 @@ export const debitWalletSchema = Joi.object({
   description: descriptionSchema
 });
 
+export const debitTreasurySchema = Joi.object({
+  merchantId: merchantIdSchema,
+  amount: amountSchema,
+  description: descriptionSchema
+});
+
 // Utility function for validation
 export const validateInput = <T>(schema: Joi.ObjectSchema, data: any): { error?: string; value?: T } => {
   const { error, value } = schema.validate(data, { 

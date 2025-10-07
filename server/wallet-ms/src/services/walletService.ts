@@ -54,8 +54,9 @@ export interface DebitWalletData {
 export class WalletService {
   /**
    * Create a new merchant wallet of specific type
+   * When any merchant wallet is created, automatically create all three internal wallets
    */
-  static async createMerchantWallet(data: CreateMerchantWalletData): Promise<{ 
+  static async createMerchantWallet(data: CreateMerchantWalletData, skipAutoCreate: boolean = false): Promise<{ 
     success: boolean; 
     wallet?: MerchantWallet; 
     error?: string 
@@ -94,6 +95,34 @@ export class WalletService {
         walletType: data.merchantWalletType
       });
 
+      // Automatically create all three internal wallets when any merchant wallet is created
+      // But only if this wasn't called from within the auto-create process (to avoid infinite recursion)
+      if (!skipAutoCreate) {
+        const existingWallets = await this.getAllMerchantWallets(data.merchantId);
+        if (existingWallets.success && existingWallets.wallets) {
+          // Check if all three wallet types exist
+          const hasTreasury = existingWallets.wallets.some(w => w.merchantWalletType === MerchantWalletType.TREASURY);
+          const hasOperation = existingWallets.wallets.some(w => w.merchantWalletType === MerchantWalletType.OPERATION);
+          const hasKYC = existingWallets.wallets.some(w => w.merchantWalletType === MerchantWalletType.KYC);
+
+          // If not all three exist, create the missing ones
+          if (!hasTreasury || !hasOperation || !hasKYC) {
+            const autoCreateResult = await this.createAllMerchantWallets(data.merchantId, data.currency, true);
+            if (!autoCreateResult.success) {
+              logger.error('Failed to auto-create merchant wallets', { 
+                merchantId: data.merchantId, 
+                error: autoCreateResult.error 
+              });
+            } else {
+              logger.info('Auto-created missing merchant wallets', { 
+                merchantId: data.merchantId, 
+                createdCount: autoCreateResult.wallets?.length 
+              });
+            }
+          }
+        }
+      }
+
       return {
         success: true,
         wallet: newWallet
@@ -110,7 +139,7 @@ export class WalletService {
   /**
    * Create all required merchant wallets (Treasury, Operation, KYC)
    */
-  static async createAllMerchantWallets(merchantId: string, currency: string = 'USD'): Promise<{ 
+  static async createAllMerchantWallets(merchantId: string, currency: string = 'USD', skipAutoCreate: boolean = false): Promise<{ 
     success: boolean; 
     wallets?: MerchantWallet[]; 
     error?: string 
@@ -124,12 +153,21 @@ export class WalletService {
       ];
 
       for (const walletType of walletTypes) {
+        // Check if this wallet type already exists
+        const existingWallet = await this.getMerchantWalletByType(merchantId, walletType.type);
+        if (existingWallet.success && existingWallet.wallet) {
+          // Wallet already exists, add it to the list
+          wallets.push(existingWallet.wallet);
+          continue;
+        }
+
+        // Create the wallet if it doesn't exist
         const result = await this.createMerchantWallet({
           merchantId,
           name: walletType.name,
           currency,
           merchantWalletType: walletType.type
-        });
+        }, skipAutoCreate); // Pass skipAutoCreate to prevent recursion
 
         if (!result.success) {
           // If any wallet creation fails, we should clean up already created wallets
@@ -678,5 +716,80 @@ export class WalletService {
     error?: string 
   }> {
     return this.getMerchantWalletByType(merchantId, MerchantWalletType.TREASURY);
+  }
+
+  /**
+   * Debit a merchant's Treasury Wallet (used for billing)
+   */
+  static async debitTreasuryWallet(debitData: { merchantId: string, amount: number, description: string }): Promise<{ 
+    success: boolean; 
+    wallet?: MerchantWallet; 
+    transaction?: Transaction; 
+    error?: string 
+  }> {
+    try {
+      // Get the Treasury Wallet for this merchant
+      const treasuryResult = await this.getTreasuryWallet(debitData.merchantId);
+      if (!treasuryResult.success || !treasuryResult.wallet) {
+        return {
+          success: false,
+          error: 'Treasury wallet not found for merchant'
+        };
+      }
+
+      const treasuryWallet = treasuryResult.wallet;
+
+      if (treasuryWallet.status !== WalletStatus.ACTIVE) {
+        return {
+          success: false,
+          error: 'Treasury wallet is not active'
+        };
+      }
+
+      // Check if wallet has sufficient balance
+      if (treasuryWallet.balance < debitData.amount) {
+        return {
+          success: false,
+          error: 'Insufficient balance in Treasury wallet'
+        };
+      }
+
+      // Update balance
+      treasuryWallet.balance -= debitData.amount;
+      treasuryWallet.updatedAt = new Date();
+
+      // Create transaction record
+      const transaction: Transaction = {
+        id: `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        walletId: treasuryWallet.id,
+        amount: -debitData.amount,
+        type: TransactionType.DEBIT,
+        status: TransactionStatus.COMPLETED,
+        description: debitData.description,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      mockDB.transactions.set(transaction.id, transaction);
+      mockDB.wallets.set(treasuryWallet.id, treasuryWallet);
+
+      logger.info('Treasury wallet debited', { 
+        walletId: treasuryWallet.id, 
+        merchantId: debitData.merchantId, 
+        amount: debitData.amount 
+      });
+
+      return {
+        success: true,
+        wallet: treasuryWallet,
+        transaction
+      };
+    } catch (error) {
+      logger.error('Error debiting Treasury wallet', { error });
+      return {
+        success: false,
+        error: 'Failed to debit Treasury wallet'
+      };
+    }
   }
 }

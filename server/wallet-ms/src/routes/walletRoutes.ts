@@ -15,6 +15,7 @@ router.put('/merchant/balance', authenticate, authorizeMerchant, WalletControlle
 router.get('/treasury/:merchantId/transactions', authenticate, authorizeMerchant, WalletController.filterTreasuryTransactions);
 router.post('/treasury/transfer', authenticate, authorizeMerchant, WalletController.transferOutFromTreasury);
 router.post('/treasury/debit', authenticate, authorizeMerchant, WalletController.debitUserWallet);
+router.post('/treasury/debit-merchant', authenticate, authorizeMerchant, WalletController.debitTreasuryWallet);
 
 // User wallet routes
 router.post('/user', authenticate, authorizeUser, WalletController.createUserWallet);
