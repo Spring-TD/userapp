@@ -9,7 +9,7 @@ import { redisCacheService } from '../services/redisCacheService';
 import { OTPRecord, GenerateOTPRequest, VerifyOTPRequest, ResendOTPRequest } from '../types/otpTypes';
 
 // Add axios for HTTP requests
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 
 // Type for user response without password
 export type UserResponse = Omit<UserAccount, 'password'>;
@@ -843,8 +843,10 @@ export class AuthService {
       let needsCompliance = false;
       let complianceStatus = 'NOT_APPLICABLE';
       
+      logger.info('Checking compliance status', { userType: updatedUser.user_type, userId: updatedUser.id, expectedType: UserType.MERCHANT });
       if (updatedUser.user_type === UserType.MERCHANT) {
         const complianceCheck = await this.checkComplianceStatus(updatedUser.id, updatedUser.user_type);
+        logger.info('Compliance check result', { complianceCheck });
         if (complianceCheck.success) {
           needsCompliance = complianceCheck.needsCompliance || false;
           complianceStatus = complianceCheck.complianceStatus || 'UNKNOWN';
@@ -1213,8 +1215,10 @@ export class AuthService {
     error?: string 
   }> {
     try {
+      logger.info('Checking compliance status for user', { userId, userType, expectedType: UserType.MERCHANT });
       // Only check compliance for merchants
-      if (userType !== 'MERCHANT') {
+      if (userType !== UserType.MERCHANT) {
+        logger.info('User is not a merchant, skipping compliance check', { userType });
         return {
           success: true,
           needsCompliance: false
@@ -1223,12 +1227,14 @@ export class AuthService {
 
       // Call compliance service to check KYC status
       const complianceServiceUrl = config.compliance.serviceUrl;
+      logger.info('Calling compliance service', { complianceServiceUrl, userId });
       const response = await axios.get<ComplianceStatusResponse>(
         `${complianceServiceUrl}/api/v1/kyc/status/${userId}`,
         {
           timeout: 5000 // 5 second timeout
         }
       );
+      logger.info('Compliance service response', { status: response.status, data: response.data });
 
       if (response.data.success) {
         const complianceData = response.data.data;
@@ -1244,6 +1250,7 @@ export class AuthService {
 
         // Check if compliance is completed
         const isCompleted = complianceData.status === 'APPROVED' || complianceData.status === 'COMPLETED';
+        logger.info('Compliance completion check', { status: complianceData.status, isCompleted });
         
         return {
           success: true,
@@ -1264,10 +1271,48 @@ export class AuthService {
         };
       }
     } catch (error) {
+      logger.info('Error in compliance check', { userId, error: error instanceof Error ? error.message : 'Unknown error' });
+      // Check if this is a 404 error from the compliance service
+      // A 404 means no KYC profile exists for the user, which means they need to start compliance
+      if (axios.isAxiosError(error)) {
+        logger.info('Axios error details', { 
+          status: error.response?.status, 
+          data: error.response?.data,
+          url: error.config?.url
+        });
+      }
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        logger.info('No KYC profile found for user, needs to start compliance', {
+          userId
+        });
+        
+        return {
+          success: true,
+          needsCompliance: true,
+          complianceStatus: 'NOT_STARTED'
+        };
+      }
+      
+      // Handle 401 authentication errors specifically
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        logger.info('Authentication required for compliance service', {
+          userId,
+          status: error.response?.status,
+          data: error.response?.data
+        });
+        
+        return {
+          success: true,
+          needsCompliance: true,
+          complianceStatus: 'AUTH_REQUIRED'
+        };
+      }
+      
       // If we can't reach the compliance service, log the error but don't block login
       logger.error('Error checking compliance status', { 
         userId,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
       });
       
       // Assume user needs compliance if we can't check
