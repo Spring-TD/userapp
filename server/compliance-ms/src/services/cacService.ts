@@ -3,6 +3,23 @@ import axios from 'axios';
 import { logger } from '../utils/logger';
 import { CAC_API_URL, CAC_API_KEY } from '../config/environment';
 
+// Define the response structure from the CAC API
+interface CACApiResponse {
+  valid?: boolean;
+  message?: string;
+  data?: {
+    companyName?: string;
+    registrationNumber?: string;
+    registrationDate?: string;
+    status?: string;
+    address?: string;
+    directors?: Array<{
+      name: string;
+      position: string;
+    }>;
+  };
+}
+
 export interface CACVerificationResult {
   success: boolean;
   valid: boolean;
@@ -49,7 +66,7 @@ export class CACService {
       }
 
       // Make API call to CAC service
-      const response = await axios.post(
+      const response = await axios.post<CACApiResponse>(
         `${CAC_API_URL}/verify-certificate`,
         {
           registrationNumber,

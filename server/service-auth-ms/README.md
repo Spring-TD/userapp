@@ -902,4 +902,26 @@ if (validation.valid) {
 } else {
   // Reject with 401 Unauthorized
 }
-```
+
+
+### Default Users
+default merchant user that was created has the following credentials:
+
+- **Email**: merchant@example.com
+- **Password**: DefaultPass123!
+
+This user was created with verified email status and active account status when the server started. The system registered the merchant, sent a mock email verification, and then automatically verified the account as part of our initialization process.
+
+You can use these credentials to log in as the default merchant user. The user was created with the following details:
+- First Name: Default
+- Last Name: Merchant
+- Phone: +1234567890
+- Country: US
+- User Merchant ID: default-merchant-id
+
+Default admin user details:
+Email: admin@example.com
+Password: AdminPass123!
+Name: Default Admin
+Phone: +1234567891
+Country: US

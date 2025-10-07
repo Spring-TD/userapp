@@ -6,14 +6,17 @@ import { logger } from '../utils/logger';
  * Uses Redis for fast data retrieval and fallback in-memory cache when Redis is unavailable
  */
 export class RedisCacheService {
-  private redisClient: RedisClientType | null = null;
+  private redisClient: ReturnType<typeof createClient> | null = null;
   private isConnected = false;
   private cacheTtl = 3600; // Default TTL in seconds (1 hour)
   private fallbackCache = new Map<string, { value: any; expiration: number }>();
 
   constructor(ttl?: number) {
     this.cacheTtl = ttl || this.cacheTtl;
-    this.initializeRedis();
+    // Initialize Redis asynchronously
+    this.initializeRedis().catch(error => {
+      logger.error('Failed to initialize Redis during construction', { error });
+    });
   }
 
   /**
@@ -33,7 +36,7 @@ export class RedisCacheService {
         password: process.env.REDIS_PASSWORD || undefined,
       });
 
-      this.redisClient.on('error', (err) => {
+      this.redisClient.on('error', (err: Error) => {
         logger.error('Redis connection error', { error: err.message });
         this.isConnected = false;
       });
