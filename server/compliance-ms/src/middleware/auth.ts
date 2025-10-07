@@ -21,6 +21,11 @@ declare global {
 // Middleware to authenticate requests
 export const authenticate = (req: Request, res: Response, next: NextFunction): any => {
   try {
+    // If service authentication already succeeded, allow the request
+    if (req.service) {
+      return next();
+    }
+    
     // Get token from header
     const authHeader = req.headers.authorization;
     

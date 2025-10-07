@@ -71,7 +71,10 @@ export class KYCController {
   // Get KYC status for a user
   static async getKYCStatus(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await kycService.getKYCStatus(req.params.userId, req.user?.userId);
+      // For service-to-service requests, use the target user ID for both params
+      // For user requests, use the authenticated user ID as the requester
+      const requesterId = req.service ? req.params.userId : req.user?.userId;
+      const result = await kycService.getKYCStatus(req.params.userId, requesterId);
       
       if (!result.success) {
         logger.warn('KYC status retrieval failed', {
@@ -88,6 +91,39 @@ export class KYCController {
       });
       
       return res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Create a minimal KYC profile for a user
+  static async createMinimalKYCProfile(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { userId } = req.params;
+      const { userType } = req.body;
+      
+      // For service-to-service requests, use the service as the requester
+      // For user requests, use the authenticated user ID as the requester
+      const requesterId = req.service ? 'service' : req.user?.userId;
+      
+      const result = await kycService.createMinimalKYCProfile(userId, userType, requesterId);
+      
+      if (!result.success) {
+        logger.warn('Failed to create minimal KYC profile', {
+          userId,
+          error: result.error
+        });
+        
+        return res.status(400).json(result);
+      }
+      
+      logger.info('Minimal KYC profile created successfully', {
+        userId,
+        userType,
+        status: result.data?.status
+      });
+      
+      return res.status(201).json(result);
     } catch (error) {
       next(error);
     }

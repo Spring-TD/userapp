@@ -414,6 +414,74 @@ export class KYCService {
     }
   }
 
+  // Create a minimal KYC profile for a user
+  async createMinimalKYCProfile(userId: string, userType: UserType, requesterId?: string): Promise<{
+    success: boolean;
+    data?: {
+      userId: string;
+      userType: UserType;
+      status: KYCStatus;
+      documentCount: number;
+      submittedAt: Date | undefined;
+    };
+    error?: string;
+  }> {
+    try {
+      // Check if a KYC profile already exists for this user
+      const existingProfile: any = await MockKYCProfileModel.findOne({ userId });
+      
+      if (existingProfile) {
+        return {
+          success: false,
+          error: 'KYC profile already exists for this user'
+        };
+      }
+      
+      // Create a minimal KYC profile
+      const kycProfileData: any = {
+        userId,
+        userType,
+        documents: [],
+        status: KYCStatus.PENDING,
+        submittedAt: new Date()
+      };
+      
+      const result = await MockKYCProfileModel.save(kycProfileData);
+      
+      auditLogger('KYC_PROFILE_CREATED', requesterId || 'system', {
+        userId,
+        userType,
+        status: result.status
+      });
+      
+      logger.info('Minimal KYC profile created successfully', {
+        userId,
+        userType,
+        status: result.status
+      });
+      
+      return {
+        success: true,
+        data: {
+          userId: result.userId,
+          userType: result.userType,
+          status: result.status,
+          documentCount: result.documents.length,
+          submittedAt: result.submittedAt
+        }
+      };
+    } catch (error) {
+      logger.error('Error creating minimal KYC profile', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      
+      return {
+        success: false,
+        error: 'Error creating minimal KYC profile'
+      };
+    }
+  }
+
   // Validate KYC submission
   async validateKYC(data: KYCSubmissionRequest, userId?: string) {
     try {

@@ -1228,9 +1228,24 @@ export class AuthService {
       // Call compliance service to check KYC status
       const complianceServiceUrl = config.compliance.serviceUrl;
       logger.info('Calling compliance service', { complianceServiceUrl, userId });
+      
+      // Prepare headers with service-to-service authentication if credential is available
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'User-Agent': 'service-auth-ms'
+      };
+      
+      if (config.compliance.serviceCredential) {
+        headers['Authorization'] = `Bearer ${config.compliance.serviceCredential}`;
+        logger.info('Using service-to-service authentication for compliance service');
+      } else {
+        logger.warn('No service credential configured for compliance service');
+      }
+      
       const response = await axios.get<ComplianceStatusResponse>(
         `${complianceServiceUrl}/api/v1/kyc/status/${userId}`,
         {
+          headers,
           timeout: 5000 // 5 second timeout
         }
       );
@@ -1282,15 +1297,37 @@ export class AuthService {
         });
       }
       if (axios.isAxiosError(error) && error.response?.status === 404) {
-        logger.info('No KYC profile found for user, needs to start compliance', {
+        logger.info('No KYC profile found for user, creating minimal profile', {
           userId
         });
         
-        return {
-          success: true,
-          needsCompliance: true,
-          complianceStatus: 'NOT_STARTED'
-        };
+        // Try to create a minimal KYC profile
+        const createProfileResult = await this.createMinimalKYCProfile(userId, userType);
+        
+        if (createProfileResult.success) {
+          logger.info('Minimal KYC profile created successfully', {
+            userId
+          });
+          
+          // Return that user needs to start compliance
+          return {
+            success: true,
+            needsCompliance: true,
+            complianceStatus: 'NOT_STARTED'
+          };
+        } else {
+          logger.error('Failed to create minimal KYC profile', {
+            userId,
+            error: createProfileResult.error
+          });
+          
+          // Still return that user needs compliance, but with an error status
+          return {
+            success: true,
+            needsCompliance: true,
+            complianceStatus: 'PROFILE_CREATION_FAILED'
+          };
+        }
       }
       
       // Handle 401 authentication errors specifically
@@ -1453,6 +1490,65 @@ export class AuthService {
       return {
         success: false,
         error: 'Failed to resend OTP'
+      };
+    }
+  }
+
+  /**
+   * Create a minimal KYC profile for a user
+   */
+  static async createMinimalKYCProfile(userId: string, userType: string): Promise<{ 
+    success: boolean; 
+    error?: string 
+  }> {
+    try {
+      // Call compliance service to create minimal KYC profile
+      const complianceServiceUrl = config.compliance.serviceUrl;
+      logger.info('Creating minimal KYC profile', { complianceServiceUrl, userId, userType });
+      
+      // Prepare headers with service-to-service authentication if credential is available
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'User-Agent': 'service-auth-ms'
+      };
+      
+      if (config.compliance.serviceCredential) {
+        headers['Authorization'] = `Bearer ${config.compliance.serviceCredential}`;
+        logger.info('Using service-to-service authentication for compliance service');
+      } else {
+        logger.warn('No service credential configured for compliance service');
+      }
+      
+      const response = await axios.post(
+        `${complianceServiceUrl}/api/v1/kyc/profile/${userId}`,
+        { userType },
+        {
+          headers,
+          timeout: 5000 // 5 second timeout
+        }
+      );
+      
+      logger.info('Minimal KYC profile creation response', { status: response.status, data: response.data });
+      
+      if (response.data.success) {
+        return {
+          success: true
+        };
+      } else {
+        return {
+          success: false,
+          error: response.data.error
+        };
+      }
+    } catch (error) {
+      logger.error('Error creating minimal KYC profile', { 
+        userId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      
+      return {
+        success: false,
+        error: 'Failed to create minimal KYC profile'
       };
     }
   }
