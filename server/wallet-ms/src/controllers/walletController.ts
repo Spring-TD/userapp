@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { WalletService } from '../services';
 import { logger } from '../utils/logger';
-import { validateInput, createMerchantWalletSchema, createUserWalletSchema, updateWalletBalanceSchema, filterTransactionSchema, transferOutSchema, debitWalletSchema, debitTreasurySchema } from '../utils/validation';
+import { validateInput, createMerchantWalletSchema, createUserWalletSchema, updateWalletBalanceSchema, filterTransactionSchema, transferOutSchema, debitWalletSchema, debitTreasurySchema, operationToKycTransferSchema, kycToOperationTransferSchema } from '../utils/validation';
 import { MerchantWalletType, TransactionType } from '../models/Wallet';
 
 // Define interfaces for the validated data
@@ -42,6 +42,21 @@ interface DebitWalletData {
 
 interface DebitTreasuryData {
   merchantId: string;
+  amount: number;
+  description: string;
+}
+
+interface OperationToKycTransferData {
+  amount: number;
+  description: string;
+}
+
+interface KycToOperationTransferData {
+  amount: number;
+  description: string;
+}
+
+interface OperationDebitData {
   amount: number;
   description: string;
 }
@@ -739,6 +754,268 @@ export class WalletController {
       });
     } catch (error) {
       logger.error('Error transferring money from Treasury Wallet', { error });
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/wallets/operation-to-kyc
+   * Transfer money from Operation Wallet to KYC Wallet
+   */
+  static async transferFromOperationToKyc(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      const merchantId = req.user.merchantId || req.user.userId;
+
+      // Validate input data
+      const { error, value } = validateInput<OperationToKycTransferData>(operationToKycTransferSchema, req.body);
+      if (error) {
+        res.status(400).json({
+          success: false,
+          error: 'Validation failed',
+          details: error
+        });
+        return;
+      }
+
+      const { amount, description } = value!;
+
+      // Perform the transfer
+      const result = await WalletService.transferFromOperationToKyc({
+        merchantId,
+        amount,
+        description
+      });
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: result.error
+        });
+        return;
+      }
+
+      logger.info('Money transferred from Operation to KYC Wallet', {
+        merchantId,
+        amount
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Money transferred successfully from Operation to KYC Wallet',
+        data: {
+          fromWallet: result.fromWallet,
+          toWallet: result.toWallet,
+          transaction: result.transaction
+        }
+      });
+    } catch (error) {
+      logger.error('Error transferring money from Operation to KYC Wallet', { error });
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/wallets/kyc-to-operation
+   * Transfer money from KYC Wallet to Operation Wallet
+   */
+  static async transferFromKycToOperation(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      const merchantId = req.user.merchantId || req.user.userId;
+
+      // Validate input data
+      const { error, value } = validateInput<KycToOperationTransferData>(kycToOperationTransferSchema, req.body);
+      if (error) {
+        res.status(400).json({
+          success: false,
+          error: 'Validation failed',
+          details: error
+        });
+        return;
+      }
+
+      const { amount, description } = value!;
+
+      // Perform the transfer
+      const result = await WalletService.transferFromKycToOperation({
+        merchantId,
+        amount,
+        description
+      });
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: result.error
+        });
+        return;
+      }
+
+      logger.info('Money transferred from KYC to Operation Wallet', {
+        merchantId,
+        amount
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Money transferred successfully from KYC to Operation Wallet',
+        data: {
+          fromWallet: result.fromWallet,
+          toWallet: result.toWallet,
+          transaction: result.transaction
+        }
+      });
+    } catch (error) {
+      logger.error('Error transferring money from KYC to Operation Wallet', { error });
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/wallets/operation/debit
+   * Debit the merchant's own Operation Wallet (used for billing)
+   */
+  static async debitOperationWallet(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      const merchantId = req.user.merchantId || req.user.userId;
+
+      // Validate input data
+      const { error, value } = validateInput<OperationDebitData>(debitTreasurySchema, req.body);
+      if (error) {
+        res.status(400).json({
+          success: false,
+          error: 'Validation failed',
+          details: error
+        });
+        return;
+      }
+
+      const { amount, description } = value!;
+
+      // Perform the debit on the Operation Wallet
+      const result = await WalletService.debitOperationWallet({
+        merchantId,
+        amount,
+        description
+      });
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: result.error
+        });
+        return;
+      }
+
+      logger.info('Operation wallet debited by merchant', {
+        merchantId,
+        amount
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Operation wallet debited successfully',
+        data: {
+          wallet: result.wallet,
+          transaction: result.transaction
+        }
+      });
+    } catch (error) {
+      logger.error('Error debiting Operation wallet', { error });
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/wallets/operation/:merchantId/transactions
+   * Filter Operation Wallet transactions by date range and type
+   */
+  static async filterOperationTransactions(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { merchantId } = req.params;
+      const { startDate, endDate, type } = req.query;
+
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      // Check if user has permission to access this wallet
+      if (req.user.userType !== 'MERCHANT' && req.user.merchantId !== merchantId) {
+        res.status(403).json({
+          success: false,
+          error: 'Access denied'
+        });
+        return;
+      }
+
+      // Validate input data
+      const { error, value } = validateInput<FilterTransactionData>(filterTransactionSchema, { startDate, endDate, type });
+      if (error) {
+        res.status(400).json({
+          success: false,
+          error: 'Validation failed',
+          details: error
+        });
+        return;
+      }
+
+      // Filter transactions
+      const filterData = {
+        startDate: startDate ? new Date(startDate as string) : undefined,
+        endDate: endDate ? new Date(endDate as string) : undefined,
+        type: type as TransactionType
+      };
+
+      const result = await WalletService.filterOperationTransactions(merchantId, filterData);
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: result.error
+        });
+        return;
+      }
+
+      logger.info('Operation wallet transactions filtered', {
+        merchantId,
+        transactionCount: result.transactions?.length
+      });
+
+      res.status(200).json({
+        success: true,
+        data: {
+          transactions: result.transactions
+        }
+      });
+    } catch (error) {
+      logger.error('Error filtering operation transactions', { error });
       next(error);
     }
   }

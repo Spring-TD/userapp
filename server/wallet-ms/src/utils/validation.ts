@@ -110,6 +110,17 @@ export const debitTreasurySchema = Joi.object({
   description: descriptionSchema
 });
 
+// Operation-KYC Wallet validation schemas
+export const operationToKycTransferSchema = Joi.object({
+  amount: amountSchema,
+  description: descriptionSchema
+});
+
+export const kycToOperationTransferSchema = Joi.object({
+  amount: amountSchema,
+  description: descriptionSchema
+});
+
 // Utility function for validation
 export const validateInput = <T>(schema: Joi.ObjectSchema, data: any): { error?: string; value?: T } => {
   const { error, value } = schema.validate(data, { 

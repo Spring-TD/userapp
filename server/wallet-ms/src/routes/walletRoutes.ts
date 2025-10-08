@@ -17,6 +17,12 @@ router.post('/treasury/transfer', authenticate, authorizeMerchant, WalletControl
 router.post('/treasury/debit', authenticate, authorizeMerchant, WalletController.debitUserWallet);
 router.post('/treasury/debit-merchant', authenticate, authorizeMerchant, WalletController.debitTreasuryWallet);
 
+// Operation Wallet specific routes
+router.get('/operation/:merchantId/transactions', authenticate, authorizeMerchant, WalletController.filterOperationTransactions);
+router.post('/operation-to-kyc', authenticate, authorizeMerchant, WalletController.transferFromOperationToKyc);
+router.post('/kyc-to-operation', authenticate, authorizeMerchant, WalletController.transferFromKycToOperation);
+router.post('/operation/debit', authenticate, authorizeMerchant, WalletController.debitOperationWallet);
+
 // User wallet routes
 router.post('/user', authenticate, authorizeUser, WalletController.createUserWallet);
 router.get('/user/:userId', authenticate, WalletController.getUserWallet);

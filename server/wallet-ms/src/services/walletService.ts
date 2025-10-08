@@ -520,6 +520,37 @@ export class WalletService {
   }
 
   /**
+   * Filter Operation Wallet transactions by date range and type
+   */
+  static async filterOperationTransactions(merchantId: string, filterData: FilterTransactionData): Promise<{ 
+    success: boolean; 
+    transactions?: Transaction[]; 
+    error?: string 
+  }> {
+    try {
+      // Get Operation Wallet for the merchant
+      const operationResult = await this.getOperationWallet(merchantId);
+      if (!operationResult.success || !operationResult.wallet) {
+        return {
+          success: false,
+          error: 'Operation wallet not found for merchant'
+        };
+      }
+
+      // Filter transactions
+      const result = await this.filterWalletTransactions(operationResult.wallet.id, filterData);
+
+      return result;
+    } catch (error) {
+      logger.error('Error filtering operation transactions', { error });
+      return {
+        success: false,
+        error: 'Failed to filter operation transactions'
+      };
+    }
+  }
+
+  /**
    * Transfer money out from one wallet to another
    */
   static async transferOut(transferData: TransferOutData): Promise<{ 
@@ -708,6 +739,164 @@ export class WalletService {
   }
 
   /**
+   * Transfer money from Operation Wallet to KYC Wallet
+   */
+  static async transferFromOperationToKyc(transferData: { 
+    merchantId: string, 
+    amount: number, 
+    description: string 
+  }): Promise<{ 
+    success: boolean; 
+    fromWallet?: MerchantWallet; 
+    toWallet?: MerchantWallet; 
+    transaction?: Transaction; 
+    error?: string 
+  }> {
+    try {
+      // Get the Operation Wallet for this merchant
+      const operationResult = await this.getMerchantWalletByType(transferData.merchantId, MerchantWalletType.OPERATION);
+      if (!operationResult.success || !operationResult.wallet) {
+        return {
+          success: false,
+          error: 'Operation wallet not found for merchant'
+        };
+      }
+
+      // Get the KYC Wallet for this merchant
+      const kycResult = await this.getMerchantWalletByType(transferData.merchantId, MerchantWalletType.KYC);
+      if (!kycResult.success || !kycResult.wallet) {
+        return {
+          success: false,
+          error: 'KYC wallet not found for merchant'
+        };
+      }
+
+      // Use the existing transferOut function to perform the transfer
+      const transferResult = await this.transferOut({
+        fromWalletId: operationResult.wallet.id,
+        toWalletId: kycResult.wallet.id,
+        amount: transferData.amount,
+        description: transferData.description
+      });
+
+      // Cast the wallets to MerchantWallet type since we know they are merchant wallets
+      if (transferResult.success && transferResult.fromWallet && transferResult.toWallet) {
+        return {
+          success: true,
+          fromWallet: transferResult.fromWallet as MerchantWallet,
+          toWallet: transferResult.toWallet as MerchantWallet,
+          transaction: transferResult.transaction,
+          error: undefined
+        };
+      } else {
+        return {
+          success: false,
+          fromWallet: undefined,
+          toWallet: undefined,
+          transaction: undefined,
+          error: transferResult.error
+        };
+      }
+    } catch (error) {
+      logger.error('Error transferring money from Operation to KYC wallet', { error });
+      return {
+        success: false,
+        error: 'Failed to transfer money from Operation to KYC wallet'
+      };
+    }
+  }
+
+  /**
+   * Transfer money from KYC Wallet to Operation Wallet
+   */
+  static async transferFromKycToOperation(transferData: { 
+    merchantId: string, 
+    amount: number, 
+    description: string 
+  }): Promise<{ 
+    success: boolean; 
+    fromWallet?: MerchantWallet; 
+    toWallet?: MerchantWallet; 
+    transaction?: Transaction; 
+    error?: string 
+  }> {
+    try {
+      // Get the KYC Wallet for this merchant
+      const kycResult = await this.getMerchantWalletByType(transferData.merchantId, MerchantWalletType.KYC);
+      if (!kycResult.success || !kycResult.wallet) {
+        return {
+          success: false,
+          error: 'KYC wallet not found for merchant'
+        };
+      }
+
+      // Get the Operation Wallet for this merchant
+      const operationResult = await this.getMerchantWalletByType(transferData.merchantId, MerchantWalletType.OPERATION);
+      if (!operationResult.success || !operationResult.wallet) {
+        return {
+          success: false,
+          error: 'Operation wallet not found for merchant'
+        };
+      }
+
+      // Use the existing transferOut function to perform the transfer
+      const transferResult = await this.transferOut({
+        fromWalletId: kycResult.wallet.id,
+        toWalletId: operationResult.wallet.id,
+        amount: transferData.amount,
+        description: transferData.description
+      });
+
+      // Cast the wallets to MerchantWallet type since we know they are merchant wallets
+      if (transferResult.success && transferResult.fromWallet && transferResult.toWallet) {
+        return {
+          success: true,
+          fromWallet: transferResult.fromWallet as MerchantWallet,
+          toWallet: transferResult.toWallet as MerchantWallet,
+          transaction: transferResult.transaction,
+          error: undefined
+        };
+      } else {
+        return {
+          success: false,
+          fromWallet: undefined,
+          toWallet: undefined,
+          transaction: undefined,
+          error: transferResult.error
+        };
+      }
+    } catch (error) {
+      logger.error('Error transferring money from KYC to Operation wallet', { error });
+      return {
+        success: false,
+        error: 'Failed to transfer money from KYC to Operation wallet'
+      };
+    }
+  }
+
+  /**
+   * Get Operation Wallet for a merchant
+   */
+  static async getOperationWallet(merchantId: string): Promise<{ 
+    success: boolean; 
+    wallet?: MerchantWallet; 
+    error?: string 
+  }> {
+    return this.getMerchantWalletByType(merchantId, MerchantWalletType.OPERATION);
+  }
+
+  /**
+   * Get KYC Wallet for a merchant
+   */
+  static async getKycWallet(merchantId: string): Promise<{ 
+    success: boolean; 
+    wallet?: MerchantWallet; 
+    error?: string 
+  }> {
+    return this.getMerchantWalletByType(merchantId, MerchantWalletType.KYC);
+  }
+
+  /**
    * Get Treasury Wallet for a merchant
    */
   static async getTreasuryWallet(merchantId: string): Promise<{ 
@@ -789,6 +978,81 @@ export class WalletService {
       return {
         success: false,
         error: 'Failed to debit Treasury wallet'
+      };
+    }
+  }
+
+  /**
+   * Debit a merchant's Operation Wallet (used for billing)
+   */
+  static async debitOperationWallet(debitData: { merchantId: string, amount: number, description: string }): Promise<{ 
+    success: boolean; 
+    wallet?: MerchantWallet; 
+    transaction?: Transaction; 
+    error?: string 
+  }> {
+    try {
+      // Get the Operation Wallet for this merchant
+      const operationResult = await this.getOperationWallet(debitData.merchantId);
+      if (!operationResult.success || !operationResult.wallet) {
+        return {
+          success: false,
+          error: 'Operation wallet not found for merchant'
+        };
+      }
+
+      const operationWallet = operationResult.wallet;
+
+      if (operationWallet.status !== WalletStatus.ACTIVE) {
+        return {
+          success: false,
+          error: 'Operation wallet is not active'
+        };
+      }
+
+      // Check if wallet has sufficient balance
+      if (operationWallet.balance < debitData.amount) {
+        return {
+          success: false,
+          error: 'Insufficient balance in Operation wallet'
+        };
+      }
+
+      // Update balance
+      operationWallet.balance -= debitData.amount;
+      operationWallet.updatedAt = new Date();
+
+      // Create transaction record
+      const transaction: Transaction = {
+        id: `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        walletId: operationWallet.id,
+        amount: -debitData.amount,
+        type: TransactionType.DEBIT,
+        status: TransactionStatus.COMPLETED,
+        description: debitData.description,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      mockDB.transactions.set(transaction.id, transaction);
+      mockDB.wallets.set(operationWallet.id, operationWallet);
+
+      logger.info('Operation wallet debited', { 
+        walletId: operationWallet.id, 
+        merchantId: debitData.merchantId, 
+        amount: debitData.amount 
+      });
+
+      return {
+        success: true,
+        wallet: operationWallet,
+        transaction
+      };
+    } catch (error) {
+      logger.error('Error debiting Operation wallet', { error });
+      return {
+        success: false,
+        error: 'Failed to debit Operation wallet'
       };
     }
   }

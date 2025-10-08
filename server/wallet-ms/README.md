@@ -4,7 +4,7 @@ This microservice handles wallet functionality for merchants and their users.
 
 ## Features
 
-- Merchant Wallets
+- Merchant Wallets (Treasury, Operation, KYC)
 - User Wallets (associated with merchants)
 - Wallet transactions
 - Balance management
@@ -14,8 +14,22 @@ This microservice handles wallet functionality for merchants and their users.
 
 ### Merchant Wallets
 - `POST /api/v1/wallets/merchant` - Create merchant wallet
-- `GET /api/v1/wallets/merchant/:merchantId` - Get merchant wallet
-- `PUT /api/v1/wallets/merchant/:merchantId/balance` - Update merchant wallet balance
+- `POST /api/v1/wallets/merchant/all` - Create all merchant wallets (Treasury, Operation, KYC)
+- `GET /api/v1/wallets/merchant/:merchantId/type/:walletType` - Get specific merchant wallet by type
+- `GET /api/v1/wallets/merchant/:merchantId/all` - Get all merchant wallets
+- `PUT /api/v1/wallets/merchant/balance` - Update merchant wallet balance
+
+### Operation Wallet Operations
+- `GET /api/v1/wallets/operation/:merchantId/transactions` - Get Operation wallet transactions
+- `POST /api/v1/wallets/operation-to-kyc` - Transfer money from Operation Wallet to KYC Wallet
+- `POST /api/v1/wallets/kyc-to-operation` - Transfer money from KYC Wallet to Operation Wallet
+- `POST /api/v1/wallets/operation/debit` - Debit the merchant's own Operation Wallet
+
+### Treasury Wallet Operations
+- `GET /api/v1/wallets/treasury/:merchantId/transactions` - Get Treasury wallet transactions
+- `POST /api/v1/wallets/treasury/transfer` - Transfer money from Treasury Wallet to another wallet
+- `POST /api/v1/wallets/treasury/debit` - Debit a user wallet
+- `POST /api/v1/wallets/treasury/debit-merchant` - Debit the merchant's own Treasury Wallet
 
 ### User Wallets
 - `POST /api/v1/wallets/user` - Create user wallet
@@ -34,6 +48,7 @@ This microservice handles wallet functionality for merchants and their users.
 interface MerchantWallet extends BaseWallet {
   merchantId: string;
   walletType: 'MERCHANT';
+  merchantWalletType: MerchantWalletType; // TREASURY, OPERATION, or KYC
   name: string;
 }
 ```
@@ -92,6 +107,9 @@ interface Transaction {
 - [x] Merchant wallet creation and management
 - [x] User wallet creation and management
 - [x] Wallet balance updates
+- [x] Operation-KYC wallet transfers
+- [x] Operation wallet transaction filtering
+- [x] Operation wallet debit functionality
 - [ ] Transaction processing
 - [ ] Transaction history
 - [ ] Security enhancements
