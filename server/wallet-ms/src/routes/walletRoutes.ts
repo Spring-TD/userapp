@@ -23,6 +23,11 @@ router.post('/operation-to-kyc', authenticate, authorizeMerchant, WalletControll
 router.post('/kyc-to-operation', authenticate, authorizeMerchant, WalletController.transferFromKycToOperation);
 router.post('/operation/debit', authenticate, authorizeMerchant, WalletController.debitOperationWallet);
 
+// KYC Wallet specific routes
+router.get('/kyc/:merchantId/transactions', authenticate, authorizeMerchant, WalletController.filterKycTransactions);
+router.post('/kyc/debit', authenticate, authorizeMerchant, WalletController.debitKycWallet);
+router.post('/kyc/fee', authenticate, authorizeMerchant, WalletController.processKycFee);
+
 // User wallet routes
 router.post('/user', authenticate, authorizeUser, WalletController.createUserWallet);
 router.get('/user/:userId', authenticate, WalletController.getUserWallet);

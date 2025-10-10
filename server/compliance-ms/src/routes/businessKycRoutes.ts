@@ -26,14 +26,12 @@ router.get('/document/:documentId', KYCController.getKYCDocument);
 router.get('/business-info', KYCController.getBusinessInfo);
 router.get('/business-survey', KYCController.getBusinessSurvey);
 router.get('/beneficial-owners', KYCController.getBeneficialOwners);
-router.get('/directors', KYCController.getDirectors);
 router.get('/risk-assessment', KYCController.getBusinessRiskAssessment);
 
 // Business information updates
 router.put('/business-info', KYCController.updateBusinessInfo);
 router.put('/business-survey', KYCController.updateBusinessSurvey);
 router.put('/beneficial-owners', KYCController.updateBeneficialOwners);
-router.put('/directors', KYCController.updateDirectors);
 
 // High-risk business specific routes
 router.get('/enhanced-due-diligence', requireHighRiskApproval, KYCController.getEnhancedDueDiligence);

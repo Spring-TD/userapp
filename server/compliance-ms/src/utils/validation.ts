@@ -129,15 +129,6 @@ export const businessKYCSubmissionSchema = Joi.object({
       }).required() // Make the kyc field required
     }).required()
   ).min(1).required(),
-  directors: Joi.array().items(
-    Joi.object({
-      firstName: Joi.string().min(2).max(50).required(),
-      lastName: Joi.string().min(2).max(50).required(),
-      position: Joi.string().min(2).max(50).required(),
-      dateOfBirth: Joi.date().max('now').required(),
-      nationality: Joi.string().min(2).max(3).required()
-    }).required()
-  ).min(1).required(),
   businessDocuments: Joi.array().items(businessDocumentSchema).min(8).required(), // Must have all 8 documents
   riskAssessment: Joi.object({
     annualTurnover: Joi.number().min(0).required(),
@@ -243,17 +234,17 @@ export const validateBusinessKYCSubmission = (data: any) => {
     };
   }
   
-  // Validate beneficial ownership total
-  const totalOwnership = value.beneficialOwners.reduce(
-    (sum: number, owner: any) => sum + owner.ownershipPercentage, 
+  // Validate shareholder ownership total
+  const totalOwnership = value.shareholders.reduce(
+    (sum: number, shareholder: any) => sum + shareholder.ownershipPercentage, 
     0
   );
   
   if (totalOwnership > 100) {
-    logger.warn('Business KYC beneficial ownership exceeds 100%', { totalOwnership });
+    logger.warn('Business KYC shareholder ownership exceeds 100%', { totalOwnership });
     return { 
       error: { 
-        message: 'Total beneficial ownership cannot exceed 100%' 
+        message: 'Total shareholder ownership cannot exceed 100%' 
       } 
     };
   }

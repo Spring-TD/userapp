@@ -61,6 +61,16 @@ interface OperationDebitData {
   description: string;
 }
 
+interface KycDebitData {
+  amount: number;
+  description: string;
+}
+
+interface KycFeeData {
+  amount: number;
+  description: string;
+}
+
 export class WalletController {
   /**
    * POST /api/v1/wallets/merchant
@@ -887,69 +897,6 @@ export class WalletController {
   }
 
   /**
-   * POST /api/v1/wallets/operation/debit
-   * Debit the merchant's own Operation Wallet (used for billing)
-   */
-  static async debitOperationWallet(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      if (!req.user) {
-        res.status(401).json({
-          success: false,
-          error: 'Authentication required'
-        });
-        return;
-      }
-
-      const merchantId = req.user.merchantId || req.user.userId;
-
-      // Validate input data
-      const { error, value } = validateInput<OperationDebitData>(debitTreasurySchema, req.body);
-      if (error) {
-        res.status(400).json({
-          success: false,
-          error: 'Validation failed',
-          details: error
-        });
-        return;
-      }
-
-      const { amount, description } = value!;
-
-      // Perform the debit on the Operation Wallet
-      const result = await WalletService.debitOperationWallet({
-        merchantId,
-        amount,
-        description
-      });
-
-      if (!result.success) {
-        res.status(400).json({
-          success: false,
-          error: result.error
-        });
-        return;
-      }
-
-      logger.info('Operation wallet debited by merchant', {
-        merchantId,
-        amount
-      });
-
-      res.status(200).json({
-        success: true,
-        message: 'Operation wallet debited successfully',
-        data: {
-          wallet: result.wallet,
-          transaction: result.transaction
-        }
-      });
-    } catch (error) {
-      logger.error('Error debiting Operation wallet', { error });
-      next(error);
-    }
-  }
-
-  /**
    * GET /api/v1/wallets/operation/:merchantId/transactions
    * Filter Operation Wallet transactions by date range and type
    */
@@ -1016,6 +963,266 @@ export class WalletController {
       });
     } catch (error) {
       logger.error('Error filtering operation transactions', { error });
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/wallets/kyc/:merchantId/transactions
+   * Filter KYC Wallet transactions by date range and type
+   */
+  static async filterKycTransactions(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { merchantId } = req.params;
+      const { startDate, endDate, type } = req.query;
+
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      // Check if user has permission to access this wallet
+      if (req.user.userType !== 'MERCHANT' && req.user.merchantId !== merchantId) {
+        res.status(403).json({
+          success: false,
+          error: 'Access denied'
+        });
+        return;
+      }
+
+      // Validate input data
+      const { error, value } = validateInput<FilterTransactionData>(filterTransactionSchema, { startDate, endDate, type });
+      if (error) {
+        res.status(400).json({
+          success: false,
+          error: 'Validation failed',
+          details: error
+        });
+        return;
+      }
+
+      // Filter transactions
+      const filterData = {
+        startDate: startDate ? new Date(startDate as string) : undefined,
+        endDate: endDate ? new Date(endDate as string) : undefined,
+        type: type as TransactionType
+      };
+
+      const result = await WalletService.filterKycTransactions(merchantId, filterData);
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: result.error
+        });
+        return;
+      }
+
+      logger.info('KYC wallet transactions filtered', {
+        merchantId,
+        transactionCount: result.transactions?.length
+      });
+
+      res.status(200).json({
+        success: true,
+        data: {
+          transactions: result.transactions
+        }
+      });
+    } catch (error) {
+      logger.error('Error filtering kyc transactions', { error });
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/wallets/operation/debit
+   * Debit the merchant's own Operation Wallet (used for billing)
+   */
+  static async debitOperationWallet(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      const merchantId = req.user.merchantId || req.user.userId;
+
+      // Validate input data
+      const { error, value } = validateInput<OperationDebitData>(debitTreasurySchema, req.body);
+      if (error) {
+        res.status(400).json({
+          success: false,
+          error: 'Validation failed',
+          details: error
+        });
+        return;
+      }
+
+      const { amount, description } = value!;
+
+      // Perform the debit on the Operation Wallet
+      const result = await WalletService.debitOperationWallet({
+        merchantId,
+        amount,
+        description
+      });
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: result.error
+        });
+        return;
+      }
+
+      logger.info('Operation wallet debited by merchant', {
+        merchantId,
+        amount
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Operation wallet debited successfully',
+        data: {
+          wallet: result.wallet,
+          transaction: result.transaction
+        }
+      });
+    } catch (error) {
+      logger.error('Error debiting Operation wallet', { error });
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/wallets/kyc/debit
+   * Debit the merchant's own KYC Wallet (used for billing)
+   */
+  static async debitKycWallet(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      const merchantId = req.user.merchantId || req.user.userId;
+
+      // Validate input data
+      const { error, value } = validateInput<KycDebitData>(debitTreasurySchema, req.body);
+      if (error) {
+        res.status(400).json({
+          success: false,
+          error: 'Validation failed',
+          details: error
+        });
+        return;
+      }
+
+      const { amount, description } = value!;
+
+      // Perform the debit on the KYC Wallet
+      const result = await WalletService.debitKycWallet({
+        merchantId,
+        amount,
+        description
+      });
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: result.error
+        });
+        return;
+      }
+
+      logger.info('KYC wallet debited by merchant', {
+        merchantId,
+        amount
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'KYC wallet debited successfully',
+        data: {
+          wallet: result.wallet,
+          transaction: result.transaction
+        }
+      });
+    } catch (error) {
+      logger.error('Error debiting KYC wallet', { error });
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/wallets/kyc/fee
+   * Process KYC fee by debiting the merchant's KYC wallet
+   */
+  static async processKycFee(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      const merchantId = req.user.merchantId || req.user.userId;
+
+      // Validate input data
+      const { error, value } = validateInput<KycFeeData>(debitTreasurySchema, req.body);
+      if (error) {
+        res.status(400).json({
+          success: false,
+          error: 'Validation failed',
+          details: error
+        });
+        return;
+      }
+
+      const { amount, description } = value!;
+
+      // Process the KYC fee
+      const result = await WalletService.processKycFee(
+        merchantId,
+        amount,
+        description || 'KYC Fee'
+      );
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: result.error
+        });
+        return;
+      }
+
+      logger.info('KYC fee processed for merchant', {
+        merchantId,
+        amount
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'KYC fee processed successfully',
+        data: {
+          wallet: result.wallet,
+          transaction: result.transaction
+        }
+      });
+    } catch (error) {
+      logger.error('Error processing KYC fee', { error });
       next(error);
     }
   }

@@ -551,6 +551,37 @@ export class WalletService {
   }
 
   /**
+   * Filter KYC Wallet transactions by date range and type
+   */
+  static async filterKycTransactions(merchantId: string, filterData: FilterTransactionData): Promise<{ 
+    success: boolean; 
+    transactions?: Transaction[]; 
+    error?: string 
+  }> {
+    try {
+      // Get KYC Wallet for the merchant
+      const kycResult = await this.getKycWallet(merchantId);
+      if (!kycResult.success || !kycResult.wallet) {
+        return {
+          success: false,
+          error: 'KYC wallet not found for merchant'
+        };
+      }
+
+      // Filter transactions
+      const result = await this.filterWalletTransactions(kycResult.wallet.id, filterData);
+
+      return result;
+    } catch (error) {
+      logger.error('Error filtering kyc transactions', { error });
+      return {
+        success: false,
+        error: 'Failed to filter kyc transactions'
+      };
+    }
+  }
+
+  /**
    * Transfer money out from one wallet to another
    */
   static async transferOut(transferData: TransferOutData): Promise<{ 
@@ -1053,6 +1084,167 @@ export class WalletService {
       return {
         success: false,
         error: 'Failed to debit Operation wallet'
+      };
+    }
+  }
+
+  /**
+   * Debit a merchant's KYC Wallet (used for billing)
+   */
+  static async debitKycWallet(debitData: { merchantId: string, amount: number, description: string }): Promise<{ 
+    success: boolean; 
+    wallet?: MerchantWallet; 
+    transaction?: Transaction; 
+    error?: string 
+  }> {
+    try {
+      // Get the KYC Wallet for this merchant
+      const kycResult = await this.getKycWallet(debitData.merchantId);
+      if (!kycResult.success || !kycResult.wallet) {
+        return {
+          success: false,
+          error: 'KYC wallet not found for merchant'
+        };
+      }
+
+      const kycWallet = kycResult.wallet;
+
+      if (kycWallet.status !== WalletStatus.ACTIVE) {
+        return {
+          success: false,
+          error: 'KYC wallet is not active'
+        };
+      }
+
+      // Check if wallet has sufficient balance
+      if (kycWallet.balance < debitData.amount) {
+        return {
+          success: false,
+          error: 'Insufficient balance in KYC wallet'
+        };
+      }
+
+      // Update balance
+      kycWallet.balance -= debitData.amount;
+      kycWallet.updatedAt = new Date();
+
+      // Create transaction record
+      const transaction: Transaction = {
+        id: `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        walletId: kycWallet.id,
+        amount: -debitData.amount,
+        type: TransactionType.DEBIT,
+        status: TransactionStatus.COMPLETED,
+        description: debitData.description,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      mockDB.transactions.set(transaction.id, transaction);
+      mockDB.wallets.set(kycWallet.id, kycWallet);
+
+      logger.info('KYC wallet debited', { 
+        walletId: kycWallet.id, 
+        merchantId: debitData.merchantId, 
+        amount: debitData.amount 
+      });
+
+      return {
+        success: true,
+        wallet: kycWallet,
+        transaction
+      };
+    } catch (error) {
+      logger.error('Error debiting KYC wallet', { error });
+      return {
+        success: false,
+        error: 'Failed to debit KYC wallet'
+      };
+    }
+  }
+
+  /**
+   * Process KYC fee by debiting the merchant's KYC wallet
+   * This method is specifically for handling KYC-related fees
+   */
+  static async processKycFee(merchantId: string, amount: number, description: string = 'KYC Fee'): Promise<{ 
+    success: boolean; 
+    wallet?: MerchantWallet; 
+    transaction?: Transaction; 
+    error?: string 
+  }> {
+    try {
+      // Validate inputs
+      if (amount <= 0) {
+        return {
+          success: false,
+          error: 'KYC fee amount must be positive'
+        };
+      }
+
+      // Get the KYC Wallet for this merchant
+      const kycResult = await this.getKycWallet(merchantId);
+      if (!kycResult.success || !kycResult.wallet) {
+        return {
+          success: false,
+          error: 'KYC wallet not found for merchant'
+        };
+      }
+
+      const kycWallet = kycResult.wallet;
+
+      if (kycWallet.status !== WalletStatus.ACTIVE) {
+        return {
+          success: false,
+          error: 'KYC wallet is not active'
+        };
+      }
+
+      // Check if wallet has sufficient balance
+      if (kycWallet.balance < amount) {
+        return {
+          success: false,
+          error: 'Insufficient balance in KYC wallet for KYC fee'
+        };
+      }
+
+      // Update balance
+      kycWallet.balance -= amount;
+      kycWallet.updatedAt = new Date();
+
+      // Create transaction record specifically for KYC fee
+      const transaction: Transaction = {
+        id: `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        walletId: kycWallet.id,
+        amount: -amount,
+        type: TransactionType.DEBIT,
+        status: TransactionStatus.COMPLETED,
+        description: description,
+        referenceId: 'KYC_FEE', // Special identifier for KYC fees
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      mockDB.transactions.set(transaction.id, transaction);
+      mockDB.wallets.set(kycWallet.id, kycWallet);
+
+      logger.info('KYC fee processed', { 
+        walletId: kycWallet.id, 
+        merchantId, 
+        amount,
+        description
+      });
+
+      return {
+        success: true,
+        wallet: kycWallet,
+        transaction
+      };
+    } catch (error) {
+      logger.error('Error processing KYC fee', { error });
+      return {
+        success: false,
+        error: 'Failed to process KYC fee'
       };
     }
   }

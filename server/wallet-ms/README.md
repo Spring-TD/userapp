@@ -25,6 +25,11 @@ This microservice handles wallet functionality for merchants and their users.
 - `POST /api/v1/wallets/kyc-to-operation` - Transfer money from KYC Wallet to Operation Wallet
 - `POST /api/v1/wallets/operation/debit` - Debit the merchant's own Operation Wallet
 
+### KYC Wallet Operations
+- `GET /api/v1/wallets/kyc/:merchantId/transactions` - Get KYC wallet transactions
+- `POST /api/v1/wallets/kyc/debit` - Debit the merchant's own KYC Wallet
+- `POST /api/v1/wallets/kyc/fee` - Process KYC fee by debiting the merchant's KYC Wallet
+
 ### Treasury Wallet Operations
 - `GET /api/v1/wallets/treasury/:merchantId/transactions` - Get Treasury wallet transactions
 - `POST /api/v1/wallets/treasury/transfer` - Transfer money from Treasury Wallet to another wallet
@@ -110,6 +115,10 @@ interface Transaction {
 - [x] Operation-KYC wallet transfers
 - [x] Operation wallet transaction filtering
 - [x] Operation wallet debit functionality
+- [x] KYC wallet transaction filtering
+- [x] KYC wallet debit functionality
+- [x] KYC fee processing functionality
+- [x] Treasury wallet handles all merchant's users wallet balance (Wallet Record filtering, Transfer Out, Debit Wallet)
 - [ ] Transaction processing
 - [ ] Transaction history
 - [ ] Security enhancements

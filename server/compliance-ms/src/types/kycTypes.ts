@@ -31,7 +31,6 @@ export enum DocumentType {
   CORPORATE_STRUCTURE = 'corporate_structure',
   BENEFICIAL_OWNERSHIP = 'beneficial_ownership',
   ARTICLES_OF_INCORPORATION = 'articles_of_incorporation',
-  DIRECTOR_IDENTIFICATION = 'director_identification',
   FINANCIAL_STATEMENTS = 'financial_statements',
   TAX_CERTIFICATE = 'tax_certificate',
   
@@ -198,13 +197,6 @@ export interface BusinessKYCSubmissionRequest {
   businessInfo: AboutTheBusinessData;
   businessSurvey: BusinessSurveyData;
   shareholders: Shareholder[];
-  directors: Array<{
-    firstName: string;
-    lastName: string;
-    position: string;
-    dateOfBirth: Date;
-    nationality: string;
-  }>;
   // Replace the generic documents array with businessDocuments
   businessDocuments: BusinessDocumentData[];
   riskAssessment: {
@@ -330,7 +322,6 @@ export const INDIVIDUAL_OPTIONAL_DOCUMENTS = [
 export const BUSINESS_REQUIRED_DOCUMENTS = [
   DocumentType.BUSINESS_REGISTRATION,
   DocumentType.BENEFICIAL_OWNERSHIP,
-  DocumentType.DIRECTOR_IDENTIFICATION,
   DocumentType.BANK
 ] as const;
 

@@ -151,7 +151,6 @@ export class KYCService {
         businessSurvey: data.businessSurvey,
         // Changed from beneficialOwners to shareholders
         shareholders: data.shareholders,
-        directors: data.directors,
         riskAssessment: data.riskAssessment,
         riskLevel,
         workflowStatus: ComplianceWorkflowStatus.INITIAL_SCREENING

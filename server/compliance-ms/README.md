@@ -116,14 +116,6 @@ Submit KYC information for a business customer to create a KYC order.
       }
     }
   ],
-  "directors": [
-    {
-      "fullName": "Jane Smith",
-      "position": "Managing Director",
-      "dateOfBirth": "1980-10-20",
-      "nationality": "NG"
-    }
-  ],
   "documents": [
     {
       "type": "business_registration",
