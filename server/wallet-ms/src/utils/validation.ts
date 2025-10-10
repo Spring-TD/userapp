@@ -56,6 +56,23 @@ const transactionTypeSchema = Joi.string().valid('CREDIT', 'DEBIT').optional().m
   'any.only': 'Transaction type must be either CREDIT or DEBIT'
 });
 
+const urlSchema = Joi.string().uri().required().messages({
+  'string.uri': 'API endpoint must be a valid URL',
+  'any.required': 'API endpoint is required'
+});
+
+const apiKeySchema = Joi.string().optional().messages({
+  'string.base': 'API key must be a string'
+});
+
+const headersSchema = Joi.object().optional().messages({
+  'object.base': 'Headers must be an object'
+});
+
+const requestBodySchema = Joi.object().optional().messages({
+  'object.base': 'Request body must be an object'
+});
+
 // Wallet validation schemas
 export const createMerchantWalletSchema = Joi.object({
   name: nameSchema,
@@ -119,6 +136,19 @@ export const operationToKycTransferSchema = Joi.object({
 export const kycToOperationTransferSchema = Joi.object({
   amount: amountSchema,
   description: descriptionSchema
+});
+
+// User Wallet 3rd Party API Call validation schema
+export const userApiCallSchema = Joi.object({
+  endpoint: urlSchema,
+  method: Joi.string().valid('GET', 'POST', 'PUT', 'DELETE').default('POST').messages({
+    'any.only': 'Method must be one of GET, POST, PUT, DELETE'
+  }),
+  headers: headersSchema,
+  body: requestBodySchema,
+  amount: amountSchema,
+  description: descriptionSchema,
+  apiKey: apiKeySchema
 });
 
 // Utility function for validation

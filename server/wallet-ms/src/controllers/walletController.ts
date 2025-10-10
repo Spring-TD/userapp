@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { WalletService } from '../services';
 import { logger } from '../utils/logger';
-import { validateInput, createMerchantWalletSchema, createUserWalletSchema, updateWalletBalanceSchema, filterTransactionSchema, transferOutSchema, debitWalletSchema, debitTreasurySchema, operationToKycTransferSchema, kycToOperationTransferSchema } from '../utils/validation';
+import { validateInput, createMerchantWalletSchema, createUserWalletSchema, updateWalletBalanceSchema, filterTransactionSchema, transferOutSchema, debitWalletSchema, debitTreasurySchema, operationToKycTransferSchema, kycToOperationTransferSchema, userApiCallSchema } from '../utils/validation';
 import { MerchantWalletType, TransactionType } from '../models/Wallet';
 
 // Define interfaces for the validated data
@@ -81,6 +81,16 @@ interface UserFilterTransactionData {
   startDate?: string;
   endDate?: string;
   type?: TransactionType;
+}
+
+interface UserApiCallData {
+  endpoint: string;
+  method: string;
+  headers: Record<string, string>;
+  body: any;
+  amount: number;
+  description: string;
+  apiKey?: string;
 }
 
 export class WalletController {
@@ -1538,4 +1548,84 @@ export class WalletController {
       next(error);
     }
   }
+
+  /**
+   * POST /api/v1/wallets/user/:userId/api-call
+   * Make a 3rd party API call from user wallet
+   */
+  static async makeUserApiCall(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { userId } = req.params;
+
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      // Check if user has permission to access this wallet
+      if (req.user.userId !== userId) {
+        res.status(403).json({
+          success: false,
+          error: 'Access denied. Only wallet owner can make API calls.'
+        });
+        return;
+      }
+
+      // Validate input data
+      const { error, value } = validateInput<UserApiCallData>(userApiCallSchema, req.body);
+      if (error) {
+        res.status(400).json({
+          success: false,
+          error: 'Validation failed',
+          details: error
+        });
+        return;
+      }
+
+      const { endpoint, method, headers, body, amount, description, apiKey } = value!;
+
+      // Perform the API call
+      const result = await WalletService.makeUserApiCall({
+        userId,
+        endpoint,
+        method: method || 'POST',
+        headers: headers || {},
+        body: body || {},
+        amount,
+        description,
+        apiKey
+      });
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: result.error
+        });
+        return;
+      }
+
+      logger.info('API call made from user wallet', {
+        userId,
+        endpoint,
+        amount
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'API call completed successfully',
+        data: {
+          wallet: result.wallet,
+          transaction: result.transaction,
+          apiResponse: result.apiResponse
+        }
+      });
+    } catch (error) {
+      logger.error('Error making API call from user wallet', { error });
+      next(error);
+    }
+  }
+
 }

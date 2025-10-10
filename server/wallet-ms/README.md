@@ -9,6 +9,7 @@ This microservice handles wallet functionality for merchants and their users.
 - Wallet transactions
 - Balance management
 - Transaction history
+- 3rd Party API Integration
 
 ## API Endpoints
 
@@ -42,6 +43,7 @@ This microservice handles wallet functionality for merchants and their users.
 - `PUT /api/v1/wallets/user/:userId/balance` - Update user wallet balance
 - `GET /api/v1/wallets/user/:userId/transactions` - Get user wallet transactions with filtering options (by date range and type)
 - `POST /api/v1/wallets/user/:userId/transfer` - Transfer money out from user wallet to another wallet
+- `POST /api/v1/wallets/user/:userId/api-call` - Make a 3rd party API call from user wallet
 - `GET /api/v1/wallets/merchant/:merchantId/users` - Get all user wallets for a merchant
 
 ### Transactions
@@ -82,6 +84,61 @@ interface Transaction {
   referenceId?: string;
   createdAt: Date;
   updatedAt: Date;
+}
+```
+
+## API Call Endpoint
+
+### POST `/api/v1/wallets/user/:userId/api-call`
+
+Make a 3rd party API call from a user wallet. The specified amount will be debited from the user's wallet balance.
+
+**Request Body:**
+```json
+{
+  "endpoint": "https://api.example.com/payment",
+  "method": "POST",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "amount": 50,
+    "currency": "USD",
+    "description": "Payment for services"
+  },
+  "amount": 50,
+  "description": "Payment to Example API",
+  "apiKey": "your-api-key"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "API call completed successfully",
+  "data": {
+    "wallet": {
+      "id": "wallet_abc",
+      "balance": 50,
+      "currency": "USD",
+      "status": "ACTIVE"
+    },
+    "transaction": {
+      "id": "txn_12345",
+      "walletId": "wallet_abc",
+      "amount": -50,
+      "type": "DEBIT",
+      "status": "COMPLETED",
+      "description": "API Call: Payment to Example API",
+      "referenceId": "https://api.example.com/payment",
+      "createdAt": "2025-01-01T10:00:00Z",
+      "updatedAt": "2025-01-01T10:00:00Z"
+    },
+    "apiResponse": {
+      // Response from the 3rd party API
+    }
+  }
 }
 ```
 
@@ -130,6 +187,7 @@ npm run test:user-wallet
 - [x] Treasury wallet handles all merchant's users wallet balance (Wallet Record filtering, Transfer Out, Debit Wallet)
 - [x] User wallet transaction filtering
 - [x] User wallet transfer out functionality
+- [x] User wallet 3rd party API call functionality
 - [ ] Transaction processing
 - [ ] Transaction history
 - [ ] Security enhancements

@@ -1,5 +1,6 @@
 import { Wallet, MerchantWallet, UserWallet, WalletStatus, Transaction, TransactionType, TransactionStatus, MerchantWalletType } from '../models/Wallet';
 import { logger } from '../utils/logger';
+import axios, { AxiosRequestConfig } from 'axios';
 
 // Mock database storage
 interface MockDB {
@@ -49,6 +50,17 @@ export interface DebitWalletData {
   userId: string;
   amount: number;
   description: string;
+}
+
+export interface UserApiCallData {
+  userId: string;
+  endpoint: string;
+  method: string;
+  headers: Record<string, string>;
+  body: any;
+  amount: number;
+  description: string;
+  apiKey?: string;
 }
 
 export class WalletService {
@@ -1338,6 +1350,138 @@ export class WalletService {
       return {
         success: false,
         error: 'Failed to process KYC fee'
+      };
+    }
+  }
+
+  /**
+   * Make a 3rd party API call from a user wallet
+   */
+  static async makeUserApiCall(apiCallData: UserApiCallData): Promise<{ 
+    success: boolean; 
+    wallet?: UserWallet; 
+    transaction?: Transaction; 
+    apiResponse?: any;
+    error?: string 
+  }> {
+    try {
+      // Get the user wallet
+      const userResult = await this.getUserWallet(apiCallData.userId);
+      if (!userResult.success || !userResult.wallet) {
+        return {
+          success: false,
+          error: 'User wallet not found'
+        };
+      }
+
+      const userWallet = userResult.wallet;
+
+      if (userWallet.status !== WalletStatus.ACTIVE) {
+        return {
+          success: false,
+          error: 'User wallet is not active'
+        };
+      }
+
+      // Check if wallet has sufficient balance
+      if (userWallet.balance < apiCallData.amount) {
+        return {
+          success: false,
+          error: 'Insufficient balance in user wallet'
+        };
+      }
+
+      // Prepare the API call
+      const axiosConfig: AxiosRequestConfig = {
+        method: apiCallData.method as any,
+        url: apiCallData.endpoint,
+        headers: {
+          'Content-Type': 'application/json',
+          ...apiCallData.headers
+        },
+        timeout: 10000 // 10 second timeout
+      };
+
+      // Add API key to headers if provided
+      if (apiCallData.apiKey) {
+        axiosConfig.headers!['Authorization'] = `Bearer ${apiCallData.apiKey}`;
+      }
+
+      // Add request body for POST/PUT requests
+      if ((apiCallData.method === 'POST' || apiCallData.method === 'PUT') && apiCallData.body) {
+        axiosConfig.data = apiCallData.body;
+      }
+
+      logger.info('Making 3rd party API call', { 
+        userId: apiCallData.userId,
+        endpoint: apiCallData.endpoint,
+        method: apiCallData.method
+      });
+
+      // Make the API call
+      let apiResponse;
+      try {
+        const response = await axios(axiosConfig);
+        apiResponse = response.data;
+        logger.info('3rd party API call successful', { 
+          userId: apiCallData.userId,
+          endpoint: apiCallData.endpoint,
+          status: response.status
+        });
+      } catch (apiError: any) {
+        logger.error('3rd party API call failed', { 
+          userId: apiCallData.userId,
+          endpoint: apiCallData.endpoint,
+          error: apiError.message,
+          status: apiError.response?.status
+        });
+        
+        // Even if the API call fails, we still debit the wallet as the service was attempted
+        // In a real implementation, you might want to handle this differently based on business rules
+        return {
+          success: false,
+          error: `API call failed: ${apiError.message}`,
+          wallet: userWallet
+        };
+      }
+
+      // Update wallet balance (debit the amount)
+      userWallet.balance -= apiCallData.amount;
+      userWallet.updatedAt = new Date();
+
+      // Create transaction record
+      const transaction: Transaction = {
+        id: `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        walletId: userWallet.id,
+        amount: -apiCallData.amount,
+        type: TransactionType.DEBIT,
+        status: TransactionStatus.COMPLETED,
+        description: `API Call: ${apiCallData.description}`,
+        referenceId: apiCallData.endpoint,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      mockDB.transactions.set(transaction.id, transaction);
+      mockDB.wallets.set(userWallet.id, userWallet);
+
+      logger.info('User wallet debited for API call', { 
+        walletId: userWallet.id, 
+        userId: apiCallData.userId, 
+        amount: apiCallData.amount 
+      });
+
+      return {
+        success: true,
+        wallet: userWallet,
+        transaction,
+        apiResponse
+      };
+    } catch (error) {
+      logger.error('Error making user API call', { error });
+      return {
+        success: false,
+        error: 'Failed to make API call'
       };
     }
   }
