@@ -37,7 +37,7 @@ Submit KYC information for an individual customer to create a KYC order.
 **Authentication**: Requires valid JWT token for individual customers
 
 **Request Body:**
-```json
+``json
 {
   "personalInfo": {
     "firstName": "John",
@@ -86,45 +86,61 @@ Submit KYC information for a business customer to create a KYC order.
 **Authentication**: Requires valid JWT token for business customers
 
 **Request Body:**
-```json
+``json
 {
   "businessInfo": {
-    "businessName": "Example Business Ltd",
-    "businessType": "CORPORATION",
-    "registrationNumber": "RC123456",
+    "companyName": "Example Business Ltd",
     "industry": "Technology",
-    "address": {
-      "street": "456 Business Ave",
-      "city": "Lagos",
-      "state": "Lagos",
-      "postalCode": "100001",
-      "country": "NG"
-    }
+    "countryOfIncorporation": "NG",
+    "website": "https://example.com",
+    "companyRegId": "RC123456",
+    "companyLogoUrl": "https://example.com/logo.png"
   },
-  "beneficialOwners": [
+  "businessSurvey": {
+    "businessType": "loan product",
+    "country": "NG",
+    "businessModel": "B2B",
+    "monthlyProcessedVolume": 500000
+  },
+  "shareholders": [
     {
       "fullName": "John Doe",
       "dateOfBirth": "1985-05-15",
       "nationality": "NG",
       "ownershipPercentage": 60,
-      "address": {
-        "street": "123 Main St",
-        "city": "Lagos",
-        "state": "Lagos",
-        "postalCode": "100001",
-        "country": "NG"
+      "bankStatement": {
+        "fileName": "bank_statement.pdf",
+        "fileType": "application/pdf",
+        "fileSize": 102400,
+        "fileUrl": "https://example.com/bank_statement.pdf",
+        "uploadDate": "2025-01-10T09:00:00.000Z"
+      },
+      "status": "pending",
+      "kyc": {
+        "url": "https://liveness-test.example.com/test-123",
+        "expiresAt": "2025-01-15T09:00:00.000Z",
+        "status": "pending"
       }
     }
   ],
-  "documents": [
+  "businessDocuments": [
     {
-      "type": "business_registration",
+      "type": "certificate_of_incorporation",
       "fileName": "certificate_of_incorporation.pdf",
       "fileType": "application/pdf",
       "fileSize": 204800,
-      "fileData": "base64encodedfiledata"
+      "fileUrl": "https://example.com/certificate_of_incorporation.pdf",
+      "uploadedAt": "2025-01-10T09:00:00.000Z",
+      "status": "pending"
     }
-  ]
+  ],
+  "riskAssessment": {
+    "annualTurnover": 500000,
+    "expectedTransactionVolume": 100000,
+    "highRiskJurisdiction": false,
+    "sanctionListCheck": false,
+    "adverseMediaCheck": false
+  }
 }
 ```
 
@@ -251,7 +267,7 @@ Retrieves all compliance documents from all user profiles in the system.
 **Authorization**: This endpoint is restricted to Compliance Officers only. Regular users cannot access this endpoint.
 
 **Success Response (200 OK):**
-```json
+``json
 {
   "success": true,
   "data": [
@@ -277,3 +293,531 @@ Retrieves all compliance documents from all user profiles in the system.
   "success": false,
   "error": "Error retrieving all documents"
 }
+
+```
+
+### Get Business Information
+**`GET /api/v1/kyc/business/business-info`**
+
+Retrieves the business information for a merchant user.
+
+**Authentication**: Requires valid JWT token for business customers
+
+**Success Response (200 OK):**
+``json
+{
+  "success": true,
+  "data": {
+    "companyName": "Example Business Ltd",
+    "industry": "Technology",
+    "countryOfIncorporation": "NG",
+    "website": "https://example.com",
+    "companyRegId": "RC123456",
+    "companyLogoUrl": "https://example.com/logo.png"
+  }
+}
+```
+
+**Error Response (404 Not Found):**
+``json
+{
+  "success": false,
+  "error": "No KYC profile found for this user"
+}
+```
+
+### Get Business Survey
+**`GET /api/v1/kyc/business/business-survey`**
+
+Retrieves the business survey data for a merchant user.
+
+**Authentication**: Requires valid JWT token for business customers
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "businessType": "loan product",
+    "country": "NG",
+    "businessModel": "B2B",
+    "monthlyProcessedVolume": 500000
+  }
+}
+```
+
+**Error Response (404 Not Found):**
+``json
+{
+  "success": false,
+  "error": "No KYC profile found for this user"
+}
+```
+
+### Get Shareholders (Beneficial Owners)
+**`GET /api/v1/kyc/business/beneficial-owners`**
+
+Retrieves the shareholders (beneficial owners) information for a merchant user.
+
+**Authentication**: Requires valid JWT token for business customers
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "fullName": "John Doe",
+      "dateOfBirth": "1985-05-15",
+      "nationality": "NG",
+      "ownershipPercentage": 60,
+      "bankStatement": {
+        "fileName": "bank_statement.pdf",
+        "fileType": "application/pdf",
+        "fileSize": 102400,
+        "fileUrl": "https://example.com/bank_statement.pdf",
+        "uploadDate": "2025-01-10T09:00:00.000Z"
+      },
+      "status": "pending",
+      "kyc": {
+        "url": "https://liveness-test.example.com/test-123",
+        "expiresAt": "2025-01-15T09:00:00.000Z",
+        "status": "pending"
+      }
+    }
+  ]
+}
+```
+
+**Error Response (404 Not Found):**
+```json
+{
+  "success": false,
+  "error": "No KYC profile found for this user"
+}
+```
+
+### Get Business Risk Assessment
+**`GET /api/v1/kyc/business/risk-assessment`**
+
+Retrieves the business risk assessment data for a merchant user.
+
+**Authentication**: Requires valid JWT token for business customers
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "annualTurnover": 500000,
+    "expectedTransactionVolume": 100000,
+    "highRiskJurisdiction": false,
+    "sanctionListCheck": false,
+    "adverseMediaCheck": false
+  }
+}
+```
+
+**Error Response (404 Not Found):**
+```json
+{
+  "success": false,
+  "error": "No KYC profile found for this user"
+}
+```
+
+### Update Business Information
+**`PUT /api/v1/kyc/business/business-info`**
+
+Updates the business information for a merchant user.
+
+**Authentication**: Requires valid JWT token for business customers
+
+**Request Body:**
+```json
+{
+  "companyName": "Updated Business Ltd",
+  "industry": "Technology",
+  "countryOfIncorporation": "NG",
+  "website": "https://updated-example.com",
+  "companyRegId": "RC123456",
+  "companyLogoUrl": "https://updated-example.com/logo.png"
+}
+```
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Business information updated successfully"
+}
+```
+
+**Error Response (400 Bad Request):**
+```json
+{
+  "success": false,
+  "error": "Error updating business information"
+}
+```
+
+### Update Business Survey
+**`PUT /api/v1/kyc/business/business-survey`**
+
+Updates the business survey data for a merchant user.
+
+**Authentication**: Requires valid JWT token for business customers
+
+**Request Body:**
+```json
+{
+  "businessType": "investment product",
+  "country": "NG",
+  "businessModel": "B2C",
+  "monthlyProcessedVolume": 600000
+}
+```
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Business survey updated successfully"
+}
+```
+
+**Error Response (400 Bad Request):**
+```json
+{
+  "success": false,
+  "error": "Error updating business survey"
+}
+```
+
+### Update Shareholders (Beneficial Owners)
+**`PUT /api/v1/kyc/business/beneficial-owners`**
+
+Updates the shareholders (beneficial owners) information for a merchant user.
+
+**Authentication**: Requires valid JWT token for business customers
+
+**Request Body:**
+```json
+[
+  {
+    "fullName": "John Doe",
+    "dateOfBirth": "1985-05-15",
+    "nationality": "NG",
+    "ownershipPercentage": 60,
+    "bankStatement": {
+      "fileName": "bank_statement.pdf",
+      "fileType": "application/pdf",
+      "fileSize": 102400,
+      "fileUrl": "https://example.com/bank_statement.pdf",
+      "uploadDate": "2025-01-10T09:00:00.000Z"
+    },
+    "status": "pending",
+    "kyc": {
+      "url": "https://liveness-test.example.com/test-123",
+      "expiresAt": "2025-01-15T09:00:00.000Z",
+      "status": "pending"
+    }
+  },
+  {
+    "fullName": "Jane Smith",
+    "dateOfBirth": "1980-10-20",
+    "nationality": "NG",
+    "ownershipPercentage": 40,
+    "bankStatement": {
+      "fileName": "bank_statement2.pdf",
+      "fileType": "application/pdf",
+      "fileSize": 102400,
+      "fileUrl": "https://example.com/bank_statement2.pdf",
+      "uploadDate": "2025-01-10T09:00:00.000Z"
+    },
+    "status": "pending",
+    "kyc": {
+      "url": "https://liveness-test.example.com/test-456",
+      "expiresAt": "2025-01-15T09:00:00.000Z",
+      "status": "pending"
+    }
+  }
+]
+```
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Shareholders updated successfully"
+}
+```
+
+**Error Response (400 Bad Request):**
+```json
+{
+  "success": false,
+  "error": "Error updating shareholders"
+}
+```
+
+### Get Enhanced Due Diligence (High-Risk Businesses)
+**`GET /api/v1/kyc/business/enhanced-due-diligence`**
+
+Retrieves enhanced due diligence information for high-risk business customers.
+
+**Authentication**: Requires valid JWT token for business customers with high-risk approval
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "businessInfo": {
+      "companyName": "Example Business Ltd",
+      "industry": "Technology",
+      "countryOfIncorporation": "NG",
+      "website": "https://example.com",
+      "companyRegId": "RC123456",
+      "companyLogoUrl": "https://example.com/logo.png"
+    },
+    "businessSurvey": {
+      "annualTurnover": 500000,
+      "expectedTransactionVolume": 100000,
+      "expectedTransactionValue": 5000,
+      "sourceOfFunds": "Business revenue",
+      "businessPurpose": "Software development and consulting",
+      "numberOfEmployees": 25,
+      "operatingSince": "2020-01-01T00:00:00.000Z",
+      "businessModelDescription": "We provide software development services to clients globally",
+      "customerBaseDescription": "Small to medium businesses in technology sector",
+      "geographicMarkets": "Nigeria, United States, United Kingdom",
+      "reasonForOpeningAccount": "To receive payments from international clients"
+    },
+    "shareholders": [
+      {
+        "fullName": "John Doe",
+        "dateOfBirth": "1985-05-15",
+        "nationality": "NG",
+        "ownershipPercentage": 60,
+        "bankStatement": {
+          "fileName": "bank_statement.pdf",
+          "fileType": "application/pdf",
+          "fileSize": 102400,
+          "fileUrl": "https://example.com/bank_statement.pdf",
+          "uploadDate": "2025-01-10T09:00:00.000Z"
+        },
+        "status": "pending",
+        "kyc": {
+          "url": "https://liveness-test.example.com/test-123",
+          "expiresAt": "2025-01-15T09:00:00.000Z",
+          "status": "pending"
+        }
+      }
+    ],
+    "riskAssessment": {
+      "annualTurnover": 500000,
+      "expectedTransactionVolume": 100000,
+      "highRiskJurisdiction": false,
+      "sanctionListCheck": false,
+      "adverseMediaCheck": false
+    },
+    "documents": [
+      {
+        "type": "certificate_of_incorporation",
+        "fileName": "certificate_of_incorporation.pdf",
+        "fileType": "application/pdf",
+        "fileSize": 204800,
+        "fileUrl": "https://example.com/certificate_of_incorporation.pdf",
+        "uploadedAt": "2025-01-10T09:00:00.000Z",
+        "status": "pending"
+      }
+    ]
+  }
+}
+```
+
+**Error Response (404 Not Found):**
+```json
+{
+  "success": false,
+  "error": "No KYC profile found for this user"
+}
+```
+
+### Get Corporate Structure Information
+**`GET /api/v1/kyc/business/corporate-structure`**
+
+Retrieves corporate structure information for corporation and LLC business types.
+
+**Authentication**: Requires valid JWT token for business customers with corporation or LLC business type
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "businessInfo": {
+      "companyName": "Example Business Ltd",
+      "industry": "Technology",
+      "countryOfIncorporation": "NG",
+      "website": "https://example.com",
+      "companyRegId": "RC123456",
+      "companyLogoUrl": "https://example.com/logo.png"
+    },
+    "shareholders": [
+      {
+        "fullName": "John Doe",
+        "dateOfBirth": "1985-05-15",
+        "nationality": "NG",
+        "ownershipPercentage": 60,
+        "bankStatement": {
+          "fileName": "bank_statement.pdf",
+          "fileType": "application/pdf",
+          "fileSize": 102400,
+          "fileUrl": "https://example.com/bank_statement.pdf",
+          "uploadDate": "2025-01-10T09:00:00.000Z"
+        },
+        "status": "pending",
+        "kyc": {
+          "url": "https://liveness-test.example.com/test-123",
+          "expiresAt": "2025-01-15T09:00:00.000Z",
+          "status": "pending"
+        }
+      }
+    ],
+    "documents": [
+      {
+        "type": "corporate_structure",
+        "fileName": "corporate_structure.pdf",
+        "fileType": "application/pdf",
+        "fileSize": 204800,
+        "fileUrl": "https://example.com/corporate_structure.pdf",
+        "uploadedAt": "2025-01-10T09:00:00.000Z",
+        "status": "pending"
+      }
+    ]
+  }
+}
+```
+
+**Error Response (404 Not Found):**
+```json
+{
+  "success": false,
+  "error": "No KYC profile found for this user"
+}
+```
+
+### Get Non-Profit Verification Information
+**`GET /api/v1/kyc/business/non-profit-verification`**
+
+Retrieves verification information for non-profit business types.
+
+**Authentication**: Requires valid JWT token for business customers with non-profit business type
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "businessInfo": {
+      "companyName": "Example Non-Profit Org",
+      "industry": "Charity",
+      "countryOfIncorporation": "NG",
+      "website": "https://example-nonprofit.org",
+      "companyRegId": "RC789012",
+      "companyLogoUrl": "https://example-nonprofit.org/logo.png"
+    },
+    "businessSurvey": {
+      "annualTurnover": 0,
+      "expectedTransactionVolume": 50000,
+      "expectedTransactionValue": 1000,
+      "sourceOfFunds": "Donations",
+      "businessPurpose": "Providing educational services to underprivileged children",
+      "numberOfEmployees": 10,
+      "operatingSince": "2015-01-01T00:00:00.000Z",
+      "businessModelDescription": "We provide educational services funded by donations",
+      "customerBaseDescription": "Underprivileged children and their families",
+      "geographicMarkets": "Nigeria",
+      "reasonForOpeningAccount": "To receive donations and manage funds"
+    },
+    "documents": [
+      {
+        "type": "business_registration",
+        "fileName": "nonprofit_registration.pdf",
+        "fileType": "application/pdf",
+        "fileSize": 204800,
+        "fileUrl": "https://example-nonprofit.org/registration.pdf",
+        "uploadedAt": "2025-01-10T09:00:00.000Z",
+        "status": "pending"
+      }
+    ]
+  }
+}
+```
+
+**Error Response (404 Not Found):**
+```json
+{
+  "success": false,
+  "error": "No KYC profile found for this user"
+}
+```
+
+### Get Government Verification Information
+**`GET /api/v1/kyc/business/government-verification`**
+
+Retrieves verification information for government entity business types.
+
+**Authentication**: Requires valid JWT token for business customers with government entity business type
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "businessInfo": {
+      "companyName": "Ministry of Education",
+      "industry": "Government",
+      "countryOfIncorporation": "NG",
+      "website": "https://education.gov.ng",
+      "companyRegId": "GOV-001",
+      "companyLogoUrl": "https://education.gov.ng/logo.png"
+    },
+    "businessSurvey": {
+      "annualTurnover": 10000000,
+      "expectedTransactionVolume": 500000,
+      "expectedTransactionValue": 20000,
+      "sourceOfFunds": "Government budget",
+      "businessPurpose": "Managing educational policies and funds",
+      "numberOfEmployees": 500,
+      "operatingSince": "1960-01-01T00:00:00.000Z",
+      "businessModelDescription": "Government entity responsible for education policies",
+      "customerBaseDescription": "Educational institutions and citizens",
+      "geographicMarkets": "Nigeria",
+      "reasonForOpeningAccount": "To manage government funds"
+    },
+    "documents": [
+      {
+        "type": "business_registration",
+        "fileName": "government_registration.pdf",
+        "fileType": "application/pdf",
+        "fileSize": 204800,
+        "fileUrl": "https://education.gov.ng/registration.pdf",
+        "uploadedAt": "2025-01-10T09:00:00.000Z",
+        "status": "pending"
+      }
+    ]
+  }
+}
+```
+
+**Error Response (404 Not Found):**
+```json
+{
+  "success": false,
+  "error": "No KYC profile found for this user"
+}
+```
+

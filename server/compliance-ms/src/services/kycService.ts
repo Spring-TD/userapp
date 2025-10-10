@@ -236,10 +236,10 @@ export class KYCService {
     if (data.riskAssessment?.adverseMediaCheck) riskScore += 2;
     if (data.riskAssessment?.sanctionListCheck) riskScore += 5;
     
-    // High-risk industries
-    const highRiskIndustries = ['gambling', 'cryptocurrency', 'arms', 'precious metals'];
-    if (data.businessInfo?.industry && highRiskIndustries.some(industry => 
-      data.businessInfo.industry.toLowerCase().includes(industry))) {
+    // High-risk business types
+    const highRiskBusinessTypes = ['gambling', 'cryptocurrency', 'arms', 'precious metals'];
+    if (data.businessSurvey?.businessType && highRiskBusinessTypes.some(type => 
+      data.businessSurvey.businessType.toLowerCase().includes(type))) {
       riskScore += 3;
     }
     
@@ -250,19 +250,14 @@ export class KYCService {
       riskScore += 2 + pepOwners.length;
     }
     
-    // High transaction volume
-    if (data.riskAssessment?.expectedTransactionVolume > 1000000) {
+    // High transaction volume based on monthly processed volume
+    if (data.businessSurvey?.monthlyProcessedVolume > 1000000) {
       riskScore += 2;
     }
     
-    // High annual turnover
-    if (data.businessSurvey?.annualTurnover > 10000000) {
+    // High annual turnover (derived from monthly volume)
+    if (data.businessSurvey?.monthlyProcessedVolume * 12 > 10000000) {
       riskScore += 2;
-    }
-    
-    // High number of employees (may indicate complexity)
-    if (data.businessSurvey?.numberOfEmployees > 1000) {
-      riskScore += 1;
     }
     
     if (riskScore >= 10) return RiskLevel.VERY_HIGH;
@@ -370,11 +365,11 @@ export class KYCService {
     data?: {
       userId: string;
       userType: any;
-      status: KYCStatus;
+      status: any;
       documentCount: number;
       submittedAt: Date | undefined;
       completedAt: Date | undefined;
-      riskLevel?: RiskLevel;
+      riskLevel?: any;
     };
     error?: string;
   }> {
@@ -388,18 +383,13 @@ export class KYCService {
         };
       }
       
-      auditLogger('KYC_STATUS', requesterId || 'anonymous', {
-        userId,
-        status: kycProfile.status
-      });
-      
       return {
         success: true,
         data: {
           userId: kycProfile.userId,
           userType: kycProfile.userType,
           status: kycProfile.status,
-          documentCount: kycProfile.documents.length,
+          documentCount: kycProfile.documents?.length || 0,
           submittedAt: kycProfile.submittedAt,
           completedAt: kycProfile.completedAt,
           riskLevel: kycProfile.riskLevel
@@ -413,20 +403,476 @@ export class KYCService {
     }
   }
 
-  // Create a minimal KYC profile for a user
-  async createMinimalKYCProfile(userId: string, userType: UserType, requesterId?: string): Promise<{
+  // Get business information for a user
+  async getBusinessInfo(userId: string): Promise<{
     success: boolean;
+    data?: any;
+    error?: string;
+  }> {
+    try {
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      
+      if (!kycProfile) {
+        return {
+          success: false,
+          error: 'No KYC profile found for this user'
+        };
+      }
+      
+      if (kycProfile.userType !== UserType.MERCHANT) {
+        return {
+          success: false,
+          error: 'User is not a business customer'
+        };
+      }
+      
+      return {
+        success: true,
+        data: kycProfile.businessInfo
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: 'Error retrieving business information'
+      };
+    }
+  }
+
+  // Get business survey data for a user
+  async getBusinessSurvey(userId: string): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> {
+    try {
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      
+      if (!kycProfile) {
+        return {
+          success: false,
+          error: 'No KYC profile found for this user'
+        };
+      }
+      
+      if (kycProfile.userType !== UserType.MERCHANT) {
+        return {
+          success: false,
+          error: 'User is not a business customer'
+        };
+      }
+      
+      return {
+        success: true,
+        data: kycProfile.businessSurvey
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: 'Error retrieving business survey data'
+      };
+    }
+  }
+
+  // Get shareholders (beneficial owners) for a user
+  async getShareholders(userId: string): Promise<{
+    success: boolean;
+    data?: any[];
+    error?: string;
+  }> {
+    try {
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      
+      if (!kycProfile) {
+        return {
+          success: false,
+          error: 'No KYC profile found for this user'
+        };
+      }
+      
+      if (kycProfile.userType !== UserType.MERCHANT) {
+        return {
+          success: false,
+          error: 'User is not a business customer'
+        };
+      }
+      
+      return {
+        success: true,
+        data: kycProfile.shareholders || []
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: 'Error retrieving shareholders'
+      };
+    }
+  }
+
+  // Get business risk assessment for a user
+  async getBusinessRiskAssessment(userId: string): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> {
+    try {
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      
+      if (!kycProfile) {
+        return {
+          success: false,
+          error: 'No KYC profile found for this user'
+        };
+      }
+      
+      if (kycProfile.userType !== UserType.MERCHANT) {
+        return {
+          success: false,
+          error: 'User is not a business customer'
+        };
+      }
+      
+      return {
+        success: true,
+        data: kycProfile.riskAssessment
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: 'Error retrieving business risk assessment'
+      };
+    }
+  }
+
+  // Update business information for a user
+  async updateBusinessInfo(userId: string, businessInfo: any): Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+  }> {
+    try {
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      
+      if (!kycProfile) {
+        return {
+          success: false,
+          error: 'No KYC profile found for this user'
+        };
+      }
+      
+      if (kycProfile.userType !== UserType.MERCHANT) {
+        return {
+          success: false,
+          error: 'User is not a business customer'
+        };
+      }
+      
+      // Update the business info
+      const updatedProfile = await MockKYCProfileModel.findByIdAndUpdate(
+        kycProfile._id,
+        { businessInfo },
+        { new: true }
+      );
+      
+      if (!updatedProfile) {
+        return {
+          success: false,
+          error: 'Failed to update business information'
+        };
+      }
+      
+      return {
+        success: true,
+        message: 'Business information updated successfully'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: 'Error updating business information'
+      };
+    }
+  }
+
+  // Update business survey data for a user
+  async updateBusinessSurvey(userId: string, businessSurvey: any): Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+  }> {
+    try {
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      
+      if (!kycProfile) {
+        return {
+          success: false,
+          error: 'No KYC profile found for this user'
+        };
+      }
+      
+      if (kycProfile.userType !== UserType.MERCHANT) {
+        return {
+          success: false,
+          error: 'User is not a business customer'
+        };
+      }
+      
+      // Update the business survey
+      const updatedProfile = await MockKYCProfileModel.findByIdAndUpdate(
+        kycProfile._id,
+        { businessSurvey },
+        { new: true }
+      );
+      
+      if (!updatedProfile) {
+        return {
+          success: false,
+          error: 'Failed to update business survey'
+        };
+      }
+      
+      return {
+        success: true,
+        message: 'Business survey updated successfully'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: 'Error updating business survey'
+      };
+    }
+  }
+
+  // Update shareholders (beneficial owners) for a user
+  async updateShareholders(userId: string, shareholders: any[]): Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+  }> {
+    try {
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      
+      if (!kycProfile) {
+        return {
+          success: false,
+          error: 'No KYC profile found for this user'
+        };
+      }
+      
+      if (kycProfile.userType !== UserType.MERCHANT) {
+        return {
+          success: false,
+          error: 'User is not a business customer'
+        };
+      }
+      
+      // Update the shareholders
+      const updatedProfile = await MockKYCProfileModel.findByIdAndUpdate(
+        kycProfile._id,
+        { shareholders },
+        { new: true }
+      );
+      
+      if (!updatedProfile) {
+        return {
+          success: false,
+          error: 'Failed to update shareholders'
+        };
+      }
+      
+      return {
+        success: true,
+        message: 'Shareholders updated successfully'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: 'Error updating shareholders'
+      };
+    }
+  }
+
+  // Get enhanced due diligence data for high-risk businesses
+  async getEnhancedDueDiligence(userId: string): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> {
+    try {
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      
+      if (!kycProfile) {
+        return {
+          success: false,
+          error: 'No KYC profile found for this user'
+        };
+      }
+      
+      if (kycProfile.userType !== UserType.MERCHANT) {
+        return {
+          success: false,
+          error: 'User is not a business customer'
+        };
+      }
+      
+      // For enhanced due diligence, we might return additional information
+      // This is a simplified implementation
+      return {
+        success: true,
+        data: {
+          businessInfo: kycProfile.businessInfo,
+          businessSurvey: kycProfile.businessSurvey,
+          shareholders: kycProfile.shareholders,
+          riskAssessment: kycProfile.riskAssessment,
+          documents: kycProfile.documents
+        }
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: 'Error retrieving enhanced due diligence data'
+      };
+    }
+  }
+
+  // Get corporate structure information for corporations and LLCs
+  async getCorporateStructure(userId: string): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> {
+    try {
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      
+      if (!kycProfile) {
+        return {
+          success: false,
+          error: 'No KYC profile found for this user'
+        };
+      }
+      
+      if (kycProfile.userType !== UserType.MERCHANT) {
+        return {
+          success: false,
+          error: 'User is not a business customer'
+        };
+      }
+      
+      // Return corporate structure information
+      return {
+        success: true,
+        data: {
+          businessInfo: kycProfile.businessInfo,
+          shareholders: kycProfile.shareholders,
+          documents: kycProfile.documents.filter((doc: any) => 
+            doc.type === 'corporate_structure' || doc.type === 'articles_of_incorporation'
+          )
+        }
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: 'Error retrieving corporate structure information'
+      };
+    }
+  }
+
+  // Get non-profit verification information
+  async getNonProfitVerification(userId: string): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> {
+    try {
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      
+      if (!kycProfile) {
+        return {
+          success: false,
+          error: 'No KYC profile found for this user'
+        };
+      }
+      
+      if (kycProfile.userType !== UserType.MERCHANT) {
+        return {
+          success: false,
+          error: 'User is not a business customer'
+        };
+      }
+      
+      // Return non-profit verification information
+      return {
+        success: true,
+        data: {
+          businessInfo: kycProfile.businessInfo,
+          businessSurvey: kycProfile.businessSurvey,
+          documents: kycProfile.documents.filter((doc: any) => 
+            doc.type === 'business_registration' || doc.type === 'tax_certificate'
+          )
+        }
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: 'Error retrieving non-profit verification information'
+      };
+    }
+  }
+
+  // Get government verification information
+  async getGovernmentVerification(userId: string): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> {
+    try {
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      
+      if (!kycProfile) {
+        return {
+          success: false,
+          error: 'No KYC profile found for this user'
+        };
+      }
+      
+      if (kycProfile.userType !== UserType.MERCHANT) {
+        return {
+          success: false,
+          error: 'User is not a business customer'
+        };
+      }
+      
+      // Return government verification information
+      return {
+        success: true,
+        data: {
+          businessInfo: kycProfile.businessInfo,
+          businessSurvey: kycProfile.businessSurvey,
+          documents: kycProfile.documents.filter((doc: any) => 
+            doc.type === 'business_registration'
+          )
+        }
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: 'Error retrieving government verification information'
+      };
+    }
+  }
+
+  // Create a minimal KYC profile for a user
+  async createMinimalKYCProfile(userId: string, userType: UserType, createdBy?: string): Promise<{
+    success: boolean;
+    message?: string;
     data?: {
       userId: string;
       userType: UserType;
-      status: KYCStatus;
-      documentCount: number;
-      submittedAt: Date | undefined;
+      status: any;
+      createdAt: Date;
     };
     error?: string;
   }> {
     try {
-      // Check if a KYC profile already exists for this user
+      // Check if profile already exists
       const existingProfile: any = await MockKYCProfileModel.findOne({ userId });
       
       if (existingProfile) {
@@ -436,8 +882,8 @@ export class KYCService {
         };
       }
       
-      // Create a minimal KYC profile
-      const kycProfileData: any = {
+      // Create minimal profile
+      const profileData: any = {
         userId,
         userType,
         documents: [],
@@ -445,35 +891,19 @@ export class KYCService {
         submittedAt: new Date()
       };
       
-      const result = await MockKYCProfileModel.save(kycProfileData);
-      
-      auditLogger('KYC_PROFILE_CREATED', requesterId || 'system', {
-        userId,
-        userType,
-        status: result.status
-      });
-      
-      logger.info('Minimal KYC profile created successfully', {
-        userId,
-        userType,
-        status: result.status
-      });
+      const result = await MockKYCProfileModel.save(profileData);
       
       return {
         success: true,
+        message: 'Minimal KYC profile created successfully',
         data: {
           userId: result.userId,
           userType: result.userType,
           status: result.status,
-          documentCount: result.documents.length,
-          submittedAt: result.submittedAt
+          createdAt: result.submittedAt!
         }
       };
     } catch (error) {
-      logger.error('Error creating minimal KYC profile', {
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      
       return {
         success: false,
         error: 'Error creating minimal KYC profile'

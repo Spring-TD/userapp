@@ -71,24 +71,17 @@ export const businessKYCSubmissionSchema = Joi.object({
     companyLogoUrl: Joi.string().uri().required()
   }).required(),
   businessSurvey: Joi.object({
-    annualTurnover: Joi.number().min(0).required(),
-    expectedTransactionVolume: Joi.number().min(0).required(),
-    expectedTransactionValue: Joi.number().min(0).required(),
-    sourceOfFunds: Joi.string().min(5).max(200).required(),
-    businessPurpose: Joi.string().min(5).max(200).required(),
-    numberOfEmployees: Joi.number().min(0).required(),
-    operatingSince: Joi.date().max('now').required(),
-    websiteTraffic: Joi.number().min(0).optional(),
-    socialMediaPresence: Joi.boolean().optional(),
-    marketingChannels: Joi.string().optional(),
-    paymentMethods: Joi.string().optional(),
-    businessModelDescription: Joi.string().min(5).max(500).required(),
-    customerBaseDescription: Joi.string().min(5).max(500).required(),
-    geographicMarkets: Joi.string().min(5).max(500).required(),
-    regulatoryLicenses: Joi.string().optional(),
-    insuranceCoverage: Joi.string().optional(),
-    previousBankingRelationship: Joi.string().optional(),
-    reasonForOpeningAccount: Joi.string().min(5).max(500).required()
+    // 1. business type i.e  loan product, investment product, savings products
+    businessType: Joi.string().min(2).max(100).required(),
+    
+    // 2. country
+    country: Joi.string().min(2).max(50).required(),
+    
+    // 3. business model i.e B2B, B2C, B2B2C, etc
+    businessModel: Joi.string().min(2).max(20).required(),
+    
+    // 4. Monthly processed volume
+    monthlyProcessedVolume: Joi.number().min(0).required()
   }).required(),
   shareholders: Joi.array().items(
     Joi.object({

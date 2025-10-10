@@ -231,24 +231,17 @@ export interface AboutTheBusinessData {
 
 // BusinessSurvey interface for business survey information
 export interface BusinessSurveyData {
-  annualTurnover: number;
-  expectedTransactionVolume: number;
-  expectedTransactionValue: number;
-  sourceOfFunds: string;
-  businessPurpose: string;
-  numberOfEmployees: number;
-  operatingSince: Date;
-  websiteTraffic?: number;
-  socialMediaPresence?: boolean;
-  marketingChannels?: string;
-  paymentMethods?: string;
-  businessModelDescription: string;
-  customerBaseDescription: string;
-  geographicMarkets: string;
-  regulatoryLicenses?: string;
-  insuranceCoverage?: string;
-  previousBankingRelationship?: string;
-  reasonForOpeningAccount: string;
+  // 1. business type i.e  loan product, investment product, savings products
+  businessType: string;
+  
+  // 2. country
+  country: string;
+  
+  // 3. business model i.e B2B, B2C, B2B2C, etc
+  businessModel: string;
+  
+  // 4. Monthly processed volume
+  monthlyProcessedVolume: number;
 }
 
 // Generic KYC submission request (for backward compatibility)
