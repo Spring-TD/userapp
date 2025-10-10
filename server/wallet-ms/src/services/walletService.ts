@@ -520,6 +520,37 @@ export class WalletService {
   }
 
   /**
+   * Filter User Wallet transactions by date range and type
+   */
+  static async filterUserTransactions(userId: string, filterData: FilterTransactionData): Promise<{ 
+    success: boolean; 
+    transactions?: Transaction[]; 
+    error?: string 
+  }> {
+    try {
+      // Get User Wallet
+      const userResult = await this.getUserWallet(userId);
+      if (!userResult.success || !userResult.wallet) {
+        return {
+          success: false,
+          error: 'User wallet not found'
+        };
+      }
+
+      // Filter transactions
+      const result = await this.filterWalletTransactions(userResult.wallet.id, filterData);
+
+      return result;
+    } catch (error) {
+      logger.error('Error filtering user transactions', { error });
+      return {
+        success: false,
+        error: 'Failed to filter user transactions'
+      };
+    }
+  }
+
+  /**
    * Filter Operation Wallet transactions by date range and type
    */
   static async filterOperationTransactions(merchantId: string, filterData: FilterTransactionData): Promise<{ 
@@ -685,6 +716,68 @@ export class WalletService {
       return {
         success: false,
         error: 'Failed to transfer money between wallets'
+      };
+    }
+  }
+
+  /**
+   * Transfer money out from user wallet to another wallet
+   */
+  static async transferOutFromUser(transferData: { 
+    userId: string, 
+    toWalletId: string, 
+    amount: number, 
+    description: string 
+  }): Promise<{ 
+    success: boolean; 
+    fromWallet?: UserWallet; 
+    toWallet?: Wallet; 
+    transaction?: Transaction; 
+    error?: string 
+  }> {
+    try {
+      // Get the user wallet
+      const userResult = await this.getUserWallet(transferData.userId);
+      if (!userResult.success || !userResult.wallet) {
+        return {
+          success: false,
+          error: 'User wallet not found'
+        };
+      }
+
+      const userWallet = userResult.wallet;
+
+      // Use the existing transferOut function to perform the transfer
+      const transferResult = await this.transferOut({
+        fromWalletId: userWallet.id,
+        toWalletId: transferData.toWalletId,
+        amount: transferData.amount,
+        description: transferData.description
+      });
+
+      // Cast the wallets to UserWallet type since we know the fromWallet is a user wallet
+      if (transferResult.success && transferResult.fromWallet && transferResult.toWallet) {
+        return {
+          success: true,
+          fromWallet: transferResult.fromWallet as UserWallet,
+          toWallet: transferResult.toWallet,
+          transaction: transferResult.transaction,
+          error: undefined
+        };
+      } else {
+        return {
+          success: false,
+          fromWallet: undefined,
+          toWallet: undefined,
+          transaction: undefined,
+          error: transferResult.error
+        };
+      }
+    } catch (error) {
+      logger.error('Error transferring money from user wallet', { error });
+      return {
+        success: false,
+        error: 'Failed to transfer money from user wallet'
       };
     }
   }

@@ -32,6 +32,8 @@ router.post('/kyc/fee', authenticate, authorizeMerchant, WalletController.proces
 router.post('/user', authenticate, authorizeUser, WalletController.createUserWallet);
 router.get('/user/:userId', authenticate, WalletController.getUserWallet);
 router.put('/user/:userId/balance', authenticate, authorizeUser, WalletController.updateUserWalletBalance);
+router.get('/user/:userId/transactions', authenticate, WalletController.filterUserTransactions);
+router.post('/user/:userId/transfer', authenticate, authorizeUser, WalletController.transferOutFromUser);
 
 // Get wallets by merchant (merchant can view all wallets associated with their business)
 router.get('/merchant/:merchantId/users', authenticate, WalletController.getUserWalletsByMerchant);

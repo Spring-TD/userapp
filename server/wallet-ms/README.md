@@ -40,6 +40,8 @@ This microservice handles wallet functionality for merchants and their users.
 - `POST /api/v1/wallets/user` - Create user wallet
 - `GET /api/v1/wallets/user/:userId` - Get user wallet
 - `PUT /api/v1/wallets/user/:userId/balance` - Update user wallet balance
+- `GET /api/v1/wallets/user/:userId/transactions` - Get user wallet transactions with filtering options (by date range and type)
+- `POST /api/v1/wallets/user/:userId/transfer` - Transfer money out from user wallet to another wallet
 - `GET /api/v1/wallets/merchant/:merchantId/users` - Get all user wallets for a merchant
 
 ### Transactions
@@ -107,6 +109,13 @@ interface Transaction {
    npm start
    ```
 
+## Testing
+
+Run user wallet feature tests:
+```bash
+npm run test:user-wallet
+```
+
 ## Implementation Status
 
 - [x] Merchant wallet creation and management
@@ -119,6 +128,8 @@ interface Transaction {
 - [x] KYC wallet debit functionality
 - [x] KYC fee processing functionality
 - [x] Treasury wallet handles all merchant's users wallet balance (Wallet Record filtering, Transfer Out, Debit Wallet)
+- [x] User wallet transaction filtering
+- [x] User wallet transfer out functionality
 - [ ] Transaction processing
 - [ ] Transaction history
 - [ ] Security enhancements

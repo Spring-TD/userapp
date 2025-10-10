@@ -71,6 +71,18 @@ interface KycFeeData {
   description: string;
 }
 
+interface UserTransferOutData {
+  toWalletId: string;
+  amount: number;
+  description: string;
+}
+
+interface UserFilterTransactionData {
+  startDate?: string;
+  endDate?: string;
+  type?: TransactionType;
+}
+
 export class WalletController {
   /**
    * POST /api/v1/wallets/merchant
@@ -598,6 +610,152 @@ export class WalletController {
       });
     } catch (error) {
       logger.error('Error retrieving user wallets by merchant', { error });
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/wallets/user/:userId/transactions
+   * Filter User Wallet transactions by date range and type
+   */
+  static async filterUserTransactions(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { userId } = req.params;
+      const { startDate, endDate, type } = req.query;
+
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      // Check if user has permission to access this wallet
+      if (req.user.userId !== userId && req.user.merchantId !== userId && req.user.userType !== 'ADMIN') {
+        res.status(403).json({
+          success: false,
+          error: 'Access denied'
+        });
+        return;
+      }
+
+      // Validate input data
+      const { error, value } = validateInput<FilterTransactionData>(filterTransactionSchema, { startDate, endDate, type });
+      if (error) {
+        res.status(400).json({
+          success: false,
+          error: 'Validation failed',
+          details: error
+        });
+        return;
+      }
+
+      // Filter transactions
+      const filterData = {
+        startDate: startDate ? new Date(startDate as string) : undefined,
+        endDate: endDate ? new Date(endDate as string) : undefined,
+        type: type as TransactionType
+      };
+
+      const result = await WalletService.filterUserTransactions(userId, filterData);
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: result.error
+        });
+        return;
+      }
+
+      logger.info('User wallet transactions filtered', {
+        userId,
+        transactionCount: result.transactions?.length
+      });
+
+      res.status(200).json({
+        success: true,
+        data: {
+          transactions: result.transactions
+        }
+      });
+    } catch (error) {
+      logger.error('Error filtering user transactions', { error });
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/wallets/user/:userId/transfer
+   * Transfer money out from user wallet to another wallet
+   */
+  static async transferOutFromUser(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { userId } = req.params;
+
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      // Check if user has permission to access this wallet
+      if (req.user.userId !== userId) {
+        res.status(403).json({
+          success: false,
+          error: 'Access denied. Only wallet owner can transfer money out.'
+        });
+        return;
+      }
+
+      // Validate input data
+      const { error, value } = validateInput<UserTransferOutData>(transferOutSchema, req.body);
+      if (error) {
+        res.status(400).json({
+          success: false,
+          error: 'Validation failed',
+          details: error
+        });
+        return;
+      }
+
+      const { toWalletId, amount, description } = value!;
+
+      // Perform the transfer
+      const result = await WalletService.transferOutFromUser({
+        userId,
+        toWalletId,
+        amount,
+        description
+      });
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: result.error
+        });
+        return;
+      }
+
+      logger.info('Money transferred from user wallet', {
+        userId,
+        toWalletId,
+        amount
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Money transferred successfully',
+        data: {
+          fromWallet: result.fromWallet,
+          toWallet: result.toWallet,
+          transaction: result.transaction
+        }
+      });
+    } catch (error) {
+      logger.error('Error transferring money from user wallet', { error });
       next(error);
     }
   }

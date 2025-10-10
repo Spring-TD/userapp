@@ -136,7 +136,7 @@ export enum BusinessDocumentType {
   BANK_STATEMENT = 'bank_statement',
   AML_POLICIES = 'aml_policies',
   DATA_PRIVACY_POLICY = 'data_privacy_policy',
-  LICENSE = 'license'
+  // LICENSE = 'license'
 }
 
 // Business Document interface for the 8 required documents
@@ -309,12 +309,6 @@ export const INDIVIDUAL_REQUIRED_DOCUMENTS = [
 
 export const INDIVIDUAL_OPTIONAL_DOCUMENTS = [
   DocumentType.INCOME_PROOF,
-  DocumentType.BANK
-] as const;
-
-export const BUSINESS_REQUIRED_DOCUMENTS = [
-  DocumentType.BUSINESS_REGISTRATION,
-  DocumentType.BENEFICIAL_OWNERSHIP,
   DocumentType.BANK
 ] as const;
 
