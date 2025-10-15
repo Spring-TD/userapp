@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { WalletController } from '../controllers/walletController';
+import { FundingController } from '../controllers/fundingController';
 import { authenticate, authorizeMerchant, authorizeUser } from '../middleware/auth';
 
 const router = Router();
@@ -35,6 +36,10 @@ router.put('/user/:userId/balance', authenticate, authorizeUser, WalletControlle
 router.get('/user/:userId/transactions', authenticate, WalletController.filterUserTransactions);
 router.post('/user/:userId/transfer', authenticate, authorizeUser, WalletController.transferOutFromUser);
 router.post('/user/:userId/api-call', authenticate, authorizeUser, WalletController.makeUserApiCall);
+
+// Funding routes (public endpoints for payment provider callbacks)
+router.post('/funding/callback', FundingController.handleFundingCallback);
+router.get('/funding/status/:transactionId', FundingController.checkFundingStatus);
 
 // Get wallets by merchant (merchant can view all wallets associated with their business)
 router.get('/merchant/:merchantId/users', authenticate, WalletController.getUserWalletsByMerchant);

@@ -7,9 +7,10 @@ This microservice handles wallet functionality for merchants and their users.
 - Merchant Wallets (Treasury, Operation, KYC)
 - User Wallets (associated with merchants)
 - Wallet transactions
-- Balance management
+- Balance management with Main Balance and Ledger Balance
 - Transaction history
 - 3rd Party API Integration
+- External Funding Callbacks
 
 ## API Endpoints
 
@@ -46,9 +47,22 @@ This microservice handles wallet functionality for merchants and their users.
 - `POST /api/v1/wallets/user/:userId/api-call` - Make a 3rd party API call from user wallet
 - `GET /api/v1/wallets/merchant/:merchantId/users` - Get all user wallets for a merchant
 
+### Funding Callbacks
+- `POST /api/v1/wallets/funding/callback` - Webhook endpoint for funding notifications from payment providers
+- `GET /api/v1/wallets/funding/status/:transactionId` - Check funding status manually
+
 ### Transactions
 - `POST /api/v1/transactions` - Create transaction (Not yet implemented)
 - `GET /api/v1/transactions/:walletId` - Get transaction history (Not yet implemented)
+
+## Wallet Ledger Structure
+
+The wallet implements a dual balance system:
+
+- **Main Balance**: The first balance to debit when a user authorizes a transaction
+- **Ledger Balance**: The last balance to update after an operation is complete, only debited when an operation on a 3rd party API is complete
+
+This structure ensures that funds are reserved when a user authorizes a transaction (Main Balance) but only actually deducted when the external operation completes successfully (Ledger Balance).
 
 ## Data Models
 
@@ -72,6 +86,19 @@ interface UserWallet extends BaseWallet {
 }
 ```
 
+### Base Wallet
+```typescript
+interface BaseWallet {
+  id: string;
+  mainBalance: number;
+  ledgerBalance: number;
+  currency: string;
+  createdAt: Date;
+  updatedAt: Date;
+  status: WalletStatus;
+}
+```
+
 ### Transaction
 ```typescript
 interface Transaction {
@@ -82,6 +109,15 @@ interface Transaction {
   status: TransactionStatus;
   description: string;
   referenceId?: string;
+  balanceBefore?: number;
+  balanceAfter?: number;
+  category?: string;
+  source?: string;
+  metadata?: Record<string, any>;
+  tags?: string[];
+  externalReference?: string;
+  ipAddress?: string;
+  userAgent?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -113,14 +149,15 @@ Make a 3rd party API call from a user wallet. The specified amount will be debit
 ```
 
 **Response:**
-```json
+```
 {
   "success": true,
   "message": "API call completed successfully",
   "data": {
     "wallet": {
       "id": "wallet_abc",
-      "balance": 50,
+      "mainBalance": 50,
+      "ledgerBalance": 50,
       "currency": "USD",
       "status": "ACTIVE"
     },
@@ -132,12 +169,64 @@ Make a 3rd party API call from a user wallet. The specified amount will be debit
       "status": "COMPLETED",
       "description": "API Call: Payment to Example API",
       "referenceId": "https://api.example.com/payment",
+      "balanceBefore": 100,
+      "balanceAfter": 50,
       "createdAt": "2025-01-01T10:00:00Z",
       "updatedAt": "2025-01-01T10:00:00Z"
     },
     "apiResponse": {
       // Response from the 3rd party API
     }
+  }
+}
+```
+
+## Funding Callback Endpoint
+
+### POST `/api/v1/wallets/funding/callback`
+
+Webhook endpoint for funding notifications from payment providers. This endpoint will be called by external payment providers when a funding transaction is completed.
+
+**Request Body:**
+```
+{
+  "walletId": "wallet_abc",
+  "amount": 100,
+  "currency": "USD",
+  "transactionId": "txn_98765",
+  "paymentMethod": "CARD",
+  "status": "SUCCESS",
+  "description": "Credit card funding",
+  "providerReference": "payment_provider_123",
+  "signature": "hmac_signature_for_verification"
+}
+```
+
+**Response for User Wallet Funding:**
+```
+{
+  "success": true,
+  "message": "User wallet funding callback processed successfully",
+  "data": {
+    "walletId": "wallet_abc",
+    "userId": "user_456",
+    "newMainBalance": 150,
+    "newLedgerBalance": 150
+  }
+}
+```
+
+**Response for Merchant Wallet Funding:**
+```
+{
+  "success": true,
+  "message": "Merchant wallet funding callback processed successfully",
+  "data": {
+    "walletId": "wallet_def",
+    "merchantId": "merchant_123",
+    "merchantWalletType": "TREASURY",
+    "newMainBalance": 2500,
+    "newLedgerBalance": 2500
   }
 }
 ```
@@ -188,6 +277,9 @@ npm run test:user-wallet
 - [x] User wallet transaction filtering
 - [x] User wallet transfer out functionality
 - [x] User wallet 3rd party API call functionality
+- [x] Wallet funding callback functionality
+- [x] Enhanced transaction model with balance tracking
+- [x] Dual balance system (Main Balance and Ledger Balance)
 - [ ] Transaction processing
 - [ ] Transaction history
 - [ ] Security enhancements

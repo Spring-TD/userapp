@@ -1,6 +1,7 @@
 export interface BaseWallet {
   id: string;
-  balance: number;
+  mainBalance: number;
+  ledgerBalance: number;
   currency: string;
   createdAt: Date;
   updatedAt: Date;
@@ -38,6 +39,15 @@ export interface Transaction {
   status: TransactionStatus;
   description: string;
   referenceId?: string;
+  balanceBefore?: number;
+  balanceAfter?: number;
+  category?: string;
+  source?: string;
+  metadata?: Record<string, any>;
+  tags?: string[];
+  externalReference?: string;
+  ipAddress?: string;
+  userAgent?: string;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -93,7 +93,8 @@ export class WalletService {
         walletType: 'MERCHANT',
         merchantWalletType: data.merchantWalletType,
         name: data.name,
-        balance: 0,
+        mainBalance: 0,
+        ledgerBalance: 0,
         currency: data.currency,
         status: WalletStatus.ACTIVE,
         createdAt: new Date(),
@@ -301,7 +302,8 @@ export class WalletService {
         merchantId: data.merchantId,
         walletType: 'USER',
         name: data.name,
-        balance: 0,
+        mainBalance: 0,
+        ledgerBalance: 0,
         currency: data.currency,
         status: WalletStatus.ACTIVE,
         createdAt: new Date(),
@@ -412,8 +414,12 @@ export class WalletService {
         };
       }
 
+      // Capture balance before update
+      const balanceBefore = wallet.mainBalance;
+      
       // Update balance
-      wallet.balance += amount;
+      wallet.mainBalance += amount;
+      wallet.ledgerBalance += amount; // For immediate updates, both balances change together
       wallet.updatedAt = new Date();
 
       // Create transaction record
@@ -424,6 +430,8 @@ export class WalletService {
         type: amount >= 0 ? TransactionType.CREDIT : TransactionType.DEBIT,
         status: TransactionStatus.COMPLETED,
         description: description,
+        balanceBefore: balanceBefore,
+        balanceAfter: wallet.mainBalance,
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -431,7 +439,7 @@ export class WalletService {
       mockDB.transactions.set(transaction.id, transaction);
       mockDB.wallets.set(wallet.id, wallet);
 
-      logger.info('Wallet balance updated', { walletId, newBalance: wallet.balance });
+      logger.info('Wallet balance updated', { walletId, newBalance: wallet.mainBalance });
 
       return {
         success: true,
@@ -667,16 +675,22 @@ export class WalletService {
       }
 
       // Check if source wallet has sufficient balance
-      if (fromWallet.balance < transferData.amount) {
+      if (fromWallet.mainBalance < transferData.amount) {
         return {
           success: false,
           error: 'Insufficient balance in source wallet'
         };
       }
 
+      // Capture balances before update
+      const fromBalanceBefore = fromWallet.mainBalance;
+      const toBalanceBefore = toWallet.mainBalance;
+      
       // Update balances
-      fromWallet.balance -= transferData.amount;
-      toWallet.balance += transferData.amount;
+      fromWallet.mainBalance -= transferData.amount;
+      toWallet.mainBalance += transferData.amount;
+      fromWallet.ledgerBalance -= transferData.amount;
+      toWallet.ledgerBalance += transferData.amount;
       fromWallet.updatedAt = new Date();
       toWallet.updatedAt = new Date();
 
@@ -689,6 +703,8 @@ export class WalletService {
         status: TransactionStatus.COMPLETED,
         description: `Transfer out: ${transferData.description}`,
         referenceId: toWallet.id,
+        balanceBefore: fromBalanceBefore,
+        balanceAfter: fromWallet.mainBalance,
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -702,6 +718,8 @@ export class WalletService {
         status: TransactionStatus.COMPLETED,
         description: `Transfer in: ${transferData.description}`,
         referenceId: fromWallet.id,
+        balanceBefore: toBalanceBefore,
+        balanceAfter: toWallet.mainBalance,
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -828,15 +846,19 @@ export class WalletService {
       }
 
       // Check if wallet has sufficient balance
-      if (userWallet.balance < debitData.amount) {
+      if (userWallet.mainBalance < debitData.amount) {
         return {
           success: false,
           error: 'Insufficient balance in user wallet'
         };
       }
 
+      // Capture balance before update
+      const balanceBefore = userWallet.mainBalance;
+      
       // Update balance
-      userWallet.balance -= debitData.amount;
+      userWallet.mainBalance -= debitData.amount;
+      userWallet.ledgerBalance -= debitData.amount;
       userWallet.updatedAt = new Date();
 
       // Create transaction record
@@ -847,6 +869,8 @@ export class WalletService {
         type: TransactionType.DEBIT,
         status: TransactionStatus.COMPLETED,
         description: debitData.description,
+        balanceBefore: balanceBefore,
+        balanceAfter: userWallet.mainBalance,
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -1072,15 +1096,19 @@ export class WalletService {
       }
 
       // Check if wallet has sufficient balance
-      if (treasuryWallet.balance < debitData.amount) {
+      if (treasuryWallet.mainBalance < debitData.amount) {
         return {
           success: false,
           error: 'Insufficient balance in Treasury wallet'
         };
       }
 
+      // Capture balance before update
+      const balanceBefore = treasuryWallet.mainBalance;
+      
       // Update balance
-      treasuryWallet.balance -= debitData.amount;
+      treasuryWallet.mainBalance -= debitData.amount;
+      treasuryWallet.ledgerBalance -= debitData.amount;
       treasuryWallet.updatedAt = new Date();
 
       // Create transaction record
@@ -1091,6 +1119,8 @@ export class WalletService {
         type: TransactionType.DEBIT,
         status: TransactionStatus.COMPLETED,
         description: debitData.description,
+        balanceBefore: balanceBefore,
+        balanceAfter: treasuryWallet.mainBalance,
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -1147,15 +1177,19 @@ export class WalletService {
       }
 
       // Check if wallet has sufficient balance
-      if (operationWallet.balance < debitData.amount) {
+      if (operationWallet.mainBalance < debitData.amount) {
         return {
           success: false,
           error: 'Insufficient balance in Operation wallet'
         };
       }
 
+      // Capture balance before update
+      const balanceBefore = operationWallet.mainBalance;
+      
       // Update balance
-      operationWallet.balance -= debitData.amount;
+      operationWallet.mainBalance -= debitData.amount;
+      operationWallet.ledgerBalance -= debitData.amount;
       operationWallet.updatedAt = new Date();
 
       // Create transaction record
@@ -1166,6 +1200,8 @@ export class WalletService {
         type: TransactionType.DEBIT,
         status: TransactionStatus.COMPLETED,
         description: debitData.description,
+        balanceBefore: balanceBefore,
+        balanceAfter: operationWallet.mainBalance,
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -1222,15 +1258,19 @@ export class WalletService {
       }
 
       // Check if wallet has sufficient balance
-      if (kycWallet.balance < debitData.amount) {
+      if (kycWallet.mainBalance < debitData.amount) {
         return {
           success: false,
           error: 'Insufficient balance in KYC wallet'
         };
       }
 
+      // Capture balance before update
+      const balanceBefore = kycWallet.mainBalance;
+      
       // Update balance
-      kycWallet.balance -= debitData.amount;
+      kycWallet.mainBalance -= debitData.amount;
+      kycWallet.ledgerBalance -= debitData.amount;
       kycWallet.updatedAt = new Date();
 
       // Create transaction record
@@ -1241,6 +1281,8 @@ export class WalletService {
         type: TransactionType.DEBIT,
         status: TransactionStatus.COMPLETED,
         description: debitData.description,
+        balanceBefore: balanceBefore,
+        balanceAfter: kycWallet.mainBalance,
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -1306,15 +1348,19 @@ export class WalletService {
       }
 
       // Check if wallet has sufficient balance
-      if (kycWallet.balance < amount) {
+      if (kycWallet.mainBalance < amount) {
         return {
           success: false,
           error: 'Insufficient balance in KYC wallet for KYC fee'
         };
       }
 
+      // Capture balance before update
+      const balanceBefore = kycWallet.mainBalance;
+      
       // Update balance
-      kycWallet.balance -= amount;
+      kycWallet.mainBalance -= amount;
+      kycWallet.ledgerBalance -= amount;
       kycWallet.updatedAt = new Date();
 
       // Create transaction record specifically for KYC fee
@@ -1326,6 +1372,8 @@ export class WalletService {
         status: TransactionStatus.COMPLETED,
         description: description,
         referenceId: 'KYC_FEE', // Special identifier for KYC fees
+        balanceBefore: balanceBefore,
+        balanceAfter: kycWallet.mainBalance,
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -1384,7 +1432,7 @@ export class WalletService {
       }
 
       // Check if wallet has sufficient balance
-      if (userWallet.balance < apiCallData.amount) {
+      if (userWallet.mainBalance < apiCallData.amount) {
         return {
           success: false,
           error: 'Insufficient balance in user wallet'
@@ -1445,8 +1493,12 @@ export class WalletService {
         };
       }
 
+      // Capture balance before update
+      const balanceBefore = userWallet.mainBalance;
+      
       // Update wallet balance (debit the amount)
-      userWallet.balance -= apiCallData.amount;
+      userWallet.mainBalance -= apiCallData.amount;
+      userWallet.ledgerBalance -= apiCallData.amount; // Update ledger balance when API call is complete
       userWallet.updatedAt = new Date();
 
       // Create transaction record
@@ -1458,6 +1510,8 @@ export class WalletService {
         status: TransactionStatus.COMPLETED,
         description: `API Call: ${apiCallData.description}`,
         referenceId: apiCallData.endpoint,
+        balanceBefore: balanceBefore,
+        balanceAfter: userWallet.mainBalance,
         createdAt: new Date(),
         updatedAt: new Date()
       };

@@ -4,11 +4,12 @@ This document describes the enhanced features available for User Wallets in the 
 
 ## Overview
 
-User Wallets now support four key features:
+User Wallets now support five key features:
 1. **Wallet Record Filtering** - Filter transaction records by date range and type
 2. **Transfer Out** - Transfer money from user wallet to other wallets
 3. **Debit Wallet** - Allow money to be debited via billing (already implemented)
 4. **3rd Party API Calls** - Make API calls to external services and debit the wallet
+5. **Funding Callbacks** - Receive notifications when wallet is funded via external payment methods
 
 ## API Endpoints
 
@@ -173,12 +174,68 @@ Make a 3rd party API call from a user wallet. The specified amount will be debit
 - The API key can be passed in the request body or as part of the headers
 - Supported HTTP methods: GET, POST, PUT, DELETE
 
+### 5. Funding Callbacks
+
+#### POST `/api/v1/wallets/funding/callback`
+
+Webhook endpoint for funding notifications from payment providers. This endpoint will be called by external payment providers when a funding transaction is completed.
+
+**Request Body:**
+```json
+{
+  "walletId": "wallet_abc",
+  "amount": 100,
+  "currency": "USD",
+  "transactionId": "txn_98765",
+  "paymentMethod": "CARD",
+  "status": "SUCCESS",
+  "description": "Credit card funding",
+  "providerReference": "payment_provider_123",
+  "signature": "hmac_signature_for_verification"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Funding callback processed successfully",
+  "data": {
+    "walletId": "wallet_abc",
+    "newBalance": 150
+  }
+}
+```
+
+#### GET `/api/v1/wallets/funding/status/:transactionId`
+
+Manually check the status of a funding transaction.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "transactionId": "txn_98765",
+    "status": "COMPLETED",
+    "message": "Funding transaction completed successfully"
+  }
+}
+```
+
+**Important Notes:**
+- This endpoint is publicly accessible (no authentication required) as it's designed to receive callbacks from external payment providers
+- In a production environment, you should implement signature verification to ensure callbacks are authentic
+- The endpoint automatically credits the wallet when a successful funding notification is received
+- Supported payment methods: CARD, BANK_TRANSFER, WALLET, OTHER
+
 ## Security & Access Control
 
 1. **Wallet Record Filtering**: Users can only filter their own transactions. Merchants can filter transactions of their users.
 2. **Transfer Out**: Only wallet owners can transfer money out from their wallets.
 3. **Debit Wallet**: Only merchants can debit wallets of their associated users.
 4. **API Calls**: Only wallet owners can make API calls from their wallets.
+5. **Funding Callbacks**: Public endpoint for payment provider notifications with signature verification.
 
 ## Implementation Details
 
@@ -193,6 +250,8 @@ Make a 3rd party API call from a user wallet. The specified amount will be debit
 1. `filterUserTransactions()` - Handles GET requests for filtering user transactions
 2. `transferOutFromUser()` - Handles POST requests for transferring money out from user wallets
 3. `makeUserApiCall()` - Handles POST requests for making API calls from user wallets
+4. `handleFundingCallback()` - Handles POST requests for funding notifications
+5. `checkFundingStatus()` - Handles GET requests for checking funding status
 
 ## Testing
 

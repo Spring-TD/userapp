@@ -1,16 +1,14 @@
 import Joi from 'joi';
 
 // Validation schemas
-const walletIdSchema = Joi.string().min(1).max(100).required().messages({
+const walletIdSchema = Joi.string().min(1).max(100).optional().messages({
   'string.min': 'Wallet ID must not be empty',
-  'string.max': 'Wallet ID must not exceed 100 characters',
-  'any.required': 'Wallet ID is required'
+  'string.max': 'Wallet ID must not exceed 100 characters'
 });
 
-const merchantIdSchema = Joi.string().min(1).max(100).required().messages({
+const merchantIdSchema = Joi.string().min(1).max(100).optional().messages({
   'string.min': 'Merchant ID must not be empty',
-  'string.max': 'Merchant ID must not exceed 100 characters',
-  'any.required': 'Merchant ID is required'
+  'string.max': 'Merchant ID must not exceed 100 characters'
 });
 
 const userIdSchema = Joi.string().min(1).max(100).required().messages({
@@ -37,15 +35,13 @@ const nameSchema = Joi.string().min(1).max(100).required().messages({
   'any.required': 'Name is required'
 });
 
-const descriptionSchema = Joi.string().min(1).max(500).required().messages({
+const descriptionSchema = Joi.string().min(1).max(500).optional().messages({
   'string.min': 'Description must not be empty',
-  'string.max': 'Description must not exceed 500 characters',
-  'any.required': 'Description is required'
+  'string.max': 'Description must not exceed 500 characters'
 });
 
-const merchantWalletTypeSchema = Joi.string().valid('TREASURY', 'OPERATION', 'KYC').required().messages({
-  'any.only': 'Merchant wallet type must be one of TREASURY, OPERATION, or KYC',
-  'any.required': 'Merchant wallet type is required'
+const merchantWalletTypeSchema = Joi.string().valid('TREASURY', 'OPERATION', 'KYC').optional().messages({
+  'any.only': 'Merchant wallet type must be one of TREASURY, OPERATION, or KYC'
 });
 
 const dateSchema = Joi.date().iso().optional().messages({
@@ -73,11 +69,27 @@ const requestBodySchema = Joi.object().optional().messages({
   'object.base': 'Request body must be an object'
 });
 
+const transactionIdSchema = Joi.string().min(1).max(100).required().messages({
+  'string.min': 'Transaction ID must not be empty',
+  'string.max': 'Transaction ID must not exceed 100 characters',
+  'any.required': 'Transaction ID is required'
+});
+
+const statusSchema = Joi.string().valid('SUCCESS', 'COMPLETED', 'PENDING', 'FAILED', 'CANCELLED').required().messages({
+  'any.only': 'Status must be one of SUCCESS, COMPLETED, PENDING, FAILED, or CANCELLED',
+  'any.required': 'Status is required'
+});
+
+const paymentMethodSchema = Joi.string().valid('CARD', 'BANK_TRANSFER', 'WALLET', 'OTHER').required().messages({
+  'any.only': 'Payment method must be one of CARD, BANK_TRANSFER, WALLET, or OTHER',
+  'any.required': 'Payment method is required'
+});
+
 // Wallet validation schemas
 export const createMerchantWalletSchema = Joi.object({
   name: nameSchema,
   currency: currencySchema,
-  merchantWalletType: merchantWalletTypeSchema
+  merchantWalletType: merchantWalletTypeSchema.required()
 });
 
 export const createUserWalletSchema = Joi.object({
@@ -109,8 +121,8 @@ export const filterTransactionSchema = Joi.object({
 });
 
 export const transferOutSchema = Joi.object({
-  fromWalletId: walletIdSchema,
-  toWalletId: walletIdSchema,
+  fromWalletId: walletIdSchema.required(),
+  toWalletId: walletIdSchema.required(),
   amount: amountSchema,
   description: descriptionSchema
 });
@@ -122,7 +134,7 @@ export const debitWalletSchema = Joi.object({
 });
 
 export const debitTreasurySchema = Joi.object({
-  merchantId: merchantIdSchema,
+  merchantId: merchantIdSchema.required(),
   amount: amountSchema,
   description: descriptionSchema
 });
@@ -149,6 +161,21 @@ export const userApiCallSchema = Joi.object({
   amount: amountSchema,
   description: descriptionSchema,
   apiKey: apiKeySchema
+});
+
+// Funding callback validation schema
+export const fundingCallbackSchema = Joi.object({
+  walletId: walletIdSchema,
+  amount: amountSchema,
+  currency: currencySchema,
+  transactionId: transactionIdSchema,
+  paymentMethod: paymentMethodSchema,
+  status: statusSchema,
+  description: descriptionSchema,
+  providerReference: Joi.string().optional(),
+  signature: Joi.string().optional(),
+  merchantId: merchantIdSchema,
+  merchantWalletType: merchantWalletTypeSchema
 });
 
 // Utility function for validation
