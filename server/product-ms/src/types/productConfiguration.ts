@@ -23,7 +23,11 @@ export interface LoanProductConfiguration extends BaseProductConfiguration {
   
   // Fees and rates
   managementFee: number; // Management fee
-  interestRate: number; // Interest Rate (%)
+  // Interest Rate (amount or %) - Updated to support both amount and percentage
+  interestRate: {
+    type: 'percentage' | 'amount';
+    value: number;
+  };
   penalty: {
     type: 'percentage' | 'amount';
     value: number; // Penalty (amount or %)
@@ -60,12 +64,66 @@ export interface LoanProductConfiguration extends BaseProductConfiguration {
 
 // Configuration for Mortgage products
 export interface MortgageProductConfiguration extends BaseProductConfiguration {
-  interestRate: number;
+  // Basic information
+  purpose: string; // Purpose/Description
+  minimumFacilityAmount: number; // Minimum Facility Amount
+  maximumFacilityAmount: number; // Maximum Facility Amount
+  
+  // Repayment information
+  repaymentCycle: 'year' | 'month' | 'week' | 'day'; // Repayment Cycle
+  loanTenure: {
+    value: number;
+    unit: 'year' | 'month' | 'week' | 'day'; // Loan Tenure
+  };
+  
+  // Fees and rates
+  managementFee: number; // Management fee
+  // Interest Rate (amount or %) - Updated to support both amount and percentage
+  interestRate: {
+    type: 'percentage' | 'amount';
+    value: number;
+  };
+  penalty: {
+    type: 'percentage' | 'amount';
+    value: number; // Penalty (amount or %)
+  };
+  
+  // Moratorium period
+  moratorium: {
+    value: number;
+    unit: 'year' | 'month' | 'week' | 'day'; // Moratorium
+  };
+  
+  // Minimum repayment
+  minimumRepaymentAmount: number; // Minimum Repayment Amount
+  
+  // Security requirements
+  securityRequirements: Array<'property' | 'car' | 'land' | 'other'>; // Security Requirement
+  additionalSecurityRequirements?: string; // Additional security requirements
+  
+  // Eligibility
+  eligibility: string; // Eligibility (Text)
+  
+  // Product image
+  productImage?: string; // Add product image (image URL or base64)
+  
+  // Currency
+  currency: string; // Currency (options)
+  
+  // Withdrawal penalty
+  withdrawalPenalty: {
+    type: 'percentage' | 'amount';
+    value: number; // Withdrawal penalty (set % or amount)
+  };
+  
+  // Mortgage-specific fields
   termYears: number;
   downPaymentPercentage: number;
   propertyTypeRestrictions?: string[];
   requiresInsurance: boolean;
   insuranceTypes?: string[];
+  equityContribution?: number; // Equity contribution percentage
+  propertyValue?: number; // Property value amount
 }
 
 // Configuration for Savings products
@@ -126,15 +184,8 @@ export interface CommodityProductConfiguration extends BaseProductConfiguration 
   commodityType: string;
   unitOfMeasure: string;
   minimumOrderQuantity: number;
+  price: number; // Product price
   priceVolatilityThreshold: number;
-  requiresStorage: boolean;
-  storageOptions?: string[];
-}
-
-// Configuration for Custom products
-export interface CustomProductConfiguration extends BaseProductConfiguration {
-  customFields: Record<string, any>;
-  validationRules?: Record<string, any>;
 }
 
 // Union type for all product configurations
@@ -142,8 +193,7 @@ export type ProductConfiguration =
   | LoanProductConfiguration
   | MortgageProductConfiguration
   | SavingsProductConfiguration
-  | CommodityProductConfiguration
-  | CustomProductConfiguration;
+  | CommodityProductConfiguration;
 
 // Request interfaces for creating/updating configurations
 export interface CreateProductConfigurationRequest {

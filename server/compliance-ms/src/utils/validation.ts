@@ -9,7 +9,6 @@ import {
   KYCStatus,
   INDIVIDUAL_REQUIRED_DOCUMENTS,
   INDIVIDUAL_OPTIONAL_DOCUMENTS,
-  BUSINESS_REQUIRED_DOCUMENTS,
   BUSINESS_OPTIONAL_DOCUMENTS
 } from '../types/kycTypes';
 import { logger } from './logger';

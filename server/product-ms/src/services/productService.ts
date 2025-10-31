@@ -1,10 +1,9 @@
-import { Product, CreateProductRequest, UpdateProductRequest } from '../types/product';
+import { Product, CreateProductRequest, UpdateProductRequest, SelectProductTypeRequest, CreateProductAfterTypeRequest } from '../types/product';
 import { 
   LoanProductConfiguration, 
   MortgageProductConfiguration, 
   SavingsProductConfiguration, 
-  CommodityProductConfiguration, 
-  CustomProductConfiguration,
+  CommodityProductConfiguration,
   ProductConfiguration,
   CreateProductConfigurationRequest,
   UpdateProductConfigurationRequest
@@ -13,6 +12,70 @@ import {
 export class ProductService {
   private products: Product[] = [];
   private productConfigurations: ProductConfiguration[] = [];
+
+  // New method to select product type after receiving create-app ID
+  async selectProductType(typeData: SelectProductTypeRequest): Promise<Product> {
+    const newProduct: Product = {
+      id: this.generateId(),
+      referenceNumber: this.generateReferenceNumber(), // Added reference number
+      name: '', // Will be set later
+      description: '', // Will be set later
+      type: typeData.type,
+      appId: typeData.appId,
+      status: 'incomplete', // Changed initial status to incomplete
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      // Add mortgage-specific fields if type is Mortgage
+      ...(typeData.type === 'Mortgage' && {
+        equityContribution: 0,
+        propertyValue: 0
+      }),
+      // Add commodity-specific fields if type is Commodity
+      ...(typeData.type === 'Commodity' && {
+        price: 0,
+        minimumQuantity: 0,
+        unitOfMeasure: ''
+      })
+    };
+
+    this.products.push(newProduct);
+    return newProduct;
+  }
+
+  // New method to create product after type selection
+  async createProductAfterType(productData: CreateProductAfterTypeRequest): Promise<Product | null> {
+    const productIndex = this.products.findIndex(p => p.id === productData.productId);
+    
+    if (productIndex === -1) {
+      return null;
+    }
+
+    // Check if this is a mortgage product and if so, preserve the mortgage-specific fields
+    const existingProduct = this.products[productIndex];
+    const mortgageFields = existingProduct.type === 'Mortgage' ? {
+      equityContribution: existingProduct.equityContribution,
+      propertyValue: existingProduct.propertyValue
+    } : {};
+    
+    // Check if this is a commodity product and if so, preserve the commodity-specific fields
+    const commodityFields = existingProduct.type === 'Commodity' ? {
+      price: existingProduct.price,
+      minimumQuantity: existingProduct.minimumQuantity,
+      unitOfMeasure: existingProduct.unitOfMeasure
+    } : {};
+
+    const updatedProduct = {
+      ...this.products[productIndex],
+      name: productData.name,
+      description: productData.description,
+      ...mortgageFields,
+      ...commodityFields,
+      updatedAt: new Date().toISOString()
+    };
+
+    this.products[productIndex] = updatedProduct;
+    return updatedProduct;
+  }
 
   async createProduct(productData: CreateProductRequest): Promise<Product> {
     const newProduct: Product = {
@@ -24,7 +87,18 @@ export class ProductService {
       appId: productData.appId, // Added create-app ID
       status: 'incomplete', // Changed initial status to incomplete
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      // Add mortgage-specific fields if type is Mortgage
+      ...(productData.type === 'Mortgage' && {
+        equityContribution: 0,
+        propertyValue: 0
+      }),
+      // Add commodity-specific fields if type is Commodity
+      ...(productData.type === 'Commodity' && {
+        price: 0,
+        minimumQuantity: 0,
+        unitOfMeasure: ''
+      })
     };
 
     this.products.push(newProduct);
@@ -43,9 +117,25 @@ export class ProductService {
       return null;
     }
 
+    // Preserve existing mortgage fields if not being updated
+    const existingProduct = this.products[productIndex];
+    const mortgageFields = existingProduct.type === 'Mortgage' ? {
+      equityContribution: updateData.equityContribution !== undefined ? updateData.equityContribution : existingProduct.equityContribution,
+      propertyValue: updateData.propertyValue !== undefined ? updateData.propertyValue : existingProduct.propertyValue
+    } : {};
+    
+    // Preserve existing commodity fields if not being updated
+    const commodityFields = existingProduct.type === 'Commodity' ? {
+      price: updateData.price !== undefined ? updateData.price : existingProduct.price,
+      minimumQuantity: updateData.minimumQuantity !== undefined ? updateData.minimumQuantity : existingProduct.minimumQuantity,
+      unitOfMeasure: updateData.unitOfMeasure !== undefined ? updateData.unitOfMeasure : existingProduct.unitOfMeasure
+    } : {};
+
     const updatedProduct = {
       ...this.products[productIndex],
       ...updateData,
+      ...mortgageFields,
+      ...commodityFields,
       updatedAt: new Date().toISOString()
     };
 
@@ -115,15 +205,6 @@ export class ProductService {
           updatedAt: new Date().toISOString(),
           ...configData.configuration
         } as CommodityProductConfiguration;
-        break;
-      case 'Custom':
-        newConfiguration = {
-          id: this.generateId(),
-          productId: configData.productId,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          ...configData.configuration
-        } as CustomProductConfiguration;
         break;
       default:
         throw new Error('Unsupported product type');

@@ -3,10 +3,82 @@
 ## Overview
 This microservice handles product creation and management for the SpringTD platform. When triggered, it receives a create-app ID and uses it to create a product with the required information.
 
+## New Workflow
+The product creation workflow has been updated to require product type selection as the first step after receiving the create-app ID:
+1. Receive create-app ID
+2. Select product type (Loan, Mortgage, Savings, or Commodity)
+3. Provide product name and description
+4. Configure product-specific settings
+
 ## API Endpoints
 
-### Create Product
-Creates a new product with the provided information.
+### Select Product Type
+Selects the product type after receiving the create-app ID.
+
+**Endpoint:** `POST /api/v1/products/select-type`
+
+**Request Body:**
+```json
+{
+  "appId": "string",           // Required: Create-app ID (1-100 characters)
+  "type": "string"             // Required: Product type (Loan, Mortgage, Savings, or Commodity)
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Product type selected successfully",
+  "data": {
+    "id": "string",
+    "referenceNumber": "string",  // Auto-generated unique reference number
+    "name": "",                   // Will be set later
+    "description": "",            // Will be set later
+    "type": "string",
+    "appId": "string",
+    "status": "incomplete",       // Initial status (complete or incomplete)
+    "createdAt": "string",        // ISO timestamp
+    "updatedAt": "string"         // ISO timestamp
+  }
+}
+```
+
+### Create Product After Type Selection
+Creates the product with name and description after selecting the type.
+
+**Endpoint:** `POST /api/v1/products/create-after-type`
+
+**Request Body:**
+```json
+{
+  "productId": "string",        // Required: Product ID from type selection
+  "name": "string",             // Required: Product name (1-200 characters)
+  "description": "string"       // Required: Product description (1-1000 characters)
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Product created successfully",
+  "data": {
+    "id": "string",
+    "referenceNumber": "string",  // Auto-generated unique reference number
+    "name": "string",
+    "description": "string",
+    "type": "string",
+    "appId": "string",
+    "status": "incomplete",       // Initial status (complete or incomplete)
+    "createdAt": "string",        // ISO timestamp
+    "updatedAt": "string"         // ISO timestamp
+  }
+}
+```
+
+### Create Product (Legacy Endpoint)
+Creates a new product with all information at once (maintained for backward compatibility).
 
 **Endpoint:** `POST /api/v1/products`
 
@@ -15,7 +87,7 @@ Creates a new product with the provided information.
 {
   "name": "string",           // Required: Product name (1-200 characters)
   "description": "string",    // Required: Product description (1-1000 characters)
-  "type": "string",           // Required: Product type (Loan, Mortgage, Savings, Commodity, or Custom)
+  "type": "string",           // Required: Product type (Loan, Mortgage, Savings, or Commodity)
   "appId": "string"           // Required: Create-app ID (1-100 characters)
 }
 ```
@@ -25,9 +97,6 @@ Creates a new product with the provided information.
 - **Mortgage**: Long-term loan secured by real estate
 - **Savings**: Financial product for saving money with interest
 - **Commodity**: Product related to trading physical goods
-- **Custom**: User-defined product type (allows custom naming)
-
-When using "Custom" as the type, users can specify their own product type in the description or name fields.
 
 **Response:**
 ```json
@@ -63,7 +132,7 @@ Updates an existing product.
 {
   "name": "string",              // Optional: Product name (1-200 characters)
   "description": "string",       // Optional: Product description (1-1000 characters)
-  "type": "string",              // Optional: Product type (Loan, Mortgage, Savings, Commodity, or Custom)
+  "type": "string",              // Optional: Product type (Loan, Mortgage, Savings, or Commodity)
   "status": "string"             // Optional: Product status (complete or incomplete)
 }
 ```
@@ -99,6 +168,42 @@ Determines what action is allowed for a product based on its status.
 When a product's status is "complete", the allowed action is "manage".
 When a product's status is "incomplete", the allowed action is "configure".
 
+### Manage Product
+Allows editing/updating all product information for complete products.
+
+**Endpoint:** `PUT /api/v1/products/:id/manage`
+
+**Request Body:**
+```json
+{
+  "name": "string",              // Optional: Product name (1-200 characters)
+  "description": "string",       // Optional: Product description (1-1000 characters)
+  "type": "string",              // Optional: Product type (Loan, Mortgage, Savings, or Commodity)
+  "status": "string"             // Optional: Product status (complete or incomplete)
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Product managed successfully",
+  "data": {
+    "id": "string",
+    "referenceNumber": "string",  // Auto-generated unique reference number
+    "name": "string",
+    "description": "string",
+    "type": "string",
+    "appId": "string",
+    "status": "string",           // Product status (complete or incomplete)
+    "createdAt": "string",        // ISO timestamp
+    "updatedAt": "string"         // ISO timestamp
+  }
+}
+```
+
+Only products with "complete" status can be managed. Attempting to manage an incomplete product will result in a 403 Forbidden error.
+
 ## Product Configuration API Endpoints
 
 ### Create Product Configuration
@@ -110,7 +215,7 @@ Creates a configuration for a specific product based on its type.
 ```json
 {
   "productId": "string",           // Required: Product ID
-  "productType": "string",         // Required: Product type (Loan, Mortgage, Savings, Commodity, or Custom)
+  "productType": "string",         // Required: Product type (Loan, Mortgage, Savings, or Commodity)
   "configuration": {
     // Configuration fields vary by product type
     // See specific configuration types below
@@ -146,7 +251,9 @@ For Loan products, the following configuration fields are available:
   - **value**: Number of units
   - **unit**: Time unit (year, month, week, day)
 - **managementFee**: Management fee amount
-- **interestRate**: Interest rate percentage
+- **interestRate**: 
+  - **type**: "percentage" or "amount"
+  - **value**: Interest rate value
 - **penalty**: 
   - **type**: "percentage" or "amount"
   - **value**: Penalty value
@@ -162,6 +269,43 @@ For Loan products, the following configuration fields are available:
 - **withdrawalPenalty**: 
   - **type**: "percentage" or "amount"
   - **value**: Withdrawal penalty value
+
+### Mortgage Product Configuration
+For Mortgage products, the following configuration fields are available:
+
+- **purpose**: Text description of the mortgage purpose
+- **minimumFacilityAmount**: Minimum mortgage amount available
+- **maximumFacilityAmount**: Maximum mortgage amount available
+- **repaymentCycle**: Repayment frequency (year, month, week, day)
+- **loanTenure**: 
+  - **value**: Number of units
+  - **unit**: Time unit (year, month, week, day)
+- **managementFee**: Management fee amount
+- **interestRate**: 
+  - **type**: "percentage" or "amount"
+  - **value**: Interest rate value
+- **penalty**: 
+  - **type**: "percentage" or "amount"
+  - **value**: Penalty value
+- **moratorium**: 
+  - **value**: Number of units
+  - **unit**: Time unit (year, month, week, day)
+- **minimumRepaymentAmount**: Minimum required repayment amount
+- **securityRequirements**: Array of required securities (property, car, land, other)
+- **additionalSecurityRequirements**: Additional security requirements text
+- **eligibility**: Eligibility criteria text
+- **productImage**: Product image URL or base64 encoded image
+- **currency**: Currency code (e.g., USD, EUR, NGN)
+- **withdrawalPenalty**: 
+  - **type**: "percentage" or "amount"
+  - **value**: Withdrawal penalty value
+- **termYears**: Number of years for the mortgage term
+- **downPaymentPercentage**: Required down payment percentage
+- **propertyTypeRestrictions**: Array of property type restrictions (optional)
+- **requiresInsurance**: Whether insurance is required
+- **insuranceTypes**: Array of insurance types (optional)
+- **equityContribution**: Equity contribution percentage (optional)
+- **propertyValue**: Property value amount (optional)
 
 ### Savings Product Configuration
 For Savings products, the following configuration fields are available:
@@ -190,17 +334,47 @@ For Savings products, the following configuration fields are available:
 - **productImage**: Product image URL or base64 encoded image
 - **userMode**: User mode ("single" or "group")
 
+### Commodity Product Configuration
+For Commodity products, the following configuration fields are available:
+
+- **commodityType**: Type of commodity (e.g., Gold, Silver, Oil)
+- **unitOfMeasure**: Unit of measurement for the commodity (e.g., grams, barrels)
+- **minimumOrderQuantity**: Minimum quantity that can be ordered
+- **price**: Price of the commodity
+- **priceVolatilityThreshold**: Threshold for price volatility alerts
+
 ## Validation
 All requests are validated using Joi schemas to ensure data integrity:
 - Product name: 1-200 characters, required for creation
 - Product description: 1-1000 characters, required for creation
-- Product type: Must be one of Loan, Mortgage, Savings, Commodity, or Custom (1-100 characters)
+- Product type: Must be one of Loan, Mortgage, Savings, or Commodity (1-100 characters)
 - App ID: 1-100 characters, required for creation
 - Status: Must be either "complete" or "incomplete"
 
 ## Example Usage
-To create a product, send a POST request to `/api/v1/products` with the required fields:
 
+To select a product type after receiving the create-app ID:
+```bash
+curl -X POST http://localhost:3005/api/v1/products/select-type \
+  -H "Content-Type: application/json" \
+  -d '{
+    "appId": "app-12345",
+    "type": "Loan"
+  }'
+```
+
+To create a product after selecting the type:
+```bash
+curl -X POST http://localhost:3005/api/v1/products/create-after-type \
+  -H "Content-Type: application/json" \
+  -d '{
+    "productId": "product-id-123",
+    "name": "Personal Loan",
+    "description": "A personal loan for home improvement"
+  }'
+```
+
+To create a product using the legacy endpoint (all information at once):
 ```bash
 curl -X POST http://localhost:3005/api/v1/products \
   -H "Content-Type: application/json" \
@@ -226,6 +400,16 @@ To check what action is allowed for a product:
 curl -X GET http://localhost:3005/api/v1/products/product-id-123/action
 ```
 
+To manage a complete product:
+```bash
+curl -X PUT http://localhost:3005/api/v1/products/product-id-123/manage \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Updated Product Name",
+    "description": "Updated product description"
+  }'
+```
+
 To create a loan product configuration:
 ```bash
 curl -X POST http://localhost:3005/api/v1/configurations \
@@ -243,7 +427,10 @@ curl -X POST http://localhost:3005/api/v1/configurations \
         "unit": "month"
       },
       "managementFee": 100,
-      "interestRate": 5.5,
+      "interestRate": {
+        "type": "percentage",
+        "value": 5.5
+      },
       "penalty": {
         "type": "percentage",
         "value": 2.0

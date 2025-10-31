@@ -1,0 +1,89 @@
+export interface App {
+  id: string;
+  name: string;
+  websiteUrl: string;
+  alias: string;
+  description: string;
+  merchantId: string;
+  status: 'draft' | 'submitted' | 'approved' | 'rejected' | 'incomplete';
+  createdAt: string;
+  updatedAt: string;
+  submittedAt?: string;
+  approvedAt?: string;
+  rejectedAt?: string;
+  rejectionReason?: string;
+  productKeys?: string[]; // Array of product keys associated with this app
+}
+
+export interface CreateAppRequest {
+  name: string;
+  websiteUrl: string;
+  alias: string;
+  description: string;
+  merchantId: string;
+}
+
+export interface UpdateAppRequest {
+  name?: string;
+  websiteUrl?: string;
+  alias?: string;
+  description?: string;
+  status?: 'draft' | 'submitted' | 'approved' | 'rejected' | 'incomplete';
+  rejectionReason?: string;
+  productKeys?: string[];
+}
+
+export interface AppResponse {
+  success: boolean;
+  message?: string;
+  data?: App;
+  error?: string;
+}
+
+// Transaction interface
+export interface Transaction {
+  id: string;
+  appId: string;
+  amount: number;
+  currency: string;
+  type: 'credit' | 'debit';
+  status: 'pending' | 'completed' | 'failed' | 'cancelled';
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Transaction query parameters
+export interface TransactionQueryParams {
+  page?: number;
+  limit?: number;
+  type?: 'credit' | 'debit';
+  status?: 'pending' | 'completed' | 'failed' | 'cancelled';
+  startDate?: string;
+  endDate?: string;
+}
+
+// Drive Document interface
+export interface DriveDocument {
+  id: string;
+  appId: string;
+  userId: string;
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  url: string;
+  uploadedAt: string;
+  status: 'pending' | 'verified' | 'rejected';
+  metadata?: Record<string, any>;
+}
+
+// Drive document query parameters
+export interface DriveDocumentQueryParams {
+  page?: number;
+  limit?: number;
+  userId?: string;
+  fileType?: string;
+  status?: 'pending' | 'verified' | 'rejected';
+  startDate?: string;
+  endDate?: string;
+}

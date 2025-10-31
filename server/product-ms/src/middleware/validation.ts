@@ -10,7 +10,7 @@ declare global {
 }
 
 export const validate = (schema: ObjectSchema) => {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: Request, res: Response, next: NextFunction): void | Response => {
     const { error, value } = schema.validate(req.body, { 
       abortEarly: false,
       stripUnknown: true 
