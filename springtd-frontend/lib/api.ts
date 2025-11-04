@@ -9,6 +9,14 @@ const api = axios.create({
   withCredentials: true, // if cookies are involved
 })
 
+// Create a separate instance for email verification (no auth required)
+export const publicApi = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001",
+  headers: {
+    "Content-Type": "application/json",
+  },
+})
+
 // Request interceptor (attach token)
 api.interceptors.request.use((config) => {
   const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null

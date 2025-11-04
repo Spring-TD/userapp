@@ -11,6 +11,7 @@ import { passwordRoutes } from './routes/passwordRoutes';
 import { userRoutes } from './routes/userRoutes';
 import { samsRoutes } from './routes/samsRoutes';
 import { credentialRoutes } from './routes/credentialRoutes';
+import { verifyEmailRoutes } from './routes/verifyEmailRoutes';
 import { SAMSService } from './services/samsService';
 import { redisCacheService } from './services/redisCacheService';
 import { logger } from './utils/logger';
@@ -51,7 +52,7 @@ app.get('/health', (_req, res) => {
   res.status(200).json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
-    service: 'client-auth-microservice'
+    service: 'service-auth-microservice'
   });
 });
 
@@ -60,6 +61,7 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/otp', otpRoutes);
 app.use('/api/v1/password', passwordRoutes);
 app.use('/api/v1/user', userRoutes);
+app.use('/verify-email', verifyEmailRoutes);
 
 // SAMS (Service Authentication Microservice) routes
 app.use('/api/v1/services', samsRoutes);

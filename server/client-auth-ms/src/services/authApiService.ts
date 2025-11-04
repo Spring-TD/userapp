@@ -275,6 +275,26 @@ class AuthApiService {
     }
   }
 
+  // ===== EMAIL VERIFICATION ENDPOINT =====
+  async verifyEmail(token: string): Promise<ApiResponse<any>> {
+    try {
+      // Create a separate client for root-level endpoints
+      const rootClient = axios.create({
+        baseURL: config.serviceAuthUrl,
+        timeout: 10000,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      });
+      
+      const response: AxiosResponse<ApiResponse<any>> = await rootClient.get(`/verify-email`, { params: { token } });
+      return response.data;
+    } catch (error: any) {
+      return this.handleError(error);
+    }
+  }
+
   async suspendUser(token: string, userId: string, reason?: string): Promise<ApiResponse<any>> {
     try {
       const response: AxiosResponse<ApiResponse<any>> = await this.apiClient.put(`/user/suspend/${userId}`, { reason }, this.createAuthHeaders(token));

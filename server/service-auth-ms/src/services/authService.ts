@@ -355,6 +355,78 @@ export class AuthService {
   }
 
   /**
+   * Verify email using token from email verification link
+   */
+  static async verifyEmailToken(token: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Verify the email verification token
+      const tokenData = verifyEmailVerificationToken(token);
+      if (!tokenData) {
+        return {
+          success: false,
+          error: 'Invalid or expired verification token'
+        };
+      }
+
+      // Find user by ID
+      const user = await mockDb.findUserById(tokenData.userId);
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not found'
+        };
+      }
+
+      // Check if email matches
+      if (user.email !== tokenData.email) {
+        return {
+          success: false,
+          error: 'Invalid verification token'
+        };
+      }
+
+      // Check if account is already verified
+      if (user.email_verified) {
+        return {
+          success: false,
+          error: 'Email is already verified'
+        };
+      }
+
+      // Update user to mark email as verified and activate account
+      await mockDb.updateUser(user.id, {
+        email_verified: true,
+        status: AccountStatus.ACTIVE
+      });
+
+      // Get updated user
+      const updatedUser = await mockDb.findUserById(user.id);
+      if (!updatedUser) {
+        return {
+          success: false,
+          error: 'Failed to retrieve updated user'
+        };
+      }
+
+      logger.info('Email verification successful', {
+        userId: updatedUser.id,
+        email: updatedUser.email,
+        userType: updatedUser.user_type
+      });
+
+      return {
+        success: true
+      };
+    } catch (error) {
+      logger.error('Error during email verification', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error during email verification'
+      };
+    }
+  }
+
+  /**
    * Get user profile by ID
    */
   static async getUserProfile(userId: string): Promise<{ success: boolean; user?: UserResponse; error?: string }> {

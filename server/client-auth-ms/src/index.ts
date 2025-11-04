@@ -9,6 +9,7 @@ import { authRoutes } from './routes/authRoutes';
 import { otpRoutes } from './routes/otpRoutes';
 import { passwordRoutes } from './routes/passwordRoutes';
 import { userRoutes } from './routes/userRoutes';
+import { verifyEmailRoutes } from './routes/verifyEmailRoutes';
 
 const app = express();
 
@@ -37,6 +38,7 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/otp', otpRoutes);
 app.use('/api/v1/password', passwordRoutes);
 app.use('/api/v1/user', userRoutes);
+app.use('/verify-email', verifyEmailRoutes);
 
 // Error handling middleware
 app.use(notFoundHandler);

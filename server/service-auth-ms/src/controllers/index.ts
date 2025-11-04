@@ -6,3 +6,4 @@ export * from './userController';
 export * from './serviceController';
 export * from './whitelistController';
 export * from './credentialController';
+export * from './emailVerificationController';

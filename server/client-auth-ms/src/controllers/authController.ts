@@ -164,4 +164,28 @@ export class AuthController {
       });
     }
   }
+
+  // ===== EMAIL VERIFICATION =====
+  static async verifyEmail(req: Request, res: Response): Promise<void> {
+    try {
+      const { token } = req.query;
+
+      if (!token || typeof token !== 'string') {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid or missing verification token'
+        });
+        return;
+      }
+
+      const result = await authApiService.verifyEmail(token);
+      res.status(result.success ? 200 : 400).json(result);
+    } catch (error) {
+      console.error('Error in verifyEmail:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  }
 }
