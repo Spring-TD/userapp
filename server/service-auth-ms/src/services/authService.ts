@@ -7,6 +7,7 @@ import { emailService } from './emailService';
 import { tokenBlacklistService } from './tokenBlacklistService';
 import { redisCacheService } from '../services/redisCacheService';
 import { OTPRecord, GenerateOTPRequest, VerifyOTPRequest, ResendOTPRequest } from '../types/otpTypes';
+import paymentService from './paymentService';
 
 // Add axios for HTTP requests
 import axios, { AxiosError } from 'axios';
@@ -335,6 +336,15 @@ export class AuthService {
         userId: updatedUser.id,
         email: updatedUser.email,
         userType: updatedUser.user_type
+      });
+
+      // Notify payment service to create record (non-blocking)
+      // This happens asynchronously and won't affect the verification response
+      paymentService.createRecordAfterVerification(updatedUser).catch(error => {
+        logger.warn('Failed to notify payment service', {
+          userId: updatedUser.id,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
       });
 
       // Remove password from response

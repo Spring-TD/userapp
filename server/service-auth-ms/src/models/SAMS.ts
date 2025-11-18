@@ -8,8 +8,7 @@ import {
   Credential, 
   IPWhitelist, 
   ServiceStatus, 
-  CredentialStatus, 
-  CredentialType,
+  CredentialStatus,
   ServiceStorage 
 } from '../types/samsTypes';
 import { v4 as uuidv4 } from 'uuid';
@@ -188,8 +187,19 @@ export class IPWhitelistModel {
     // Simple implementation - in production use a proper CIDR library
     if (!cidr.includes('/')) return ip === cidr;
     
-    const [range, bits] = cidr.split('/');
-    const mask = ~(2 ** (32 - parseInt(bits)) - 1);
+    const parts = cidr.split('/');
+    if (parts.length !== 2) return false;
+    
+    const range = parts[0];
+    const bits = parts[1];
+    
+    // Check for undefined values
+    if (range === undefined || bits === undefined) return false;
+    
+    const bitsNum = parseInt(bits);
+    if (isNaN(bitsNum)) return false;
+    
+    const mask = ~(2 ** (32 - bitsNum) - 1);
     
     const ipNum = this.ipToNumber(ip);
     const rangeNum = this.ipToNumber(range);

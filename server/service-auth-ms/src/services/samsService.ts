@@ -67,10 +67,13 @@ export class ServiceService {
       }
 
       // Create service
-      const service = SAMSDatabase.services.create({
+      const serviceParams: Omit<Service, 'service_id' | 'created_at' | 'updated_at' | 'status'> = {
         ...serviceData,
-        created_by: createdBy
-      });
+      };
+      if (createdBy !== undefined) {
+        serviceParams.created_by = createdBy;
+      }
+      const service = SAMSDatabase.services.create(serviceParams);
 
       logger.info('Service created successfully', {
         serviceId: service.service_id,
@@ -313,13 +316,18 @@ export class WhitelistService {
         }
 
         // Create whitelist entry
-        const whitelist = SAMSDatabase.ipWhitelists.create({
+        const whitelistParams: Omit<IPWhitelist, 'id' | 'created_at' | 'updated_at'> = {
           service_id: serviceId,
           ip_address: ipAddress,
-          description: whitelistData.description,
-          is_active: true,
-          created_by: createdBy
-        });
+          is_active: true
+        };
+        if (whitelistData.description !== undefined) {
+          whitelistParams.description = whitelistData.description;
+        }
+        if (createdBy !== undefined) {
+          whitelistParams.created_by = createdBy;
+        }
+        const whitelist = SAMSDatabase.ipWhitelists.create(whitelistParams);
 
         whitelistedEntries.push(whitelist);
       }
@@ -395,8 +403,13 @@ export class WhitelistService {
   private static isValidIPAddress(ip: string): boolean {
     // Check for CIDR notation
     if (ip.includes('/')) {
-      const [address, mask] = ip.split('/');
+      const parts = ip.split('/');
+      if (parts.length !== 2) return false;
+      const address = parts[0];
+      const mask = parts[1];
+      if (address === undefined || mask === undefined) return false;
       const maskNum = parseInt(mask);
+      if (isNaN(maskNum)) return false;
       if (maskNum < 0 || maskNum > 32) return false;
       return this.isValidIPv4(address);
     }
@@ -472,17 +485,26 @@ export class CredentialService {
         : undefined;
 
       // Create credential
-      const credential = SAMSDatabase.credentials.create({
+      const credentialParams: Omit<Credential, 'credential_id' | 'created_at' | 'updated_at' | 'status'> = {
         service_id: serviceId,
-        target_service_id: credentialData.target_service_id,
         credential_type: credentialData.credential_type,
         credential_value: credentialValue,
         credential_hash: credentialHash,
-        expires_at: expiresAt,
         permissions: credentialData.permissions || [],
-        rate_limit: credentialData.rate_limit,
-        created_by: createdBy
-      });
+      };
+      if (credentialData.target_service_id !== undefined) {
+        credentialParams.target_service_id = credentialData.target_service_id;
+      }
+      if (expiresAt !== undefined) {
+        credentialParams.expires_at = expiresAt;
+      }
+      if (credentialData.rate_limit !== undefined) {
+        credentialParams.rate_limit = credentialData.rate_limit;
+      }
+      if (createdBy !== undefined) {
+        credentialParams.created_by = createdBy;
+      }
+      const credential = SAMSDatabase.credentials.create(credentialParams);
 
       logger.info('Credential created', {
         credentialId: credential.credential_id,
@@ -532,7 +554,7 @@ export class CredentialService {
         return {
           success: true,
           valid: false,
-          message: validation.reason
+          message: validation.reason || 'Credential validation failed'
         };
       }
 
@@ -560,17 +582,26 @@ export class CredentialService {
         targetServiceId: credential!.target_service_id
       });
 
+      // Build response data object with proper handling of optional properties
+      const responseData: NonNullable<ValidateCredentialResponse['data']> = {
+        credential_id: credential!.credential_id,
+        service_id: credential!.service_id,
+        permissions: credential!.permissions || []
+      };
+      
+      if (credential!.expires_at !== undefined) {
+        responseData.expires_at = credential!.expires_at;
+      }
+      
+      if (credential!.rate_limit !== undefined) {
+        responseData.rate_limit = credential!.rate_limit;
+      }
+
       return {
         success: true,
         valid: true,
         message: 'Credential is valid',
-        data: {
-          credential_id: credential!.credential_id,
-          service_id: credential!.service_id,
-          permissions: credential!.permissions || [],
-          expires_at: credential!.expires_at,
-          rate_limit: credential!.rate_limit
-        }
+        data: responseData
       };
 
     } catch (error) {

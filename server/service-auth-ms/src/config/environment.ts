@@ -60,7 +60,10 @@ const envSchema = Joi.object({
   
   // Compliance Service
   COMPLIANCE_SERVICE_URL: Joi.string().default('http://localhost:3003'),
-  COMPLIANCE_SERVICE_CREDENTIAL: Joi.string().optional()
+  COMPLIANCE_SERVICE_CREDENTIAL: Joi.string().optional(),
+  
+  // Payment Service
+  PAYMENT_SERVICE_URL: Joi.string().default('http://localhost:3007')
 }).unknown();
 
 const { error, value: envVars } = envSchema.validate(process.env);
@@ -132,5 +135,8 @@ export const config = {
   compliance: {
     serviceUrl: envVars.COMPLIANCE_SERVICE_URL,
     serviceCredential: envVars.COMPLIANCE_SERVICE_CREDENTIAL,
+  },
+  payment: {
+    serviceUrl: envVars.PAYMENT_SERVICE_URL,
   }
 };
