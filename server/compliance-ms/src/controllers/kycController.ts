@@ -1469,6 +1469,158 @@ export class KYCController {
       });
     }
   }
+
+  // Get individual risk assessment
+  static async getIndividualRiskAssessment(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user?.userId;
+      
+      if (!userId) {
+        return res.status(400).json({
+          success: false,
+          error: 'User ID is required'
+        });
+      }
+      
+      // Get KYC status which includes risk assessment
+      const result = await kycService.getKYCStatus(userId, userId);
+      
+      if (!result.success) {
+        return res.status(404).json(result);
+      }
+      
+      return res.status(200).json({
+        success: true,
+        data: {
+          riskLevel: result.data?.riskLevel,
+          riskAssessment: (result.data as any).riskAssessment
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Update personal info for individual
+  static async updatePersonalInfo(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user?.userId;
+      
+      if (!userId) {
+        return res.status(400).json({
+          success: false,
+          error: 'User ID is required'
+        });
+      }
+      
+      const result = await kycService.updatePersonalInfo(userId, req.body);
+      
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+      
+      logger.info('Personal info updated successfully', { userId });
+      
+      return res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Get enhanced verification status
+  static async getEnhancedVerificationStatus(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user?.userId;
+      
+      if (!userId) {
+        return res.status(400).json({
+          success: false,
+          error: 'User ID is required'
+        });
+      }
+      
+      const result = await kycService.getEnhancedDueDiligence(userId);
+      
+      if (!result.success) {
+        return res.status(404).json(result);
+      }
+      
+      return res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Create shareholder data (legacy endpoint - use updateBeneficialOwners instead)
+  static async createShareholderData(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { merchantId } = req.params;
+      
+      if (!merchantId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Merchant ID is required'
+        });
+      }
+      
+      return res.status(400).json({
+        success: false,
+        error: 'This endpoint is deprecated. Use PUT /beneficial-owners to update shareholders.'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Get shareholder data
+  static async getShareholderData(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { merchantId } = req.params;
+      
+      if (!merchantId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Merchant ID is required'
+        });
+      }
+      
+      const result = await kycService.getShareholders(merchantId);
+      
+      if (!result.success) {
+        return res.status(404).json(result);
+      }
+      
+      return res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Update shareholder data
+  static async updateShareholderData(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { merchantId } = req.params;
+      
+      if (!merchantId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Merchant ID is required'
+        });
+      }
+      
+      const result = await kycService.updateShareholders(merchantId, req.body);
+      
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+      
+      logger.info('Shareholder data updated successfully', { merchantId });
+      
+      return res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export default KYCController;

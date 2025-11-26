@@ -1,5 +1,3 @@
-import { UserAccount } from '../models/User';
-
 // OTP types
 export type OTPType = 'email_verification' | 'password_reset' | 'login';
 

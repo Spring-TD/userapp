@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ComplianceWorkflowStatus = exports.BUSINESS_OPTIONAL_DOCUMENTS = exports.BUSINESS_REQUIRED_DOCUMENTS = exports.INDIVIDUAL_OPTIONAL_DOCUMENTS = exports.INDIVIDUAL_REQUIRED_DOCUMENTS = exports.RiskLevel = exports.BusinessType = exports.BusinessDocumentType = exports.DocumentType = exports.UserType = exports.KYCStatus = void 0;
+exports.ComplianceWorkflowStatus = exports.BUSINESS_OPTIONAL_DOCUMENTS = exports.INDIVIDUAL_OPTIONAL_DOCUMENTS = exports.INDIVIDUAL_REQUIRED_DOCUMENTS = exports.RiskLevel = exports.BusinessType = exports.BusinessDocumentType = exports.DocumentType = exports.UserType = exports.KYCStatus = void 0;
 var KYCStatus;
 (function (KYCStatus) {
     KYCStatus["PENDING"] = "pending";
@@ -27,7 +27,6 @@ var DocumentType;
     DocumentType["CORPORATE_STRUCTURE"] = "corporate_structure";
     DocumentType["BENEFICIAL_OWNERSHIP"] = "beneficial_ownership";
     DocumentType["ARTICLES_OF_INCORPORATION"] = "articles_of_incorporation";
-    DocumentType["DIRECTOR_IDENTIFICATION"] = "director_identification";
     DocumentType["FINANCIAL_STATEMENTS"] = "financial_statements";
     DocumentType["TAX_CERTIFICATE"] = "tax_certificate";
     DocumentType["BANK"] = "bank";
@@ -42,7 +41,6 @@ var BusinessDocumentType;
     BusinessDocumentType["BANK_STATEMENT"] = "bank_statement";
     BusinessDocumentType["AML_POLICIES"] = "aml_policies";
     BusinessDocumentType["DATA_PRIVACY_POLICY"] = "data_privacy_policy";
-    BusinessDocumentType["LICENSE"] = "license";
 })(BusinessDocumentType || (exports.BusinessDocumentType = BusinessDocumentType = {}));
 var BusinessType;
 (function (BusinessType) {
@@ -66,12 +64,6 @@ exports.INDIVIDUAL_REQUIRED_DOCUMENTS = [
 ];
 exports.INDIVIDUAL_OPTIONAL_DOCUMENTS = [
     DocumentType.INCOME_PROOF,
-    DocumentType.BANK
-];
-exports.BUSINESS_REQUIRED_DOCUMENTS = [
-    DocumentType.BUSINESS_REGISTRATION,
-    DocumentType.BENEFICIAL_OWNERSHIP,
-    DocumentType.DIRECTOR_IDENTIFICATION,
     DocumentType.BANK
 ];
 exports.BUSINESS_OPTIONAL_DOCUMENTS = [

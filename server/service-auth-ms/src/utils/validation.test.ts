@@ -16,7 +16,7 @@ describe('Validation Utilities', () => {
       const { error, value } = validateInput(userRegistrationSchema, validUserData);
       expect(error).toBeUndefined();
       expect(value).toBeDefined();
-      expect(value?.email).toBe(validUserData.email);
+      expect((value as any)?.email).toBe(validUserData.email);
     });
 
     it('should validate minimal user data', () => {
@@ -70,7 +70,7 @@ describe('Validation Utilities', () => {
       const { error, value } = validateInput(merchantRegistrationSchema, validMerchantData);
       expect(error).toBeUndefined();
       expect(value).toBeDefined();
-      expect(value?.user_merchant_id).toBe(validMerchantData.user_merchant_id);
+      expect((value as any)?.user_merchant_id).toBe(validMerchantData.user_merchant_id);
     });
 
     it('should validate minimal merchant data', () => {

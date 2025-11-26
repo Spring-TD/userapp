@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { Request, Response, NextFunction } from 'express';
 import { AuthController } from '../controllers/authController';
 import { AuthService } from '../services/authService';
@@ -13,7 +13,6 @@ jest.mock('../utils/mockDatabase');
 jest.mock('../utils/logger');
 
 const mockAuthService = AuthService as jest.Mocked<typeof AuthService>;
-const mockGenerateEmailVerificationToken = generateEmailVerificationToken as jest.MockedFunction<typeof generateEmailVerificationToken>;
 const mockVerifyEmailVerificationToken = verifyEmailVerificationToken as jest.MockedFunction<typeof verifyEmailVerificationToken>;
 
 // Mock Express request, response, and next function
@@ -231,17 +230,17 @@ describe('Account Verification', () => {
         email
       });
       
-      const mockFindUserById = jest.fn()
+      const mockFindUserById: any = jest.fn()
         .mockResolvedValueOnce(mockUser)  // First call for verification
-        .mockResolvedValueOnce(updatedUser) as jest.MockedFunction<any>; // Second call after update
+        .mockResolvedValueOnce(updatedUser);
         
-      const mockUpdateUser = jest.fn().mockResolvedValue(undefined) as jest.MockedFunction<any>;
+      const mockUpdateUser: any = jest.fn().mockResolvedValue(undefined);
       
       (mockDb as any).findUserById = mockFindUserById;
       (mockDb as any).updateUser = mockUpdateUser;
       
       // Act
-      const result = await AuthService.verifyAccount(token);
+      const result = await AuthService.verifyAccount({ token });
       
       // Assert
       expect(mockVerifyEmailVerificationToken).toHaveBeenCalledWith(token);
@@ -265,7 +264,7 @@ describe('Account Verification', () => {
       mockVerifyEmailVerificationToken.mockReturnValue(null);
       
       // Act
-      const result = await AuthService.verifyAccount(token);
+      const result = await AuthService.verifyAccount({ token });
       
       // Assert
       expect(result.success).toBe(false);
@@ -283,11 +282,11 @@ describe('Account Verification', () => {
         email
       });
       
-      const mockFindUserById = jest.fn().mockResolvedValue(null) as jest.MockedFunction<any>;
+      const mockFindUserById: any = jest.fn().mockResolvedValue(null);
       (mockDb as any).findUserById = mockFindUserById;
       
       // Act
-      const result = await AuthService.verifyAccount(token);
+      const result = await AuthService.verifyAccount({ token });
       
       // Assert
       expect(result.success).toBe(false);
@@ -313,11 +312,11 @@ describe('Account Verification', () => {
         email: tokenEmail
       });
       
-      const mockFindUserById = jest.fn().mockResolvedValue(mockUser) as jest.MockedFunction<any>;
+      const mockFindUserById: any = jest.fn().mockResolvedValue(mockUser);
       (mockDb as any).findUserById = mockFindUserById;
       
       // Act
-      const result = await AuthService.verifyAccount(token);
+      const result = await AuthService.verifyAccount({ token });
       
       // Assert
       expect(result.success).toBe(false);
@@ -342,11 +341,11 @@ describe('Account Verification', () => {
         email
       });
       
-      const mockFindUserById = jest.fn().mockResolvedValue(mockUser) as jest.MockedFunction<any>;
+      const mockFindUserById: any = jest.fn().mockResolvedValue(mockUser);
       (mockDb as any).findUserById = mockFindUserById;
       
       // Act
-      const result = await AuthService.verifyAccount(token);
+      const result = await AuthService.verifyAccount({ token });
       
       // Assert
       expect(result.success).toBe(false);

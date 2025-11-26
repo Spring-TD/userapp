@@ -3,7 +3,7 @@
  * Handles IP address whitelisting for service access control
  */
 
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 import { WhitelistService } from '../services/samsService';
 import { 
   serviceIdSchema, 

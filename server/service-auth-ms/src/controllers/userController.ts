@@ -3,7 +3,6 @@ import { AuthService } from '../services/authService';
 import { userProfileUpdateSchema, userVerificationSchema, userSuspensionSchema, validateInput } from '../utils/validation';
 import { logger } from '../utils/logger';
 import { AccountStatus } from '../models/User';
-import { adminOnly } from '../middleware/auth';
 
 export class UserController {
   /**

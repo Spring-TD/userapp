@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { Request, Response, NextFunction } from 'express';
 import { OTPController } from '../controllers/otpController';
 import { AuthService } from '../services/authService';
@@ -203,6 +203,7 @@ describe('OTPController', () => {
       // Mock server error
       jest.spyOn(AuthService, 'verifyOTP').mockResolvedValue({
         success: false,
+        valid: false,
         error: 'Internal server error during OTP verification'
       });
       

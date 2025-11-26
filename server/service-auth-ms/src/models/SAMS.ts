@@ -346,7 +346,7 @@ export class CredentialModel {
   /**
    * Void/revoke credential
    */
-  static void(credentialId: string, reason?: string): boolean {
+  static void(credentialId: string): boolean {
     const credential = this.storage.credentials.get(credentialId);
     if (!credential) return false;
 

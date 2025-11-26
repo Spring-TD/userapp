@@ -21,7 +21,6 @@ export declare enum DocumentType {
     CORPORATE_STRUCTURE = "corporate_structure",
     BENEFICIAL_OWNERSHIP = "beneficial_ownership",
     ARTICLES_OF_INCORPORATION = "articles_of_incorporation",
-    DIRECTOR_IDENTIFICATION = "director_identification",
     FINANCIAL_STATEMENTS = "financial_statements",
     TAX_CERTIFICATE = "tax_certificate",
     BANK = "bank",
@@ -110,8 +109,7 @@ export declare enum BusinessDocumentType {
     PROOF_OF_ADDRESS = "proof_of_address",
     BANK_STATEMENT = "bank_statement",
     AML_POLICIES = "aml_policies",
-    DATA_PRIVACY_POLICY = "data_privacy_policy",
-    LICENSE = "license"
+    DATA_PRIVACY_POLICY = "data_privacy_policy"
 }
 export interface BusinessDocumentData {
     type: BusinessDocumentType;
@@ -165,13 +163,6 @@ export interface BusinessKYCSubmissionRequest {
     businessInfo: AboutTheBusinessData;
     businessSurvey: BusinessSurveyData;
     shareholders: Shareholder[];
-    directors: Array<{
-        firstName: string;
-        lastName: string;
-        position: string;
-        dateOfBirth: Date;
-        nationality: string;
-    }>;
     businessDocuments: BusinessDocumentData[];
     riskAssessment: {
         annualTurnover: number;
@@ -184,31 +175,16 @@ export interface BusinessKYCSubmissionRequest {
 export interface AboutTheBusinessData {
     companyName: string;
     industry: string;
-    businessDescription: string;
     countryOfIncorporation: string;
     website: string;
     companyRegId: string;
     companyLogoUrl: string;
 }
 export interface BusinessSurveyData {
-    annualTurnover: number;
-    expectedTransactionVolume: number;
-    expectedTransactionValue: number;
-    sourceOfFunds: string;
-    businessPurpose: string;
-    numberOfEmployees: number;
-    operatingSince: Date;
-    websiteTraffic?: number;
-    socialMediaPresence?: boolean;
-    marketingChannels?: string;
-    paymentMethods?: string;
-    businessModelDescription: string;
-    customerBaseDescription: string;
-    geographicMarkets: string;
-    regulatoryLicenses?: string;
-    insuranceCoverage?: string;
-    previousBankingRelationship?: string;
-    reasonForOpeningAccount: string;
+    businessType: string;
+    country: string;
+    businessModel: string;
+    monthlyProcessedVolume: number;
 }
 export interface KYCSubmissionRequest {
     userId: string;
@@ -259,7 +235,6 @@ export interface KYCSearchFilters {
 }
 export declare const INDIVIDUAL_REQUIRED_DOCUMENTS: readonly [DocumentType.IDENTITY, DocumentType.ADDRESS];
 export declare const INDIVIDUAL_OPTIONAL_DOCUMENTS: readonly [DocumentType.INCOME_PROOF, DocumentType.BANK];
-export declare const BUSINESS_REQUIRED_DOCUMENTS: readonly [DocumentType.BUSINESS_REGISTRATION, DocumentType.BENEFICIAL_OWNERSHIP, DocumentType.DIRECTOR_IDENTIFICATION, DocumentType.BANK];
 export declare const BUSINESS_OPTIONAL_DOCUMENTS: readonly [DocumentType.BUSINESS_LICENSE, DocumentType.CORPORATE_STRUCTURE, DocumentType.ARTICLES_OF_INCORPORATION, DocumentType.FINANCIAL_STATEMENTS, DocumentType.TAX_CERTIFICATE];
 export interface RiskIndicators {
     politicallyExposed: boolean;

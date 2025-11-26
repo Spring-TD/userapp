@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import { describe, it, expect, jest } from '@jest/globals';
 import { 
   generateAccessToken, 
   generateRefreshToken, 
@@ -9,6 +9,230 @@ import {
   JWTPayload 
 } from '../utils/crypto';
 import { UserType, AccountStatus } from '../models/User';
-import jwt from 'jsonwebtoken';
+import * as jwt from 'jsonwebtoken';
 
-// Mock the config\njest.mock('../config/environment', () => ({\n  config: {\n    jwt: {\n      secret: 'test-secret-key',\n      expiresIn: '1h',\n      refreshExpiresIn: '7d'\n    }\n  }\n}));\n\ndescribe('JWT Crypto Functions', () => {\n  const mockUser = {\n    id: 'user-123',\n    email: 'user@example.com',\n    user_type: UserType.USER,\n    user_merchant_id: 'merchant-456',\n    password: 'hashed-password',\n    first_name: 'John',\n    last_name: 'Doe',\n    status: AccountStatus.ACTIVE,\n    email_verified: true,\n    phone_verified: false,\n    country: 'US',\n    created_at: new Date(),\n    updated_at: new Date(),\n    failed_login_attempts: 0\n  };\n  \n  describe('generateAccessToken', () => {\n    it('should generate a valid access token', () => {\n      // Act\n      const token = generateAccessToken(mockUser);\n      \n      // Assert\n      expect(token).toBeTruthy();\n      expect(typeof token).toBe('string');\n      \n      // Verify token structure\n      const decoded = jwt.verify(token, 'test-secret-key') as JWTPayload;\n      expect(decoded.userId).toBe(mockUser.id);\n      expect(decoded.email).toBe(mockUser.email);\n      expect(decoded.userType).toBe(mockUser.user_type);\n      expect(decoded.userMerchantId).toBe(mockUser.user_merchant_id);\n    });\n    \n    it('should generate token without userMerchantId when not provided', () => {\n      // Arrange\n      const userWithoutMerchantId = { ...mockUser, user_merchant_id: undefined };\n      \n      // Act\n      const token = generateAccessToken(userWithoutMerchantId);\n      \n      // Assert\n      const decoded = jwt.verify(token, 'test-secret-key') as JWTPayload;\n      expect(decoded.userMerchantId).toBeUndefined();\n    });\n  });\n  \n  describe('generateRefreshToken', () => {\n    it('should generate a valid refresh token', () => {\n      // Act\n      const token = generateRefreshToken(mockUser);\n      \n      // Assert\n      expect(token).toBeTruthy();\n      expect(typeof token).toBe('string');\n      \n      // Verify token structure\n      const decoded = jwt.verify(token, 'test-secret-key') as JWTPayload;\n      expect(decoded.userId).toBe(mockUser.id);\n      expect(decoded.email).toBe(mockUser.email);\n      expect(decoded.userType).toBe(mockUser.user_type);\n    });\n  });\n  \n  describe('verifyToken', () => {\n    it('should verify a valid token', () => {\n      // Arrange\n      const token = generateAccessToken(mockUser);\n      \n      // Act\n      const decoded = verifyToken(token);\n      \n      // Assert\n      expect(decoded).toBeTruthy();\n      expect(decoded!.userId).toBe(mockUser.id);\n      expect(decoded!.email).toBe(mockUser.email);\n      expect(decoded!.userType).toBe(mockUser.user_type);\n    });\n    \n    it('should return null for invalid token', () => {\n      // Act\n      const decoded = verifyToken('invalid-token');\n      \n      // Assert\n      expect(decoded).toBeNull();\n    });\n    \n    it('should return null for expired token', () => {\n      // Arrange\n      const expiredToken = jwt.sign(\n        { userId: 'user-123', exp: Math.floor(Date.now() / 1000) - 1000 },\n        'test-secret-key'\n      );\n      \n      // Act\n      const decoded = verifyToken(expiredToken);\n      \n      // Assert\n      expect(decoded).toBeNull();\n    });\n  });\n  \n  describe('extractTokenFromHeader', () => {\n    it('should extract token from valid Bearer header', () => {\n      // Arrange\n      const authHeader = 'Bearer valid-token-123';\n      \n      // Act\n      const token = extractTokenFromHeader(authHeader);\n      \n      // Assert\n      expect(token).toBe('valid-token-123');\n    });\n    \n    it('should return null for invalid header format', () => {\n      // Arrange\n      const authHeader = 'Basic invalid-format';\n      \n      // Act\n      const token = extractTokenFromHeader(authHeader);\n      \n      // Assert\n      expect(token).toBeNull();\n    });\n    \n    it('should return null for undefined header', () => {\n      // Act\n      const token = extractTokenFromHeader(undefined);\n      \n      // Assert\n      expect(token).toBeNull();\n    });\n    \n    it('should return null for empty string', () => {\n      // Act\n      const token = extractTokenFromHeader('');\n      \n      // Assert\n      expect(token).toBeNull();\n    });\n  });\n  \n  describe('isTokenExpired', () => {\n    it('should return false for valid token', () => {\n      // Arrange\n      const token = generateAccessToken(mockUser);\n      \n      // Act\n      const isExpired = isTokenExpired(token);\n      \n      // Assert\n      expect(isExpired).toBe(false);\n    });\n    \n    it('should return true for expired token', () => {\n      // Arrange\n      const expiredToken = jwt.sign(\n        { userId: 'user-123', exp: Math.floor(Date.now() / 1000) - 1000 },\n        'test-secret-key'\n      );\n      \n      // Act\n      const isExpired = isTokenExpired(expiredToken);\n      \n      // Assert\n      expect(isExpired).toBe(true);\n    });\n    \n    it('should return true for invalid token', () => {\n      // Act\n      const isExpired = isTokenExpired('invalid-token');\n      \n      // Assert\n      expect(isExpired).toBe(true);\n    });\n  });\n  \n  describe('getTokenExpiration', () => {\n    it('should return expiration date for valid token', () => {\n      // Arrange\n      const token = generateAccessToken(mockUser);\n      \n      // Act\n      const expiration = getTokenExpiration(token);\n      \n      // Assert\n      expect(expiration).toBeInstanceOf(Date);\n      expect(expiration!.getTime()).toBeGreaterThan(Date.now());\n    });\n    \n    it('should return null for invalid token', () => {\n      // Act\n      const expiration = getTokenExpiration('invalid-token');\n      \n      // Assert\n      expect(expiration).toBeNull();\n    });\n    \n    it('should return null for token without exp claim', () => {\n      // Arrange\n      const tokenWithoutExp = jwt.sign(\n        { userId: 'user-123' },\n        'test-secret-key'\n      );\n      \n      // Act\n      const expiration = getTokenExpiration(tokenWithoutExp);\n      \n      // Assert\n      expect(expiration).toBeNull();\n    });\n  });\n});
+// Mock the config
+jest.mock('../config/environment', () => ({
+  config: {
+    jwt: {
+      secret: 'test-secret-key',
+      expiresIn: '1h',
+      refreshExpiresIn: '7d'
+    }
+  }
+}));
+
+describe('JWT Crypto Functions', () => {
+  const mockUser = {
+    id: 'user-123',
+    email: 'user@example.com',
+    user_type: UserType.USER,
+    user_merchant_id: 'merchant-456',
+    password: 'hashed-password',
+    first_name: 'John',
+    last_name: 'Doe',
+    status: AccountStatus.ACTIVE,
+    email_verified: true,
+    phone_verified: false,
+    country: 'US',
+    created_at: new Date(),
+    updated_at: new Date(),
+    failed_login_attempts: 0
+  };
+  
+  describe('generateAccessToken', () => {
+    it('should generate a valid access token', () => {
+      // Act
+      const token = generateAccessToken(mockUser);
+      
+      // Assert
+      expect(token).toBeTruthy();
+      expect(typeof token).toBe('string');
+      
+      // Verify token structure
+      const decoded = jwt.verify(token, 'test-secret-key') as JWTPayload;
+      expect(decoded.userId).toBe(mockUser.id);
+      expect(decoded.email).toBe(mockUser.email);
+      expect(decoded.userType).toBe(mockUser.user_type);
+      expect(decoded.userMerchantId).toBe(mockUser.user_merchant_id);
+    });
+    
+    it('should generate token without userMerchantId when not provided', () => {
+      // Arrange
+      const userWithoutMerchantId: any = { ...mockUser, user_merchant_id: undefined };
+      
+      // Act
+      const token = generateAccessToken(userWithoutMerchantId);
+      
+      // Assert
+      const decoded = jwt.verify(token, 'test-secret-key') as JWTPayload;
+      expect(decoded.userMerchantId).toBeUndefined();
+    });
+  });
+  
+  describe('generateRefreshToken', () => {
+    it('should generate a valid refresh token', () => {
+      // Act
+      const token = generateRefreshToken(mockUser);
+      
+      // Assert
+      expect(token).toBeTruthy();
+      expect(typeof token).toBe('string');
+      
+      // Verify token structure
+      const decoded = jwt.verify(token, 'test-secret-key') as JWTPayload;
+      expect(decoded.userId).toBe(mockUser.id);
+      expect(decoded.email).toBe(mockUser.email);
+      expect(decoded.userType).toBe(mockUser.user_type);
+    });
+  });
+  
+  describe('verifyToken', () => {
+    it('should verify a valid token', () => {
+      // Arrange
+      const token = generateAccessToken(mockUser);
+      
+      // Act
+      const decoded = verifyToken(token);
+      
+      // Assert
+      expect(decoded).toBeTruthy();
+      expect(decoded!.userId).toBe(mockUser.id);
+      expect(decoded!.email).toBe(mockUser.email);
+      expect(decoded!.userType).toBe(mockUser.user_type);
+    });
+    
+    it('should return null for invalid token', () => {
+      // Act
+      const decoded = verifyToken('invalid-token');
+      
+      // Assert
+      expect(decoded).toBeNull();
+    });
+    
+    it('should return null for expired token', () => {
+      // Arrange
+      const expiredToken = jwt.sign(
+        { userId: 'user-123', exp: Math.floor(Date.now() / 1000) - 1000 },
+        'test-secret-key'
+      );
+      
+      // Act
+      const decoded = verifyToken(expiredToken);
+      
+      // Assert
+      expect(decoded).toBeNull();
+    });
+  });
+  
+  describe('extractTokenFromHeader', () => {
+    it('should extract token from valid Bearer header', () => {
+      // Arrange
+      const authHeader = 'Bearer valid-token-123';
+      
+      // Act
+      const token = extractTokenFromHeader(authHeader);
+      
+      // Assert
+      expect(token).toBe('valid-token-123');
+    });
+    
+    it('should return null for invalid header format', () => {
+      // Arrange
+      const authHeader = 'Basic invalid-format';
+      
+      // Act
+      const token = extractTokenFromHeader(authHeader);
+      
+      // Assert
+      expect(token).toBeNull();
+    });
+    
+    it('should return null for undefined header', () => {
+      // Act
+      const token = extractTokenFromHeader(undefined);
+      
+      // Assert
+      expect(token).toBeNull();
+    });
+    
+    it('should return null for empty string', () => {
+      // Act
+      const token = extractTokenFromHeader('');
+      
+      // Assert
+      expect(token).toBeNull();
+    });
+  });
+  
+  describe('isTokenExpired', () => {
+    it('should return false for valid token', () => {
+      // Arrange
+      const token = generateAccessToken(mockUser);
+      
+      // Act
+      const isExpired = isTokenExpired(token);
+      
+      // Assert
+      expect(isExpired).toBe(false);
+    });
+    
+    it('should return true for expired token', () => {
+      // Arrange
+      const expiredToken = jwt.sign(
+        { userId: 'user-123', exp: Math.floor(Date.now() / 1000) - 1000 },
+        'test-secret-key'
+      );
+      
+      // Act
+      const isExpired = isTokenExpired(expiredToken);
+      
+      // Assert
+      expect(isExpired).toBe(true);
+    });
+    
+    it('should return true for invalid token', () => {
+      // Act
+      const isExpired = isTokenExpired('invalid-token');
+      
+      // Assert
+      expect(isExpired).toBe(true);
+    });
+  });
+  
+  describe('getTokenExpiration', () => {
+    it('should return expiration date for valid token', () => {
+      // Arrange
+      const token = generateAccessToken(mockUser);
+      
+      // Act
+      const expiration = getTokenExpiration(token);
+      
+      // Assert
+      expect(expiration).toBeInstanceOf(Date);
+      expect(expiration!.getTime()).toBeGreaterThan(Date.now());
+    });
+    
+    it('should return null for invalid token', () => {
+      // Act
+      const expiration = getTokenExpiration('invalid-token');
+      
+      // Assert
+      expect(expiration).toBeNull();
+    });
+    
+    it('should return null for token without exp claim', () => {
+      // Arrange
+      const tokenWithoutExp = jwt.sign(
+        { userId: 'user-123' },
+        'test-secret-key'
+      );
+      
+      // Act
+      const expiration = getTokenExpiration(tokenWithoutExp);
+      
+      // Assert
+      expect(expiration).toBeNull();
+    });
+  });
+});

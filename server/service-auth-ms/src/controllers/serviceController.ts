@@ -8,12 +8,10 @@ import { ServiceService } from '../services/samsService';
 import { 
   createServiceSchema, 
   serviceIdSchema, 
-  updateServiceStatusSchema, 
   validateInput 
 } from '../utils/validation';
 import { 
-  CreateServiceRequest, 
-  ServiceStatus 
+  CreateServiceRequest
 } from '../types/samsTypes';
 import { logger } from '../utils/logger';
 
@@ -62,7 +60,7 @@ export class ServiceController {
    * GET /api/v1/services
    * Get all registered services
    */
-  static async getAllServices(req: Request, res: Response): Promise<void> {
+  static async getAllServices(res: Response): Promise<void> {
     try {
       const result = await ServiceService.getAllServices();
       
@@ -125,7 +123,7 @@ export class ServiceController {
    * GET /api/v1/services/health
    * Get SAMS system health status
    */
-  static async getSystemHealth(req: Request, res: Response): Promise<void> {
+  static async getSystemHealth(res: Response): Promise<void> {
     try {
       const healthStatus = {
         status: 'healthy',

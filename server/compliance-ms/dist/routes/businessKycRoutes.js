@@ -19,12 +19,10 @@ router.get('/document/:documentId', kycController_1.KYCController.getKYCDocument
 router.get('/business-info', kycController_1.KYCController.getBusinessInfo);
 router.get('/business-survey', kycController_1.KYCController.getBusinessSurvey);
 router.get('/beneficial-owners', kycController_1.KYCController.getBeneficialOwners);
-router.get('/directors', kycController_1.KYCController.getDirectors);
 router.get('/risk-assessment', kycController_1.KYCController.getBusinessRiskAssessment);
 router.put('/business-info', kycController_1.KYCController.updateBusinessInfo);
 router.put('/business-survey', kycController_1.KYCController.updateBusinessSurvey);
 router.put('/beneficial-owners', kycController_1.KYCController.updateBeneficialOwners);
-router.put('/directors', kycController_1.KYCController.updateDirectors);
 router.get('/enhanced-due-diligence', complianceMiddleware_1.requireHighRiskApproval, kycController_1.KYCController.getEnhancedDueDiligence);
 router.get('/corporate-structure', (0, complianceMiddleware_1.validateBusinessType)([
     kycTypes_1.BusinessType.CORPORATION,

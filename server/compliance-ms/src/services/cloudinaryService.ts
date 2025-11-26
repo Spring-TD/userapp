@@ -31,7 +31,7 @@ export const uploadToCloudinary = async (
         overwrite: false,
         invalidate: true
       },
-      (error, result) => {
+      (error: any, result: any) => {
         if (error) {
           logger.error('Cloudinary upload error', { error: error.message });
           reject(error);

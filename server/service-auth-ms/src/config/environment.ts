@@ -9,9 +9,8 @@ const envSchema = Joi.object({
   NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
   PORT: Joi.number().default(3000),
   
-  // Database
-  DATABASE_URL: Joi.string().required(),
-  DATABASE_SSL: Joi.boolean().default(false),
+  // MongoDB
+  MONGODB_URI: Joi.string().required(),
   
   // Redis
   REDIS_URL: Joi.string().required(),
@@ -77,9 +76,8 @@ export const config = {
   server: {
     port: envVars.PORT,
   },
-  database: {
-    url: envVars.DATABASE_URL,
-    ssl: envVars.DATABASE_SSL,
+  mongodb: {
+    uri: envVars.MONGODB_URI,
   },
   redis: {
     url: envVars.REDIS_URL,

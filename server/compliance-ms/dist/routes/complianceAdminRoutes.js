@@ -5,6 +5,7 @@ const express_1 = require("express");
 const auth_1 = require("../middleware/auth");
 const audit_1 = require("../middleware/audit");
 const complianceMiddleware_1 = require("../middleware/complianceMiddleware");
+const sanctionsValidation_1 = require("../middleware/sanctionsValidation");
 const kycController_1 = require("../controllers/kycController");
 const router = (0, express_1.Router)();
 exports.complianceAdminRoutes = router;
@@ -16,6 +17,7 @@ router.get('/profiles/pending-review', kycController_1.KYCController.getPendingR
 router.get('/profiles/high-risk', kycController_1.KYCController.getHighRiskProfiles);
 router.get('/users', kycController_1.KYCController.getAllUsers);
 router.get('/documents', kycController_1.KYCController.getAllComplianceDocuments);
+router.post('/check-sanctions', sanctionsValidation_1.validateSanctionsCheck, kycController_1.KYCController.checkSanctions);
 router.get('/individuals/:userId', kycController_1.KYCController.getIndividualProfile);
 router.put('/individuals/:userId/risk-level', kycController_1.KYCController.updateIndividualRiskLevel);
 router.post('/individuals/:userId/review', kycController_1.KYCController.reviewIndividualKYC);
@@ -35,6 +37,7 @@ router.post('/businesses/:userId/unblock', kycController_1.KYCController.unblock
 router.post('/businesses/:userId/verify-certificate', kycController_1.KYCController.verifyCertificateWithCAC);
 router.put('/document/:documentId/status', kycController_1.KYCController.updateKYCDocumentStatus);
 router.get('/document/:documentId', kycController_1.KYCController.getKYCDocument);
+router.post('/document/:documentId/verify-aml', kycController_1.KYCController.verifyAMLDocument);
 router.put('/workflow/:kycId/status', kycController_1.KYCController.updateWorkflowStatus);
 router.get('/workflows/pending', kycController_1.KYCController.getPendingWorkflows);
 router.get('/reports/risk-summary', kycController_1.KYCController.getRiskSummaryReport);

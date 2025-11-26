@@ -16,10 +16,13 @@ import { SAMSService } from './services/samsService';
 import { redisCacheService } from './services/redisCacheService';
 import { logger } from './utils/logger';
 import { AuthService } from './services/authService';
-import { UserType, AccountStatus } from './models/User';
+import { AccountStatus } from './models/User';
 import { mockDb } from './utils/mockDatabase';
 
 const app = express();
+
+// Trust proxy for Fly.io (trust first proxy only)
+app.set('trust proxy', 1);
 
 // Security middleware
 app.use(helmet());
@@ -46,6 +49,26 @@ app.use(express.urlencoded({ extended: true }));
 
 // Request logging
 app.use(requestLogger);
+
+// Root endpoint
+app.get('/', (_req, res) => {
+  res.status(200).json({
+    service: 'Service Authentication Microservice',
+    version: '1.0.0',
+    status: 'running',
+    endpoints: {
+      health: '/health',
+      auth: '/api/v1/auth',
+      otp: '/api/v1/otp',
+      password: '/api/v1/password',
+      user: '/api/v1/user',
+      services: '/api/v1/services',
+      credentials: '/api/v1/credentials',
+      verifyEmail: '/verify-email'
+    },
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Health check endpoint
 app.get('/health', (_req, res) => {
@@ -167,7 +190,8 @@ if (require.main === module) {
     await createDefaultMerchantUser();
     await createDefaultAdminUser();
     
-    app.listen(PORT, () => {
+    // Explicitly bind to 0.0.0.0
+    app.listen(PORT, '0.0.0.0', () => {
       logger.info(`Client Auth Microservice running on port ${PORT}`);
       logger.info(`Environment: ${config.env}`);
       logger.info('SAMS (Service Authentication Microservice) initialized');

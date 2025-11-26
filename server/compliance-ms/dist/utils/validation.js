@@ -52,24 +52,10 @@ exports.businessKYCSubmissionSchema = joi_1.default.object({
         companyLogoUrl: joi_1.default.string().uri().required()
     }).required(),
     businessSurvey: joi_1.default.object({
-        annualTurnover: joi_1.default.number().min(0).required(),
-        expectedTransactionVolume: joi_1.default.number().min(0).required(),
-        expectedTransactionValue: joi_1.default.number().min(0).required(),
-        sourceOfFunds: joi_1.default.string().min(5).max(200).required(),
-        businessPurpose: joi_1.default.string().min(5).max(200).required(),
-        numberOfEmployees: joi_1.default.number().min(0).required(),
-        operatingSince: joi_1.default.date().max('now').required(),
-        websiteTraffic: joi_1.default.number().min(0).optional(),
-        socialMediaPresence: joi_1.default.boolean().optional(),
-        marketingChannels: joi_1.default.string().optional(),
-        paymentMethods: joi_1.default.string().optional(),
-        businessModelDescription: joi_1.default.string().min(5).max(500).required(),
-        customerBaseDescription: joi_1.default.string().min(5).max(500).required(),
-        geographicMarkets: joi_1.default.string().min(5).max(500).required(),
-        regulatoryLicenses: joi_1.default.string().optional(),
-        insuranceCoverage: joi_1.default.string().optional(),
-        previousBankingRelationship: joi_1.default.string().optional(),
-        reasonForOpeningAccount: joi_1.default.string().min(5).max(500).required()
+        businessType: joi_1.default.string().min(2).max(100).required(),
+        country: joi_1.default.string().min(2).max(50).required(),
+        businessModel: joi_1.default.string().min(2).max(20).required(),
+        monthlyProcessedVolume: joi_1.default.number().min(0).required()
     }).required(),
     shareholders: joi_1.default.array().items(joi_1.default.object({
         fullName: joi_1.default.string().min(2).max(100).required(),
@@ -106,13 +92,6 @@ exports.businessKYCSubmissionSchema = joi_1.default.object({
                 completedAt: joi_1.default.date().optional()
             }).optional()
         }).required()
-    }).required()).min(1).required(),
-    directors: joi_1.default.array().items(joi_1.default.object({
-        firstName: joi_1.default.string().min(2).max(50).required(),
-        lastName: joi_1.default.string().min(2).max(50).required(),
-        position: joi_1.default.string().min(2).max(50).required(),
-        dateOfBirth: joi_1.default.date().max('now').required(),
-        nationality: joi_1.default.string().min(2).max(3).required()
     }).required()).min(1).required(),
     businessDocuments: joi_1.default.array().items(exports.businessDocumentSchema).min(8).required(),
     riskAssessment: joi_1.default.object({
@@ -191,12 +170,12 @@ const validateBusinessKYCSubmission = (data) => {
             }
         };
     }
-    const totalOwnership = value.beneficialOwners.reduce((sum, owner) => sum + owner.ownershipPercentage, 0);
+    const totalOwnership = value.shareholders.reduce((sum, shareholder) => sum + shareholder.ownershipPercentage, 0);
     if (totalOwnership > 100) {
-        logger_1.logger.warn('Business KYC beneficial ownership exceeds 100%', { totalOwnership });
+        logger_1.logger.warn('Business KYC shareholder ownership exceeds 100%', { totalOwnership });
         return {
             error: {
-                message: 'Total beneficial ownership cannot exceed 100%'
+                message: 'Total shareholder ownership cannot exceed 100%'
             }
         };
     }

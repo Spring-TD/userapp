@@ -9,6 +9,9 @@ const logger_1 = require("../utils/logger");
 const kycTypes_1 = require("../types/kycTypes");
 const authenticate = (req, res, next) => {
     try {
+        if (req.service) {
+            return next();
+        }
         const authHeader = req.headers.authorization;
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
             logger_1.logger.warn('Authentication failed - No token provided or invalid format');
@@ -48,7 +51,7 @@ const isAdmin = (req, res, next) => {
                 error: 'Authentication required'
             });
         }
-        if (req.user.userType !== kycTypes_1.UserType.MERCHANT) {
+        if (req.user.userType !== kycTypes_1.UserType.ADMIN) {
             logger_1.logger.warn(`Admin access denied for user ${req.user.userId}`);
             return res.status(403).json({
                 success: false,

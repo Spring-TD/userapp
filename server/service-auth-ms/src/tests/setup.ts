@@ -3,7 +3,7 @@
 
 // Set test environment variables
 process.env['NODE_ENV'] = 'test';
-process.env['DATABASE_URL'] = 'postgresql://test:test@localhost:5432/test_db';
+process.env['MONGODB_URI'] = 'mongodb://localhost:27017/test_db';
 process.env['REDIS_URL'] = 'redis://localhost:6379';
 process.env['JWT_SECRET'] = 'test-jwt-secret-key-for-testing-purposes-only';
 process.env['SMTP_HOST'] = 'smtp.test.com';

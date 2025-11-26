@@ -93,6 +93,7 @@ export class WalletService {
         walletType: 'MERCHANT',
         merchantWalletType: data.merchantWalletType,
         name: data.name,
+        balance: 0,
         mainBalance: 0,
         ledgerBalance: 0,
         currency: data.currency,
@@ -302,6 +303,7 @@ export class WalletService {
         merchantId: data.merchantId,
         walletType: 'USER',
         name: data.name,
+        balance: 0,
         mainBalance: 0,
         ledgerBalance: 0,
         currency: data.currency,
@@ -419,6 +421,7 @@ export class WalletService {
       
       // Update balance
       wallet.mainBalance += amount;
+      wallet.balance = wallet.mainBalance; // Keep balance in sync with mainBalance
       wallet.ledgerBalance += amount; // For immediate updates, both balances change together
       wallet.updatedAt = new Date();
 
@@ -688,7 +691,9 @@ export class WalletService {
       
       // Update balances
       fromWallet.mainBalance -= transferData.amount;
+      fromWallet.balance = fromWallet.mainBalance;
       toWallet.mainBalance += transferData.amount;
+      toWallet.balance = toWallet.mainBalance;
       fromWallet.ledgerBalance -= transferData.amount;
       toWallet.ledgerBalance += transferData.amount;
       fromWallet.updatedAt = new Date();
@@ -858,6 +863,7 @@ export class WalletService {
       
       // Update balance
       userWallet.mainBalance -= debitData.amount;
+      userWallet.balance = userWallet.mainBalance;
       userWallet.ledgerBalance -= debitData.amount;
       userWallet.updatedAt = new Date();
 
@@ -1108,6 +1114,7 @@ export class WalletService {
       
       // Update balance
       treasuryWallet.mainBalance -= debitData.amount;
+      treasuryWallet.balance = treasuryWallet.mainBalance;
       treasuryWallet.ledgerBalance -= debitData.amount;
       treasuryWallet.updatedAt = new Date();
 
@@ -1189,6 +1196,7 @@ export class WalletService {
       
       // Update balance
       operationWallet.mainBalance -= debitData.amount;
+      operationWallet.balance = operationWallet.mainBalance;
       operationWallet.ledgerBalance -= debitData.amount;
       operationWallet.updatedAt = new Date();
 
@@ -1270,6 +1278,7 @@ export class WalletService {
       
       // Update balance
       kycWallet.mainBalance -= debitData.amount;
+      kycWallet.balance = kycWallet.mainBalance;
       kycWallet.ledgerBalance -= debitData.amount;
       kycWallet.updatedAt = new Date();
 
@@ -1360,6 +1369,7 @@ export class WalletService {
       
       // Update balance
       kycWallet.mainBalance -= amount;
+      kycWallet.balance = kycWallet.mainBalance;
       kycWallet.ledgerBalance -= amount;
       kycWallet.updatedAt = new Date();
 
@@ -1498,6 +1508,7 @@ export class WalletService {
       
       // Update wallet balance (debit the amount)
       userWallet.mainBalance -= apiCallData.amount;
+      userWallet.balance = userWallet.mainBalance;
       userWallet.ledgerBalance -= apiCallData.amount; // Update ledger balance when API call is complete
       userWallet.updatedAt = new Date();
 

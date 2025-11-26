@@ -1,4 +1,4 @@
-import { KYCProfile, KYCStatus, KYCSubmissionRequest, IndividualKYCSubmissionRequest, BusinessKYCSubmissionRequest, RiskLevel, ComplianceWorkflowStatus } from '../types/kycTypes';
+import { KYCProfile, KYCStatus, KYCSubmissionRequest, IndividualKYCSubmissionRequest, BusinessKYCSubmissionRequest, RiskLevel, ComplianceWorkflowStatus, UserType } from '../types/kycTypes';
 import { CACVerificationResult } from './cacService';
 export declare class KYCService {
     submitIndividualKYC(data: IndividualKYCSubmissionRequest, userId?: string): Promise<{
@@ -54,11 +54,82 @@ export declare class KYCService {
         data?: {
             userId: string;
             userType: any;
-            status: KYCStatus;
+            status: any;
             documentCount: number;
             submittedAt: Date | undefined;
             completedAt: Date | undefined;
-            riskLevel?: RiskLevel;
+            riskLevel?: any;
+        };
+        error?: string;
+    }>;
+    getBusinessInfo(userId: string): Promise<{
+        success: boolean;
+        data?: any;
+        error?: string;
+    }>;
+    getBusinessSurvey(userId: string): Promise<{
+        success: boolean;
+        data?: any;
+        error?: string;
+    }>;
+    getShareholders(userId: string): Promise<{
+        success: boolean;
+        data?: any[];
+        error?: string;
+    }>;
+    getBusinessRiskAssessment(userId: string): Promise<{
+        success: boolean;
+        data?: any;
+        error?: string;
+    }>;
+    updatePersonalInfo(userId: string, personalInfo: any): Promise<{
+        success: boolean;
+        message?: string;
+        error?: string;
+    }>;
+    updateBusinessInfo(userId: string, businessInfo: any): Promise<{
+        success: boolean;
+        message?: string;
+        error?: string;
+    }>;
+    updateBusinessSurvey(userId: string, businessSurvey: any): Promise<{
+        success: boolean;
+        message?: string;
+        error?: string;
+    }>;
+    updateShareholders(userId: string, shareholders: any[]): Promise<{
+        success: boolean;
+        message?: string;
+        error?: string;
+    }>;
+    getEnhancedDueDiligence(userId: string): Promise<{
+        success: boolean;
+        data?: any;
+        error?: string;
+    }>;
+    getCorporateStructure(userId: string): Promise<{
+        success: boolean;
+        data?: any;
+        error?: string;
+    }>;
+    getNonProfitVerification(userId: string): Promise<{
+        success: boolean;
+        data?: any;
+        error?: string;
+    }>;
+    getGovernmentVerification(userId: string): Promise<{
+        success: boolean;
+        data?: any;
+        error?: string;
+    }>;
+    createMinimalKYCProfile(userId: string, userType: UserType, createdBy?: string): Promise<{
+        success: boolean;
+        message?: string;
+        data?: {
+            userId: string;
+            userType: UserType;
+            status: any;
+            createdAt: Date;
         };
         error?: string;
     }>;
@@ -253,6 +324,18 @@ export declare class KYCService {
         };
         error?: string;
     }>;
+    reviewKYC(kycId: string, status: KYCStatus, rejectionReason?: string, reviewedBy?: string): Promise<{
+        success: boolean;
+        message?: string;
+        data?: {
+            kycId: string;
+            status: KYCStatus;
+            rejectionReason: string | undefined;
+            reviewedBy: string | undefined;
+            reviewDate: Date | undefined;
+        };
+        error?: string;
+    }>;
     updateKYCDocumentStatus(documentId: string, status: KYCStatus, rejectionReason?: string): Promise<{
         success: boolean;
         message?: string;
@@ -265,16 +348,7 @@ export declare class KYCService {
     }>;
     getKYCDocument(documentId: string): Promise<{
         success: boolean;
-        data?: {
-            userId: string;
-            type: any;
-            fileName: string;
-            fileType: string;
-            fileSize: number;
-            uploadDate: Date;
-            status: KYCStatus;
-            rejectionReason?: string;
-        };
+        data?: any;
         error?: string;
     }>;
     getAllKYCDocuments(userId: string): Promise<{
@@ -287,18 +361,6 @@ export declare class KYCService {
         data?: (KYCProfile & {
             _id: string;
         })[];
-        error?: string;
-    }>;
-    reviewKYC(kycId: string, status: KYCStatus, rejectionReason?: string, reviewedBy?: string): Promise<{
-        success: boolean;
-        message?: string;
-        data?: {
-            kycId: string;
-            status: KYCStatus;
-            rejectionReason: string | undefined;
-            reviewedBy: string | undefined;
-            reviewDate: Date | undefined;
-        };
         error?: string;
     }>;
 }

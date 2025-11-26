@@ -22,6 +22,26 @@ app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Root endpoint
+app.get('/', (_req, res) => {
+  res.json({
+    success: true,
+    service: 'Client Authentication Microservice',
+    version: '1.0.0',
+    status: 'running',
+    endpoints: {
+      health: '/health',
+      registration: '/api/v1/registration',
+      auth: '/api/v1/auth',
+      otp: '/api/v1/otp',
+      password: '/api/v1/password',
+      user: '/api/v1/user',
+      verifyEmail: '/verify-email'
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Health check endpoint
 app.get('/health', (_req, res) => {
   res.json({

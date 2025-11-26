@@ -10,7 +10,7 @@ import { OTPRecord, GenerateOTPRequest, VerifyOTPRequest, ResendOTPRequest } fro
 import paymentService from './paymentService';
 
 // Add axios for HTTP requests
-import axios, { AxiosError } from 'axios';
+import axios from 'axios';
 
 // Type for user response without password
 export type UserResponse = Omit<UserAccount, 'password'>;
@@ -77,9 +77,6 @@ export interface VerifyAccountRequest {
 }
 
 export class AuthService {
-  // In-memory OTP storage - replace with Redis in production
-  private static otpStore: Map<string, OTPRecord> = new Map();
-
   /**
    * Register a new user
    */

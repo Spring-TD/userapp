@@ -10,7 +10,9 @@ class RedisCacheService {
         this.cacheTtl = 3600;
         this.fallbackCache = new Map();
         this.cacheTtl = ttl || this.cacheTtl;
-        this.initializeRedis();
+        this.initializeRedis().catch(error => {
+            logger_1.logger.error('Failed to initialize Redis during construction', { error });
+        });
     }
     async initializeRedis() {
         try {

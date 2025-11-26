@@ -1,5 +1,6 @@
 export interface BaseWallet {
   id: string;
+  balance: number; // Alias for mainBalance for backward compatibility
   mainBalance: number;
   ledgerBalance: number;
   currency: string;

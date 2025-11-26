@@ -57,6 +57,7 @@ export declare const CLOUDINARY_API_KEY: string;
 export declare const CLOUDINARY_API_SECRET: string;
 export declare const CAC_API_URL: string | undefined;
 export declare const CAC_API_KEY: string | undefined;
+export declare const OPENSANCTIONS_API_KEY: string | undefined;
 export declare const REDIS_URL: string | undefined;
 export declare const REDIS_PASSWORD: string | undefined;
 //# sourceMappingURL=environment.d.ts.map

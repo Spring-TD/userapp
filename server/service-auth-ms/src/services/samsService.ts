@@ -638,7 +638,7 @@ export class CredentialService {
         };
       }
 
-      const success = SAMSDatabase.credentials.void(credentialId, voidData.reason);
+      const success = SAMSDatabase.credentials.void(credentialId);
       if (!success) {
         return {
           success: false,

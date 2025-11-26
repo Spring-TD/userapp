@@ -3,26 +3,22 @@ export declare class KYCController {
     static submitIndividualKYC(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static submitBusinessKYC(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static getKYCStatus(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
+    static createMinimalKYCProfile(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static updateKYCDocumentStatus(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static getKYCDocument(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static getAllKYCDocuments(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static searchKYCProfiles(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static validateKYCSubmission(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
+    static verifyAMLDocument(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static reviewKYCSubmission(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static submitKYC(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static getBusinessInfo(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
+    static getBusinessSurvey(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static getBeneficialOwners(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
-    static getDirectors(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
-    static getIndividualRiskAssessment(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static getBusinessRiskAssessment(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
-    static updatePersonalInfo(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static updateBusinessInfo(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
+    static updateBusinessSurvey(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static updateBeneficialOwners(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
-    static updateDirectors(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
-    static createShareholderData(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
-    static getShareholderData(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
-    static updateShareholderData(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
-    static getEnhancedVerificationStatus(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static getEnhancedDueDiligence(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static getCorporateStructure(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static getNonProfitVerification(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
@@ -49,8 +45,13 @@ export declare class KYCController {
     static blockUser(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static unblockUser(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
     static verifyCertificateWithCAC(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
-    static getBusinessSurvey(req: Request, res: Response, next: NextFunction): Promise<any>;
-    static updateBusinessSurvey(req: Request, res: Response, next: NextFunction): Promise<any>;
+    static checkSanctions(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>>>;
+    static getIndividualRiskAssessment(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
+    static updatePersonalInfo(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
+    static getEnhancedVerificationStatus(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
+    static createShareholderData(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
+    static getShareholderData(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
+    static updateShareholderData(req: Request, res: Response, next: NextFunction): Promise<Response<any, Record<string, any>> | undefined>;
 }
 export default KYCController;
 //# sourceMappingURL=kycController.d.ts.map

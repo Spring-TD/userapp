@@ -543,6 +543,55 @@ export class KYCService {
     }
   }
 
+  // Update personal information for individual user
+  async updatePersonalInfo(userId: string, personalInfo: any): Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+  }> {
+    try {
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      
+      if (!kycProfile) {
+        return {
+          success: false,
+          error: 'No KYC profile found for this user'
+        };
+      }
+      
+      if (kycProfile.userType !== UserType.INDIVIDUAL) {
+        return {
+          success: false,
+          error: 'User is not an individual customer'
+        };
+      }
+      
+      // Update the personal info
+      const updatedProfile = await MockKYCProfileModel.findByIdAndUpdate(
+        kycProfile._id,
+        { personalInfo },
+        { new: true }
+      );
+      
+      if (!updatedProfile) {
+        return {
+          success: false,
+          error: 'Failed to update personal information'
+        };
+      }
+      
+      return {
+        success: true,
+        message: 'Personal information updated successfully'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: 'Error updating personal information'
+      };
+    }
+  }
+
   // Update business information for a user
   async updateBusinessInfo(userId: string, businessInfo: any): Promise<{
     success: boolean;
