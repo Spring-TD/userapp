@@ -19,6 +19,29 @@ app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Root endpoint
+app.get('/', (_req, res) => {
+  res.json({
+    success: true,
+    service: 'Billing Microservice',
+    version: '1.0.0',
+    status: 'running',
+    endpoints: {
+      health: '/health',
+      billing: '/api/v1/billing'
+    },
+    features: [
+      'Invoicing',
+      'Payment Processing',
+      'Subscription Management',
+      'Transaction History',
+      'Recurring Billing',
+      'One-Time Billing'
+    ],
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Health check endpoint
 app.get('/health', (_req, res) => {
   res.json({

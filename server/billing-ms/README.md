@@ -2,6 +2,8 @@
 
 This microservice handles billing, invoicing, and payment processing for the SpringTD platform.
 
+Deployment URL: https://billing-ms.fly.dev/
+
 ## Features
 
 - Invoice generation and management

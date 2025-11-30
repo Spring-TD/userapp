@@ -3,6 +3,8 @@
 ## Overview
 This microservice handles product creation and management for the SpringTD platform. When triggered, it receives a create-app ID and uses it to create a product with the required information.
 
+Deployment URL: https://product-ms.fly.dev/
+
 ## New Workflow
 The product creation workflow has been updated to require product type selection as the first step after receiving the create-app ID:
 1. Receive create-app ID

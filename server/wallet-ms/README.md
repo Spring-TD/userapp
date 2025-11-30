@@ -2,6 +2,8 @@
 
 This microservice handles wallet functionality for merchants and their users.
 
+Deployment URL: https://wallet-ms.fly.dev/
+
 ## Features
 
 - Merchant Wallets (Treasury, Operation, KYC)

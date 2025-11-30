@@ -2,6 +2,8 @@
 
 The Create App Microservice handles the creation and management of applications within the SpringTD platform. This service allows merchants to create applications that can then be associated with products from the Product Microservice.
 
+Deployment URL: https://create-app-ms.fly.dev/
+
 ## Features
 
 - Create new applications with detailed information (App Name, Website URL, App Alias, App Description)

@@ -17,6 +17,29 @@ app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Root endpoint
+app.get('/', (_req, res) => {
+  res.json({
+    success: true,
+    service: 'Product Microservice',
+    version: '1.0.0',
+    status: 'running',
+    endpoints: {
+      health: '/health',
+      products: '/api/v1/products',
+      configurations: '/api/v1/configurations'
+    },
+    features: [
+      'Loan Products',
+      'Savings Products',
+      'Mortgage Products',
+      'Commodity Products',
+      'Product Configuration Management'
+    ],
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Health check endpoint
 app.get('/health', (_req, res) => {
   res.json({

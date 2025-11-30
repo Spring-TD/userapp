@@ -19,6 +19,30 @@ app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Root endpoint
+app.get('/', (_req, res) => {
+  res.json({
+    success: true,
+    service: 'Payment Microservice',
+    version: '1.0.0',
+    status: 'running',
+    endpoints: {
+      health: '/health',
+      payments: '/api/v1/payments',
+      records: '/api/v1/records'
+    },
+    features: [
+      'Card Payments',
+      'Bank Transfers',
+      'PayPal Integration',
+      'Crypto Payments',
+      'Merchant Record Management',
+      'Debit/Credit Ledger Tracking'
+    ],
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Health check endpoint
 app.get('/health', (_req, res) => {
   res.json({

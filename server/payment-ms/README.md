@@ -2,6 +2,8 @@
 
 Payment gateway integration and transaction processing microservice for the Spring-TD platform.
 
+Deployment URL: https://payment-ms.fly.dev/
+
 ## Overview
 
 The Payment Microservice handles all payment-related operations including processing payments through various gateways, managing transactions, and handling refunds. It supports multiple payment methods including card payments, bank transfers, PayPal, and cryptocurrency.

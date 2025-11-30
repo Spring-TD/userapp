@@ -3,6 +3,8 @@
 ## Overview
 The Client Authentication Microservice (client-auth-ms) is a comprehensive API gateway that handles all client-facing authentication operations. It acts as the single entry point for frontend applications, providing form validation, request forwarding, and seamless integration with the backend authentication service (service-auth-ms). This service now supports the complete authentication workflow including registration, login, password management, OTP verification, and user profile management.
 
+Deployment URL: https://client-auth-ms.fly.dev/
+
 ## Features
 - **✅ Registration Forms**: Merchant, user, and admin signup with validation
 - **✅ Authentication**: Complete login/logout/refresh token flow  
@@ -374,7 +376,7 @@ Frontend → client-auth-ms (port 3001) → service-auth-ms (port 3000) → Data
 The client-auth-ms collects form data and maps it to the service-auth-ms data models:
 
 #### Merchant Registration Data Model
-```typescript
+``typescript
 interface MerchantRegistrationForm {
   first_name: string;     // Maps to BaseUser.first_name
   last_name: string;      // Maps to BaseUser.last_name
@@ -386,7 +388,7 @@ interface MerchantRegistrationForm {
 ```
 
 #### User Registration Data Model
-```typescript
+``typescript
 interface UserRegistrationForm {
   user_merchant_id: string; // Maps to User.user_merchant_id
   first_name: string;       // Maps to BaseUser.first_name
@@ -399,7 +401,7 @@ interface UserRegistrationForm {
 ```
 
 #### Admin Registration Data Model
-```typescript
+``typescript
 interface AdminRegistrationForm {
   first_name: string;     // Maps to BaseUser.first_name
   last_name: string;      // Maps to BaseUser.last_name
@@ -413,7 +415,7 @@ interface AdminRegistrationForm {
 ### Service-Auth-MS Data Model Relationship
 The collected form data maps to the service-auth-ms data models:
 
-```typescript
+``typescript
 // BaseUser interface (inherited by User, Merchant, and Admin)
 interface BaseUser {
   id: string;

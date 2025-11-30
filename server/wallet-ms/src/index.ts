@@ -25,6 +25,30 @@ app.use(cors({
 app.use(helmet());
 app.use(morgan('combined'));
 
+// Root endpoint
+app.get('/', (req, res) => {
+  res.status(200).json({
+    success: true,
+    service: 'Wallet Microservice',
+    version: '1.0.0',
+    status: 'running',
+    endpoints: {
+      health: '/health',
+      wallets: '/api/v1/wallets',
+      transactions: '/api/v1/transactions'
+    },
+    features: [
+      'User Wallets',
+      'Merchant Wallets (Treasury, Operation, KYC)',
+      'Wallet Balance Management',
+      'Transaction History',
+      'Wallet Funding',
+      'Transfer Operations'
+    ],
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({

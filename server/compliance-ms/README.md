@@ -2,6 +2,8 @@
 
 A comprehensive compliance microservice providing Know Your Customer (KYC) verification, risk assessment, and regulatory compliance capabilities for merchants and users.
 
+Deployment URL: https://compliance-ms.fly.dev/
+
 ## Features
 
 ### ✅ Implemented
@@ -334,7 +336,7 @@ Retrieves the business survey data for a merchant user.
 **Authentication**: Requires valid JWT token for business customers
 
 **Success Response (200 OK):**
-```json
+``json
 {
   "success": true,
   "data": {
@@ -405,7 +407,7 @@ Retrieves the business risk assessment data for a merchant user.
 **Authentication**: Requires valid JWT token for business customers
 
 **Success Response (200 OK):**
-```json
+``json
 {
   "success": true,
   "data": {

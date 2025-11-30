@@ -14,7 +14,7 @@ dotenv.config();
 
 // Initialize Express app
 const app = express();
-const PORT = process.env.PORT || 3003;
+const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3003;
 
 // Middleware setup
 app.use(express.json({ limit: '10mb' }));
@@ -30,6 +30,29 @@ app.use(morgan('combined', {
 
 // Initialize mock database with seed data
 seedMockData();
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    service: 'Compliance Microservice',
+    version: '1.0.0',
+    status: 'running',
+    endpoints: {
+      health: '/health',
+      kyc: '/api/v1/kyc'
+    },
+    features: [
+      'KYC Verification',
+      'AML Checks',
+      'Sanctions Screening',
+      'CAC Verification',
+      'Liveness Testing',
+      'Document Verification'
+    ],
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Health check endpoint
 app.get('/health', async (req, res) => {
@@ -91,7 +114,7 @@ process.on('SIGINT', async () => {
 });
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   logger.info(`Compliance service running on port ${PORT}`);
   logger.info('Mock database initialized with sample data');
   const stats = getDbStats();

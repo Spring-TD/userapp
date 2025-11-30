@@ -2,6 +2,8 @@
 
 A comprehensive authentication and user management microservice providing secure account creation, verification, authentication, and user lifecycle management capabilities for both merchants and regular users. **Now includes inter-service authentication and management.**
 
+Deployment URL: https://service-auth-ms.fly.dev/
+
 ## Features
 
 ### ✅ Implemented
@@ -159,7 +161,7 @@ COMPLIANCE_SERVICE_URL=http://localhost:3003  # Compliance microservice URL (def
 - **Duration fields**: Must be positive integers (in seconds)
 
 ### Example .env File
-```bash
+```
 # Core
 NODE_ENV=development
 PORT=3000
