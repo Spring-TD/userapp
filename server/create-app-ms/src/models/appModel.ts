@@ -4,6 +4,11 @@ export class AppModel {
   private static apps: App[] = [];
 
   static async createApp(appData: CreateAppRequest): Promise<App> {
+    // Ensure merchantId is provided (should be guaranteed by controller)
+    if (!appData.merchantId) {
+      throw new Error('Merchant ID is required');
+    }
+
     const newApp: App = {
       id: this.generateId(),
       name: appData.name,

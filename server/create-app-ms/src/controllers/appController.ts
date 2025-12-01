@@ -6,6 +6,18 @@ import { WalletService } from '../services/walletService';
 import { TransactionService } from '../services/transactionService';
 import { DriveService } from '../services/driveService';
 
+// Extend Request interface to include user data
+interface AuthenticatedRequest extends Request {
+  user?: {
+    userId: string;
+    email: string;
+    userType: string;
+    userMerchantId?: string;
+    iat?: number;
+    exp?: number;
+  };
+}
+
 interface TypedRequest<T> extends Request {
   body: T;
 }
@@ -17,22 +29,36 @@ export class AppController {
     this.appService = appService;
   }
 
-  createApp = async (req: TypedRequest<CreateAppRequest>, res: Response): Promise<void> => {
+  createApp = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const appData: CreateAppRequest = req.body;
       
-      // Extract merchantId from authenticated user (in real implementation)
-      // For now, we'll assume it's provided in the request
-      if (!appData.merchantId) {
+      // Extract merchantId from authenticated user
+      if (!req.user) {
+        throw new ApiError(401, 'Authentication required');
+      }
+      
+      // For merchants, use their merchant ID; for admins, allow specifying merchant ID in request
+      const merchantId = req.user.userType === 'MERCHANT' 
+        ? req.user.userMerchantId || req.user.userId 
+        : appData.merchantId || req.user.userId;
+
+      if (!merchantId) {
         throw new ApiError(400, 'Merchant ID is required');
       }
 
-      const app = await this.appService.createApp(appData);
+      // Override merchantId in appData with the authenticated user's merchantId
+      const appDataWithMerchantId = {
+        ...appData,
+        merchantId
+      };
+
+      const app = await this.appService.createApp(appDataWithMerchantId);
       
       // Automatically create user wallets for the app
       // We'll create a user wallet for the merchant (as a user of their own app)
       const walletResult = await WalletService.createUserWallet(
-        appData.merchantId, // userId (merchant is also a user of their own app)
+        merchantId, // userId (merchant is also a user of their own app)
         app.id, // merchantId (the app ID)
         `User Wallet for App ${app.id}`
       );

@@ -2,13 +2,14 @@ import { Router } from 'express';
 import { AppService } from '../services/appService';
 import { AppController } from '../controllers/appController';
 import { apiKeyAuth } from '../middleware/apiKeyAuth';
+import { authenticate, merchantOnly } from '../middleware/auth';
 
 const router = Router();
 const appService = new AppService();
 const appController = new AppController(appService);
 
-// Create a new app
-router.post('/', appController.createApp);
+// Create a new app - now requires authentication
+router.post('/', authenticate, merchantOnly, appController.createApp);
 
 // Get all apps
 router.get('/', appController.getAllApps);

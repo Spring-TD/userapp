@@ -11,6 +11,7 @@ interface Config {
   walletServiceUrl: string;
   specialApiKey: string;
   publicKey: string;
+  jwtSecret: string;
 }
 
 export const config: Config = {
@@ -20,5 +21,6 @@ export const config: Config = {
   productServiceUrl: process.env.PRODUCT_SERVICE_URL || 'http://localhost:3005',
   walletServiceUrl: process.env.WALLET_SERVICE_URL || 'http://localhost:3004',
   specialApiKey: process.env.SPECIAL_API_KEY || 'default-special-key',
-  publicKey: process.env.PUBLIC_KEY || 'default-public-key'
+  publicKey: process.env.PUBLIC_KEY || 'default-public-key',
+  jwtSecret: process.env.JWT_SECRET || 'fallback_secret_key'
 };

@@ -20,7 +20,7 @@ export interface CreateAppRequest {
   websiteUrl: string;
   alias: string;
   description: string;
-  merchantId: string;
+  merchantId?: string; // Made optional since it can be extracted from authenticated user
 }
 
 export interface UpdateAppRequest {

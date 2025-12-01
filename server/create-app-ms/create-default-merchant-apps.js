@@ -61,11 +61,10 @@ async function authenticateAndGetMerchantId() {
     // Log all user properties to see what's available
     console.log('User properties:', Object.keys(user));
     
-    // For the default merchant, we know the merchant ID from the code
-    // In a real implementation, we would get this from the user object
-    // But for the default merchant, we can use the known value
-    const merchantId = 'default-merchant-id';
-    console.log(`Using known merchant ID: ${merchantId}`);
+    // Extract merchant ID from the user object
+    // For merchants, the merchant ID should be in user_merchant_id or fall back to user ID
+    const merchantId = user.user_merchant_id || user.id;
+    console.log(`Extracted merchant ID: ${merchantId}`);
     
     return {
       accessToken,
@@ -133,7 +132,7 @@ async function createDefaultMerchantApps() {
       process.exit(1);
     }
     
-    // We're using the known merchant ID for the default merchant
+    // Use the extracted merchant ID from the authenticated user
     const { merchantId, accessToken } = authInfo;
     console.log(`Using merchant ID: ${merchantId}\n`);
     
