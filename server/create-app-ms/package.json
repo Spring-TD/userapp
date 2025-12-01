@@ -9,7 +9,8 @@
     "start": "node dist/index.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "seed:transactions": "node dist/seed-transactions.js"
+    "seed:transactions": "node dist/seed-transactions.js",
+    "create:default-apps": "node create-default-merchant-apps.js"
   },
   "dependencies": {
     "axios": "^1.12.2",
