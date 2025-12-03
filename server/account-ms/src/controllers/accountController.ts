@@ -6,7 +6,7 @@ class AccountController {
   // Create a new account
   async createAccount(req: Request, res: Response): Promise<Response> {
     try {
-      const { userId, accountType, currency, email, appId }: CreateAccountInput = req.body;
+      const { userId, accountType, currency, email, appId, productId }: CreateAccountInput = req.body;
 
       if (!userId || !accountType || !currency) {
         return res.status(400).json({
@@ -14,7 +14,7 @@ class AccountController {
         });
       }
 
-      const account = await accountService.createAccount({ userId, accountType, currency, email, appId });
+      const account = await accountService.createAccount({ userId, accountType, currency, email, appId, productId });
       return res.status(201).json(account);
     } catch (error: any) {
       return res.status(500).json({ error: error.message });
@@ -105,6 +105,55 @@ class AccountController {
       return res.status(200).json({
         success: true,
         data: ownership
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+
+  // Calculate account pricing based on product
+  async calculatePricing(req: Request, res: Response): Promise<Response> {
+    try {
+      const { productId, accountType, amount } = req.body;
+
+      if (!productId || !accountType || !amount) {
+        return res.status(400).json({
+          error: 'Missing required fields: productId, accountType, amount'
+        });
+      }
+
+      const pricing = await accountService.calculateAccountPricing(productId, accountType, amount);
+      return res.status(200).json({
+        success: true,
+        data: pricing
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+
+  // Get product pricing
+  async getProductPricing(req: Request, res: Response): Promise<Response> {
+    try {
+      const { productId } = req.params;
+      const pricing = await accountService.getProductPricing(productId);
+
+      if (!pricing) {
+        return res.status(404).json({
+          success: false,
+          error: 'Product pricing not found'
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: pricing
       });
     } catch (error: any) {
       return res.status(500).json({

@@ -24,4 +24,10 @@ router.post('/users/:userId/billing-check', accountController.checkBillingStatus
 // Get app ownership information
 router.get('/users/:userId/app-ownership', accountController.getAppOwnership);
 
+// Calculate account pricing based on product
+router.post('/pricing/calculate', accountController.calculatePricing);
+
+// Get product pricing
+router.get('/pricing/product/:productId', accountController.getProductPricing);
+
 export default router;

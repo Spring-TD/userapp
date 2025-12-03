@@ -5,6 +5,7 @@ import billingService from './billingService';
 import walletService from './walletService';
 import serviceAuthService from './serviceAuthService';
 import createAppService from './createAppService';
+import productService from './productService';
 
 export interface CreateAccountInput {
   userId: string;
@@ -12,6 +13,7 @@ export interface CreateAccountInput {
   currency: string;
   email?: string;
   appId?: string; // Optional: to associate account with an app
+  productId?: string; // Optional: to associate account with a product for pricing
 }
 
 class AccountService {
@@ -68,6 +70,19 @@ class AccountService {
     // If appId is provided, record the account-app association
     if (input.appId) {
       await this.recordAccountForApp(createdAccount.id, input.appId, input.userId);
+    }
+
+    // If productId is provided, get pricing and log it
+    if (input.productId) {
+      try {
+        const pricing = await productService.getProductPricing(input.productId);
+        if (pricing) {
+          console.log(`Account ${createdAccount.id} associated with product ${pricing.productName}`);
+          console.log(`Pricing details:`, pricing);
+        }
+      } catch (error) {
+        console.error('Failed to get product pricing:', error);
+      }
     }
 
     // Orchestrate Wallet Creation
@@ -193,6 +208,26 @@ class AccountService {
       console.log(`Account ${accountId} successfully associated with app ${appId}`);
     } catch (error) {
       console.error('Failed to record account for app:', error);
+    }
+  }
+
+  // Calculate pricing for an account based on product
+  async calculateAccountPricing(productId: string, accountType: string, amount: number): Promise<any> {
+    try {
+      return await productService.calculateAccountPricing(productId, accountType, amount);
+    } catch (error: any) {
+      console.error('Error calculating account pricing:', error);
+      throw error;
+    }
+  }
+
+  // Get product pricing
+  async getProductPricing(productId: string): Promise<any> {
+    try {
+      return await productService.getProductPricing(productId);
+    } catch (error: any) {
+      console.error('Error getting product pricing:', error);
+      throw error;
     }
   }
 }
