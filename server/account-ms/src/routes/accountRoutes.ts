@@ -21,4 +21,7 @@ router.delete('/accounts/:id', accountController.deleteAccount);
 // Check billing status
 router.post('/users/:userId/billing-check', accountController.checkBillingStatus);
 
+// Get app ownership information
+router.get('/users/:userId/app-ownership', accountController.getAppOwnership);
+
 export default router;

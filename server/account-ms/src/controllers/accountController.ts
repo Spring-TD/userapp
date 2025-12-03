@@ -6,7 +6,7 @@ class AccountController {
   // Create a new account
   async createAccount(req: Request, res: Response): Promise<Response> {
     try {
-      const { userId, accountType, currency, email }: CreateAccountInput = req.body;
+      const { userId, accountType, currency, email, appId }: CreateAccountInput = req.body;
 
       if (!userId || !accountType || !currency) {
         return res.status(400).json({
@@ -14,7 +14,7 @@ class AccountController {
         });
       }
 
-      const account = await accountService.createAccount({ userId, accountType, currency, email });
+      const account = await accountService.createAccount({ userId, accountType, currency, email, appId });
       return res.status(201).json(account);
     } catch (error: any) {
       return res.status(500).json({ error: error.message });
@@ -94,6 +94,23 @@ class AccountController {
       return res.status(200).json(result);
     } catch (error: any) {
       return res.status(500).json({ error: error.message });
+    }
+  }
+
+  // Get app ownership information
+  async getAppOwnership(req: Request, res: Response): Promise<Response> {
+    try {
+      const { userId } = req.params;
+      const ownership = await accountService.getAppOwnership(userId);
+      return res.status(200).json({
+        success: true,
+        data: ownership
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        error: error.message
+      });
     }
   }
 }

@@ -4,12 +4,14 @@ import complianceService from './complianceService';
 import billingService from './billingService';
 import walletService from './walletService';
 import serviceAuthService from './serviceAuthService';
+import createAppService from './createAppService';
 
 export interface CreateAccountInput {
   userId: string;
   accountType: string;
   currency: string;
   email?: string;
+  appId?: string; // Optional: to associate account with an app
 }
 
 class AccountService {
@@ -62,6 +64,11 @@ class AccountService {
       createdAccount.id,
       input.accountType
     );
+
+    // If appId is provided, record the account-app association
+    if (input.appId) {
+      await this.recordAccountForApp(createdAccount.id, input.appId, input.userId);
+    }
 
     // Orchestrate Wallet Creation
     // We create a wallet if the account is for a specific product type (savings, loan, mortgage)
@@ -145,6 +152,47 @@ class AccountService {
     } catch (error: any) {
       console.error('Error processing billing:', error);
       return { status: 'error', message: error.message };
+    }
+  }
+
+  // Get app ownership information for a user
+  // This helps understand which apps a user owns and their associated accounts
+  async getAppOwnership(userId: string): Promise<any> {
+    try {
+      const ownershipRecords = await createAppService.getOwnershipRecords(userId);
+      const userAccounts = await this.getAccountsByUserId(userId);
+
+      return {
+        userId,
+        apps: ownershipRecords,
+        accounts: userAccounts,
+        totalApps: ownershipRecords.length,
+        totalAccounts: userAccounts.length
+      };
+    } catch (error: any) {
+      console.error('Error getting app ownership:', error);
+      throw error;
+    }
+  }
+
+  // Record that an account belongs to a specific app
+  // This maintains the memory of account-app relationships
+  async recordAccountForApp(accountId: string, appId: string, userId: string): Promise<void> {
+    try {
+      // Verify the user owns the app
+      const ownsApp = await createAppService.userOwnsApp(userId, appId);
+
+      if (!ownsApp) {
+        console.warn(`User ${userId} does not own app ${appId}`);
+        return;
+      }
+
+      // Record the association
+      await createAppService.recordAccountForApp(appId, accountId, userId);
+
+      console.log(`Account ${accountId} successfully associated with app ${appId}`);
+    } catch (error) {
+      console.error('Failed to record account for app:', error);
     }
   }
 }
