@@ -19,6 +19,7 @@ Deployment URL: https://create-app-ms.fly.dev/
 - Get transaction statistics for applications
 - Manage documents submitted by users through the Drive feature
 - Special endpoints requiring API key authentication for advanced operations
+- **Authentication required for app creation** - Merchant ID is extracted from authenticated user context
 
 ## API Endpoints
 
@@ -28,14 +29,17 @@ Deployment URL: https://create-app-ms.fly.dev/
 ```
 POST /api/v1/apps
 ```
-Creates a new application in draft status and automatically creates a user wallet for the application.
+Creates a new application in draft status and automatically creates a user wallet for the application. Requires JWT authentication - merchant ID is extracted from the authenticated user context.
+
+**Request Headers:**
+- `Authorization`: Bearer token obtained through authentication
 
 **Request Body:**
 - `name` (string, required): Application name (3-100 characters)
 - `websiteUrl` (string, required): Application website URL
 - `alias` (string, required): Application alias (2-50 characters)
 - `description` (string, required): Application description (10-1000 characters)
-- `merchantId` (string, required): ID of the merchant who owns the application
+- `merchantId` (string, optional): ID of the merchant who owns the application (extracted from authenticated user for merchants, required for admins)
 
 **Response:**
 Returns the created application with auto-generated ID and timestamps, along with user wallet creation information.
@@ -690,6 +694,8 @@ This integration ensures that each application has the necessary financial infra
 
 ## Authentication
 
+Standard endpoints that modify data (like creating apps) now require JWT authentication. The merchant ID is extracted from the authenticated user context rather than being passed in the request body.
+
 Special endpoints require two headers for authentication:
 - `X-Special-Key`: The special API key
 - `X-Public-Key`: The public key
@@ -710,6 +716,7 @@ curl -X GET "http://localhost:3002/api/v1/special/apps" \
 - `WALLET_SERVICE_URL`: URL for the Wallet Microservice
 - `SPECIAL_API_KEY`: Special API key for authenticating special endpoints
 - `PUBLIC_KEY`: Public key for authenticating special endpoints
+- `JWT_SECRET`: Secret key for JWT token verification
 
 ## Installation
 
