@@ -63,3 +63,21 @@ Run tests with:
 ```
 npm test
 ```
+
+## API Gateway
+
+This service now acts as the API Gateway for the SpringTD platform. It proxies requests to the following microservices:
+
+- `/api/v1/products` -> Product Service
+- `/api/v1/compliance` -> Compliance Service
+- `/api/v1/wallets` -> Wallet Service
+- `/api/v1/billing` -> Billing Service
+- `/api/v1/apps` -> Create App Service
+- `/api/v1/payments` -> Payment Service
+- `/api/v1/auth` -> Client Auth Service
+
+### Running Gateway Tests
+To verify the gateway configuration:
+```bash
+npx ts-node scripts/test-gateway.ts
+```
