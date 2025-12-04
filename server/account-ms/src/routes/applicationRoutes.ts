@@ -1,5 +1,6 @@
 import express from 'express';
 import applicationController from '../controllers/applicationController';
+import { requireAdmin } from '../middleware/authMiddleware';
 
 const router = express.Router();
 
@@ -7,16 +8,16 @@ const router = express.Router();
 router.post('/apply', applicationController.applyForProduct);
 
 // Admin: Approve application
-router.post('/:id/approve', applicationController.approveApplication);
+router.post('/:id/approve', requireAdmin, applicationController.approveApplication);
 
 // Admin: Reject application
-router.post('/:id/reject', applicationController.rejectApplication);
+router.post('/:id/reject', requireAdmin, applicationController.rejectApplication);
 
 // Admin: Get all applications
-router.get('/', applicationController.getAllApplications);
+router.get('/', requireAdmin, applicationController.getAllApplications);
 
 // Admin: Get pending applications
-router.get('/pending', applicationController.getPendingApplications);
+router.get('/pending', requireAdmin, applicationController.getPendingApplications);
 
 // Get user applications
 router.get('/user/:userId', applicationController.getUserApplications);

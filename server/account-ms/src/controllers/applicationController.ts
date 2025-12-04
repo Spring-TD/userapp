@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import applicationService from '../services/applicationService';
+import { AuthRequest } from '../middleware/authMiddleware';
 
 class ApplicationController {
     // Apply for a product
@@ -38,13 +39,15 @@ class ApplicationController {
     async approveApplication(req: Request, res: Response) {
         try {
             const { id } = req.params;
-            const { adminId } = req.body; // In a real app, this would come from auth token
+            const adminId = (req as AuthRequest).adminId;
 
             if (!adminId) {
-                return res.status(400).json({
+                // Should be caught by middleware, but safe check
+                res.status(403).json({
                     success: false,
                     error: 'Admin ID is required'
                 });
+                return;
             }
 
             const result = await applicationService.approveApplication(id, adminId);
@@ -64,13 +67,15 @@ class ApplicationController {
     async rejectApplication(req: Request, res: Response) {
         try {
             const { id } = req.params;
-            const { reason, adminId } = req.body;
+            const { reason } = req.body;
+            const adminId = (req as AuthRequest).adminId;
 
             if (!adminId) {
-                return res.status(400).json({
+                res.status(403).json({
                     success: false,
                     error: 'Admin ID is required'
                 });
+                return;
             }
 
             if (!reason) {
