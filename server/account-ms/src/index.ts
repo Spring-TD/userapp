@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import { config } from './config/environment';
 import accountRoutes from './routes/accountRoutes';
+import applicationRoutes from './routes/applicationRoutes';
 
 const app = express();
 const PORT = config.port;
@@ -19,6 +20,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api/v1', accountRoutes);
+app.use('/api/v1/applications', applicationRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
