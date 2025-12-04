@@ -23,12 +23,14 @@ class ApplicationController {
             });
 
             res.status(201).json(result);
+            return;
         } catch (error: any) {
             console.error('Error in applyForProduct:', error);
             res.status(500).json({
                 success: false,
                 error: error.message || 'Internal server error'
             });
+            return;
         }
     }
 
@@ -47,12 +49,14 @@ class ApplicationController {
 
             const result = await applicationService.approveApplication(id, adminId);
             res.status(200).json(result);
+            return;
         } catch (error: any) {
             console.error('Error in approveApplication:', error);
             res.status(500).json({
                 success: false,
                 error: error.message || 'Internal server error'
             });
+            return;
         }
     }
 
@@ -78,12 +82,14 @@ class ApplicationController {
 
             const result = await applicationService.rejectApplication(id, reason, adminId);
             res.status(200).json(result);
+            return;
         } catch (error: any) {
             console.error('Error in rejectApplication:', error);
             res.status(500).json({
                 success: false,
                 error: error.message || 'Internal server error'
             });
+            return;
         }
     }
 
@@ -95,12 +101,14 @@ class ApplicationController {
                 success: true,
                 data: applications
             });
+            return;
         } catch (error: any) {
             console.error('Error in getAllApplications:', error);
             res.status(500).json({
                 success: false,
                 error: error.message || 'Internal server error'
             });
+            return;
         }
     }
 
@@ -112,12 +120,14 @@ class ApplicationController {
                 success: true,
                 data: applications
             });
+            return;
         } catch (error: any) {
             console.error('Error in getPendingApplications:', error);
             res.status(500).json({
                 success: false,
                 error: error.message || 'Internal server error'
             });
+            return;
         }
     }
 
@@ -130,12 +140,42 @@ class ApplicationController {
                 success: true,
                 data: applications
             });
+            return;
         } catch (error: any) {
             console.error('Error in getUserApplications:', error);
             res.status(500).json({
                 success: false,
                 error: error.message || 'Internal server error'
             });
+            return;
+        }
+    }
+
+    // Get application by ID
+    async getApplicationById(req: Request, res: Response) {
+        try {
+            const { id } = req.params;
+            const application = await applicationService.getApplicationById(id);
+
+            if (!application) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Application not found'
+                });
+            }
+
+            res.status(200).json({
+                success: true,
+                data: application
+            });
+            return;
+        } catch (error: any) {
+            console.error('Error in getApplicationById:', error);
+            res.status(500).json({
+                success: false,
+                error: error.message || 'Internal server error'
+            });
+            return;
         }
     }
 }

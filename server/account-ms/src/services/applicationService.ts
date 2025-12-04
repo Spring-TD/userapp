@@ -161,6 +161,13 @@ class ApplicationService {
     async getUserApplications(userId: string) {
         return await mockDb.getApplicationsByUserId(userId);
     }
+
+    /**
+     * Get application by ID
+     */
+    async getApplicationById(applicationId: string) {
+        return await mockDb.getApplicationById(applicationId);
+    }
 }
 
 export default new ApplicationService();

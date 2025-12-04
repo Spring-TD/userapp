@@ -21,4 +21,7 @@ router.get('/pending', applicationController.getPendingApplications);
 // Get user applications
 router.get('/user/:userId', applicationController.getUserApplications);
 
+// Get application by ID
+router.get('/:id', applicationController.getApplicationById);
+
 export default router;
