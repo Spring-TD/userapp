@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import { config } from './config/environment';
 import accountRoutes from './routes/accountRoutes';
 import applicationRoutes from './routes/applicationRoutes';
+import { setupProxies } from './middleware/proxyMiddleware';
 
 const app = express();
 const PORT = config.port;
@@ -15,6 +16,11 @@ app.use(cors({
   origin: config.corsOrigins
 }));
 app.use(morgan(config.logLevel));
+
+// Setup Proxies (must be before body parser)
+setupProxies(app);
+
+// Body parsers (for local routes)
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

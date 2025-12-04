@@ -12,8 +12,10 @@ interface EnvironmentConfig {
   billingServiceUrl: string;
   walletServiceUrl: string;
   serviceAuthUrl: string;
+  clientAuthServiceUrl: string;
   createAppServiceUrl: string;
   productServiceUrl: string;
+  paymentServiceUrl: string;
 }
 
 export const config: EnvironmentConfig = {
@@ -26,6 +28,8 @@ export const config: EnvironmentConfig = {
   billingServiceUrl: process.env.BILLING_SERVICE_URL || 'http://localhost:3006',
   walletServiceUrl: process.env.WALLET_SERVICE_URL || 'http://localhost:3004',
   serviceAuthUrl: process.env.SERVICE_AUTH_URL || 'http://localhost:3000',
-  createAppServiceUrl: process.env.CREATE_APP_SERVICE_URL || 'http://localhost:3007',
-  productServiceUrl: process.env.PRODUCT_SERVICE_URL || 'http://localhost:3005'
+  clientAuthServiceUrl: process.env.CLIENT_AUTH_SERVICE_URL || 'http://localhost:3001',
+  createAppServiceUrl: process.env.CREATE_APP_SERVICE_URL || 'http://localhost:3002',
+  productServiceUrl: process.env.PRODUCT_SERVICE_URL || 'http://localhost:3005',
+  paymentServiceUrl: process.env.PAYMENT_SERVICE_URL || 'http://localhost:3007'
 };
