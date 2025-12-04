@@ -55,8 +55,12 @@ export const setupProxies = (app: Express) => {
     );
 
     // Client Auth Service Proxy
-    app.use(
-        '/api/v1/auth',
-        createProxyMiddleware(createOptions(config.clientAuthServiceUrl))
-    );
+    const clientAuthTarget = config.clientAuthServiceUrl;
+
+    app.use('/api/v1/auth', createProxyMiddleware(createOptions(clientAuthTarget)));
+    app.use('/api/v1/registration', createProxyMiddleware(createOptions(clientAuthTarget)));
+    app.use('/api/v1/otp', createProxyMiddleware(createOptions(clientAuthTarget)));
+    app.use('/api/v1/password', createProxyMiddleware(createOptions(clientAuthTarget)));
+    app.use('/api/v1/user', createProxyMiddleware(createOptions(clientAuthTarget)));
+    app.use('/verify-email', createProxyMiddleware(createOptions(clientAuthTarget)));
 };

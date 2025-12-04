@@ -68,14 +68,6 @@ const server = app.listen(config.port, () => {
   console.log(`🚀 Client Auth Microservice running on port ${config.port}`);
   console.log(`📱 Environment: ${config.nodeEnv}`);
   console.log(`🔗 Service Auth URL: ${config.serviceAuthUrl}`);
-  console.log(`🌐 API Gateway Features:`);
-  console.log(`   ✅ Registration (Merchant/User)`);
-  console.log(`   ✅ Authentication (Login/Logout/Refresh)`);
-  console.log(`   ✅ Account Verification`);
-  console.log(`   ✅ OTP Management`);
-  console.log(`   ✅ Password Management`);
-  console.log(`   ✅ User Profile Management`);
-  console.log(`   ✅ Administrative Operations`);
 });
 
 process.on('SIGTERM', () => {
