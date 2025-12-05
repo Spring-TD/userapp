@@ -19,6 +19,12 @@ This microservice handles account management functionality for the SpringTD plat
 - MongoDB (via Mongoose)
 - Jest for testing
 
+## Deployment
+
+The service is deployed on Fly.io and is accessible at: https://account-ms.fly.dev
+
+Health check endpoint: https://account-ms.fly.dev/health
+
 ## Getting Started
 
 ### Prerequisites
