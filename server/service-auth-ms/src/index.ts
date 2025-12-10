@@ -12,6 +12,7 @@ import { userRoutes } from './routes/userRoutes';
 import { samsRoutes } from './routes/samsRoutes';
 import { credentialRoutes } from './routes/credentialRoutes';
 import { verifyEmailRoutes } from './routes/verifyEmailRoutes';
+import { roleRoutes } from './routes/roleRoutes';
 import { SAMSService } from './services/samsService';
 import { redisCacheService } from './services/redisCacheService';
 import { logger } from './utils/logger';
@@ -62,6 +63,7 @@ app.get('/', (_req, res) => {
       otp: '/api/v1/otp',
       password: '/api/v1/password',
       user: '/api/v1/user',
+      roles: '/api/v1/roles',
       services: '/api/v1/services',
       credentials: '/api/v1/credentials',
       verifyEmail: '/verify-email'
@@ -84,6 +86,7 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/otp', otpRoutes);
 app.use('/api/v1/password', passwordRoutes);
 app.use('/api/v1/user', userRoutes);
+app.use('/api/v1/roles', roleRoutes);
 app.use('/verify-email', verifyEmailRoutes);
 
 // SAMS (Service Authentication Microservice) routes
@@ -126,7 +129,7 @@ async function createDefaultMerchantUser() {
 
     // Register the merchant
     const result = await AuthService.registerMerchant(defaultMerchantData);
-    
+
     if (result.success && result.merchant) {
       // Verify the email automatically by updating the user directly
       await mockDb.updateUser(result.merchant.id, {
@@ -164,7 +167,7 @@ async function createDefaultAdminUser() {
 
     // Register the admin
     const result = await AuthService.registerAdmin(defaultAdminData);
-    
+
     if (result.success && result.user) {
       logger.info('Default admin user created successfully');
     } else {
@@ -185,11 +188,11 @@ if (require.main === module) {
     SAMSService.initialize()
   ]).then(async () => {
     logger.info('Redis cache service initialized');
-    
+
     // Create default users
     await createDefaultMerchantUser();
     await createDefaultAdminUser();
-    
+
     // Explicitly bind to 0.0.0.0
     app.listen(PORT, '0.0.0.0', () => {
       logger.info(`Client Auth Microservice running on port ${PORT}`);

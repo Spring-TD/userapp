@@ -287,7 +287,7 @@ class AuthApiService {
           'Accept': 'application/json'
         }
       });
-      
+
       const response: AxiosResponse<ApiResponse<any>> = await rootClient.get(`/verify-email`, { params: { token } });
       return response.data;
     } catch (error: any) {
@@ -307,6 +307,34 @@ class AuthApiService {
   async activateUser(token: string, userId: string): Promise<ApiResponse<any>> {
     try {
       const response: AxiosResponse<ApiResponse<any>> = await this.apiClient.put(`/user/activate/${userId}`, {}, this.createAuthHeaders(token));
+      return response.data;
+    } catch (error: any) {
+      return this.handleError(error);
+    }
+  }
+
+  // ===== ROLE MANAGEMENT ENDPOINTS =====
+  async createRole(token: string, roleData: any): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.apiClient.post('/roles', roleData, this.createAuthHeaders(token));
+      return response.data;
+    } catch (error: any) {
+      return this.handleError(error);
+    }
+  }
+
+  async getRoles(token: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.apiClient.get('/roles', this.createAuthHeaders(token));
+      return response.data;
+    } catch (error: any) {
+      return this.handleError(error);
+    }
+  }
+
+  async getPermissions(token?: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.apiClient.get('/roles/permissions', this.createAuthHeaders(token));
       return response.data;
     } catch (error: any) {
       return this.handleError(error);

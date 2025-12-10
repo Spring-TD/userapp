@@ -10,6 +10,7 @@ import { otpRoutes } from './routes/otpRoutes';
 import { passwordRoutes } from './routes/passwordRoutes';
 import { userRoutes } from './routes/userRoutes';
 import { verifyEmailRoutes } from './routes/verifyEmailRoutes';
+import { roleRoutes } from './routes/roleRoutes';
 
 const app = express();
 
@@ -36,6 +37,7 @@ app.get('/', (_req, res) => {
       otp: '/api/v1/otp',
       password: '/api/v1/password',
       user: '/api/v1/user',
+      roles: '/api/v1/roles',
       verifyEmail: '/verify-email'
     },
     timestamp: new Date().toISOString()
@@ -58,6 +60,7 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/otp', otpRoutes);
 app.use('/api/v1/password', passwordRoutes);
 app.use('/api/v1/user', userRoutes);
+app.use('/api/v1/roles', roleRoutes);
 app.use('/verify-email', verifyEmailRoutes);
 
 // Error handling middleware

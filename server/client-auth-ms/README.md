@@ -12,6 +12,7 @@ Deployment URL: https://client-auth-ms.fly.dev/
 - **✅ OTP Management**: Generate, verify, and resend OTP codes
 - **✅ Password Management**: Forgot password, reset, and change operations
 - **✅ User Profile**: Get and update user profile information
+- **✅ Role Management**: Create roles and manage permissions
 - **✅ Administrative Operations**: User suspension and activation
 - **✅ API Gateway**: Centralized routing and validation
 - **✅ CORS Support**: Configured for frontend integration
@@ -253,20 +254,6 @@ Content-Type: application/json
 Authorization: Bearer <admin-jwt-token>
 
 {
-  "reason": "Policy violation"
-}
-```
-
-#### Activate User (Admin)
-```
-PUT /api/v1/user/activate/{userId}
-Authorization: Bearer <admin-jwt-token>
-```
-
-## Form Field Specifications
-
-### Merchant Registration Form
-- `first_name`: String (required, 2-50 chars)
 - `last_name`: String (required, 2-50 chars)  
 - `email`: Valid email address (required)
 - `phone`: International format (required)
@@ -486,6 +473,7 @@ The client-auth-ms now provides complete coverage of all authentication operatio
 | **OTP Operations** | Generate, Verify, Resend OTP codes | ✅ Complete |
 | **Password Management** | Forgot, Reset, Change password | ✅ Complete |
 | **User Profile** | Get/Update profile, User information | ✅ Complete |
+| **Role Management** | Create roles, Get roles, Permissions | ✅ Complete |
 | **Administration** | Suspend/Activate users, Verify info | ✅ Complete |
 | **Health & Monitoring** | Health check endpoint | ✅ Complete |
 

@@ -1,10 +1,12 @@
 import { UserAccount } from '../models/User';
+import { Role } from '../models/Role';
 import { v4 as uuidv4 } from 'uuid';
 
 // Mock in-memory database
 class MockDatabase {
   private users: Map<string, UserAccount> = new Map();
   private emailIndex: Map<string, string> = new Map(); // email -> userId mapping
+  private roles: Map<string, Role> = new Map();
 
   /**
    * Find user by email
@@ -28,7 +30,7 @@ class MockDatabase {
   async createUser(userData: Omit<UserAccount, 'id' | 'created_at' | 'updated_at' | 'failed_login_attempts'>): Promise<UserAccount> {
     const id = uuidv4();
     const now = new Date();
-    
+
     const user: UserAccount = {
       ...userData,
       id,
@@ -39,7 +41,7 @@ class MockDatabase {
 
     this.users.set(id, user);
     this.emailIndex.set(userData.email.toLowerCase(), id);
-    
+
     return user;
   }
 
@@ -80,11 +82,40 @@ class MockDatabase {
   }
 
   /**
+   * Create a new role
+   */
+  async createRole(role: Role): Promise<Role> {
+    this.roles.set(role.id, role);
+    return role;
+  }
+
+  /**
+   * Find role by ID
+   */
+  async findRoleById(id: string): Promise<Role | null> {
+    return this.roles.get(id) || null;
+  }
+
+  /**
+   * Find roles by merchant ID
+   */
+  async findRolesByMerchantId(merchantId: string): Promise<Role[]> {
+    const result: Role[] = [];
+    for (const role of this.roles.values()) {
+      if (role.merchant_id === merchantId) {
+        result.push(role);
+      }
+    }
+    return result;
+  }
+
+  /**
    * Clear all data (for testing purposes)
    */
   async clearAll(): Promise<void> {
     this.users.clear();
     this.emailIndex.clear();
+    this.roles.clear();
   }
 }
 

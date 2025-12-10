@@ -23,6 +23,7 @@ Deployment URL: https://service-auth-ms.fly.dev/
 - User profile management ✅
 - Administrative account operations ✅
 - OTP generation and verification ✅
+- Role Management and Permissions (RBAC) ✅
 - Merchant compliance status checking ✅
 - Database integration (MongoDB) 🛠️ (configured, using mock database)
 - Comprehensive audit trails 🚧 (structured logging implemented)
@@ -276,6 +277,11 @@ The service provides the following API endpoints:
 - `POST /api/v1/user/verify-info` - Verify user information ✅ **Implemented**
 - `PUT /api/v1/user/suspend` - Suspend user account (admin) ✅ **Implemented**
 - `PUT /api/v1/user/activate` - Activate suspended account (admin) ✅ **Implemented**
+
+### Role Management
+- `POST /api/v1/roles` - Create new role (Merchant) ✅ **Implemented**
+- `GET /api/v1/roles` - Get all roles (Merchant) ✅ **Implemented**
+- `GET /api/v1/roles/permissions` - Get available permissions ✅ **Implemented**
 
 ### Health Check
 - `GET /health` - Service health status ✅ **Implemented**
@@ -613,6 +619,35 @@ interface Admin extends BaseUser {
   user_merchant_id: 'admin';
   country: string;
 }
+\`\`\`
+
+### Role & Permissions
+\`\`\`typescript
+enum Permission {
+  CREATE_ADMIN = 'create_admin',
+  GENERATE_SECRET_KEYS = 'generate_secret_keys',
+  SEE_SECRET_KEYS = 'see_secret_keys',
+  EDIT_PRODUCTS = 'edit_products',
+  CREATE_PRODUCTS = 'create_products',
+  VIEW_PRODUCTS = 'view_products',
+  CHANGE_PASSWORD = 'change_password',
+  SEE_BILLING = 'see_billing',
+  ADD_PAYMENT_METHOD = 'add_payment_method',
+  EDIT_PAYMENT_METHOD = 'edit_payment_method',
+  CREATE_APP = 'create_app',
+  SEE_ACTIVITY_LOG = 'see_activity_log',
+  DOWNLOAD_REPORT = 'download_report'
+}
+
+interface Role {
+  id: string;
+  name: string;
+  description: string;
+  permissions: Permission[];
+  merchant_id: string;
+  created_at: Date;
+  updated_at: Date;
+}
 ```
 
 ## Validation Rules
@@ -902,8 +937,82 @@ const validation = await fetch('http://sams:3000/api/v1/credentials/validate', {
 if (validation.valid) {
   // Process the request
 } else {
-  // Reject with 401 Unauthorized
+  // Rejected with 401 Unauthorized
 }
+\`\`\`
+
+### Role Management API
+
+#### Create Role
+**\`POST /api/v1/roles\`**
+
+Creates a new role with specific permissions. Only available to merchants.
+
+**Request Body:**
+\`\`\`json
+{
+  "name": "Support Agent",
+  "description": "Role for customer support staff",
+  "permissions": [
+    "view_products",
+    "see_activity_log",
+    "change_password"
+  ]
+}
+\`\`\`
+
+**Success Response (201 Created):**
+\`\`\`json
+{
+  "success": true,
+  "message": "Role created successfully",
+  "data": {
+    "role": {
+      "id": "role-uuid-1234",
+      "name": "Support Agent",
+      "description": "Role for customer support staff",
+      "permissions": ["view_products", "see_activity_log", "change_password"],
+      "merchant_id": "merchant-uuid-5678",
+      "created_at": "2025-01-10T12:00:00.000Z",
+      "updated_at": "2025-01-10T12:00:00.000Z"
+    }
+  }
+}
+\`\`\`
+
+#### Get Roles
+**\`GET /api/v1/roles\`**
+
+Retrieves all roles created by the authenticated merchant.
+
+#### Get Permissions
+**\`GET /api/v1/roles/permissions\`**
+
+Returns a list of all available permissions that can be assigned to roles.
+
+**Success Response (200 OK):**
+\`\`\`json
+{
+  "success": true,
+  "data": {
+    "permissions": [
+      "create_admin",
+      "generate_secret_keys",
+      "see_secret_keys",
+      "edit_products",
+      "create_products",
+      "view_products",
+      "change_password",
+      "see_billing",
+      "add_payment_method",
+      "edit_payment_method",
+      "create_app",
+      "see_activity_log",
+      "download_report"
+    ]
+  }
+}
+\`\`\`
 
 
 ### Default Users
