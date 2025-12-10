@@ -26,12 +26,14 @@ Deployment URL: https://service-auth-ms.fly.dev/
 - Role Management and Permissions (RBAC) - Full CRUD operations ✅
 - Merchant User Invitation System ✅
 - Merchant compliance status checking ✅
+- Merchant API Key Management (Public/Secret Keys) ✅
 - Database integration (MongoDB) 🛠️ (configured, using mock database)
 - Comprehensive audit trails 🚧 (structured logging implemented)
 
 ## Documentation
 
 - **[Role Management API](./ROLE_MANAGEMENT_API.md)** - Comprehensive guide for role management endpoints
+- **[API Key Management](./API_KEY_MANAGEMENT.md)** - Guide for creating and managing merchant API keys
 
 ## Technology Stack
 
@@ -291,6 +293,11 @@ The service provides the following API endpoints:
 - `GET /api/v1/roles/permissions` - Get available permissions ✅ **Implemented**
 - `PUT /api/v1/roles/:roleId` - Update existing role (Merchant) ✅ **Implemented**
 - `DELETE /api/v1/roles/:roleId` - Delete role (Merchant) ✅ **Implemented**
+
+### API Key Management
+- `POST /api/v1/keys` - Create new API key pair (Merchant) ✅ **Implemented**
+- `GET /api/v1/keys` - List all API keys (Merchant) ✅ **Implemented**
+- `DELETE /api/v1/keys/:keyId` - Revoke API key (Merchant) ✅ **Implemented**
 
 ### Invitation Management
 - `POST /api/v1/invitations` - Create invitation (Merchant) ✅ **Implemented**

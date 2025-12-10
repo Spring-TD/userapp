@@ -14,6 +14,7 @@ import { credentialRoutes } from './routes/credentialRoutes';
 import { verifyEmailRoutes } from './routes/verifyEmailRoutes';
 import { roleRoutes } from './routes/roleRoutes';
 import { invitationRoutes } from './routes/invitationRoutes';
+import { apiKeyRoutes } from './routes/apiKeyRoutes';
 import { SAMSService } from './services/samsService';
 import { redisCacheService } from './services/redisCacheService';
 import { logger } from './utils/logger';
@@ -94,6 +95,7 @@ app.use('/api/v1/user', userRoutes);
 app.use('/api/v1/roles', roleRoutes);
 app.use('/api/v1/invitations', invitationRoutes);
 app.use('/verify-email', verifyEmailRoutes);
+app.use('/api/v1/keys', apiKeyRoutes);
 
 // SAMS (Service Authentication Microservice) routes
 app.use('/api/v1/services', samsRoutes);

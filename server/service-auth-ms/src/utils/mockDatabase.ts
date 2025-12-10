@@ -1,6 +1,7 @@
 import { UserAccount } from '../models/User';
 import { Role } from '../models/Role';
 import { Invitation } from '../models/Invitation';
+import { ApiKey, ApiKeyStatus } from '../models/ApiKey';
 import { v4 as uuidv4 } from 'uuid';
 
 // Mock in-memory database
@@ -9,6 +10,7 @@ class MockDatabase {
   private emailIndex: Map<string, string> = new Map(); // email -> userId mapping
   private roles: Map<string, Role> = new Map();
   private invitations: Map<string, Invitation> = new Map();
+  private apiKeys: Map<string, ApiKey> = new Map();
 
   /**
    * Find user by email
@@ -207,6 +209,72 @@ class MockDatabase {
   }
 
   /**
+   * Create ApiKey
+   */
+  async createApiKey(apiKey: ApiKey): Promise<ApiKey> {
+    this.apiKeys.set(apiKey.id, apiKey);
+    return apiKey;
+  }
+
+  /**
+   * Find ApiKey by ID
+   */
+  async findApiKeyById(id: string): Promise<ApiKey | null> {
+    return this.apiKeys.get(id) || null;
+  }
+
+  /**
+   * Find ApiKey by Public Key
+   */
+  async findApiKeyByPublicKey(publicKey: string): Promise<ApiKey | null> {
+    for (const key of this.apiKeys.values()) {
+      if (key.public_key === publicKey) {
+        return key;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Find ApiKeys by Merchant ID
+   */
+  async findApiKeysByMerchantId(merchantId: string): Promise<ApiKey[]> {
+    const result: ApiKey[] = [];
+    for (const key of this.apiKeys.values()) {
+      if (key.merchant_id === merchantId && key.status !== ApiKeyStatus.REVOKED) {
+        result.push(key);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Update ApiKey
+   */
+  async updateApiKey(id: string, updates: Partial<ApiKey>): Promise<ApiKey | null> {
+    const key = this.apiKeys.get(id);
+    if (!key) return null;
+
+    const updatedKey = {
+      ...key,
+      ...updates,
+      updated_at: new Date()
+    };
+
+    this.apiKeys.set(id, updatedKey);
+    return updatedKey;
+  }
+
+  /**
+   * Delete ApiKey (Revoke)
+   * We typically revoke keys rather than deleting them immediately, but this method deletes from DB.
+   * Prefer using updateApiKey to set status to REVOKED.
+   */
+  async deleteApiKey(id: string): Promise<boolean> {
+    return this.apiKeys.delete(id);
+  }
+
+  /**
    * Clear all data (for testing purposes)
    */
   async clearAll(): Promise<void> {
@@ -214,6 +282,7 @@ class MockDatabase {
     this.emailIndex.clear();
     this.roles.clear();
     this.invitations.clear();
+    this.apiKeys.clear();
   }
 }
 

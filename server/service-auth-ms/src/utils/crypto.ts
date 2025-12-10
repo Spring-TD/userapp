@@ -1,4 +1,5 @@
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { config } from '../config/environment';
 import { UserAccount, UserType } from '../models/User';
@@ -47,7 +48,7 @@ export const generateRandomString = (length: number = 32): string => {
 export const generateSecureToken = (length: number = 32): string => {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
   let result = '';
-  
+
   // Use crypto.randomInt for better security if available
   if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
     const array = new Uint8Array(length);
@@ -61,7 +62,7 @@ export const generateSecureToken = (length: number = 32): string => {
       result += chars.charAt(Math.floor(Math.random() * chars.length));
     }
   }
-  
+
   return result;
 };
 
@@ -214,6 +215,9 @@ export const isTokenExpired = (token: string): boolean => {
 /**
  * Get token expiration time
  */
+/**
+ * Get token expiration time
+ */
 export const getTokenExpiration = (token: string): Date | null => {
   try {
     const decoded = jwt.decode(token) as any;
@@ -224,4 +228,34 @@ export const getTokenExpiration = (token: string): Date | null => {
   } catch (error) {
     return null;
   }
+};
+
+/**
+ * Generate API key pair (public and secret)
+ */
+export const generateApiKeyPair = (environment: 'test' | 'live'): { publicKey: string, secretKey: string } => {
+  const prefix = environment === 'live' ? 'live' : 'test';
+  const randomPublic = generateRandomString(24);
+  const randomSecret = generateRandomString(48);
+
+  return {
+    publicKey: `pk_${prefix}_${randomPublic}`,
+    secretKey: `sk_${prefix}_${randomSecret}`
+  };
+};
+
+/**
+ * Hash API key
+ * We use SHA-256 for API key hashing as it's faster than bcrypt and sufficient for high-entropy keys
+ */
+export const hashApiKey = (apiKey: string): string => {
+  return crypto.createHash('sha256').update(apiKey).digest('hex');
+};
+
+/**
+ * Verify API key against hash
+ */
+export const verifyApiKey = (apiKey: string, hash: string): boolean => {
+  const computedHash = hashApiKey(apiKey);
+  return computedHash === hash;
 };
