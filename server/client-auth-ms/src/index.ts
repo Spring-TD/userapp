@@ -11,6 +11,7 @@ import { passwordRoutes } from './routes/passwordRoutes';
 import { userRoutes } from './routes/userRoutes';
 import { verifyEmailRoutes } from './routes/verifyEmailRoutes';
 import { roleRoutes } from './routes/roleRoutes';
+import { invitationRoutes } from './routes/invitationRoutes';
 
 const app = express();
 
@@ -38,6 +39,7 @@ app.get('/', (_req, res) => {
       password: '/api/v1/password',
       user: '/api/v1/user',
       roles: '/api/v1/roles',
+      invitations: '/api/v1/invitations',
       verifyEmail: '/verify-email'
     },
     timestamp: new Date().toISOString()
@@ -61,6 +63,7 @@ app.use('/api/v1/otp', otpRoutes);
 app.use('/api/v1/password', passwordRoutes);
 app.use('/api/v1/user', userRoutes);
 app.use('/api/v1/roles', roleRoutes);
+app.use('/api/v1/invitations', invitationRoutes);
 app.use('/verify-email', verifyEmailRoutes);
 
 // Error handling middleware

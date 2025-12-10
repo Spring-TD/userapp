@@ -57,9 +57,9 @@ export class EmailService {
     try {
       if (!this.isConfigured || !this.transporter) {
         logger.warn('Email service not configured, logging password reset token');
-        logger.info('Password Reset Token', { 
-          email, 
-          userName, 
+        logger.info('Password Reset Token', {
+          email,
+          userName,
           resetToken: resetToken.substring(0, 20) + '...',
           resetUrl: `${process.env['FRONTEND_URL'] || 'http://localhost:3000'}/reset-password?token=${resetToken}`
         });
@@ -67,7 +67,7 @@ export class EmailService {
       }
 
       const resetUrl = `${process.env['FRONTEND_URL'] || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
-      
+
       const mailOptions = {
         from: config.email.from,
         to: email,
@@ -77,25 +77,25 @@ export class EmailService {
       };
 
       const info = await this.transporter.sendMail(mailOptions);
-      
+
       if (config.env === 'production') {
-        logger.info('Password reset email sent', { 
-          email, 
-          messageId: info.messageId 
+        logger.info('Password reset email sent', {
+          email,
+          messageId: info.messageId
         });
       } else {
-        logger.info('Password reset email (mock)', { 
-          email, 
+        logger.info('Password reset email (mock)', {
+          email,
           resetUrl,
-          messageId: info.messageId 
+          messageId: info.messageId
         });
       }
 
       return true;
     } catch (error) {
-      logger.error('Failed to send password reset email', { 
+      logger.error('Failed to send password reset email', {
         error: error instanceof Error ? error.message : 'Unknown error',
-        email 
+        email
       });
       return false;
     }
@@ -108,9 +108,9 @@ export class EmailService {
     try {
       if (!this.isConfigured || !this.transporter) {
         logger.warn('Email service not configured, logging verification token');
-        logger.info('Email Verification Token', { 
-          email, 
-          userName, 
+        logger.info('Email Verification Token', {
+          email,
+          userName,
           verificationToken: verificationToken.substring(0, 20) + '...',
           verificationUrl: `${process.env['FRONTEND_URL'] || 'http://localhost:3000'}/verify-email?token=${verificationToken}`
         });
@@ -118,7 +118,7 @@ export class EmailService {
       }
 
       const verificationUrl = `${process.env['FRONTEND_URL'] || 'http://localhost:3000'}/verify-email?token=${verificationToken}`;
-      
+
       const mailOptions = {
         from: config.email.from,
         to: email,
@@ -128,25 +128,25 @@ export class EmailService {
       };
 
       const info = await this.transporter.sendMail(mailOptions);
-      
+
       if (config.env === 'production') {
-        logger.info('Email verification sent', { 
-          email, 
-          messageId: info.messageId 
+        logger.info('Email verification sent', {
+          email,
+          messageId: info.messageId
         });
       } else {
-        logger.info('Email verification (mock)', { 
-          email, 
+        logger.info('Email verification (mock)', {
+          email,
           verificationUrl,
-          messageId: info.messageId 
+          messageId: info.messageId
         });
       }
 
       return true;
     } catch (error) {
-      logger.error('Failed to send email verification', { 
+      logger.error('Failed to send email verification', {
         error: error instanceof Error ? error.message : 'Unknown error',
-        email 
+        email
       });
       return false;
     }
@@ -172,32 +172,128 @@ export class EmailService {
       };
 
       const info = await this.transporter.sendMail(mailOptions);
-      
+
       if (config.env === 'production') {
-        logger.info('Password change notification sent', { 
-          email, 
-          messageId: info.messageId 
+        logger.info('Password change notification sent', {
+          email,
+          messageId: info.messageId
         });
       } else {
-        logger.info('Password change notification (mock)', { 
-          email, 
-          messageId: info.messageId 
+        logger.info('Password change notification (mock)', {
+          email,
+          messageId: info.messageId
         });
       }
 
       return true;
     } catch (error) {
-      logger.error('Failed to send password change notification', { 
+      logger.error('Failed to send password change notification', {
         error: error instanceof Error ? error.message : 'Unknown error',
-        email 
+        email
       });
       return false;
     }
   }
 
   /**
-   * Get password reset email HTML template
+   * Send invitation email
    */
+  async sendInvitationEmail(email: string, invitationUrl: string, merchantName: string, roleName: string): Promise<boolean> {
+    try {
+      if (!this.isConfigured || !this.transporter) {
+        logger.warn('Email service not configured, logging invitation');
+        logger.info('Invitation Email', { email, invitationUrl, merchantName, roleName });
+        return true;
+      }
+
+      const mailOptions = {
+        from: config.email.from,
+        to: email,
+        subject: `You have been invited to join ${merchantName}`,
+        html: this.getInvitationEmailTemplate(merchantName, roleName, invitationUrl),
+        text: this.getInvitationEmailText(merchantName, roleName, invitationUrl)
+      };
+
+      const info = await this.transporter.sendMail(mailOptions);
+
+      if (config.env === 'production') {
+        logger.info('Invitation email sent', { email, messageId: info.messageId });
+      } else {
+        logger.info('Invitation email (mock)', { email, invitationUrl, messageId: info.messageId });
+      }
+
+      return true;
+    } catch (error) {
+      logger.error('Failed to send invitation email', { error: error instanceof Error ? error.message : 'Unknown error', email });
+      return false;
+    }
+  }
+
+  /**
+   * Get invitation email HTML template
+   */
+  private getInvitationEmailTemplate(merchantName: string, roleName: string, invitationUrl: string): string {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Invitation</title>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #f4f4f4; padding: 20px; text-align: center; }
+          .content { padding: 20px; }
+          .button { display: inline-block; background: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; }
+          .footer { background: #f4f4f4; padding: 20px; text-align: center; font-size: 12px; color: #666; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Invitation to Join Team</h1>
+          </div>
+          <div class="content">
+            <p>Hello,</p>
+            <p>You have been invited to join <strong>${merchantName}</strong> as a <strong>${roleName}</strong>.</p>
+            <p>Click the button below to accept the invitation and set up your account:</p>
+            <p style="text-align: center;">
+              <a href="${invitationUrl}" class="button">Accept Invitation</a>
+            </p>
+            <p>If the button doesn't work, copy and paste this link into your browser:</p>
+            <p style="word-break: break-all; color: #007bff;">${invitationUrl}</p>
+            <p><strong>This link will expire in 48 hours.</strong></p>
+          </div>
+          <div class="footer">
+            <p>This is an automated message, please do not reply to this email.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Get invitation email text template
+   */
+  private getInvitationEmailText(merchantName: string, roleName: string, invitationUrl: string): string {
+    return `
+Invitation to Join Team
+
+Hello,
+
+You have been invited to join ${merchantName} as a ${roleName}.
+
+Click the link below to accept the invitation and set up your account:
+
+${invitationUrl}
+
+This link will expire in 48 hours.
+
+This is an automated message, please do not reply to this email.
+    `;
+  }
+
   private getPasswordResetEmailTemplate(userName: string, resetUrl: string): string {
     return `
       <!DOCTYPE html>
@@ -234,7 +330,6 @@ export class EmailService {
             <p>This is an automated message, please do not reply to this email.</p>
           </div>
         </div>
-      </body>
       </html>
     `;
   }

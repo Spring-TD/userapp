@@ -13,6 +13,7 @@ Deployment URL: https://client-auth-ms.fly.dev/
 - **✅ Password Management**: Forgot password, reset, and change operations
 - **✅ User Profile**: Get and update user profile information
 - **✅ Role Management**: Create roles and manage permissions
+- **✅ Invitation Management**: Invite users, validate tokens, accept invitations
 - **✅ Administrative Operations**: User suspension and activation
 - **✅ API Gateway**: Centralized routing and validation
 - **✅ CORS Support**: Configured for frontend integration
@@ -254,6 +255,54 @@ Content-Type: application/json
 Authorization: Bearer <admin-jwt-token>
 
 {
+  "reason": "Violation of terms"
+}
+```
+
+#### Activate User (Admin)
+```
+PUT /api/v1/user/activate/{userId}
+Authorization: Bearer <admin-jwt-token>
+```
+
+### Invitation Management Endpoints ✅
+
+#### Create Invitation (Merchant)
+```
+POST /api/v1/invitations
+Content-Type: application/json
+Authorization: Bearer <merchant-jwt-token>
+
+{
+  "email": "new.user@example.com",
+  "roleId": "role-id-uuid"
+}
+```
+
+#### Get Invitations (Merchant)
+```
+GET /api/v1/invitations
+Authorization: Bearer <merchant-jwt-token>
+```
+
+#### Validate Invitation Token (Public)
+```
+GET /api/v1/invitations/validate/{token}
+```
+
+#### Accept Invitation (Public)
+```
+POST /api/v1/invitations/accept
+Content-Type: application/json
+
+{
+  "token": "invitation-token-uuid",
+  "firstName": "Jane",
+  "lastName": "Doe",
+  "password": "SecurePass123!",
+  "phone": "+1234567890" // Optional
+}
+```
 - `last_name`: String (required, 2-50 chars)  
 - `email`: Valid email address (required)
 - `phone`: International format (required)
@@ -474,6 +523,7 @@ The client-auth-ms now provides complete coverage of all authentication operatio
 | **Password Management** | Forgot, Reset, Change password | ✅ Complete |
 | **User Profile** | Get/Update profile, User information | ✅ Complete |
 | **Role Management** | Create roles, Get roles, Permissions | ✅ Complete |
+| **Invitation Management** | Create, List, Validate, Accept | ✅ Complete |
 | **Administration** | Suspend/Activate users, Verify info | ✅ Complete |
 | **Health & Monitoring** | Health check endpoint | ✅ Complete |
 

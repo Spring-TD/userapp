@@ -341,6 +341,43 @@ class AuthApiService {
     }
   }
 
+  // ===== INVITATION ENDPOINTS =====
+  async createInvitation(token: string, invitationData: any): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.apiClient.post('/invitations', invitationData, this.createAuthHeaders(token));
+      return response.data;
+    } catch (error: any) {
+      return this.handleError(error);
+    }
+  }
+
+  async getInvitations(token: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.apiClient.get('/invitations', this.createAuthHeaders(token));
+      return response.data;
+    } catch (error: any) {
+      return this.handleError(error);
+    }
+  }
+
+  async validateInvitationToken(token: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.apiClient.get(`/invitations/validate/${token}`);
+      return response.data;
+    } catch (error: any) {
+      return this.handleError(error);
+    }
+  }
+
+  async acceptInvitation(invitationData: any): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.apiClient.post('/invitations/accept', invitationData);
+      return response.data;
+    } catch (error: any) {
+      return this.handleError(error);
+    }
+  }
+
   // ===== UTILITY METHODS =====
   private generateMerchantId(firstName: string, lastName: string): string {
     const timestamp = Date.now().toString();

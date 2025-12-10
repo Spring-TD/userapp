@@ -13,6 +13,7 @@ import { samsRoutes } from './routes/samsRoutes';
 import { credentialRoutes } from './routes/credentialRoutes';
 import { verifyEmailRoutes } from './routes/verifyEmailRoutes';
 import { roleRoutes } from './routes/roleRoutes';
+import { invitationRoutes } from './routes/invitationRoutes';
 import { SAMSService } from './services/samsService';
 import { redisCacheService } from './services/redisCacheService';
 import { logger } from './utils/logger';
@@ -64,6 +65,7 @@ app.get('/', (_req, res) => {
       password: '/api/v1/password',
       user: '/api/v1/user',
       roles: '/api/v1/roles',
+      invitations: '/api/v1/invitations',
       services: '/api/v1/services',
       credentials: '/api/v1/credentials',
       verifyEmail: '/verify-email'
@@ -87,6 +89,7 @@ app.use('/api/v1/otp', otpRoutes);
 app.use('/api/v1/password', passwordRoutes);
 app.use('/api/v1/user', userRoutes);
 app.use('/api/v1/roles', roleRoutes);
+app.use('/api/v1/invitations', invitationRoutes);
 app.use('/verify-email', verifyEmailRoutes);
 
 // SAMS (Service Authentication Microservice) routes

@@ -24,6 +24,7 @@ Deployment URL: https://service-auth-ms.fly.dev/
 - Administrative account operations ✅
 - OTP generation and verification ✅
 - Role Management and Permissions (RBAC) ✅
+- Merchant User Invitation System ✅
 - Merchant compliance status checking ✅
 - Database integration (MongoDB) 🛠️ (configured, using mock database)
 - Comprehensive audit trails 🚧 (structured logging implemented)
@@ -282,6 +283,12 @@ The service provides the following API endpoints:
 - `POST /api/v1/roles` - Create new role (Merchant) ✅ **Implemented**
 - `GET /api/v1/roles` - Get all roles (Merchant) ✅ **Implemented**
 - `GET /api/v1/roles/permissions` - Get available permissions ✅ **Implemented**
+
+### Invitation Management
+- `POST /api/v1/invitations` - Create invitation (Merchant) ✅ **Implemented**
+- `GET /api/v1/invitations` - Get invitations (Merchant) ✅ **Implemented**
+- `GET /api/v1/invitations/validate/:token` - Validate invitation token ✅ **Implemented**
+- `POST /api/v1/invitations/accept` - Accept invitation ✅ **Implemented**
 
 ### Health Check
 - `GET /health` - Service health status ✅ **Implemented**
@@ -646,7 +653,21 @@ interface Role {
   permissions: Permission[];
   merchant_id: string;
   created_at: Date;
+  merchant_id: string;
+  created_at: Date;
   updated_at: Date;
+}
+
+interface Invitation {
+  id: string;
+  email: string;
+  roleId: string;
+  merchantId: string;
+  token: string;
+  status: 'pending' | 'accepted' | 'expired' | 'revoked';
+  expiresAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
 }
 ```
 

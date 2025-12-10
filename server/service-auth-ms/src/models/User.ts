@@ -33,6 +33,7 @@ export interface User extends BaseUser {
   user_type: UserType.USER | UserType.ADMIN;
   user_merchant_id: string;
   country: string;
+  role_id?: string; // ID of the role assigned to this user
 }
 
 export interface Merchant extends BaseUser {
