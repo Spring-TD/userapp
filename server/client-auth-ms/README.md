@@ -265,6 +265,16 @@ PUT /api/v1/user/activate/{userId}
 Authorization: Bearer <admin-jwt-token>
 ```
 
+#### Update User Status (Merchant/Admin)
+```
+PUT /api/v1/user/{userId}/status
+Authorization: Bearer <merchant-jwt-token>
+
+{
+  "status": "active"
+}
+```
+
 ### Invitation Management Endpoints ✅
 
 #### Create Invitation (Merchant)

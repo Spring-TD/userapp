@@ -278,6 +278,7 @@ The service provides the following API endpoints:
 - `POST /api/v1/user/verify-info` - Verify user information ✅ **Implemented**
 - `PUT /api/v1/user/suspend` - Suspend user account (admin) ✅ **Implemented**
 - `PUT /api/v1/user/activate` - Activate suspended account (admin) ✅ **Implemented**
+- `PUT /api/v1/user/:userId/status` - Update user status (Merchant/Admin) ✅ **Implemented**
 
 ### Role Management
 - `POST /api/v1/roles` - Create new role (Merchant) ✅ **Implemented**
