@@ -23,11 +23,15 @@ Deployment URL: https://service-auth-ms.fly.dev/
 - User profile management ✅
 - Administrative account operations ✅
 - OTP generation and verification ✅
-- Role Management and Permissions (RBAC) ✅
+- Role Management and Permissions (RBAC) - Full CRUD operations ✅
 - Merchant User Invitation System ✅
 - Merchant compliance status checking ✅
 - Database integration (MongoDB) 🛠️ (configured, using mock database)
 - Comprehensive audit trails 🚧 (structured logging implemented)
+
+## Documentation
+
+- **[Role Management API](./ROLE_MANAGEMENT_API.md)** - Comprehensive guide for role management endpoints
 
 ## Technology Stack
 
@@ -285,6 +289,8 @@ The service provides the following API endpoints:
 - `POST /api/v1/roles` - Create new role (Merchant) ✅ **Implemented**
 - `GET /api/v1/roles` - Get all roles (Merchant) ✅ **Implemented**
 - `GET /api/v1/roles/permissions` - Get available permissions ✅ **Implemented**
+- `PUT /api/v1/roles/:roleId` - Update existing role (Merchant) ✅ **Implemented**
+- `DELETE /api/v1/roles/:roleId` - Delete role (Merchant) ✅ **Implemented**
 
 ### Invitation Management
 - `POST /api/v1/invitations` - Create invitation (Merchant) ✅ **Implemented**
@@ -1035,27 +1041,146 @@ Returns a list of all available permissions that can be assigned to roles.
     ]
   }
 }
-\`\`\`
+```
+
+#### Update Role
+**`PUT /api/v1/roles/:roleId`**
+
+Updates an existing role. Only the merchant who created the role can update it.
+
+**Authentication:** Required (Merchant only)
+
+**URL Parameters:**
+- `roleId`: The UUID of the role to update
+
+**Request Body:**
+```json
+{
+  "name": "Senior Manager",
+  "description": "Senior manager with extended access",
+  "permissions": [
+    "view_products",
+    "edit_products",
+    "create_products",
+    "see_billing",
+    "add_payment_method",
+    "create_app",
+    "see_activity_log"
+  ]
+}
+```
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Role updated successfully",
+  "data": {
+    "role": {
+      "id": "role-uuid-1234",
+      "name": "Senior Manager",
+      "description": "Senior manager with extended access",
+      "permissions": [
+        "view_products",
+        "edit_products",
+        "create_products",
+        "see_billing",
+        "add_payment_method",
+        "create_app",
+        "see_activity_log"
+      ],
+      "merchant_id": "merchant-uuid-5678",
+      "created_at": "2025-01-10T12:00:00.000Z",
+      "updated_at": "2025-01-10T13:00:00.000Z"
+    }
+  }
+}
+```
+
+**Error Responses:**
+- `404 Not Found`: Role not found
+- `403 Forbidden`: You do not have permission to update this role
+- `400 Bad Request`: Validation failed
+
+#### Delete Role
+**`DELETE /api/v1/roles/:roleId`**
+
+Deletes a role. Only the merchant who created the role can delete it. Roles cannot be deleted if users are currently assigned to them.
+
+**Authentication:** Required (Merchant only)
+
+**URL Parameters:**
+- `roleId`: The UUID of the role to delete
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Role deleted successfully"
+}
+```
+
+**Error Responses:**
+- `404 Not Found`: Role not found
+- `403 Forbidden`: You do not have permission to delete this role
+- `400 Bad Request`: Cannot delete role: X user(s) are currently assigned to this role
 
 
 ### Default Users
-default merchant user that was created has the following credentials:
 
+The service automatically creates a default merchant and several test users when it starts:
+
+#### Default Merchant
 - **Email**: merchant@example.com
 - **Password**: DefaultPass123!
+- **First Name**: Default
+- **Last Name**: Merchant
+- **Phone**: +1234567890
+- **Country**: US
+- **User Merchant ID**: default-merchant-id
+- **Status**: Active (email verified)
 
-This user was created with verified email status and active account status when the server started. The system registered the merchant, sent a mock email verification, and then automatically verified the account as part of our initialization process.
+This merchant account is created with verified email status and active account status during server initialization.
 
-You can use these credentials to log in as the default merchant user. The user was created with the following details:
-- First Name: Default
-- Last Name: Merchant
-- Phone: +1234567890
-- Country: US
-- User Merchant ID: default-merchant-id
 
-Default admin user details:
-Email: admin@example.com
-Password: AdminPass123!
-Name: Default Admin
-Phone: +1234567891
-Country: US
+#### Default Admin
+- **Email**: admin@example.com
+- **Password**: AdminPass123!
+- **Name**: Default Admin
+- **Phone**: +1234567891
+- **Country**: US
+
+#### Default Invited Users (Merchant Organization)
+
+The system also creates three invited users for the default merchant, each with different role assignments:
+
+**1. Merchant Admin User**
+- **Email**: merchant-admin@example.com
+- **Password**: DefaultPass123!
+- **First Name**: Merchant
+- **Last Name**: Admin
+- **Role**: Admin (full access to all permissions)
+- **Merchant ID**: default-merchant-id
+- **Status**: Active (email verified)
+
+**2. Merchant Manager User**
+- **Email**: merchant-manager@example.com
+- **Password**: DefaultPass123!
+- **First Name**: Merchant
+- **Last Name**: Manager
+- **Role**: Manager (operational access)
+- **Permissions**: view_products, edit_products, create_products, see_billing, add_payment_method, edit_payment_method, create_app, see_activity_log, download_report
+- **Merchant ID**: default-merchant-id
+- **Status**: Active (email verified)
+
+**3. Merchant Support User**
+- **Email**: merchant-support@example.com
+- **Password**: DefaultPass123!
+- **First Name**: Merchant
+- **Last Name**: Support
+- **Role**: Support (read-only access)
+- **Permissions**: view_products, see_activity_log, see_billing
+- **Merchant ID**: default-merchant-id
+- **Status**: Active (email verified)
+
+These users demonstrate the role-based access control (RBAC) system and can be used for testing different permission levels.

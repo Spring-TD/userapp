@@ -17,4 +17,10 @@ router.post('/', merchantOnly, RoleController.createRole);
 // Get all roles (Merchant only)
 router.get('/', merchantOnly, RoleController.getRoles);
 
+// Update a role (Merchant only)
+router.put('/:roleId', merchantOnly, RoleController.updateRole);
+
+// Delete a role (Merchant only)
+router.delete('/:roleId', merchantOnly, RoleController.deleteRole);
+
 export const roleRoutes = router;

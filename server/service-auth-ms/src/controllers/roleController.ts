@@ -103,6 +103,108 @@ export class RoleController {
     }
 
     /**
+     * PUT /api/v1/roles/:roleId
+     * Update an existing role
+     */
+    static async updateRole(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            if (!req.user || req.user.userType !== 'merchant') {
+                res.status(403).json({
+                    success: false,
+                    error: 'Only merchants can update roles'
+                });
+                return;
+            }
+
+            const roleId = req.params['roleId'];
+            if (!roleId) {
+                res.status(400).json({
+                    success: false,
+                    error: 'Role ID is required'
+                });
+                return;
+            }
+
+            // Validate input
+            const { error, value } = validateInput<CreateRoleRequest>(createRoleSchema, req.body);
+            if (error) {
+                res.status(400).json({
+                    success: false,
+                    error: 'Validation failed',
+                    details: error
+                });
+                return;
+            }
+
+            // Update role
+            const result = await RoleService.updateRole(req.user.userId, roleId, value!);
+
+            if (!result.success) {
+                res.status(400).json({
+                    success: false,
+                    error: result.error
+                });
+                return;
+            }
+
+            res.status(200).json({
+                success: true,
+                message: 'Role updated successfully',
+                data: {
+                    role: result.role
+                }
+            });
+        } catch (error) {
+            logger.error('Error in updateRole controller', { error: error instanceof Error ? error.message : 'Unknown error' });
+            next(error);
+        }
+    }
+
+    /**
+     * DELETE /api/v1/roles/:roleId
+     * Delete a role
+     */
+    static async deleteRole(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            if (!req.user || req.user.userType !== 'merchant') {
+                res.status(403).json({
+                    success: false,
+                    error: 'Only merchants can delete roles'
+                });
+                return;
+            }
+
+            const roleId = req.params['roleId'];
+            if (!roleId) {
+                res.status(400).json({
+                    success: false,
+                    error: 'Role ID is required'
+                });
+                return;
+            }
+
+            // Delete role
+            const result = await RoleService.deleteRole(req.user.userId, roleId);
+
+            if (!result.success) {
+                res.status(400).json({
+                    success: false,
+                    error: result.error
+                });
+                return;
+            }
+
+            res.status(200).json({
+                success: true,
+                message: 'Role deleted successfully'
+            });
+        } catch (error) {
+            logger.error('Error in deleteRole controller', { error: error instanceof Error ? error.message : 'Unknown error' });
+            next(error);
+        }
+    }
+
+    /**
      * GET /api/v1/roles/permissions
      * Get all available permissions
      */

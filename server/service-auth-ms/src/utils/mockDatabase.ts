@@ -111,6 +111,7 @@ class MockDatabase {
     return this.roles.get(id) || null;
   }
 
+
   /**
    * Find roles by merchant ID
    */
@@ -122,6 +123,30 @@ class MockDatabase {
       }
     }
     return result;
+  }
+
+  /**
+   * Update role
+   */
+  async updateRole(id: string, updates: Partial<Role>): Promise<Role | null> {
+    const role = this.roles.get(id);
+    if (!role) return null;
+
+    const updatedRole = {
+      ...role,
+      ...updates,
+      updated_at: new Date()
+    };
+
+    this.roles.set(id, updatedRole);
+    return updatedRole;
+  }
+
+  /**
+   * Delete role
+   */
+  async deleteRole(id: string): Promise<boolean> {
+    return this.roles.delete(id);
   }
 
   /**
