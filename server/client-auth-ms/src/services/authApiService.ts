@@ -275,6 +275,15 @@ class AuthApiService {
     }
   }
 
+  async updateUserStatus(token: string, userId: string, status: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.apiClient.put(`/user/${userId}/status`, { status }, this.createAuthHeaders(token));
+      return response.data;
+    } catch (error: any) {
+      return this.handleError(error);
+    }
+  }
+
   // ===== EMAIL VERIFICATION ENDPOINT =====
   async verifyEmail(token: string): Promise<ApiResponse<any>> {
     try {

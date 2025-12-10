@@ -1,10 +1,111 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthService } from '../services/authService';
-import { userProfileUpdateSchema, userVerificationSchema, userSuspensionSchema, validateInput } from '../utils/validation';
+import { AccountStatus, UserType } from '../models/User';
+import { userProfileUpdateSchema, userVerificationSchema, userSuspensionSchema, userStatusUpdateSchema, validateInput } from '../utils/validation';
 import { logger } from '../utils/logger';
-import { AccountStatus } from '../models/User';
 
 export class UserController {
+  /**
+   * PUT /api/v1/user/:userId/status
+   * Update user status (Merchant can update their users, Admin can update anyone)
+   */
+  static async updateStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      // Check if user is authenticated
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      const { userId } = req.params;
+      if (!userId) {
+        res.status(400).json({
+          success: false,
+          error: 'User ID is required'
+        });
+        return;
+      }
+
+      // Validate input data
+      const { error, value } = validateInput<{
+        status: AccountStatus;
+      }>(userStatusUpdateSchema, req.body);
+
+      if (error) {
+        res.status(400).json({
+          success: false,
+          error: 'Validation failed',
+          details: error
+        });
+        return;
+      }
+
+      // Get target user to check permissions
+      const targetUserResult = await AuthService.getUserProfile(userId);
+      if (!targetUserResult.success || !targetUserResult.user) {
+        res.status(404).json({
+          success: false,
+          error: 'User not found'
+        });
+        return;
+      }
+      const targetUser = targetUserResult.user;
+
+      // Check permissions
+      const requesterType = req.user.userType.toLowerCase();
+
+      if (requesterType === UserType.MERCHANT) {
+        // Merchant can only update status of their own users
+        if (!req.user.userMerchantId || targetUser.user_merchant_id !== req.user.userMerchantId) {
+          res.status(403).json({
+            success: false,
+            error: 'Unauthorized: You can only manage your own users'
+          });
+          return;
+        }
+      } else if (requesterType !== UserType.ADMIN) {
+        // Other users cannot update status
+        res.status(403).json({
+          success: false,
+          error: 'Unauthorized: Insufficient permissions'
+        });
+        return;
+      }
+
+      // Update user status
+      const result = await AuthService.updateUserStatus(userId, value!.status);
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: result.error
+        });
+        return;
+      }
+
+      logger.info('User status updated via API', {
+        targetUserId: userId,
+        newStatus: value!.status,
+        updatedBy: req.user.userId,
+        updaterType: requesterType
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'User status updated successfully',
+        data: {
+          user: result.user
+        }
+      });
+    } catch (error) {
+      logger.error('Error in updateStatus controller', { error: error instanceof Error ? error.message : 'Unknown error' });
+      next(error);
+    }
+  }
+
   /**
    * GET /api/v1/user/profile
    * Get current user's profile
@@ -127,7 +228,7 @@ export class UserController {
         });
         return;
       }
-      
+
       const { userId } = req.params;
       if (!userId) {
         res.status(400).json({
@@ -183,7 +284,7 @@ export class UserController {
         });
         return;
       }
-      
+
       const { userId } = req.params;
       if (!userId) {
         res.status(400).json({
@@ -263,7 +364,7 @@ export class UserController {
         });
         return;
       }
-      
+
       const { userId } = req.params;
       if (!userId) {
         res.status(400).json({
@@ -349,7 +450,7 @@ export class UserController {
         });
         return;
       }
-      
+
       const { userId } = req.params;
       if (!userId) {
         res.status(400).json({

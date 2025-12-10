@@ -272,7 +272,7 @@ export class AuthService {
     try {
       // Use the token from either field
       const verificationTokenToUse = request.token || request.verificationToken;
-      
+
       if (!verificationTokenToUse) {
         return {
           success: false,
@@ -787,6 +787,61 @@ export class AuthService {
   }
 
   /**
+   * Update user status (generic)
+   */
+  static async updateUserStatus(userId: string, status: AccountStatus): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
+    try {
+      const user = await mockDb.findUserById(userId);
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not found'
+        };
+      }
+
+      // Update user status
+      await mockDb.updateUser(userId, {
+        status,
+        updated_at: new Date(),
+        ...(status === AccountStatus.ACTIVE ? { failed_login_attempts: 0 } : {}) // Reset failed attempts if activating
+      });
+
+      // Get updated user
+      const updatedUser = await mockDb.findUserById(userId);
+      if (!updatedUser) {
+        return {
+          success: false,
+          error: 'Failed to retrieve updated user'
+        };
+      }
+
+      // Update Redis cache
+      await redisCacheService.set(`user:${userId}`, updatedUser);
+
+      logger.info('User status updated', {
+        userId: updatedUser.id,
+        email: updatedUser.email,
+        newStatus: status
+      });
+
+      // Remove password from response
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password, ...userResponse } = updatedUser;
+
+      return {
+        success: true,
+        user: userResponse as UserResponse
+      };
+    } catch (error) {
+      logger.error('Error updating user status', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error while updating user status'
+      };
+    }
+  }
+
+  /**
    * Check if email exists
    */
   static async emailExists(email: string): Promise<boolean> {
@@ -863,7 +918,7 @@ export class AuthService {
         // Increment failed login attempts
         const failedAttempts = (user.failed_login_attempts || 0) + 1;
         const lockoutThreshold = config.security.accountLockoutAttempts;
-        
+
         const updateData: Partial<UserAccount> = {
           failed_login_attempts: failedAttempts
         };
@@ -921,7 +976,7 @@ export class AuthService {
       // Check compliance status for merchants
       let needsCompliance = false;
       let complianceStatus = 'NOT_APPLICABLE';
-      
+
       logger.info('Checking compliance status', { userType: updatedUser.user_type, userId: updatedUser.id, expectedType: UserType.MERCHANT });
       if (updatedUser.user_type === UserType.MERCHANT) {
         const complianceCheck = await this.checkComplianceStatus(updatedUser.id, updatedUser.user_type);
@@ -1287,11 +1342,11 @@ export class AuthService {
   /**
    * Check compliance status for a user
    */
-  static async checkComplianceStatus(userId: string, userType: string): Promise<{ 
-    success: boolean; 
-    needsCompliance?: boolean; 
+  static async checkComplianceStatus(userId: string, userType: string): Promise<{
+    success: boolean;
+    needsCompliance?: boolean;
     complianceStatus?: string;
-    error?: string 
+    error?: string
   }> {
     try {
       logger.info('Checking compliance status for user', { userId, userType, expectedType: UserType.MERCHANT });
@@ -1307,20 +1362,20 @@ export class AuthService {
       // Call compliance service to check KYC status
       const complianceServiceUrl = config.compliance.serviceUrl;
       logger.info('Calling compliance service', { complianceServiceUrl, userId });
-      
+
       // Prepare headers with service-to-service authentication if credential is available
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'User-Agent': 'service-auth-ms'
       };
-      
+
       if (config.compliance.serviceCredential) {
         headers['Authorization'] = `Bearer ${config.compliance.serviceCredential}`;
         logger.info('Using service-to-service authentication for compliance service');
       } else {
         logger.warn('No service credential configured for compliance service');
       }
-      
+
       const response = await axios.get<ComplianceStatusResponse>(
         `${complianceServiceUrl}/api/v1/kyc/status/${userId}`,
         {
@@ -1332,7 +1387,7 @@ export class AuthService {
 
       if (response.data.success) {
         const complianceData = response.data.data;
-        
+
         // If no compliance profile exists, user needs to complete compliance
         if (!complianceData) {
           return {
@@ -1345,7 +1400,7 @@ export class AuthService {
         // Check if compliance is completed
         const isCompleted = complianceData.status === 'APPROVED' || complianceData.status === 'COMPLETED';
         logger.info('Compliance completion check', { status: complianceData.status, isCompleted });
-        
+
         return {
           success: true,
           needsCompliance: !isCompleted,
@@ -1357,7 +1412,7 @@ export class AuthService {
           userId,
           error: response.data.error
         });
-        
+
         return {
           success: true,
           needsCompliance: true,
@@ -1369,8 +1424,8 @@ export class AuthService {
       // Check if this is a 404 error from the compliance service
       // A 404 means no KYC profile exists for the user, which means they need to start compliance
       if (axios.isAxiosError(error)) {
-        logger.info('Axios error details', { 
-          status: error.response?.status, 
+        logger.info('Axios error details', {
+          status: error.response?.status,
           data: error.response?.data,
           url: error.config?.url
         });
@@ -1379,15 +1434,15 @@ export class AuthService {
         logger.info('No KYC profile found for user, creating minimal profile', {
           userId
         });
-        
+
         // Try to create a minimal KYC profile
         const createProfileResult = await this.createMinimalKYCProfile(userId, userType);
-        
+
         if (createProfileResult.success) {
           logger.info('Minimal KYC profile created successfully', {
             userId
           });
-          
+
           // Return that user needs to start compliance
           return {
             success: true,
@@ -1399,7 +1454,7 @@ export class AuthService {
             userId,
             error: createProfileResult.error
           });
-          
+
           // Still return that user needs compliance, but with an error status
           return {
             success: true,
@@ -1408,7 +1463,7 @@ export class AuthService {
           };
         }
       }
-      
+
       // Handle 401 authentication errors specifically
       if (axios.isAxiosError(error) && error.response?.status === 401) {
         logger.info('Authentication required for compliance service', {
@@ -1416,21 +1471,21 @@ export class AuthService {
           status: error.response?.status,
           data: error.response?.data
         });
-        
+
         return {
           success: true,
           needsCompliance: true,
           complianceStatus: 'AUTH_REQUIRED'
         };
       }
-      
+
       // If we can't reach the compliance service, log the error but don't block login
-      logger.error('Error checking compliance status', { 
+      logger.error('Error checking compliance status', {
         userId,
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined
       });
-      
+
       // Assume user needs compliance if we can't check
       return {
         success: true,
@@ -1443,42 +1498,42 @@ export class AuthService {
   /**
    * Generate OTP for email verification, password reset, or login
    */
-  static async generateOTP(request: GenerateOTPRequest): Promise<{ 
-    success: boolean; 
-    reference?: string; 
+  static async generateOTP(request: GenerateOTPRequest): Promise<{
+    success: boolean;
+    reference?: string;
     expiresIn?: number;
-    error?: string 
+    error?: string
   }> {
     try {
       // Mock implementation - in production, generate actual OTP and send via email/SMS
       const { identifier, channel, purpose } = request;
-      
+
       // Generate a 6-digit OTP code
       const code = Math.floor(100000 + Math.random() * 900000).toString();
-      
+
       // Set expiration (5 minutes)
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-      
+
       // Store OTP (in production, use Redis or database)
       const otpRecord: OTPRecord = {
         code,
         userId: '', // Would be linked to actual user in real implementation
         email: channel === 'email' ? identifier : '',
-        type: purpose === 'verification' ? 'email_verification' : 
-              purpose === 'password-reset' ? 'password_reset' : 'login',
+        type: purpose === 'verification' ? 'email_verification' :
+          purpose === 'password-reset' ? 'password_reset' : 'login',
         expiresAt,
         attempts: 0
       };
-      
+
       // Add phone property only if channel is SMS
       if (channel === 'sms') {
         otpRecord.phone = identifier;
       }
-      
+
       // In a real implementation, store this in Redis or database
       // For now, we'll just log it
       logger.info('OTP generated', { identifier, channel, purpose, code });
-      
+
       // Send OTP via email or SMS (mock implementation)
       if (channel === 'email') {
         // In real implementation, send email with code
@@ -1487,7 +1542,7 @@ export class AuthService {
         // In real implementation, send SMS with code
         logger.info(`OTP ${code} sent to phone ${identifier}`);
       }
-      
+
       return {
         success: true,
         reference: `otp_${Date.now()}`, // Mock reference
@@ -1505,25 +1560,25 @@ export class AuthService {
   /**
    * Verify OTP code
    */
-  static async verifyOTP(request: VerifyOTPRequest): Promise<{ 
-    success: boolean; 
+  static async verifyOTP(request: VerifyOTPRequest): Promise<{
+    success: boolean;
     valid: boolean;
-    error?: string 
+    error?: string
   }> {
     try {
       const { identifier, code } = request;
-      
+
       // Mock implementation - in production, check against stored OTP
       // This is just a placeholder that always returns success for demonstration
       logger.info('OTP verification requested', { identifier, code });
-      
+
       // In a real implementation, you would:
       // 1. Retrieve stored OTP for identifier
       // 2. Check if code matches
       // 3. Check if OTP is expired
       // 4. Increment attempt count
       // 5. Handle locking after too many attempts
-      
+
       return {
         success: true,
         valid: true // Mock response - always valid in this mock implementation
@@ -1541,24 +1596,24 @@ export class AuthService {
   /**
    * Resend OTP code
    */
-  static async resendOTP(request: ResendOTPRequest): Promise<{ 
-    success: boolean; 
-    reference?: string; 
+  static async resendOTP(request: ResendOTPRequest): Promise<{
+    success: boolean;
+    reference?: string;
     expiresIn?: number;
-    error?: string 
+    error?: string
   }> {
     try {
       const { identifier } = request;
-      
+
       // Mock implementation - in production, regenerate OTP with same parameters
       logger.info('OTP resend requested', { identifier });
-      
+
       // In a real implementation, you would:
       // 1. Retrieve the original OTP request parameters
       // 2. Generate a new code
       // 3. Update the stored OTP record
       // 4. Send the new code
-      
+
       return {
         success: true,
         reference: `otp_${Date.now()}`, // Mock reference
@@ -1576,28 +1631,28 @@ export class AuthService {
   /**
    * Create a minimal KYC profile for a user
    */
-  static async createMinimalKYCProfile(userId: string, userType: string): Promise<{ 
-    success: boolean; 
-    error?: string 
+  static async createMinimalKYCProfile(userId: string, userType: string): Promise<{
+    success: boolean;
+    error?: string
   }> {
     try {
       // Call compliance service to create minimal KYC profile
       const complianceServiceUrl = config.compliance.serviceUrl;
       logger.info('Creating minimal KYC profile', { complianceServiceUrl, userId, userType });
-      
+
       // Prepare headers with service-to-service authentication if credential is available
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'User-Agent': 'service-auth-ms'
       };
-      
+
       if (config.compliance.serviceCredential) {
         headers['Authorization'] = `Bearer ${config.compliance.serviceCredential}`;
         logger.info('Using service-to-service authentication for compliance service');
       } else {
         logger.warn('No service credential configured for compliance service');
       }
-      
+
       const response = await axios.post(
         `${complianceServiceUrl}/api/v1/kyc/profile/${userId}`,
         { userType },
@@ -1606,9 +1661,9 @@ export class AuthService {
           timeout: 5000 // 5 second timeout
         }
       );
-      
+
       logger.info('Minimal KYC profile creation response', { status: response.status, data: response.data });
-      
+
       if (response.data.success) {
         return {
           success: true
@@ -1620,11 +1675,11 @@ export class AuthService {
         };
       }
     } catch (error) {
-      logger.error('Error creating minimal KYC profile', { 
+      logger.error('Error creating minimal KYC profile', {
         userId,
         error: error instanceof Error ? error.message : 'Unknown error'
       });
-      
+
       return {
         success: false,
         error: 'Failed to create minimal KYC profile'

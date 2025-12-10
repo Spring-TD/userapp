@@ -6,6 +6,7 @@ const router = Router();
 // User profile management routes
 router.get('/profile', UserController.getProfile);
 router.put('/profile', UserController.updateProfile);
+router.put('/:userId/status', UserController.updateStatus);
 
 // Admin user management routes
 router.get('/info/:userId', UserController.getInfo);

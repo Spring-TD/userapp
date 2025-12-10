@@ -111,6 +111,11 @@ export const userSuspensionSchema = Joi.object({
   reason: Joi.string().max(500).optional()
 });
 
+// User status update validation schema
+export const userStatusUpdateSchema = Joi.object({
+  status: Joi.string().valid('pending', 'active', 'suspended', 'deactivated').required()
+});
+
 // SAMS (Service Authentication Microservice) Validation Schemas
 
 // Service creation validation schema
@@ -179,15 +184,15 @@ export const updateServiceStatusSchema = Joi.object({
 
 // Validation helper function
 export const validateInput = <T>(schema: Joi.ObjectSchema, data: any): { error?: string; value?: T } => {
-  const { error, value } = schema.validate(data, { 
+  const { error, value } = schema.validate(data, {
     abortEarly: false,
-    stripUnknown: true 
+    stripUnknown: true
   });
-  
+
   if (error) {
     const errorMessage = error.details.map((detail: any) => detail.message).join(', ');
     return { error: errorMessage };
   }
-  
+
   return { value };
 };

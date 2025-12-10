@@ -10,6 +10,7 @@ router.use(authenticate);
 // User profile management routes
 router.get('/profile', UserController.getProfile);
 router.put('/profile', UserController.updateProfile);
+router.put('/:userId/status', UserController.updateStatus);
 
 // Admin user management routes
 router.get('/info/:userId', adminOnly, UserController.getInfo);

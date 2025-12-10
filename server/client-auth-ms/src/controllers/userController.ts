@@ -49,6 +49,39 @@ export class UserController {
     }
   }
 
+  static async updateStatus(req: Request, res: Response): Promise<void> {
+    try {
+      const token = req.headers.authorization?.replace('Bearer ', '');
+      const { userId } = req.params;
+      const { status } = req.body;
+
+      if (!token) {
+        res.status(401).json({
+          success: false,
+          error: 'Authorization token is required'
+        });
+        return;
+      }
+
+      if (!userId) {
+        res.status(400).json({
+          success: false,
+          error: 'User ID is required'
+        });
+        return;
+      }
+
+      const result = await authApiService.updateUserStatus(token, userId, status);
+      res.status(result.success ? 200 : 400).json(result);
+    } catch (error) {
+      console.error('Error in updateStatus:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  }
+
   static async getInfo(req: Request, res: Response): Promise<void> {
     try {
       const token = req.headers.authorization?.replace('Bearer ', '');
