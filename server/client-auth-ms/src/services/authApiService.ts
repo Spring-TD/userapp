@@ -284,6 +284,15 @@ class AuthApiService {
     }
   }
 
+  async getMerchantUsers(token: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.apiClient.get('/user/list', this.createAuthHeaders(token));
+      return response.data;
+    } catch (error: any) {
+      return this.handleError(error);
+    }
+  }
+
   // ===== EMAIL VERIFICATION ENDPOINT =====
   async verifyEmail(token: string): Promise<ApiResponse<any>> {
     try {

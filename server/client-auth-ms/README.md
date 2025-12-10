@@ -216,6 +216,12 @@ GET /api/v1/user/profile
 Authorization: Bearer <jwt-token>
 ```
 
+#### List Merchant Users
+```
+GET /api/v1/user/list
+Authorization: Bearer <merchant-jwt-token>
+```
+
 #### Update User Profile
 ```
 PUT /api/v1/user/profile

@@ -107,6 +107,55 @@ export class UserController {
   }
 
   /**
+   * GET /api/v1/user/list
+   * Get list of users for the authenticated merchant
+   */
+  static async getMerchantUsers(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      // Check if user is authenticated
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      // Check if user is a merchant or admin
+      if (req.user.userType !== UserType.MERCHANT && req.user.userType !== UserType.ADMIN) {
+        res.status(403).json({
+          success: false,
+          error: 'Access denied: Merchant or Admin only'
+        });
+        return;
+      }
+
+      const merchantId = req.user.userMerchantId || 'admin';
+
+      // Get merchant users
+      const result = await AuthService.getMerchantUsers(merchantId);
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: result.error
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          users: result.users
+        }
+      });
+    } catch (error) {
+      logger.error('Error in getMerchantUsers controller', { error: error instanceof Error ? error.message : 'Unknown error' });
+      next(error);
+    }
+  }
+
+  /**
    * GET /api/v1/user/profile
    * Get current user's profile
    */

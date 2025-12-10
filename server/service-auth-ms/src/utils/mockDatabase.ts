@@ -84,6 +84,19 @@ class MockDatabase {
   }
 
   /**
+   * Find users by merchant ID
+   */
+  async findUsersByMerchantId(merchantId: string): Promise<UserAccount[]> {
+    const result: UserAccount[] = [];
+    for (const user of this.users.values()) {
+      if ('user_merchant_id' in user && user.user_merchant_id === merchantId && user.user_type === 'user') {
+        result.push(user);
+      }
+    }
+    return result;
+  }
+
+  /**
    * Create a new role
    */
   async createRole(role: Role): Promise<Role> {

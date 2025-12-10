@@ -841,6 +841,52 @@ export class AuthService {
     }
   }
 
+
+  /**
+
+   * Get users by merchant ID
+   */
+  static async getMerchantUsers(merchantId: string): Promise<{ success: boolean; users?: (UserResponse & { roleName?: string })[]; error?: string }> {
+    try {
+      const users = await mockDb.findUsersByMerchantId(merchantId);
+
+      // Fetch all roles to lookup names efficiently
+      // In a real DB we would use a join, but here we can just fetch all roles for this merchant
+      // However mockDb.findRolesByMerchantId might be needed or we just iterate.
+      // Let's assume we can resolve individual roles or improved the mock DB later.
+      // For now, let's look up each role if role_id exists.
+
+      const userResponses = await Promise.all(users.map(async (user) => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { password, ...userResponse } = user;
+
+        let roleName = undefined;
+        if ('role_id' in user && user.role_id) {
+          const role = await mockDb.findRoleById(user.role_id);
+          if (role) {
+            roleName = role.name;
+          }
+        }
+
+        return {
+          ...userResponse,
+          roleName
+        } as UserResponse & { roleName?: string };
+      }));
+
+      return {
+        success: true,
+        users: userResponses
+      };
+    } catch (error) {
+      logger.error('Error getting merchant users', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error while retrieving merchant users'
+      };
+    }
+  }
+
   /**
    * Check if email exists
    */

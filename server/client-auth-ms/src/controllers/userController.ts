@@ -49,6 +49,30 @@ export class UserController {
     }
   }
 
+
+  static async listUsers(req: Request, res: Response): Promise<void> {
+    try {
+      const token = req.headers.authorization?.replace('Bearer ', '');
+
+      if (!token) {
+        res.status(401).json({
+          success: false,
+          error: 'Authorization token is required'
+        });
+        return;
+      }
+
+      const result = await authApiService.getMerchantUsers(token);
+      res.status(result.success ? 200 : 400).json(result);
+    } catch (error) {
+      console.error('Error in listUsers:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  }
+
   static async updateStatus(req: Request, res: Response): Promise<void> {
     try {
       const token = req.headers.authorization?.replace('Bearer ', '');

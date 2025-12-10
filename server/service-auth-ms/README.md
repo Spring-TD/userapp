@@ -273,6 +273,7 @@ The service provides the following API endpoints:
 
 ### User Management
 - `GET /api/v1/user/profile` - Get user profile ✅ **Implemented**
+- `GET /api/v1/user/list` - List users for merchant ✅ **Implemented**
 - `PUT /api/v1/user/profile` - Update user profile ✅ **Implemented**
 - `GET /api/v1/user/info` - Get detailed user information ✅ **Implemented**
 - `POST /api/v1/user/verify-info` - Verify user information ✅ **Implemented**

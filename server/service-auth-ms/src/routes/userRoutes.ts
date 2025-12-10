@@ -8,6 +8,7 @@ const router = Router();
 router.use(authenticate);
 
 // User profile management routes
+router.get('/list', UserController.getMerchantUsers);
 router.get('/profile', UserController.getProfile);
 router.put('/profile', UserController.updateProfile);
 router.put('/:userId/status', UserController.updateStatus);
