@@ -18,8 +18,11 @@ import { SAMSService } from './services/samsService';
 import { redisCacheService } from './services/redisCacheService';
 import { logger } from './utils/logger';
 import { AuthService } from './services/authService';
-import { AccountStatus } from './models/User';
+import { AccountStatus, UserType } from './models/User';
 import { mockDb } from './utils/mockDatabase';
+import { RoleService } from './services/roleService';
+import { Permission } from './models/Role';
+import { hashPassword } from './utils/crypto';
 
 const app = express();
 
@@ -148,6 +151,116 @@ async function createDefaultMerchantUser() {
   }
 }
 
+// Function to create default merchant roles and invited users
+async function createDefaultMerchantContext() {
+  try {
+    const merchant = await AuthService.getUserByEmail('merchant@example.com');
+    if (!merchant) {
+      logger.error('Default merchant not found, skipping context creation');
+      return;
+    }
+
+    const merchantId = merchant.user_merchant_id;
+    logger.info(`Creating context for merchant ${merchantId}`);
+
+    // define roles
+    const rolesToCreate = [
+      {
+        name: 'Admin',
+        description: 'Administrator with full access',
+        permissions: Object.values(Permission)
+      },
+      {
+        name: 'Manager',
+        description: 'Manager with operational access',
+        permissions: [
+          Permission.VIEW_PRODUCTS, Permission.EDIT_PRODUCTS, Permission.CREATE_PRODUCTS,
+          Permission.SEE_BILLING, Permission.ADD_PAYMENT_METHOD, Permission.EDIT_PAYMENT_METHOD,
+          Permission.CREATE_APP, Permission.SEE_ACTIVITY_LOG, Permission.DOWNLOAD_REPORT
+        ]
+      },
+      {
+        name: 'Support',
+        description: 'Support staff with read-only access',
+        permissions: [
+          Permission.VIEW_PRODUCTS, Permission.SEE_ACTIVITY_LOG, Permission.SEE_BILLING
+        ]
+      }
+    ];
+
+    const createdRoles: Record<string, string> = {}; // Name -> ID
+
+    for (const roleDef of rolesToCreate) {
+      // Check if role exists (simple check by name isn't directly supported by mockDb, so we iterate or just create new ones since it's in-memory)
+      // Since it's a mock DB that resets on start, we can just create them.
+      // But if we want to be safe against re-runs if logic changes:
+      const existingRoles = await mockDb.findRolesByMerchantId(merchantId);
+      const existingRole = existingRoles.find(r => r.name === roleDef.name);
+
+      if (existingRole) {
+        createdRoles[roleDef.name] = existingRole.id;
+        logger.info(`Role ${roleDef.name} already exists`);
+      } else {
+        const result = await RoleService.createRole(merchantId, {
+          name: roleDef.name,
+          description: roleDef.description,
+          permissions: roleDef.permissions
+        });
+        if (result.success && result.role) {
+          createdRoles[roleDef.name] = result.role.id;
+          logger.info(`Role ${roleDef.name} created successfully`);
+        } else {
+          logger.error(`Failed to create role ${roleDef.name}: ${result.error}`);
+        }
+      }
+    }
+
+    // Create users with roles
+    const usersToCreate = [
+      { email: 'merchant-admin@example.com', role: 'Admin', first: 'Merchant', last: 'Admin' },
+      { email: 'merchant-manager@example.com', role: 'Manager', first: 'Merchant', last: 'Manager' },
+      { email: 'merchant-support@example.com', role: 'Support', first: 'Merchant', last: 'Support' }
+    ];
+
+    for (const userDef of usersToCreate) {
+      const existingUser = await AuthService.getUserByEmail(userDef.email);
+      if (existingUser) {
+        logger.info(`User ${userDef.email} already exists`);
+        continue;
+      }
+
+      const roleId = createdRoles[userDef.role];
+      if (!roleId) {
+        logger.error(`Cannot create user ${userDef.email}: Role ${userDef.role} not found`);
+        continue;
+      }
+
+      const hashedPassword = await hashPassword('DefaultPass123!');
+
+      // We use mockDb.createUser to set everything directly including role_id
+      await mockDb.createUser({
+        email: userDef.email,
+        password: hashedPassword,
+        first_name: userDef.first,
+        last_name: userDef.last,
+        user_type: UserType.USER, // Regular user type (invited user)
+        status: AccountStatus.ACTIVE,
+        email_verified: true,
+        phone_verified: false,
+        user_merchant_id: merchantId,
+        country: 'US',
+        role_id: roleId,
+        phone: '+15550000000'
+      } as any);
+
+      logger.info(`User ${userDef.email} created with role ${userDef.role}`);
+    }
+
+  } catch (error) {
+    logger.error('Error creating default merchant context:', error);
+  }
+}
+
 // Function to create a default admin user
 async function createDefaultAdminUser() {
   try {
@@ -195,6 +308,7 @@ if (require.main === module) {
     // Create default users
     await createDefaultMerchantUser();
     await createDefaultAdminUser();
+    await createDefaultMerchantContext();
 
     // Explicitly bind to 0.0.0.0
     app.listen(PORT, '0.0.0.0', () => {
