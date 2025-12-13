@@ -258,4 +258,34 @@ export class UserController {
       });
     }
   }
+
+  static async updateCallbackUrls(req: Request, res: Response): Promise<void> {
+    try {
+      const token = req.headers.authorization?.replace('Bearer ', '');
+      const { callback_url, error_logs_url } = req.body;
+
+      if (!token) {
+        res.status(401).json({
+          success: false,
+          error: 'Authorization token is required'
+        });
+        return;
+      }
+
+      // Basic input validation
+      if (callback_url && typeof callback_url !== 'string') {
+        res.status(400).json({ success: false, error: 'Invalid callback_url format' });
+        return;
+      }
+
+      const result = await authApiService.updateUserCallbackUrls(token, { callback_url, error_logs_url });
+      res.status(result.success ? 200 : 400).json(result);
+    } catch (error) {
+      console.error('Error in updateCallbackUrls:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  }
 }

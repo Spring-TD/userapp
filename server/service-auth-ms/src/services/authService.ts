@@ -1707,6 +1707,38 @@ export class AuthService {
   }
 
   /**
+   * Update user callback URLs
+   */
+  static async updateUserCallbackUrls(userId: string, urls: { callback_url?: string; error_logs_url?: string }): Promise<{ success: boolean; user?: UserAccount; error?: string }> {
+    try {
+      const user = await mockDb.findUserById(userId);
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not found'
+        };
+      }
+
+      const updatedUser = await mockDb.updateUser(userId, {
+        callback_url: urls.callback_url,
+        error_logs_url: urls.error_logs_url,
+        updated_at: new Date()
+      });
+
+      return {
+        success: true,
+        user: updatedUser
+      };
+    } catch (error) {
+      logger.error('Error updating callback URLs', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error while updating callback URLs'
+      };
+    }
+  }
+
+  /**
    * Get active sessions for a user
    */
   static async getUserSessions(userId: string): Promise<{ success: boolean; sessions?: Session[]; error?: string }> {

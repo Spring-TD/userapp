@@ -430,6 +430,15 @@ class AuthApiService {
       return this.handleError(error);
     }
   }
+
+  async updateUserCallbackUrls(token: string, urls: { callback_url?: string; error_logs_url?: string }): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.apiClient.put('/user/callbacks', urls, this.createAuthHeaders(token));
+      return response.data;
+    } catch (error: any) {
+      return this.handleError(error);
+    }
+  }
 }
 
 export const authApiService = new AuthApiService();

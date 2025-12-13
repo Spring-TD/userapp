@@ -13,6 +13,7 @@ router.get('/profile', UserController.getProfile);
 router.put('/profile', UserController.updateProfile);
 router.put('/:userId/status', UserController.updateStatus);
 router.post('/deactivate', UserController.deactivate);
+router.put('/callbacks', UserController.updateCallbackUrls);
 
 // Admin user management routes
 router.get('/info/:userId', adminOnly, UserController.getInfo);

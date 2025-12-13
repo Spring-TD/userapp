@@ -255,6 +255,69 @@ export class UserController {
   }
 
   /**
+   * PUT /api/v1/user/callbacks
+   * Update merchant callback URLs
+   */
+  static async updateCallbackUrls(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      // Check if user is authenticated
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      // Check if user is a merchant
+      if (req.user.userType !== UserType.MERCHANT) {
+        res.status(403).json({
+          success: false,
+          error: 'Access denied: Merchants only'
+        });
+        return;
+      }
+
+      const { callback_url, error_logs_url } = req.body;
+
+      // Validate input (basic URL validation)
+      // Note: In a real app we'd use Joi or similar. For now, basic check.
+      if (callback_url && !callback_url.startsWith('http')) {
+        res.status(400).json({ success: false, error: 'Invalid callback URL' });
+        return;
+      }
+      if (error_logs_url && !error_logs_url.startsWith('http')) {
+        res.status(400).json({ success: false, error: 'Invalid error logs URL' });
+        return;
+      }
+
+      const result = await AuthService.updateUserCallbackUrls(req.user.userId, {
+        callback_url,
+        error_logs_url
+      });
+
+      if (!result.success) {
+        res.status(500).json({
+          success: false,
+          error: result.error
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Callback URLs updated successfully',
+        data: {
+          user: result.user
+        }
+      });
+    } catch (error) {
+      logger.error('Error in updateCallbackUrls controller', { error: error instanceof Error ? error.message : 'Unknown error' });
+      next(error);
+    }
+  }
+
+  /**
    * GET /api/v1/user/info/:userId
    * Get detailed user information (admin only)
    */

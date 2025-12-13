@@ -41,6 +41,8 @@ export interface Merchant extends BaseUser {
   user_type: UserType.MERCHANT;
   user_merchant_id: string;
   country: string;
+  callback_url?: string;
+  error_logs_url?: string;
 }
 
 export type UserAccount = User | Merchant;
