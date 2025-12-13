@@ -284,6 +284,15 @@ class AuthApiService {
     }
   }
 
+  async deactivateAccount(token: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.apiClient.post('/user/deactivate', {}, this.createAuthHeaders(token));
+      return response.data;
+    } catch (error: any) {
+      return this.handleError(error);
+    }
+  }
+
   async getMerchantUsers(token: string): Promise<ApiResponse<any>> {
     try {
       const response: AxiosResponse<ApiResponse<any>> = await this.apiClient.get('/user/list', this.createAuthHeaders(token));
@@ -401,6 +410,25 @@ class AuthApiService {
     const timestamp = Date.now().toString();
     const namePrefix = (firstName.substring(0, 2) + lastName.substring(0, 2)).toLowerCase();
     return `${namePrefix}_${timestamp.substring(-8)}`;
+  }
+
+  // ===== SESSION MANAGEMENT ENDPOINTS =====
+  async getSessions(token: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.apiClient.get('/sessions', this.createAuthHeaders(token));
+      return response.data;
+    } catch (error: any) {
+      return this.handleError(error);
+    }
+  }
+
+  async revokeSession(token: string, sessionId: string): Promise<ApiResponse<any>> {
+    try {
+      const response: AxiosResponse<ApiResponse<any>> = await this.apiClient.delete(`/sessions/${sessionId}`, this.createAuthHeaders(token));
+      return response.data;
+    } catch (error: any) {
+      return this.handleError(error);
+    }
   }
 }
 

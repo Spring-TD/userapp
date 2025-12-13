@@ -76,7 +76,25 @@ npm start
 - `POST /api/v1/users/:userId/billing-check` - Check billing status
 - `GET /api/v1/users/:userId/app-ownership` - Get app ownership information
 - `POST /api/v1/pricing/calculate` - Calculate account pricing based on product
+- `POST /api/v1/pricing/calculate` - Calculate account pricing based on product
 - `GET /api/v1/pricing/product/:productId` - Get product pricing
+
+### Loan Services
+- `POST /api/v1/loans/apply` - Apply for a loan
+- `GET /api/v1/loans/:id` - Get loan details (application)
+- `GET /api/v1/loans/user/:userId` - Get all user's loans
+
+### Mortgage Services
+- `POST /api/v1/mortgages/apply` - Apply for a mortgage
+- `GET /api/v1/mortgages/:id` - Get mortgage details (application)
+- `GET /api/v1/mortgages/user/:userId` - Get all user's mortgages
+
+### Commodity Services
+- `POST /api/v1/commodities/buy` - Buy a commodity
+- `GET /api/v1/commodities/:productId` - Get commodity details
+
+### Savings Services
+- `POST /api/v1/savings-accounts` - Create a savings account
 
 ## API Gateway
 
@@ -104,7 +122,11 @@ npx ts-node scripts/test-gateway.ts
 
 ## Environment Variables
 
-See [.env.example](.env.example) for required environment variables.
+NODE_ENV=development
+PORT= xxxxxxxxxxxx
+MONGO_URI= xxxxxxxxxxxx
+CORS_ORIGINS= xxxxxxxxxxxx
+LOG_LEVEL= xxxxxxxxxxxxx
 
 ## Testing
 
@@ -112,3 +134,57 @@ Run tests with:
 ```
 npm test
 ```
+
+# 📘 External APIs
+
+## **🛍️ Product APIs**
+
+| Function                  | Method | API Endpoint                                               |
+| ------------------------- | ------ | ---------------------------------------------------------- |
+| Fetch all FI products     | GET    | `https://account-ms.fly.dev/api/v1/products`               |
+| Get product details by ID | GET    | `https://account-ms.fly.dev/api/v1/products/:id`           |
+| Get commodity details     | GET    | `https://account-ms.fly.dev/api/v1/commodities/:productId` |
+
+---
+
+## **🏦 Application & Account APIs**
+
+| Function               | Method | API Endpoint                                          | Body Parameters (Example)                     |
+| ---------------------- | ------ | ----------------------------------------------------- | --------------------------------------------- |
+| Apply for loan         | POST   | `https://account-ms.fly.dev/api/v1/loans/apply`       | `{ product_id, merchant_id, user_id }`        |
+| Apply for mortgage     | POST   | `https://account-ms.fly.dev/api/v1/mortgages/apply`   | `{ product_id, merchant_id, user_id }`        |
+| Create savings account | POST   | `https://account-ms.fly.dev/api/v1/savings-accounts/` | `{ product_id, user_id, initial_deposit... }` |
+| Buy commodity          | POST   | `https://account-ms.fly.dev/api/v1/commodities/buy`   | `{ product_id, user_id, amount }`             |
+
+---
+
+## **📊 Query APIs (Loans & Commodities)**
+
+| Function                    | Method | API Endpoint                                           |
+| --------------------------- | ------ | ------------------------------------------------------ |
+| Get loan details by loan_id | GET    | `https://account-ms.fly.dev/api/v1/loans/:id`          |
+| Get all user loans          | GET    | `https://account-ms.fly.dev/api/v1/loans/user/:userId` |
+
+---
+
+## **🔐 Authentication & Registration APIs**
+
+| Function                   | Method | API Endpoint                                              |
+| -------------------------- | ------ | --------------------------------------------------------- |
+| API Authentication (Login) | POST   | `https://account-ms.fly.dev/api/v1/auth/login`            |
+| Create Merchant Account    | POST   | `https://account-ms.fly.dev/api/v1/registration/merchant` |
+| Create Merchant Customer   | POST   | `https://account-ms.fly.dev/api/v1/registration/user`     |
+
+---
+
+## **💼 Wallet APIs**
+
+| Function                      | Method | API Endpoint                                                                  | Notes                                          |
+| ----------------------------- | ------ | ----------------------------------------------------------------------------- | ---------------------------------------------- |
+| Create Merchant Wallet        | POST   | `https://account-ms.fly.dev/api/v1/wallets/merchant`                          | —                                              |
+| Create User Wallet            | POST   | `https://account-ms.fly.dev/api/v1/wallets/user`                              | —                                              |
+| Fetch Merchant wallet details | GET    | `https://account-ms.fly.dev/api/v1/wallets/merchant/:merchantId/all`          | Returns Treasury, Operation, & KYC wallets     |
+| Fetch Merchant wallet history | GET    | `https://account-ms.fly.dev/api/v1/wallets/treasury/:merchantId/transactions` | Replace **treasury** with `operation` or `kyc` |
+| Fetch user wallet details     | GET    | `https://account-ms.fly.dev/api/v1/wallets/user/:userId`                      | —                                              |
+| Fetch user wallet history     | GET    | `https://account-ms.fly.dev/api/v1/wallets/user/:userId/transactions`         | —                                              |
+

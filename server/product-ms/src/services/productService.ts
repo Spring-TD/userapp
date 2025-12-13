@@ -1,8 +1,8 @@
 import { Product, CreateProductRequest, UpdateProductRequest, SelectProductTypeRequest, CreateProductAfterTypeRequest } from '../types/product';
-import { 
-  LoanProductConfiguration, 
-  MortgageProductConfiguration, 
-  SavingsProductConfiguration, 
+import {
+  LoanProductConfiguration,
+  MortgageProductConfiguration,
+  SavingsProductConfiguration,
   CommodityProductConfiguration,
   ProductConfiguration,
   CreateProductConfigurationRequest,
@@ -45,7 +45,7 @@ export class ProductService {
   // New method to create product after type selection
   async createProductAfterType(productData: CreateProductAfterTypeRequest): Promise<Product | null> {
     const productIndex = this.products.findIndex(p => p.id === productData.productId);
-    
+
     if (productIndex === -1) {
       return null;
     }
@@ -56,7 +56,7 @@ export class ProductService {
       equityContribution: existingProduct.equityContribution,
       propertyValue: existingProduct.propertyValue
     } : {};
-    
+
     // Check if this is a commodity product and if so, preserve the commodity-specific fields
     const commodityFields = existingProduct.type === 'Commodity' ? {
       price: existingProduct.price,
@@ -112,7 +112,7 @@ export class ProductService {
 
   async updateProduct(id: string, updateData: UpdateProductRequest): Promise<Product | null> {
     const productIndex = this.products.findIndex(p => p.id === id);
-    
+
     if (productIndex === -1) {
       return null;
     }
@@ -123,7 +123,7 @@ export class ProductService {
       equityContribution: updateData.equityContribution !== undefined ? updateData.equityContribution : existingProduct.equityContribution,
       propertyValue: updateData.propertyValue !== undefined ? updateData.propertyValue : existingProduct.propertyValue
     } : {};
-    
+
     // Preserve existing commodity fields if not being updated
     const commodityFields = existingProduct.type === 'Commodity' ? {
       price: updateData.price !== undefined ? updateData.price : existingProduct.price,
@@ -145,7 +145,7 @@ export class ProductService {
 
   async deleteProduct(id: string): Promise<boolean> {
     const productIndex = this.products.findIndex(p => p.id === id);
-    
+
     if (productIndex === -1) {
       return false;
     }
@@ -156,6 +156,10 @@ export class ProductService {
 
   async getProductsByMerchant(merchantId: string): Promise<Product[]> {
     return this.products.filter(p => p.appId === merchantId);
+  }
+
+  async getAllProducts(): Promise<Product[]> {
+    return this.products;
   }
 
   // Configuration management methods
@@ -221,7 +225,7 @@ export class ProductService {
 
   async updateProductConfiguration(productId: string, updateData: UpdateProductConfigurationRequest): Promise<ProductConfiguration | null> {
     const configIndex = this.productConfigurations.findIndex(c => c.productId === productId);
-    
+
     if (configIndex === -1) {
       return null;
     }
@@ -238,7 +242,7 @@ export class ProductService {
 
   async deleteProductConfiguration(productId: string): Promise<boolean> {
     const configIndex = this.productConfigurations.findIndex(c => c.productId === productId);
-    
+
     if (configIndex === -1) {
       return false;
     }

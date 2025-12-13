@@ -533,7 +533,46 @@ export class UserController {
         }
       });
     } catch (error) {
-      logger.error('Error in activate controller', { error: error instanceof Error ? error.message : 'Unknown error' });
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/user/deactivate
+   * Deactivate current user's account
+   */
+  static async deactivate(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      // Check if user is authenticated
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      // Deactivate user account
+      const result = await AuthService.deactivateAccount(req.user.userId);
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: result.error
+        });
+        return;
+      }
+
+      logger.info('User deactivated their account', {
+        userId: req.user.userId
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Account deactivated successfully. You can reactivate by logging in within 90 days.'
+      });
+    } catch (error) {
+      logger.error('Error in deactivate controller', { error: error instanceof Error ? error.message : 'Unknown error' });
       next(error);
     }
   }

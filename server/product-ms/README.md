@@ -144,6 +144,11 @@ Deletes a product by its ID.
 
 **Endpoint:** `DELETE /api/v1/products/:id`
 
+### Get ALL Products
+Retrieves all products.
+
+**Endpoint:** `GET /api/v1/products`
+
 ### Get Products by App ID
 Retrieves all products associated with a specific app ID.
 

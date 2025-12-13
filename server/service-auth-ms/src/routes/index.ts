@@ -6,3 +6,4 @@ export * from './userRoutes';
 export * from './samsRoutes';
 export * from './credentialRoutes';
 export * from './verifyEmailRoutes';
+export * from './sessionRoutes';

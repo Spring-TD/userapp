@@ -1,4 +1,6 @@
 import { User, Merchant, UserType, AccountStatus, UserAccount } from '../models/User';
+import { Session } from '../models/Session';
+import { v4 as uuidv4 } from 'uuid';
 import { mockDb } from '../utils/mockDatabase';
 import { hashPassword, comparePassword, generatePasswordResetToken, verifyPasswordResetToken, generateEmailVerificationToken, verifyEmailVerificationToken, generateAccessToken, generateRefreshToken, verifyToken } from '../utils/crypto';
 import { logger } from '../utils/logger';
@@ -841,6 +843,115 @@ export class AuthService {
     }
   }
 
+  /**
+   * Deactivate user account
+   */
+  static async deactivateAccount(userId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const user = await mockDb.findUserById(userId);
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not found'
+        };
+      }
+
+      if (user.status === AccountStatus.DEACTIVATED) {
+        return {
+          success: false,
+          error: 'Account is already deactivated'
+        };
+      }
+
+      // Pause subscriptions
+      const subscriptionResult = await paymentService.pauseUserSubscriptions(userId);
+      if (!subscriptionResult.success) {
+        logger.warn('Failed to pause some subscriptions during deactivation', { errors: subscriptionResult.errors });
+        // Proceed with deactivation
+      }
+
+      // Deactivate account
+      await mockDb.updateUser(userId, {
+        status: AccountStatus.DEACTIVATED,
+        deactivated_at: new Date(),
+        updated_at: new Date()
+      });
+
+      // Update Redis cache
+      await redisCacheService.delete(`user:${userId}`);
+
+      logger.info('User account deactivated', { userId });
+
+      return {
+        success: true
+      };
+    } catch (error) {
+      logger.error('Error deactivating account', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error during account deactivation'
+      };
+    }
+  }
+
+  /**
+   * Reactivate user account
+   */
+  static async reactivateAccount(userId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const user = await mockDb.findUserById(userId);
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not found'
+        };
+      }
+
+      if (user.status !== AccountStatus.DEACTIVATED) {
+        return {
+          success: false,
+          error: 'Account is not deactivated'
+        };
+      }
+
+      // Check 90 days window
+      if (user.deactivated_at) {
+        const ninetyDaysInMs = 90 * 24 * 60 * 60 * 1000;
+        const timeDiff = new Date().getTime() - new Date(user.deactivated_at).getTime();
+
+        if (timeDiff > ninetyDaysInMs) {
+          return {
+            success: false,
+            error: 'Account cannot be reactivated because 90 days have passed since deactivation.'
+          };
+        }
+      }
+
+      // Reactivate account
+      await mockDb.updateUser(userId, {
+        status: AccountStatus.ACTIVE,
+        deactivated_at: null, // Clear deactivation date
+        updated_at: new Date(),
+        failed_login_attempts: 0
+      });
+
+      // Update Redis cache
+      await redisCacheService.delete(`user:${userId}`);
+
+      logger.info('User account reactivated', { userId });
+
+      return {
+        success: true
+      };
+    } catch (error) {
+      logger.error('Error reactivating account', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error during account reactivation'
+      };
+    }
+  }
+
 
   /**
 
@@ -849,6 +960,7 @@ export class AuthService {
   static async getMerchantUsers(merchantId: string): Promise<{ success: boolean; users?: (UserResponse & { roleName?: string })[]; error?: string }> {
     try {
       const users = await mockDb.findUsersByMerchantId(merchantId);
+      const activeUsers = users.filter((u: any) => u.status !== AccountStatus.DEACTIVATED);
 
       // Fetch all roles to lookup names efficiently
       // In a real DB we would use a join, but here we can just fetch all roles for this merchant
@@ -856,7 +968,7 @@ export class AuthService {
       // Let's assume we can resolve individual roles or improved the mock DB later.
       // For now, let's look up each role if role_id exists.
 
-      const userResponses = await Promise.all(users.map(async (user) => {
+      const userResponses = await Promise.all(activeUsers.map(async (user) => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { password, ...userResponse } = user;
 
@@ -938,7 +1050,7 @@ export class AuthService {
   /**
    * Login user with email and password
    */
-  static async login(email: string, password: string): Promise<LoginResponse> {
+  static async login(email: string, password: string, ipAddress?: string, userAgent?: string): Promise<LoginResponse> {
     try {
       // Find user by email
       const user = await this.getUserByEmail(email.toLowerCase());
@@ -992,10 +1104,43 @@ export class AuthService {
 
       // Check if account is active
       if (user.status !== AccountStatus.ACTIVE) {
-        return {
-          success: false,
-          error: `Account is ${user.status}. Please contact support.`
-        };
+        // Handle deactivated account reactivation
+        if (user.status === AccountStatus.DEACTIVATED) {
+          // Check if within 90 days
+          if (user.deactivated_at) {
+            const ninetyDaysInMs = 90 * 24 * 60 * 60 * 1000;
+            const timeDiff = Date.now() - new Date(user.deactivated_at).getTime();
+
+            if (timeDiff > ninetyDaysInMs) {
+              return {
+                success: false,
+                error: 'Account has been permanently deleted.'
+              };
+            }
+
+            // Auto-reactivate
+            await mockDb.updateUser(user.id, {
+              status: AccountStatus.ACTIVE,
+              deactivated_at: null,
+              failed_login_attempts: 0,
+              updated_at: new Date()
+            });
+
+            logger.info('User account auto-reactivated on login', { userId: user.id });
+            // Continue to generate token
+          } else {
+            // Should not happen if deactivated properly, but just in case
+            return {
+              success: false,
+              error: 'Account is deactivated and cannot be restored.'
+            };
+          }
+        } else {
+          return {
+            success: false,
+            error: `Account is ${user.status}. Please contact support.`
+          };
+        }
       }
 
       // Reset failed login attempts on successful login
@@ -1049,6 +1194,21 @@ export class AuthService {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { password: userPassword, ...userResponse } = updatedUser;
 
+      // Create Session
+      const session: Session = {
+        id: uuidv4(),
+        userId: updatedUser.id,
+        refreshToken: refreshToken,
+        ipAddress: ipAddress || 'Unknown IP',
+        deviceInfo: userAgent || 'Unknown Device', // Simple mapping for now, ideally parse User-Agent string
+        createdAt: new Date(),
+        lastActiveAt: new Date(),
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days expiration for refresh token
+        isValid: true
+      };
+
+      await mockDb.createSession(session);
+
       return {
         success: true,
         user: userResponse as UserResponse,
@@ -1084,8 +1244,13 @@ export class AuthService {
       const accessTokenExp = decoded.exp ? decoded.exp * 1000 : undefined;
       await tokenBlacklistService.addToBlacklist(accessToken, accessTokenExp);
 
-      // Add refresh token to blacklist if provided
+      // Invalidate session associated with refresh token
       if (refreshToken) {
+        const session = await mockDb.findSessionByRefreshToken(refreshToken);
+        if (session) {
+          await mockDb.invalidateSession(session.id);
+        }
+
         const refreshDecoded = verifyToken(refreshToken);
         if (refreshDecoded) {
           const refreshTokenExp = refreshDecoded.exp ? refreshDecoded.exp * 1000 : undefined;
@@ -1537,6 +1702,64 @@ export class AuthService {
         success: true,
         needsCompliance: true,
         complianceStatus: 'CHECK_FAILED'
+      };
+    }
+  }
+
+  /**
+   * Get active sessions for a user
+   */
+  static async getUserSessions(userId: string): Promise<{ success: boolean; sessions?: Session[]; error?: string }> {
+    try {
+      const sessions = await mockDb.findSessionsByUserId(userId);
+      return {
+        success: true,
+        sessions
+      };
+    } catch (error) {
+      logger.error('Error getting user sessions', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error while retrieving sessions'
+      };
+    }
+  }
+
+  /**
+   * Revoke a specific session
+   */
+  static async revokeSession(userId: string, sessionId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const session = await mockDb.findSessionById(sessionId);
+
+      if (!session) {
+        return {
+          success: false,
+          error: 'Session not found'
+        };
+      }
+
+      if (session.userId !== userId) {
+        return {
+          success: false,
+          error: 'Unauthorized to revoke this session'
+        };
+      }
+
+      await mockDb.invalidateSession(sessionId);
+
+      // Also blacklist the associated refresh token if possible
+      // We don't have the expiration available easily without parsing, so standard blacklist default applies
+      await tokenBlacklistService.addToBlacklist(session.refreshToken);
+
+      return {
+        success: true
+      };
+    } catch (error) {
+      logger.error('Error revoking session', { error: error instanceof Error ? error.message : 'Unknown error' });
+      return {
+        success: false,
+        error: 'Internal server error while revoking session'
       };
     }
   }

@@ -12,6 +12,7 @@ import { userRoutes } from './routes/userRoutes';
 import { verifyEmailRoutes } from './routes/verifyEmailRoutes';
 import { roleRoutes } from './routes/roleRoutes';
 import { invitationRoutes } from './routes/invitationRoutes';
+import { sessionRoutes } from './routes/sessionRoutes';
 
 const app = express();
 
@@ -64,6 +65,7 @@ app.use('/api/v1/password', passwordRoutes);
 app.use('/api/v1/user', userRoutes);
 app.use('/api/v1/roles', roleRoutes);
 app.use('/api/v1/invitations', invitationRoutes);
+app.use('/api/v1/sessions', sessionRoutes);
 app.use('/verify-email', verifyEmailRoutes);
 
 // Error handling middleware

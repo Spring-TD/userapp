@@ -2,6 +2,7 @@ import { UserAccount } from '../models/User';
 import { Role } from '../models/Role';
 import { Invitation } from '../models/Invitation';
 import { ApiKey, ApiKeyStatus } from '../models/ApiKey';
+import { Session } from '../models/Session';
 import { v4 as uuidv4 } from 'uuid';
 
 // Mock in-memory database
@@ -11,6 +12,7 @@ class MockDatabase {
   private roles: Map<string, Role> = new Map();
   private invitations: Map<string, Invitation> = new Map();
   private apiKeys: Map<string, ApiKey> = new Map();
+  private sessions: Map<string, Session> = new Map();
 
   /**
    * Find user by email
@@ -275,6 +277,65 @@ class MockDatabase {
   }
 
   /**
+   * Create Session
+   */
+  async createSession(session: Session): Promise<Session> {
+    this.sessions.set(session.id, session);
+    return session;
+  }
+
+  /**
+   * Find Session by ID
+   */
+  async findSessionById(id: string): Promise<Session | null> {
+    return this.sessions.get(id) || null;
+  }
+
+  /**
+   * Find Sessions by User ID
+   */
+  async findSessionsByUserId(userId: string): Promise<Session[]> {
+    const result: Session[] = [];
+    for (const session of this.sessions.values()) {
+      if (session.userId === userId && session.isValid) {
+        result.push(session);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Find Session by Refresh Token
+   */
+  async findSessionByRefreshToken(refreshToken: string): Promise<Session | null> {
+    for (const session of this.sessions.values()) {
+      if (session.refreshToken === refreshToken) {
+        return session;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Invalidate Session
+   */
+  async invalidateSession(id: string): Promise<boolean> {
+    const session = this.sessions.get(id);
+    if (!session) return false;
+
+    session.isValid = false;
+    this.sessions.set(id, session);
+    return true;
+  }
+
+  /**
+   * Delete Session
+   */
+  async deleteSession(id: string): Promise<boolean> {
+    return this.sessions.delete(id);
+  }
+
+  /**
    * Clear all data (for testing purposes)
    */
   async clearAll(): Promise<void> {
@@ -283,6 +344,7 @@ class MockDatabase {
     this.roles.clear();
     this.invitations.clear();
     this.apiKeys.clear();
+    this.sessions.clear();
   }
 }
 

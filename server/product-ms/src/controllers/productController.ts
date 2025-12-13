@@ -20,7 +20,7 @@ export class ProductController {
     try {
       // Validate input using Joi schema
       const { error, value } = validateInput<SelectProductTypeRequest>(selectProductTypeSchema, req.body);
-      
+
       if (error) {
         throw new ApiError(400, error);
       }
@@ -31,7 +31,7 @@ export class ProductController {
       }
 
       const product = await this.productService.selectProductType(value);
-      
+
       res.status(201).json({
         success: true,
         message: 'Product type selected successfully',
@@ -45,7 +45,7 @@ export class ProductController {
         });
         return;
       }
-      
+
       console.error('Error in selectProductType controller:', error);
       res.status(500).json({
         success: false,
@@ -59,7 +59,7 @@ export class ProductController {
     try {
       // Validate input using Joi schema
       const { error, value } = validateInput<CreateProductAfterTypeRequest>(createProductAfterTypeSchema, req.body);
-      
+
       if (error) {
         throw new ApiError(400, error);
       }
@@ -70,11 +70,11 @@ export class ProductController {
       }
 
       const product = await this.productService.createProductAfterType(value);
-      
+
       if (!product) {
         throw new ApiError(404, 'Product not found');
       }
-      
+
       res.status(200).json({
         success: true,
         message: 'Product created successfully',
@@ -88,7 +88,7 @@ export class ProductController {
         });
         return;
       }
-      
+
       console.error('Error in createProductAfterType controller:', error);
       res.status(500).json({
         success: false,
@@ -101,7 +101,7 @@ export class ProductController {
     try {
       // Validate input using Joi schema
       const { error, value } = validateInput<CreateProductRequest>(createProductSchema, req.body);
-      
+
       if (error) {
         throw new ApiError(400, error);
       }
@@ -112,7 +112,7 @@ export class ProductController {
       }
 
       const product = await this.productService.createProduct(value);
-      
+
       res.status(201).json({
         success: true,
         message: 'Product created successfully',
@@ -126,8 +126,24 @@ export class ProductController {
         });
         return;
       }
-      
+
       console.error('Error in createProduct controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  };
+
+  getAllProducts = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const products = await this.productService.getAllProducts();
+      res.json({
+        success: true,
+        data: products
+      });
+    } catch (error) {
+      console.error('Error in getAllProducts controller:', error);
       res.status(500).json({
         success: false,
         error: 'Internal server error'
@@ -138,13 +154,13 @@ export class ProductController {
   getProductById = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      
+
       if (!id) {
         throw new ApiError(400, 'Product ID is required');
       }
 
       const product = await this.productService.getProductById(id);
-      
+
       if (!product) {
         throw new ApiError(404, 'Product not found');
       }
@@ -161,7 +177,7 @@ export class ProductController {
         });
         return;
       }
-      
+
       console.error('Error in getProductById controller:', error);
       res.status(500).json({
         success: false,
@@ -173,14 +189,14 @@ export class ProductController {
   updateProduct = async (req: TypedRequest<UpdateProductRequest>, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      
+
       if (!id) {
         throw new ApiError(400, 'Product ID is required');
       }
 
       // Validate input using Joi schema
       const { error, value } = validateInput<UpdateProductRequest>(updateProductSchema, req.body);
-      
+
       if (error) {
         throw new ApiError(400, error);
       }
@@ -191,7 +207,7 @@ export class ProductController {
       }
 
       const product = await this.productService.updateProduct(id, value);
-      
+
       if (!product) {
         throw new ApiError(404, 'Product not found');
       }
@@ -209,7 +225,7 @@ export class ProductController {
         });
         return;
       }
-      
+
       console.error('Error in updateProduct controller:', error);
       res.status(500).json({
         success: false,
@@ -221,13 +237,13 @@ export class ProductController {
   deleteProduct = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      
+
       if (!id) {
         throw new ApiError(400, 'Product ID is required');
       }
 
       const deleted = await this.productService.deleteProduct(id);
-      
+
       if (!deleted) {
         throw new ApiError(404, 'Product not found');
       }
@@ -244,7 +260,7 @@ export class ProductController {
         });
         return;
       }
-      
+
       console.error('Error in deleteProduct controller:', error);
       res.status(500).json({
         success: false,
@@ -256,7 +272,7 @@ export class ProductController {
   getProductsByAppId = async (req: Request, res: Response): Promise<void> => {
     try {
       const { appId } = req.params;
-      
+
       if (!appId) {
         throw new ApiError(400, 'App ID is required');
       }
@@ -275,7 +291,7 @@ export class ProductController {
         });
         return;
       }
-      
+
       console.error('Error in getProductsByAppId controller:', error);
       res.status(500).json({
         success: false,
@@ -288,13 +304,13 @@ export class ProductController {
   checkProductAction = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      
+
       if (!id) {
         throw new ApiError(400, 'Product ID is required');
       }
 
       const product = await this.productService.getProductById(id);
-      
+
       if (!product) {
         throw new ApiError(404, 'Product not found');
       }
@@ -319,7 +335,7 @@ export class ProductController {
         });
         return;
       }
-      
+
       console.error('Error in checkProductAction controller:', error);
       res.status(500).json({
         success: false,
@@ -332,14 +348,14 @@ export class ProductController {
   manageProduct = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      
+
       if (!id) {
         throw new ApiError(400, 'Product ID is required');
       }
 
       // Get the product to check its status
       const product = await this.productService.getProductById(id);
-      
+
       if (!product) {
         throw new ApiError(404, 'Product not found');
       }
@@ -351,7 +367,7 @@ export class ProductController {
 
       // Validate input using Joi schema
       const { error, value } = validateInput<UpdateProductRequest>(updateProductSchema, req.body);
-      
+
       if (error) {
         throw new ApiError(400, error);
       }
@@ -363,7 +379,7 @@ export class ProductController {
 
       // Update the product
       const updatedProduct = await this.productService.updateProduct(id, value);
-      
+
       if (!updatedProduct) {
         throw new ApiError(404, 'Product not found');
       }
@@ -381,7 +397,7 @@ export class ProductController {
         });
         return;
       }
-      
+
       console.error('Error in manageProduct controller:', error);
       res.status(500).json({
         success: false,

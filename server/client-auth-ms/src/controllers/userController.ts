@@ -235,4 +235,27 @@ export class UserController {
       });
     }
   }
+
+  static async deactivate(req: Request, res: Response): Promise<void> {
+    try {
+      const token = req.headers.authorization?.replace('Bearer ', '');
+
+      if (!token) {
+        res.status(401).json({
+          success: false,
+          error: 'Authorization token is required'
+        });
+        return;
+      }
+
+      const result = await authApiService.deactivateAccount(token);
+      res.status(result.success ? 200 : 400).json(result);
+    } catch (error) {
+      console.error('Error in deactivate:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  }
 }

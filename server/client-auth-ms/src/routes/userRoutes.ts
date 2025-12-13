@@ -8,6 +8,7 @@ router.get('/list', UserController.listUsers);
 router.get('/profile', UserController.getProfile);
 router.put('/profile', UserController.updateProfile);
 router.put('/:userId/status', UserController.updateStatus);
+router.post('/deactivate', UserController.deactivate);
 
 // Admin user management routes
 router.get('/info/:userId', UserController.getInfo);

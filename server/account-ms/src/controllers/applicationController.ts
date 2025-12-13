@@ -156,6 +156,46 @@ class ApplicationController {
         }
     }
 
+    // Get user loan applications
+    async getUserLoanApplications(req: Request, res: Response) {
+        try {
+            const { userId } = req.params;
+            const applications = await applicationService.getUserApplicationsByType(userId, 'Loan');
+            res.status(200).json({
+                success: true,
+                data: applications
+            });
+            return;
+        } catch (error: any) {
+            console.error('Error in getUserLoanApplications:', error);
+            res.status(500).json({
+                success: false,
+                error: error.message || 'Internal server error'
+            });
+            return;
+        }
+    }
+
+    // Get user mortgage applications
+    async getUserMortgageApplications(req: Request, res: Response) {
+        try {
+            const { userId } = req.params;
+            const applications = await applicationService.getUserApplicationsByType(userId, 'Mortgage');
+            res.status(200).json({
+                success: true,
+                data: applications
+            });
+            return;
+        } catch (error: any) {
+            console.error('Error in getUserMortgageApplications:', error);
+            res.status(500).json({
+                success: false,
+                error: error.message || 'Internal server error'
+            });
+            return;
+        }
+    }
+
     // Get application by ID
     async getApplicationById(req: Request, res: Response) {
         try {

@@ -25,6 +25,7 @@ export interface BaseUser {
   created_at: Date;
   updated_at: Date;
   last_login_at?: Date;
+  deactivated_at?: Date | null;
   failed_login_attempts: number;
   locked_until?: Date;
 }

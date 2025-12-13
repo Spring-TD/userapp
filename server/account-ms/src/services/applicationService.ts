@@ -163,6 +163,14 @@ class ApplicationService {
     }
 
     /**
+     * Get user's applications by type
+     */
+    async getUserApplicationsByType(userId: string, type: string) {
+        const apps = await mockDb.getApplicationsByUserId(userId);
+        return apps.filter(app => app.productType === type);
+    }
+
+    /**
      * Get application by ID
      */
     async getApplicationById(applicationId: string) {

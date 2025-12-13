@@ -9,9 +9,11 @@ import { User, Merchant } from '../models/User';
  */
 class PaymentService {
   private paymentServiceUrl: string;
+  private billingServiceUrl: string;
 
   constructor() {
     this.paymentServiceUrl = config.payment.serviceUrl;
+    this.billingServiceUrl = config.billing.serviceUrl;
   }
 
   /**
@@ -75,6 +77,67 @@ class PaymentService {
       // Don't fail the verification if payment service is down
       // This is a non-blocking operation
       return false;
+    }
+  }
+
+  /**
+   * Pause all active subscriptions (recurring billings) for a user
+   */
+  async pauseUserSubscriptions(userId: string): Promise<{ success: boolean; pausedCount: number; errors: string[] }> {
+    try {
+      logger.info('Pausing subscriptions for user', { userId });
+
+      // 1. Get all recurring billings for the user
+      const response = await axios.get(
+        `${this.billingServiceUrl}/api/v1/billing/recurring-billings`,
+        {
+          params: { billTo: userId },
+          timeout: 5000
+        }
+      );
+
+      if (!response.data.success) {
+        throw new Error('Failed to fetch recurring billings');
+      }
+
+      const billings = response.data.data || [];
+      const activeBillings = billings.filter((b: any) => b.status === 'active');
+
+      let pausedCount = 0;
+      const errors: string[] = [];
+
+      // 2. Pause each active billing
+      for (const billing of activeBillings) {
+        try {
+          await axios.post(
+            `${this.billingServiceUrl}/api/v1/billing/recurring-billings/${billing.id}/pause`,
+            {},
+            { timeout: 5000 }
+          );
+          pausedCount++;
+        } catch (err: any) {
+          logger.error(`Failed to pause billing ${billing.id}`, { error: err.message });
+          errors.push(`Failed to pause billing ${billing.id}: ${err.message}`);
+        }
+      }
+
+      return {
+        success: errors.length === 0,
+        pausedCount,
+        errors
+      };
+
+    } catch (error) {
+      logger.error('Error pausing user subscriptions', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        userId,
+        billingServiceUrl: this.billingServiceUrl
+      });
+      return {
+        success: false,
+        pausedCount: 0,
+        errors: [error instanceof Error ? error.message : 'Unknown error']
+      };
     }
   }
 }

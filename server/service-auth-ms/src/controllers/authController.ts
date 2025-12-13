@@ -223,7 +223,12 @@ export class AuthController {
       }
 
       // Authenticate user
-      const result: LoginResponse = await AuthService.login(value!.email, value!.password);
+      const result: LoginResponse = await AuthService.login(
+        value!.email,
+        value!.password,
+        req.ip,
+        req.headers['user-agent']
+      );
 
       if (!result.success) {
         res.status(401).json({
