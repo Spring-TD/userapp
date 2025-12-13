@@ -133,6 +133,57 @@ class ServiceAuthService {
             console.error('Failed to update KYC status:', error);
         }
     }
+
+    /**
+     * Get API keys for the current user (merchant)
+     */
+    async getApiKeys(authToken: string): Promise<any> {
+        try {
+            const response = await axios.get(`${this.baseUrl}/api/v1/keys`, {
+                headers: {
+                    'Authorization': `Bearer ${authToken}`
+                }
+            });
+            return response.data;
+        } catch (error: any) {
+            console.error('Error getting API keys:', error.message);
+            throw error; // Re-throw to handle in controller
+        }
+    }
+
+    /**
+     * Create a new API key
+     */
+    async createApiKey(authToken: string, data: any): Promise<any> {
+        try {
+            const response = await axios.post(`${this.baseUrl}/api/v1/keys`, data, {
+                headers: {
+                    'Authorization': `Bearer ${authToken}`
+                }
+            });
+            return response.data;
+        } catch (error: any) {
+            console.error('Error creating API key:', error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * Revoke an API key
+     */
+    async revokeApiKey(authToken: string, keyId: string): Promise<any> {
+        try {
+            const response = await axios.delete(`${this.baseUrl}/api/v1/keys/${keyId}`, {
+                headers: {
+                    'Authorization': `Bearer ${authToken}`
+                }
+            });
+            return response.data;
+        } catch (error: any) {
+            console.error('Error revoking API key:', error.message);
+            throw error;
+        }
+    }
 }
 
 export default new ServiceAuthService();

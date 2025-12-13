@@ -9,6 +9,7 @@ import loanRoutes from './routes/loanRoutes';
 import commodityRoutes from './routes/commodityRoutes';
 import savingsRoutes from './routes/savingsRoutes';
 import mortgageRoutes from './routes/mortgageRoutes';
+import apiKeyRoutes from './routes/apiKeyRoutes';
 import { setupProxies } from './middleware/proxyMiddleware';
 
 const app = express();
@@ -35,6 +36,7 @@ app.use('/api/v1/loans', loanRoutes);
 app.use('/api/v1/commodities', commodityRoutes);
 app.use('/api/v1/savings-accounts', savingsRoutes);
 app.use('/api/v1/mortgages', mortgageRoutes);
+app.use('/api/v1/keys', apiKeyRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
