@@ -1725,6 +1725,14 @@ export class AuthService {
         updated_at: new Date()
       });
 
+      // Handle the case where updateUser might return null
+      if (!updatedUser) {
+        return {
+          success: false,
+          error: 'Failed to update user'
+        };
+      }
+
       return {
         success: true,
         user: updatedUser
