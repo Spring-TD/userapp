@@ -14,6 +14,7 @@ Deployment URL: https://client-auth-ms.fly.dev/
 - **✅ User Profile**: Get and update user profile information
 - **✅ Role Management**: Create roles and manage permissions
 - **✅ Invitation Management**: Invite users, validate tokens, accept invitations
+- **✅ Session Management**: View active sessions and revoke device access
 - **✅ Administrative Operations**: User suspension and activation
 - **✅ API Gateway**: Centralized routing and validation
 - **✅ CORS Support**: Configured for frontend integration
@@ -319,6 +320,55 @@ Content-Type: application/json
   "phone": "+1234567890" // Optional
 }
 ```
+
+### Session Management Endpoints ✅
+
+#### Get Active Sessions
+```
+GET /api/v1/sessions
+Authorization: Bearer <jwt-token>
+```
+Returns a list of all active login sessions for the authenticated user, including device information, IP address, and last activity timestamp.
+
+**Response Example:**
+```json
+{
+  "success": true,
+  "data": {
+    "sessions": [
+      {
+        "id": "session-uuid",
+        "deviceInfo": "Chrome on MacBook Pro",
+        "ipAddress": "192.168.1.100",
+        "lastActiveAt": "2023-01-01T12:00:00.000Z",
+        "isCurrent": false
+      },
+      {
+        "id": "session-uuid-2",
+        "deviceInfo": "Safari on iPhone 14",
+        "ipAddress": "10.0.0.50",
+        "lastActiveAt": "2023-01-01T10:30:00.000Z",
+        "isCurrent": false
+      }
+    ]
+  }
+}
+```
+
+#### Revoke Session
+```
+DELETE /api/v1/sessions/{sessionId}
+Authorization: Bearer <jwt-token>
+```
+Revokes a specific session, logging out the user on that device. Users can only revoke their own sessions.
+
+**Response Example:**
+```json
+{
+  "success": true,
+  "message": "Session revoked successfully"
+}
+```
 - `last_name`: String (required, 2-50 chars)  
 - `email`: Valid email address (required)
 - `phone`: International format (required)
@@ -540,6 +590,7 @@ The client-auth-ms now provides complete coverage of all authentication operatio
 | **User Profile** | Get/Update profile, User information | ✅ Complete |
 | **Role Management** | Create roles, Get roles, Permissions | ✅ Complete |
 | **Invitation Management** | Create, List, Validate, Accept | ✅ Complete |
+| **Session Management** | Get active sessions, Revoke sessions | ✅ Complete |
 | **Administration** | Suspend/Activate users, Verify info | ✅ Complete |
 | **Health & Monitoring** | Health check endpoint | ✅ Complete |
 

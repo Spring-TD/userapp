@@ -267,6 +267,10 @@ The service provides the following API endpoints:
 - `POST /api/v1/auth/logout` - Logout and invalidate session ✅ **Implemented**
 - `POST /api/v1/auth/refresh` - Refresh JWT token ✅ **Implemented**
 
+### Session Management
+- `GET /api/v1/sessions` - Get active sessions ✅ **Implemented**
+- `DELETE /api/v1/sessions/:sessionId` - Revoke a specific session ✅ **Implemented**
+
 ### OTP Management
 - `POST /api/v1/otp/generate` - Generate OTP code ✅ **Implemented**
 - `POST /api/v1/otp/verify` - Verify OTP code ✅ **Implemented**
@@ -284,8 +288,9 @@ The service provides the following API endpoints:
 - `GET /api/v1/user/info` - Get detailed user information ✅ **Implemented**
 - `POST /api/v1/user/verify-info` - Verify user information ✅ **Implemented**
 - `PUT /api/v1/user/suspend` - Suspend user account (admin) ✅ **Implemented**
-- `PUT /api/v1/user/activate` - Activate suspended account (admin) ✅ **Implemented**
-- `PUT /api/v1/user/:userId/status` - Update user status (Merchant/Admin) ✅ **Implemented**
+- `PUT /api/v1/user/activate` - Activate suspended account (admin) ✅ 
+- `PUT /api/v1/user/:userId/status` - Update user status (Merchant/Admin) ✅ 
+- `POST /api/v1/user/deactivate` - Deactivate user account ✅ 
 
 ### Role Management
 - `POST /api/v1/roles` - Create new role (Merchant) ✅ **Implemented**

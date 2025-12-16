@@ -15,6 +15,7 @@ import { verifyEmailRoutes } from './routes/verifyEmailRoutes';
 import { roleRoutes } from './routes/roleRoutes';
 import { invitationRoutes } from './routes/invitationRoutes';
 import { apiKeyRoutes } from './routes/apiKeyRoutes';
+import { sessionRoutes } from './routes/sessionRoutes';
 import { SAMSService } from './services/samsService';
 import { redisCacheService } from './services/redisCacheService';
 import { logger } from './utils/logger';
@@ -100,6 +101,7 @@ app.use('/api/v1/keys', apiKeyRoutes);
 // SAMS (Service Authentication Microservice) routes
 app.use('/api/v1/services', samsRoutes);
 app.use('/api/v1/credentials', credentialRoutes);
+app.use('/api/v1/sessions', sessionRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);
