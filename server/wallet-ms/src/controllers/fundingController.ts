@@ -6,7 +6,8 @@ import { MerchantWalletType } from '../models/Wallet';
 
 // Define interfaces for the validated data
 interface FundingCallbackData {
-  walletId: string;
+  walletId?: string; // Optional if userId + merchantId provided
+  userId?: string; // For user wallet funding (alternative to walletId)
   amount: number;
   currency: string;
   transactionId: string;
@@ -15,9 +16,13 @@ interface FundingCallbackData {
   description?: string;
   providerReference?: string;
   signature?: string; // For webhook authentication
-  merchantId?: string; // For merchant wallet funding
+  merchantId?: string; // For merchant wallet funding OR identifying user wallet
   merchantWalletType?: MerchantWalletType; // For merchant wallet funding
 }
+
+// In-memory store for processed transactions (prevent duplicates)
+// In production, use Redis or database
+const processedTransactions = new Set<string>();
 
 export class FundingController {
   /**
@@ -32,6 +37,7 @@ export class FundingController {
       logger.info('Received funding callback', {
         transactionId: callbackData.transactionId,
         walletId: callbackData.walletId,
+        userId: callbackData.userId,
         merchantId: callbackData.merchantId,
         merchantWalletType: callbackData.merchantWalletType,
         amount: callbackData.amount,
@@ -50,7 +56,24 @@ export class FundingController {
         return;
       }
       
-      const { walletId, amount, transactionId, status, description, providerReference, merchantId, merchantWalletType } = value!;
+      const { walletId, userId, amount, transactionId, status, description, providerReference, merchantId, merchantWalletType } = value!;
+      
+      // Check for duplicate transaction
+      if (processedTransactions.has(transactionId)) {
+        logger.warn('Duplicate funding callback received', {
+          transactionId,
+          walletId,
+          userId,
+          merchantId
+        });
+        
+        res.status(200).json({
+          success: true,
+          message: 'Transaction already processed',
+          duplicate: true
+        });
+        return;
+      }
       
       // Verify the callback is for a successful transaction
       if (status !== 'SUCCESS' && status !== 'COMPLETED') {
@@ -105,14 +128,15 @@ export class FundingController {
             error: result.error
           });
           
-          // In a production environment, you might want to return a different status
-          // to have the provider retry the callback
           res.status(500).json({
             success: false,
             error: result.error
           });
           return;
         }
+        
+        // Mark transaction as processed
+        processedTransactions.add(transactionId);
         
         logger.info('Merchant wallet balance updated from funding callback', {
           walletId: merchantWalletResult.wallet.id,
@@ -133,17 +157,122 @@ export class FundingController {
             merchantId,
             merchantWalletType,
             newMainBalance: result.wallet?.mainBalance,
-            newLedgerBalance: result.wallet?.ledgerBalance
+            newLedgerBalance: result.wallet?.ledgerBalance,
+            transactionId
           }
         });
         return;
       }
       
-      // Handle user wallet funding (existing functionality)
-      // In a real implementation, you would also:
-      // 1. Verify the signature to ensure the callback is authentic
-      // 2. Check if this transaction has already been processed
-      // 3. Validate the wallet exists
+      // Handle user wallet funding by userId + merchantId
+      if (userId && merchantId && !walletId) {
+        logger.info('Processing user wallet funding by userId', {
+          userId,
+          merchantId,
+          amount,
+          transactionId
+        });
+        
+        // Get the user wallet
+        const userWalletResult = await WalletService.getUserWallet(userId);
+        if (!userWalletResult.success || !userWalletResult.wallet) {
+          logger.error('Failed to find user wallet for funding', {
+            userId,
+            merchantId,
+            transactionId
+          });
+          
+          res.status(404).json({
+            success: false,
+            error: 'User wallet not found'
+          });
+          return;
+        }
+        
+        // Verify the wallet belongs to the specified merchant
+        if (userWalletResult.wallet.merchantId !== merchantId) {
+          logger.error('User wallet does not belong to specified merchant', {
+            userId,
+            walletMerchantId: userWalletResult.wallet.merchantId,
+            requestedMerchantId: merchantId,
+            transactionId
+          });
+          
+          res.status(400).json({
+            success: false,
+            error: 'User wallet does not belong to the specified merchant'
+          });
+          return;
+        }
+        
+        // Credit the user wallet
+        const result = await WalletService.updateWalletBalance(
+          userWalletResult.wallet.id,
+          amount,
+          description || `Funding via ${providerReference || 'external provider'}`
+        );
+        
+        if (!result.success) {
+          logger.error('Failed to update user wallet balance from funding callback', {
+            walletId: userWalletResult.wallet.id,
+            userId,
+            merchantId,
+            amount,
+            error: result.error
+          });
+          
+          res.status(500).json({
+            success: false,
+            error: result.error
+          });
+          return;
+        }
+        
+        // Mark transaction as processed
+        processedTransactions.add(transactionId);
+        
+        logger.info('User wallet balance updated from funding callback', {
+          walletId: userWalletResult.wallet.id,
+          userId,
+          merchantId,
+          amount,
+          newMainBalance: result.wallet?.mainBalance,
+          newLedgerBalance: result.wallet?.ledgerBalance,
+          transactionId
+        });
+        
+        // Send acknowledgment to the payment provider
+        res.status(200).json({
+          success: true,
+          message: 'User wallet funding callback processed successfully',
+          data: {
+            walletId: userWalletResult.wallet.id,
+            userId,
+            merchantId,
+            newMainBalance: result.wallet?.mainBalance,
+            newLedgerBalance: result.wallet?.ledgerBalance,
+            transactionId
+          }
+        });
+        return;
+      }
+      
+      // Handle user wallet funding by walletId (existing functionality)
+      if (!walletId) {
+        logger.error('Missing required fields for funding', {
+          walletId,
+          userId,
+          merchantId,
+          merchantWalletType,
+          transactionId
+        });
+        
+        res.status(400).json({
+          success: false,
+          error: 'Either walletId or (userId + merchantId) or (merchantId + merchantWalletType) must be provided'
+        });
+        return;
+      }
       
       // For this implementation, we'll just credit the wallet
       const result = await WalletService.updateWalletBalance(
@@ -159,14 +288,15 @@ export class FundingController {
           error: result.error
         });
         
-        // In a production environment, you might want to return a different status
-        // to have the provider retry the callback
         res.status(500).json({
           success: false,
           error: result.error
         });
         return;
       }
+      
+      // Mark transaction as processed
+      processedTransactions.add(transactionId);
       
       logger.info('Wallet balance updated from funding callback', {
         walletId,
@@ -183,7 +313,8 @@ export class FundingController {
         data: {
           walletId,
           newMainBalance: result.wallet?.mainBalance,
-          newLedgerBalance: result.wallet?.ledgerBalance
+          newLedgerBalance: result.wallet?.ledgerBalance,
+          transactionId
         }
       });
       return;

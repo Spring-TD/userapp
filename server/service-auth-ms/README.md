@@ -269,7 +269,7 @@ The service provides the following API endpoints:
 
 ### Session Management
 - `GET /api/v1/sessions` - Get active sessions ✅ **Implemented**
-- `DELETE /api/v1/sessions/:sessionId` - Revoke a specific session ✅ **Implemented**
+- `DELETE /api/v1/sessions/:sessionId` - Revoke a specific session ✅ 
 
 ### OTP Management
 - `POST /api/v1/otp/generate` - Generate OTP code ✅ **Implemented**

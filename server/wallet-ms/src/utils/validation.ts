@@ -165,7 +165,11 @@ export const userApiCallSchema = Joi.object({
 
 // Funding callback validation schema
 export const fundingCallbackSchema = Joi.object({
-  walletId: walletIdSchema,
+  walletId: walletIdSchema, // Optional if userId + merchantId provided
+  userId: Joi.string().min(1).max(100).optional().messages({
+    'string.min': 'User ID must not be empty',
+    'string.max': 'User ID must not exceed 100 characters'
+  }),
   amount: amountSchema,
   currency: currencySchema,
   transactionId: transactionIdSchema,

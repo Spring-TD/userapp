@@ -51,7 +51,128 @@ Deployment URL: https://wallet-ms.fly.dev/
 
 ### Funding Callbacks
 - `POST /api/v1/wallets/funding/callback` - Webhook endpoint for funding notifications from payment providers
-- `GET /api/v1/wallets/funding/status/:transactionId` - Check funding status manually
+  - **Supports merchant wallet funding**: Use `merchantId` + `merchantWalletType` (TREASURY, OPERATION, or KYC)
+  - **Supports user wallet funding (by walletId)**: Use `walletId`
+  - **Supports user wallet funding (by user)**: Use `userId` + `merchantId` (NEW!)
+  - **Transaction deduplication**: Prevents duplicate processing using `transactionId`
+  - `GET /api/v1/wallets/funding/status/:transactionId` - Check funding status manually
+
+#### Funding Callback Usage Examples
+
+**Example 1: Fund Merchant Treasury Wallet**
+```bash
+curl -X POST "https://wallet-ms.fly.dev/api/v1/wallets/funding/callback" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "merchantId": "merchant-123",
+    "merchantWalletType": "TREASURY",
+    "amount": 1000.00,
+    "currency": "USD",
+    "transactionId": "txn-ext-001",
+    "paymentMethod": "BANK_TRANSFER",
+    "status": "SUCCESS",
+    "description": "Monthly funding from bank",
+    "providerReference": "BANK-REF-12345"
+  }'
+```
+
+Response:
+```json
+{
+  "success": true,
+  "message": "Merchant wallet funding callback processed successfully",
+  "data": {
+    "walletId": "wallet_1234567890",
+    "merchantId": "merchant-123",
+    "merchantWalletType": "TREASURY",
+    "newMainBalance": 1000.00,
+    "newLedgerBalance": 1000.00,
+    "transactionId": "txn-ext-001"
+  }
+}
+```
+
+**Example 2: Fund Merchant Operation Wallet**
+```bash
+curl -X POST "https://wallet-ms.fly.dev/api/v1/wallets/funding/callback" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "merchantId": "merchant-123",
+    "merchantWalletType": "OPERATION",
+    "amount": 500.00,
+    "currency": "USD",
+    "transactionId": "txn-ext-002",
+    "paymentMethod": "CARD",
+    "status": "COMPLETED",
+    "description": "Card payment for operations"
+  }'
+```
+
+**Example 3: Fund User Wallet by walletId**
+```bash
+curl -X POST "https://wallet-ms.fly.dev/api/v1/wallets/funding/callback" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "walletId": "wallet_user_9876543210",
+    "amount": 150.00,
+    "currency": "USD",
+    "transactionId": "txn-ext-004",
+    "paymentMethod": "BANK_TRANSFER",
+    "status": "SUCCESS",
+    "description": "User wallet funding"
+  }'
+```
+
+**Example 4: Fund User Wallet by userId + merchantId (NEW!)**
+```bash
+curl -X POST "https://wallet-ms.fly.dev/api/v1/wallets/funding/callback" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "user-456",
+    "merchantId": "merchant-123",
+    "amount": 75.50,
+    "currency": "USD",
+    "transactionId": "txn-ext-005",
+    "paymentMethod": "CARD",
+    "status": "COMPLETED",
+    "description": "Card payment for user"
+  }'
+```
+
+Response:
+```json
+{
+  "success": true,
+  "message": "User wallet funding callback processed successfully",
+  "data": {
+    "walletId": "wallet_user_9876543210",
+    "userId": "user-456",
+    "merchantId": "merchant-123",
+    "newMainBalance": 225.50,
+    "newLedgerBalance": 225.50,
+    "transactionId": "txn-ext-005"
+  }
+}
+```
+
+**Payment Methods:**
+- `CARD` - Credit/Debit card payments
+- `BANK_TRANSFER` - Bank transfers
+- `WALLET` - Digital wallet payments (PayPal, Stripe, etc.)
+- `OTHER` - Other payment methods
+
+**Transaction Status:**
+Only `SUCCESS` or `COMPLETED` status will credit the wallet. Other statuses (`PENDING`, `FAILED`, `CANCELLED`) are acknowledged but don't update the balance.
+
+**Idempotency:**
+The system prevents duplicate funding by tracking `transactionId`. Retrying with the same transaction ID returns:
+```json
+{
+  "success": true,
+  "message": "Transaction already processed",
+  "duplicate": true
+}
+```
 
 ### Transactions
 - `POST /api/v1/transactions` - Create transaction (Not yet implemented)
