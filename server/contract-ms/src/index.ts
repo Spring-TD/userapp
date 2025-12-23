@@ -6,6 +6,8 @@ import { connectDatabase } from './config/database';
 import corsMiddleware from './middleware/cors';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { contractRoutes } from './routes/contractRoutes';
+import { contractOrderRoutes } from './routes/contractOrderRoutes';
+import { contractFormRoutes } from './routes/contractFormRoutes';
 
 const app = express();
 
@@ -27,11 +29,15 @@ app.get('/', (_req, res) => {
     status: 'running',
     endpoints: {
       health: '/health',
-      contracts: '/api/v1/contracts'
+      contracts: '/api/v1/contracts',
+      contractOrders: '/api/v1/contract-orders',
+      contractForms: '/api/v1/contract-forms'
     },
     features: [
       'Contract Creation',
       'Contract Management',
+      'Contract Order Creation',
+      'Contract Form Submission',
       'Agreement Templates',
       'Contract Signing',
       'Contract Storage',
@@ -53,6 +59,8 @@ app.get('/health', (_req, res) => {
 
 // API routes
 app.use('/api/v1/contracts', contractRoutes);
+app.use('/api/v1/contract-orders', contractOrderRoutes);
+app.use('/api/v1/contract-forms', contractFormRoutes);
 
 // Error handling middleware
 app.use(notFoundHandler);
@@ -68,6 +76,8 @@ const server = app.listen(config.port, async () => {
   console.log(`🌐 Contract Service Features:`);
   console.log(`   📝 Contract Creation`);
   console.log(`   📋 Contract Management`);
+  console.log(`   📦 Contract Order Creation`);
+  console.log(`   📄 Contract Form Submission`);
   console.log(`   📄 Agreement Templates`);
   console.log(`   ✍️  Contract Signing`);
   console.log(`   💾 Contract Storage`);
