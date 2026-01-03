@@ -1,17 +1,7 @@
 import { Wallet, MerchantWallet, UserWallet, WalletStatus, Transaction, TransactionType, TransactionStatus, MerchantWalletType } from '../models/Wallet';
 import { logger } from '../utils/logger';
 import axios, { AxiosRequestConfig } from 'axios';
-
-// Mock database storage
-interface MockDB {
-  wallets: Map<string, Wallet>;
-  transactions: Map<string, Transaction>;
-}
-
-const mockDB: MockDB = {
-  wallets: new Map(),
-  transactions: new Map()
-};
+import { mockDB } from './mockDB';
 
 export interface CreateMerchantWalletData {
   merchantId: string;

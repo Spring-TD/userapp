@@ -2,7 +2,7 @@
 
 This microservice handles wallet functionality for merchants and their users.
 
-Deployment URL: https://wallet-ms.fly.dev/
+Deployment URL: https://walletms-2026.fly.dev/
 
 ## Features
 
@@ -176,7 +176,35 @@ The system prevents duplicate funding by tracking `transactionId`. Retrying with
 
 ### Transactions
 - `POST /api/v1/transactions` - Create transaction (Not yet implemented)
-- `GET /api/v1/transactions/:walletId` - Get transaction history (Not yet implemented)
+- `GET /api/v1/transactions/:walletId` - Get transaction history
+
+**Get Transaction History:**
+```bash
+curl -X GET http://localhost:3004/api/v1/transactions/{walletId} \
+  -H "Authorization: Bearer {token}"
+```
+
+Response:
+```json
+{
+  "success": true,
+  "transactions": [
+    {
+      "id": "txn_123",
+      "walletId": "wallet_456",
+      "amount": 100,
+      "type": "CREDIT",
+      "status": "COMPLETED",
+      "description": "Funding",
+      "balanceBefore": 0,
+      "balanceAfter": 100,
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "count": 1
+}
+```
 
 ## Wallet Ledger Structure
 
@@ -387,23 +415,7 @@ npm run test:user-wallet
 
 ## Implementation Status
 
-- [x] Merchant wallet creation and management
-- [x] User wallet creation and management
-- [x] Wallet balance updates
-- [x] Operation-KYC wallet transfers
-- [x] Operation wallet transaction filtering
-- [x] Operation wallet debit functionality
-- [x] KYC wallet transaction filtering
-- [x] KYC wallet debit functionality
-- [x] KYC fee processing functionality
-- [x] Treasury wallet handles all merchant's users wallet balance (Wallet Record filtering, Transfer Out, Debit Wallet)
-- [x] User wallet transaction filtering
-- [x] User wallet transfer out functionality
-- [x] User wallet 3rd party API call functionality
-- [x] Wallet funding callback functionality
-- [x] Enhanced transaction model with balance tracking
-- [x] Dual balance system (Main Balance and Ledger Balance)
 - [ ] Transaction processing
-- [ ] Transaction history
+- [x] Transaction history
 - [ ] Security enhancements
 - [ ] Database integration

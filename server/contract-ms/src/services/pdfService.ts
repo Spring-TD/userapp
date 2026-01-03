@@ -6,7 +6,7 @@ export class PDFService {
   /**
    * Generate a PDF document for a single contract form
    */
-  generateContractPDF(form: IContractForm): PDFDocument {
+  generateContractPDF(form: IContractForm): typeof PDFDocument {
     const doc = new PDFDocument({
       size: 'A4',
       margin: 50,
@@ -159,7 +159,7 @@ export class PDFService {
       doc
         .fontSize(10)
         .fillColor('#7F8C8D')
-        .text('Digital signature captured', { italics: true })
+        .text('Digital signature captured')
         .moveDown(0.5);
     }
 
@@ -168,7 +168,7 @@ export class PDFService {
       doc
         .fontSize(10)
         .fillColor('#7F8C8D')
-        .text('Facial verification completed', { italics: true })
+        .text('Facial verification completed')
         .moveDown(1);
     }
 
@@ -204,7 +204,7 @@ export class PDFService {
   /**
    * Generate a combined PDF with multiple contracts
    */
-  generateMultipleContractsPDF(forms: IContractForm[], userId: string): PDFDocument {
+  generateMultipleContractsPDF(forms: IContractForm[], userId: string): typeof PDFDocument {
     const doc = new PDFDocument({
       size: 'A4',
       margin: 50,
@@ -267,7 +267,7 @@ export class PDFService {
   /**
    * Helper to add a single contract to an existing PDF document
    */
-  private addContractToDocument(doc: PDFDocument, form: IContractForm): void {
+  private addContractToDocument(doc: any, form: IContractForm): void {
     // Header
     doc
       .fontSize(20)
@@ -322,7 +322,7 @@ export class PDFService {
   /**
    * Convert PDF document to buffer
    */
-  async pdfToBuffer(doc: PDFDocument): Promise<Buffer> {
+  async pdfToBuffer(doc: any): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       const buffers: Buffer[] = [];
       
@@ -337,7 +337,7 @@ export class PDFService {
   /**
    * Get PDF as readable stream
    */
-  pdfToStream(doc: PDFDocument): Readable {
+  pdfToStream(doc: any): Readable {
     doc.end();
     return doc as unknown as Readable;
   }

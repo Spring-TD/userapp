@@ -1,10 +1,7 @@
-# fly.toml app configuration file generated for payment-ms on 2025-11-25T08:29:57+01:00
-#
-# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
-#
+# fly.toml app configuration file for payment-ms
 
-app = 'payment-ms'
-primary_region = 'cdg'
+app = 'fuspay-payment-ms'
+primary_region = 'lhr'
 
 [build]
 

@@ -39,6 +39,8 @@ export interface IContractForm extends Document {
   status: 'draft' | 'submitted' | 'approved' | 'rejected';
   createdAt: Date;
   updatedAt: Date;
+  // Methods
+  validateSignature(): boolean;
 }
 
 const ContractToSchema = new Schema({

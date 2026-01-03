@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
 import { validateInput, createTransactionSchema, getTransactionHistorySchema } from '../utils/validation';
+import { TransactionService } from '../services/transactionService';
 
 // Define interfaces for the validated data
 interface CreateTransactionData {
@@ -50,12 +51,32 @@ export class TransactionController {
     try {
       const { walletId } = req.params;
 
-      // TODO: Implement transaction history retrieval logic
+      // Validate walletId parameter
+      if (!walletId) {
+        res.status(400).json({
+          success: false,
+          error: 'Wallet ID is required'
+        });
+        return;
+      }
+
       logger.info('Transaction history requested', { walletId });
 
-      res.status(501).json({
-        success: false,
-        error: 'Not implemented'
+      // Get transaction history from service
+      const result = await TransactionService.getTransactionHistory(walletId);
+
+      if (!result.success) {
+        res.status(404).json({
+          success: false,
+          error: result.error || 'Failed to retrieve transaction history'
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        transactions: result.transactions,
+        count: result.transactions?.length || 0
       });
     } catch (error) {
       logger.error('Error retrieving transaction history', { error });

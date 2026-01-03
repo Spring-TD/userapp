@@ -1,14 +1,6 @@
 import { Transaction, TransactionType, TransactionStatus } from '../models/Wallet';
 import { logger } from '../utils/logger';
-
-// Mock database storage
-interface MockDB {
-  transactions: Map<string, Transaction>;
-}
-
-const mockDB: MockDB = {
-  transactions: new Map()
-};
+import { mockDB } from './mockDB';
 
 export interface CreateTransactionData {
   walletId: string;
