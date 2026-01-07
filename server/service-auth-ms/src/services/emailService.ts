@@ -17,7 +17,7 @@ export class EmailService {
   /**
    * Initialize email transporter
    */
-  private async initializeTransporter(): Promise<void> {
+  private initializeTransporter(): void {
     try {
       // Try to use real SMTP configuration if available
       if (config.email.smtp.host && config.email.smtp.auth.user && config.email.smtp.auth.pass) {
@@ -28,12 +28,20 @@ export class EmailService {
           auth: config.email.smtp.auth,
         });
 
-        // Verify connection
-        if (this.transporter) {
-          await this.transporter.verify();
-        }
         this.isConfigured = true;
-        logger.info('Email service configured with SMTP');
+        logger.info('Email service configured with SMTP', {
+          host: config.email.smtp.host,
+          port: config.email.smtp.port,
+          secure: config.email.smtp.secure
+        });
+        
+        // Verify connection in background (don't block initialization)
+        this.transporter.verify().catch((error) => {
+          logger.error('SMTP connection verification failed', { 
+            error: error instanceof Error ? error.message : 'Unknown error',
+            host: config.email.smtp.host 
+          });
+        });
       } else {
         // Fall back to mock transporter for development
         this.transporter = nodemailer.createTransport({

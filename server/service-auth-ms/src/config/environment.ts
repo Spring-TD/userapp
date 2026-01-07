@@ -12,8 +12,8 @@ const envSchema = Joi.object({
   // MongoDB
   MONGODB_URI: Joi.string().required(),
 
-  // Redis
-  REDIS_URL: Joi.string().required(),
+  // Redis (optional - will use in-memory fallback if not provided)
+  REDIS_URL: Joi.string().optional().allow(''),
   REDIS_PASSWORD: Joi.string().allow('').optional(),
 
   // JWT
@@ -66,7 +66,10 @@ const envSchema = Joi.object({
   BILLING_SERVICE_URL: Joi.string().default('http://localhost:3006')
 }).unknown();
 
-const { error, value: envVars } = envSchema.validate(process.env);
+const { error, value: envVars } = envSchema.validate(process.env, {
+  convert: true, // Convert string values to correct types (e.g., "587" -> 587, "false" -> false)
+  allowUnknown: true // Allow unknown env vars
+});
 
 if (error) {
   throw new Error(`Config validation error: ${error.message}`);

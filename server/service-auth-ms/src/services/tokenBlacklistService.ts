@@ -20,6 +20,13 @@ export class TokenBlacklistService {
    */
   private async initializeRedis(): Promise<void> {
     try {
+      // Skip Redis initialization if URL is not configured
+      if (!config.redis.url || config.redis.url.trim() === '') {
+        logger.info('Redis URL not configured, using in-memory token blacklist');
+        this.isConnected = false;
+        return;
+      }
+
       this.redisClient = createClient({
         url: config.redis.url,
         password: config.redis.password || undefined,
