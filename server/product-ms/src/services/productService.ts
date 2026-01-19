@@ -4,6 +4,7 @@ import {
   MortgageProductConfiguration,
   SavingsProductConfiguration,
   CommodityProductConfiguration,
+  InvestmentProductConfiguration,
   ProductConfiguration,
   CreateProductConfigurationRequest,
   UpdateProductConfigurationRequest
@@ -209,6 +210,15 @@ export class ProductService {
           updatedAt: new Date().toISOString(),
           ...configData.configuration
         } as CommodityProductConfiguration;
+        break;
+      case 'Investment':
+        newConfiguration = {
+          id: this.generateId(),
+          productId: configData.productId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          ...configData.configuration
+        } as InvestmentProductConfiguration;
         break;
       default:
         throw new Error('Unsupported product type');

@@ -188,12 +188,66 @@ export interface CommodityProductConfiguration extends BaseProductConfiguration 
   priceVolatilityThreshold: number;
 }
 
+// Configuration for Investment products (similar to Savings)
+export interface InvestmentProductConfiguration extends BaseProductConfiguration {
+  // Loan amount settings
+  loanAmount: {
+    minimum?: number;
+    maximum?: number;
+  };
+  
+  // Charges (fees, Insurance etc)
+  charges: Array<{
+    name: string;
+    type: 'fee' | 'insurance' | 'other';
+    amount: number;
+    isPercentage?: boolean;
+  }>;
+  
+  // Investment amount settings (flexible or fixed)
+  investmentAmountSettings: 'flexible' | 'fixed';
+  
+  // Set duration
+  duration?: {
+    value: number;
+    unit: 'day' | 'week' | 'month' | 'year';
+  };
+  
+  // Interest rate
+  interestRate: number;
+  
+  // Withdrawal penalty
+  withdrawalPenalty: {
+    type: 'percentage' | 'amount';
+    value: number;
+  };
+  
+  // Withdrawal flexibility (anytime, weekly, monthly, yearly, by schedule)
+  withdrawalFlexibility: 'anytime' | 'weekly' | 'monthly' | 'yearly' | 'by_schedule';
+  
+  // Moratorium (min time before withdrawal)
+  moratorium?: {
+    value: number;
+    unit: 'day' | 'week' | 'month' | 'year';
+  };
+  
+  // Name products
+  productName: string;
+  
+  // Add product image
+  productImage?: string;
+  
+  // Single user or group
+  userMode: 'single' | 'group';
+}
+
 // Union type for all product configurations
 export type ProductConfiguration = 
   | LoanProductConfiguration
   | MortgageProductConfiguration
   | SavingsProductConfiguration
-  | CommodityProductConfiguration;
+  | CommodityProductConfiguration
+  | InvestmentProductConfiguration;
 
 // Request interfaces for creating/updating configurations
 export interface CreateProductConfigurationRequest {

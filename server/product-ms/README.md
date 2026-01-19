@@ -8,7 +8,7 @@ Deployment URL: https://product-ms.fly.dev/
 ## New Workflow
 The product creation workflow has been updated to require product type selection as the first step after receiving the create-app ID:
 1. Receive create-app ID
-2. Select product type (Loan, Mortgage, Savings, or Commodity)
+2. Select product type (Loan, Mortgage, Savings, Commodity, or Investment)
 3. Provide product name and description
 4. Configure product-specific settings
 
@@ -23,7 +23,7 @@ Selects the product type after receiving the create-app ID.
 ```json
 {
   "appId": "string",           // Required: Create-app ID (1-100 characters)
-  "type": "string"             // Required: Product type (Loan, Mortgage, Savings, or Commodity)
+  "type": "string"             // Required: Product type (Loan, Mortgage, Savings, Commodity, or Investment)
 }
 ```
 
@@ -89,7 +89,7 @@ Creates a new product with all information at once (maintained for backward comp
 {
   "name": "string",           // Required: Product name (1-200 characters)
   "description": "string",    // Required: Product description (1-1000 characters)
-  "type": "string",           // Required: Product type (Loan, Mortgage, Savings, or Commodity)
+  "type": "string",           // Required: Product type (Loan, Mortgage, Savings, Commodity, or Investment)
   "appId": "string"           // Required: Create-app ID (1-100 characters)
 }
 ```
@@ -99,6 +99,7 @@ Creates a new product with all information at once (maintained for backward comp
 - **Mortgage**: Long-term loan secured by real estate
 - **Savings**: Financial product for saving money with interest
 - **Commodity**: Product related to trading physical goods
+- **Investment**: Financial product for investment portfolios and instruments
 
 **Response:**
 ```json
@@ -134,7 +135,7 @@ Updates an existing product.
 {
   "name": "string",              // Optional: Product name (1-200 characters)
   "description": "string",       // Optional: Product description (1-1000 characters)
-  "type": "string",              // Optional: Product type (Loan, Mortgage, Savings, or Commodity)
+  "type": "string",              // Optional: Product type (Loan, Mortgage, Savings, Commodity, or Investment)
   "status": "string"             // Optional: Product status (complete or incomplete)
 }
 ```
@@ -185,7 +186,7 @@ Allows editing/updating all product information for complete products.
 {
   "name": "string",              // Optional: Product name (1-200 characters)
   "description": "string",       // Optional: Product description (1-1000 characters)
-  "type": "string",              // Optional: Product type (Loan, Mortgage, Savings, or Commodity)
+  "type": "string",              // Optional: Product type (Loan, Mortgage, Savings, Commodity, or Investment)
   "status": "string"             // Optional: Product status (complete or incomplete)
 }
 ```
@@ -222,7 +223,7 @@ Creates a configuration for a specific product based on its type.
 ```json
 {
   "productId": "string",           // Required: Product ID
-  "productType": "string",         // Required: Product type (Loan, Mortgage, Savings, or Commodity)
+  "productType": "string",         // Required: Product type (Loan, Mortgage, Savings, Commodity, or Investment)
   "configuration": {
     // Configuration fields vary by product type
     // See specific configuration types below
@@ -354,7 +355,7 @@ For Commodity products, the following configuration fields are available:
 All requests are validated using Joi schemas to ensure data integrity:
 - Product name: 1-200 characters, required for creation
 - Product description: 1-1000 characters, required for creation
-- Product type: Must be one of Loan, Mortgage, Savings, or Commodity (1-100 characters)
+- Product type: Must be one of Loan, Mortgage, Savings, Commodity, or Investment (1-100 characters)
 - App ID: 1-100 characters, required for creation
 - Status: Must be either "complete" or "incomplete"
 

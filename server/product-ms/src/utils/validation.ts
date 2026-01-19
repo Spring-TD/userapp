@@ -16,7 +16,7 @@ export const validateInput = <T>(schema: Joi.ObjectSchema, data: any): { error?:
 };
 
 // Predefined product types
-const PREDEFINED_PRODUCT_TYPES = ['Loan', 'Mortgage', 'Savings', 'Commodity'];
+const PREDEFINED_PRODUCT_TYPES = ['Loan', 'Mortgage', 'Savings', 'Commodity', 'Investment'];
 
 // Product creation validation schema
 export const createProductSchema = Joi.object({
@@ -34,7 +34,7 @@ export const createProductSchema = Joi.object({
     'string.empty': 'Product type is required',
     'string.min': 'Product type must be at least 1 character',
     'string.max': 'Product type cannot exceed 100 characters',
-    'any.only': 'Product type must be one of Loan, Mortgage, Savings, or Commodity'
+    'any.only': 'Product type must be one of Loan, Mortgage, Savings, Commodity, or Investment'
   }),
   appId: Joi.string().min(1).max(100).required().messages({
     'string.empty': 'App ID is required',
@@ -56,7 +56,7 @@ export const updateProductSchema = Joi.object({
   type: Joi.string().min(1).max(100).optional().valid(...PREDEFINED_PRODUCT_TYPES).messages({
     'string.min': 'Product type must be at least 1 character',
     'string.max': 'Product type cannot exceed 100 characters',
-    'any.only': 'Product type must be one of Loan, Mortgage, Savings, or Commodity'
+    'any.only': 'Product type must be one of Loan, Mortgage, Savings, Commodity, or Investment'
   }),
   status: Joi.string().valid('complete', 'incomplete').optional(),
   equityContribution: Joi.number().optional().messages({
@@ -87,7 +87,7 @@ export const selectProductTypeSchema = Joi.object({
     'string.empty': 'Product type is required',
     'string.min': 'Product type must be at least 1 character',
     'string.max': 'Product type cannot exceed 100 characters',
-    'any.only': 'Product type must be one of Loan, Mortgage, Savings, or Commodity'
+    'any.only': 'Product type must be one of Loan, Mortgage, Savings, Commodity, or Investment'
   })
 });
 
