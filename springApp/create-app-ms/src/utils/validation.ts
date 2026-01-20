@@ -1,4 +1,5 @@
 import { CreateAppRequest } from '../types/app';
+import { validateSubdomain } from './subdomainUtils';
 
 export const validateCreateAppRequest = (data: Partial<CreateAppRequest>): string | null => {
   // Check required fields
@@ -37,6 +38,14 @@ export const validateCreateAppRequest = (data: Partial<CreateAppRequest>): strin
   // Validate description length
   if (data.description.length < 10 || data.description.length > 1000) {
     return 'App description must be between 10 and 1000 characters';
+  }
+  
+  // Validate custom subdomain if provided
+  if (data.subdomain) {
+    const subdomainError = validateSubdomain(data.subdomain);
+    if (subdomainError) {
+      return `Invalid subdomain: ${subdomainError}`;
+    }
   }
   
   return null; // No validation errors

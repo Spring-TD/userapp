@@ -12,6 +12,9 @@ interface Config {
   specialApiKey: string;
   publicKey: string;
   jwtSecret: string;
+  baseDomain: string;
+  serverIp: string;
+  platformDomain: string;
 }
 
 export const config: Config = {
@@ -22,5 +25,8 @@ export const config: Config = {
   walletServiceUrl: process.env.WALLET_SERVICE_URL || 'http://localhost:4004',
   specialApiKey: process.env.SPECIAL_API_KEY || 'default-special-key',
   publicKey: process.env.PUBLIC_KEY || 'default-public-key',
-  jwtSecret: process.env.JWT_SECRET || 'fallback_secret_key'
+  jwtSecret: process.env.JWT_SECRET || 'fallback_secret_key',
+  baseDomain: process.env.SUBDOMAIN_BASE_DOMAIN || 'springtd.com',
+  serverIp: process.env.SERVER_IP || '',
+  platformDomain: process.env.PLATFORM_DOMAIN || 'domain.useinclude.com'
 };

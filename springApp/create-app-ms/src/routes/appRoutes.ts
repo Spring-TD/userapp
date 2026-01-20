@@ -3,6 +3,7 @@ import { AppService } from '../services/appService';
 import { AppController } from '../controllers/appController';
 import { apiKeyAuth } from '../middleware/apiKeyAuth';
 import { authenticate, merchantOnly } from '../middleware/auth';
+import { appConfigurationRoutes } from './appConfigurationRoutes';
 
 const router = Router();
 const appService = new AppService();
@@ -13,6 +14,16 @@ router.post('/', authenticate, merchantOnly, appController.createApp);
 
 // Get all apps
 router.get('/', appController.getAllApps);
+
+// Get app by subdomain (must be before /:id route to avoid conflicts)
+router.get('/subdomain/:subdomain', appController.getAppBySubdomain);
+
+// Custom domain management endpoints (must be before /:id route to avoid conflicts)
+router.post('/:id/custom-domain', authenticate, merchantOnly, appController.addCustomDomain);
+router.put('/:id/custom-domain/activate', authenticate, merchantOnly, appController.activateCustomDomain);
+router.post('/:id/custom-domain/verify', authenticate, merchantOnly, appController.verifyCustomDomain);
+router.get('/:id/custom-domain/dns', authenticate, merchantOnly, appController.getDnsConfiguration);
+router.delete('/:id/custom-domain', authenticate, merchantOnly, appController.removeCustomDomain);
 
 // Get app by ID
 router.get('/:id', appController.getAppById);
@@ -52,6 +63,9 @@ router.get('/:id/drive/documents/:documentId', appController.getDocumentById);
 router.put('/:id/drive/documents/:documentId', appController.updateDocument);
 router.delete('/:id/drive/documents/:documentId', appController.deleteDocument);
 router.get('/:id/drive/document-stats', appController.getDocumentStats);
+
+// Configuration endpoints
+router.use('/:id/configuration', appConfigurationRoutes);
 
 // Special endpoints that require API keys
 router.get('/special/metadata', apiKeyAuth, appController.getAppsWithMetadata);

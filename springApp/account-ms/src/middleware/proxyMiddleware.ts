@@ -54,6 +54,12 @@ export const setupProxies = (app: Express) => {
         createProxyMiddleware(createOptions(config.paymentServiceUrl))
     );
 
+    // Notification Service Proxy
+    app.use(
+        '/api/v1/notifications',
+        createProxyMiddleware(createOptions(config.notificationServiceUrl))
+    );
+
     // Client Auth Service Proxy
     const clientAuthTarget = config.clientAuthServiceUrl;
 

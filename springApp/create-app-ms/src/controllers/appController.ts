@@ -5,6 +5,7 @@ import { ApiError } from '../middleware/errorHandler';
 import { WalletService } from '../services/walletService';
 import { TransactionService } from '../services/transactionService';
 import { DriveService } from '../services/driveService';
+import { config } from '../config/environment';
 
 // Extend Request interface to include user data
 interface AuthenticatedRequest extends Request {
@@ -72,11 +73,25 @@ export class AppController {
         // The wallet creation failure should be handled separately
       }
       
+      // Build subdomain URL
+      const subdomainUrl = app.subdomain ? `https://${app.subdomain}.${config.baseDomain}` : undefined;
+      
+      // Build custom domain URL (if active and verified)
+      const customDomainUrl = app.customDomainActive && app.customDomainVerified && app.customDomain
+        ? `https://${app.customDomain}`
+        : undefined;
+      
       res.status(201).json({
         success: true,
         message: 'App created successfully',
         data: {
-          app,
+          app: {
+            ...app,
+            subdomainUrl,
+            customDomainUrl,
+            // Include DNS configuration if custom domain is set but not verified
+            dnsConfiguration: app.customDomain && !app.customDomainVerified ? app.dnsConfiguration : undefined
+          },
           wallets: walletResult
         }
       });
@@ -111,9 +126,23 @@ export class AppController {
         throw new ApiError(404, 'App not found');
       }
 
+      // Build subdomain URL
+      const subdomainUrl = app.subdomain ? `https://${app.subdomain}.${config.baseDomain}` : undefined;
+
+      // Build custom domain URL (if active and verified)
+      const customDomainUrl = app.customDomainActive && app.customDomainVerified && app.customDomain
+        ? `https://${app.customDomain}`
+        : undefined;
+
       res.json({
         success: true,
-        data: app
+        data: {
+          ...app,
+          subdomainUrl,
+          customDomainUrl,
+          // Include DNS configuration if custom domain is set but not verified
+          dnsConfiguration: app.customDomain && !app.customDomainVerified ? app.dnsConfiguration : undefined
+        }
       });
     } catch (error) {
       if (error instanceof ApiError) {
@@ -414,6 +443,47 @@ export class AppController {
       }
       
       console.error('Error in getProductKeys controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  };
+
+  getAppBySubdomain = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { subdomain } = req.params;
+      
+      if (!subdomain) {
+        throw new ApiError(400, 'Subdomain is required');
+      }
+
+      const app = await this.appService.getAppBySubdomain(subdomain);
+      
+      if (!app) {
+        throw new ApiError(404, 'App not found');
+      }
+
+      // Build subdomain URL
+      const subdomainUrl = app.subdomain ? `https://${app.subdomain}.${config.baseDomain}` : undefined;
+
+      res.json({
+        success: true,
+        data: {
+          ...app,
+          subdomainUrl
+        }
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+        return;
+      }
+      
+      console.error('Error in getAppBySubdomain controller:', error);
       res.status(500).json({
         success: false,
         error: 'Internal server error'
@@ -897,6 +967,233 @@ export class AppController {
       }
       
       console.error('Error in bulkUpdateApps controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  };
+
+  // Custom Domain Management Methods
+
+  addCustomDomain = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const { customDomain } = req.body;
+
+      if (!id) {
+        throw new ApiError(400, 'App ID is required');
+      }
+
+      if (!customDomain) {
+        throw new ApiError(400, 'Custom domain is required');
+      }
+
+      const app = await this.appService.updateCustomDomain(id, customDomain);
+
+      if (!app) {
+        throw new ApiError(404, 'App not found');
+      }
+
+      res.json({
+        success: true,
+        message: 'Custom domain added successfully',
+        data: {
+          app: {
+            ...app,
+            customDomainUrl: undefined, // Not active yet
+            dnsConfiguration: app.dnsConfiguration
+          }
+        }
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+        return;
+      }
+
+      console.error('Error in addCustomDomain controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  };
+
+  activateCustomDomain = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const { active, allowUnverified } = req.body;
+
+      if (!id) {
+        throw new ApiError(400, 'App ID is required');
+      }
+
+      if (typeof active !== 'boolean') {
+        throw new ApiError(400, 'Active status (boolean) is required');
+      }
+
+      const app = await this.appService.activateCustomDomain(id, active, allowUnverified || false);
+
+      if (!app) {
+        throw new ApiError(404, 'App not found');
+      }
+
+      const customDomainUrl = app.customDomainActive && app.customDomainVerified && app.customDomain
+        ? `https://${app.customDomain}`
+        : undefined;
+
+      res.json({
+        success: true,
+        message: `Custom domain ${active ? 'activated' : 'deactivated'} successfully`,
+        data: {
+          app: {
+            ...app,
+            customDomainUrl
+          }
+        }
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+        return;
+      }
+
+      console.error('Error in activateCustomDomain controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  };
+
+  verifyCustomDomain = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const { manualOverride } = req.body;
+
+      if (!id) {
+        throw new ApiError(400, 'App ID is required');
+      }
+
+      const verificationResult = await this.appService.verifyCustomDomain(id, manualOverride || false);
+
+      const app = await this.appService.getAppById(id);
+      if (!app) {
+        throw new ApiError(404, 'App not found');
+      }
+
+      res.json({
+        success: true,
+        message: verificationResult.verified
+          ? 'Custom domain verified successfully'
+          : 'Custom domain verification failed',
+        data: {
+          verified: verificationResult.verified,
+          errors: verificationResult.errors,
+          app: {
+            ...app,
+            customDomainUrl: app.customDomainActive && app.customDomainVerified && app.customDomain
+              ? `https://${app.customDomain}`
+              : undefined,
+            dnsConfiguration: app.customDomain && !app.customDomainVerified ? app.dnsConfiguration : undefined
+          }
+        }
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+        return;
+      }
+
+      console.error('Error in verifyCustomDomain controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  };
+
+  getDnsConfiguration = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+
+      if (!id) {
+        throw new ApiError(400, 'App ID is required');
+      }
+
+      const dnsConfig = await this.appService.getDnsConfiguration(id);
+
+      if (!dnsConfig) {
+        throw new ApiError(404, 'No DNS configuration found for this app');
+      }
+
+      res.json({
+        success: true,
+        data: dnsConfig
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+        return;
+      }
+
+      console.error('Error in getDnsConfiguration controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  };
+
+  removeCustomDomain = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+
+      if (!id) {
+        throw new ApiError(400, 'App ID is required');
+      }
+
+      const app = await this.appService.removeCustomDomain(id);
+
+      if (!app) {
+        throw new ApiError(404, 'App not found');
+      }
+
+      const subdomainUrl = app.subdomain ? `https://${app.subdomain}.${config.baseDomain}` : undefined;
+
+      res.json({
+        success: true,
+        message: 'Custom domain removed, using subdomain',
+        data: {
+          app: {
+            ...app,
+            subdomainUrl
+          }
+        }
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+        return;
+      }
+
+      console.error('Error in removeCustomDomain controller:', error);
       res.status(500).json({
         success: false,
         error: 'Internal server error'

@@ -16,6 +16,10 @@ export class AppModel {
       alias: appData.alias,
       description: appData.description,
       merchantId: appData.merchantId,
+      subdomain: appData.subdomain || '', // Will be set by service layer
+      customDomain: undefined,
+      customDomainActive: false,
+      customDomainVerified: false,
       status: 'draft',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -65,6 +69,38 @@ export class AppModel {
 
   static async getAllApps(): Promise<App[]> {
     return this.apps;
+  }
+
+  static async getAppBySubdomain(subdomain: string): Promise<App | null> {
+    if (!subdomain) {
+      return null;
+    }
+    const app = this.apps.find(a => a.subdomain === subdomain);
+    return app || null;
+  }
+
+  static async getAllSubdomains(): Promise<string[]> {
+    return this.apps
+      .map(app => app.subdomain)
+      .filter(subdomain => subdomain && subdomain.length > 0);
+  }
+
+  static async getAppByCustomDomain(domain: string): Promise<App | null> {
+    if (!domain) {
+      return null;
+    }
+    // Normalize domain for comparison
+    const normalizedDomain = domain.toLowerCase().trim();
+    const app = this.apps.find(a => 
+      a.customDomain && a.customDomain.toLowerCase().trim() === normalizedDomain
+    );
+    return app || null;
+  }
+
+  static async getAllCustomDomains(): Promise<string[]> {
+    return this.apps
+      .map(app => app.customDomain)
+      .filter(domain => domain && domain.length > 0) as string[];
   }
 
   private static generateId(): string {
