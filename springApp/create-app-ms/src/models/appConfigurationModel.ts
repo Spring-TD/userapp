@@ -27,6 +27,7 @@ export class AppConfigurationModel {
       onboarding: config.onboarding || this.getDefaultOnboarding(),
       support: config.support || this.getDefaultSupport(),
       policy: config.policy || this.getDefaultPolicy(),
+      dnsConfig: config.dnsConfig || this.getDefaultDnsConfig(),
       isActive: options?.isActive !== undefined ? options.isActive : true,
       updateVariance: config.updateVariance || [],
       createdAt: new Date().toISOString(),
@@ -118,6 +119,9 @@ export class AppConfigurationModel {
       onboarding: { ...existingConfig.onboarding, ...updateData.onboarding },
       support: { ...existingConfig.support, ...updateData.support },
       policy: { ...existingConfig.policy, ...updateData.policy },
+      dnsConfig: updateData.dnsConfig
+        ? { ...(existingConfig.dnsConfig || this.getDefaultDnsConfig()), ...updateData.dnsConfig }
+        : existingConfig.dnsConfig,
       updateVariance: combinedVariance,
       updatedAt: new Date().toISOString()
     };
@@ -147,6 +151,9 @@ export class AppConfigurationModel {
     }
     if (updateData.support) {
       variance.push('Support');
+    }
+    if (updateData.dnsConfig) {
+      variance.push('DNS');
     }
 
     return variance;
@@ -193,7 +200,8 @@ export class AppConfigurationModel {
         appProfile: configuration.appProfile,
         onboarding: configuration.onboarding,
         support: configuration.support,
-        policy: configuration.policy
+        policy: configuration.policy,
+        dnsConfig: configuration.dnsConfig
       },
       isDefault: templateData.isDefault || false,
       createdAt: new Date().toISOString(),
@@ -431,6 +439,16 @@ export class AppConfigurationModel {
         title: '',
         content: ''
       }
+    };
+  }
+
+  private static getDefaultDnsConfig() {
+    return {
+      customDomain: undefined,
+      customDomainActive: false,
+      customDomainVerified: false,
+      customDomainVerifiedAt: undefined,
+      dnsConfiguration: undefined
     };
   }
 

@@ -6,6 +6,7 @@ import { AppConfigurationService } from './appConfigurationService';
 import { sanitizeSubdomain, generateUniqueSubdomain, validateSubdomain } from '../utils/subdomainUtils';
 import { validateCustomDomain, normalizeDomain, isDomainUnique } from '../utils/domainUtils';
 import { DnsService } from './dnsService';
+import { VercelService } from './vercelService';
 import { config } from '../config/environment';
 
 export class AppService {
@@ -377,16 +378,37 @@ export class AppService {
       throw new ApiError(400, 'Domain already exist in our database!');
     }
 
-    // Generate DNS configuration
-    if (!config.serverIp) {
-      throw new ApiError(500, 'Server IP not configured. Please set SERVER_IP environment variable.');
+    // Use Vercel API to generate DNS configuration
+    const vercelService = new VercelService();
+    
+    if (!vercelService.isConfigured()) {
+      throw new ApiError(500, 'Vercel API is not configured. Please set VERCEL_API_TOKEN environment variable.');
     }
 
-    const dnsConfig = DnsService.generateDnsConfiguration(
-      normalizedDomain,
-      config.platformDomain,
-      config.serverIp
-    );
+    if (!config.vercelDefaultProjectId) {
+      throw new ApiError(400, 'Vercel project ID is required. Please set VERCEL_DEFAULT_PROJECT_ID environment variable.');
+    }
+
+    let dnsConfig: DnsConfiguration;
+    try {
+      // Add domain to Vercel project
+      const vercelDomainResponse = await vercelService.addDomain(
+        normalizedDomain,
+        config.vercelDefaultProjectId,
+        config.vercelTeamId
+      );
+
+      // Convert Vercel response to DNS configuration
+      dnsConfig = DnsService.convertVercelToDnsConfiguration(
+        vercelDomainResponse,
+        normalizedDomain
+      );
+    } catch (error: any) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError(500, `Failed to add domain to Vercel: ${error.message}`);
+    }
 
     // Update app with custom domain
     const updatedApp = await AppModel.updateApp(appId, {

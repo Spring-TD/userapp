@@ -122,3 +122,8 @@ export const OPENSANCTIONS_API_KEY = process.env.OPENSANCTIONS_API_KEY as string
 // Export Redis environment variables (optional)
 export const REDIS_URL = process.env.REDIS_URL as string | undefined;
 export const REDIS_PASSWORD = process.env.REDIS_PASSWORD as string | undefined;
+
+// Export Prembly API environment variables (optional)
+export const PREMBLY_API_KEY = process.env.PREMBLY_API_KEY as string | undefined;
+export const PREMBLY_API_SECRET = process.env.PREMBLY_API_SECRET as string | undefined;
+export const PREMBLY_BASE_URL = process.env.PREMBLY_BASE_URL as string | undefined;

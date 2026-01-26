@@ -9,6 +9,11 @@ export interface DnsConfiguration {
     name: string; // e.g., "www" or root domain
     value: string; // Points to platform domain (e.g., "domain.useinclude.com")
   }>;
+  txtRecords?: Array<{
+    type: 'TXT';
+    name: string;
+    value: string; // Verification or other TXT records
+  }>;
   baseUrl: string; // The base URL to use (e.g., "https://yourDomain.com/")
 }
 

@@ -14,9 +14,10 @@ Deployment URL: https://compliance-ms.fly.dev/
 - Shareholder liveness testing
 - Administrative compliance management
 - API-based compliance checking
-- **CAC Certificate Verification** - Verify business registration with the Nigerian Corporate Affairs Commission
-- **AML Document Verification** - Verify business documents using third-party KYB/AML providers
-- **Sanctions List Checking** - Check individuals and businesses against international sanctions lists
+- **CAC Certificate Verification** - Verify business registration with the Nigerian Corporate Affairs Commission (via Prembly API)
+- **AML Document Verification** - Verify business documents using Prembly API (KYB/AML providers)
+- **Sanctions List Checking** - Check individuals and businesses against international sanctions lists (via Prembly API)
+- **Prembly Integration** - Comprehensive identity verification and compliance platform integration
 
 ## Technology Stack
 
@@ -28,6 +29,7 @@ Deployment URL: https://compliance-ms.fly.dev/
 - **Testing**: Jest + Supertest
 - **Security**: helmet, CORS, express-rate-limit
 - **Logging**: Winston
+- **Verification Provider**: Prembly API (KYC, AML, CAC, Sanctions, Liveness)
 
 ## API Documentation
 

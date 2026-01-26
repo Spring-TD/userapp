@@ -1,5 +1,6 @@
 import { Shareholder, KYCStatus } from '../types/kycTypes';
 import { logger } from '../utils/logger';
+import { premblyService, PremblyLivenessRequest } from './premblyService';
 
 // Third-party liveness provider interface
 interface LivenessProvider {
@@ -16,7 +17,61 @@ interface LivenessProvider {
   }>;
 }
 
-// Mock implementation of a liveness provider
+// Prembly Liveness Provider implementation
+class PremblyLivenessProvider implements LivenessProvider {
+  async generateLivenessUrl(shareholderId: string, callbackUrl: string): Promise<{
+    url: string;
+    expiresAt: Date;
+    providerReference: string;
+  }> {
+    if (!premblyService.isConfigured()) {
+      throw new Error('Prembly API not configured');
+    }
+
+    const premblyRequest: PremblyLivenessRequest = {
+      userId: shareholderId,
+      callbackUrl
+    };
+
+    const response = await premblyService.generateLivenessTest(premblyRequest);
+
+    if (!response.status || !response.data) {
+      throw new Error(response.message || 'Failed to generate liveness test');
+    }
+
+    return {
+      url: response.data.url,
+      expiresAt: new Date(response.data.expiresAt),
+      providerReference: response.data.verificationId
+    };
+  }
+
+  async getLivenessResult(providerReference: string): Promise<{
+    success: boolean;
+    score?: number;
+    details?: string;
+    completedAt: Date;
+  }> {
+    if (!premblyService.isConfigured()) {
+      throw new Error('Prembly API not configured');
+    }
+
+    const response = await premblyService.getLivenessResult(providerReference);
+
+    if (!response.status || !response.data) {
+      throw new Error(response.message || 'Failed to get liveness result');
+    }
+
+    return {
+      success: response.data.success,
+      score: response.data.score,
+      details: response.data.details,
+      completedAt: new Date(response.data.completedAt)
+    };
+  }
+}
+
+// Mock implementation of a liveness provider (fallback)
 // In a real implementation, this would call the actual third-party API
 class MockLivenessProvider implements LivenessProvider {
   async generateLivenessUrl(shareholderId: string, callbackUrl: string): Promise<{
@@ -31,7 +86,7 @@ class MockLivenessProvider implements LivenessProvider {
     // Mock URL that would redirect to the third-party provider
     const url = `https://mock-liveness-provider.com/test/${providerReference}?callback=${encodeURIComponent(callbackUrl)}`;
     
-    logger.info('Generated liveness test URL', {
+    logger.info('Generated liveness test URL (mock)', {
       shareholderId,
       providerReference,
       expiresAt,
@@ -62,7 +117,7 @@ class MockLivenessProvider implements LivenessProvider {
       completedAt
     };
     
-    logger.info('Retrieved liveness test result', {
+    logger.info('Retrieved liveness test result (mock)', {
       providerReference,
       ...result
     });
@@ -76,8 +131,14 @@ export class LivenessService {
   private livenessProvider: LivenessProvider;
   
   constructor() {
-    // In a real implementation, you might inject the provider based on configuration
-    this.livenessProvider = new MockLivenessProvider();
+    // Use Prembly if configured, otherwise fall back to mock
+    if (premblyService.isConfigured()) {
+      logger.info('Using Prembly for liveness verification');
+      this.livenessProvider = new PremblyLivenessProvider();
+    } else {
+      logger.warn('Prembly not configured, using mock liveness provider');
+      this.livenessProvider = new MockLivenessProvider();
+    }
   }
   
   /**

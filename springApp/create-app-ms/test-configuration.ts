@@ -173,6 +173,27 @@ async function testConfigurations() {
     });
     logSuccess('Policy and terms updated');
 
+    // Step 7.5: Update DNS configuration
+    logTest('Step 7.5: Updating DNS configuration...');
+    try {
+      const updatedConfigDNS = await configService.updateDnsConfiguration(testAppId, {
+        customDomain: 'test-custom-domain.example.com',
+        customDomainActive: false,
+        customDomainVerified: false
+      });
+      logSuccess('DNS configuration updated');
+      logInfo(`Custom Domain: ${updatedConfigDNS.dnsConfig?.customDomain || 'Not set'}`);
+      logInfo(`DNS Configuration Generated: ${updatedConfigDNS.dnsConfig?.dnsConfiguration ? 'Yes' : 'No'}`);
+      logInfo(`Update Variance: ${updatedConfigDNS.updateVariance?.join(', ') || 'None'}`);
+    } catch (error: any) {
+      // DNS update might fail if SERVER_IP is not configured, which is okay for testing
+      if (error.message && error.message.includes('SERVER_IP')) {
+        logInfo('DNS update skipped (SERVER_IP not configured)');
+      } else {
+        throw error;
+      }
+    }
+
     // Step 8: Create a new configuration without deactivating
     logTest('Step 8: Creating a new configuration (without auto-deactivate)...');
     const newConfig = await configService.createConfiguration(testAppId, {

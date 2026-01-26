@@ -320,6 +320,81 @@ export class AppConfigurationController {
   };
 
   /**
+   * Update DNS configuration
+   * PUT /api/v1/apps/:id/configuration/dns
+   */
+  updateDnsConfig = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const dnsConfig = req.body;
+
+      if (!id) {
+        throw new ApiError(400, 'App ID is required');
+      }
+
+      const config = await this.configService.updateDnsConfiguration(id, dnsConfig);
+
+      res.json({
+        success: true,
+        message: 'DNS configuration updated successfully',
+        data: config
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+        return;
+      }
+
+      console.error('Error in updateDnsConfig controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  };
+
+  /**
+   * Verify domain
+   * POST /api/v1/apps/:id/configuration/dns/verify
+   */
+  verifyDomain = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+
+      if (!id) {
+        throw new ApiError(400, 'App ID is required');
+      }
+
+      const config = await this.configService.verifyDomain(id);
+
+      res.json({
+        success: true,
+        message: config.dnsConfig?.customDomainVerified 
+          ? 'Domain verified successfully' 
+          : 'Domain verification pending. Please configure DNS records as shown.',
+        data: config
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+        return;
+      }
+
+      console.error('Error in verifyDomain controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  };
+
+  /**
    * Create configuration template
    * POST /api/v1/apps/:id/configuration/templates
    */

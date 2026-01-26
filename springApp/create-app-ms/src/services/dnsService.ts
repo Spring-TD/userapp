@@ -1,5 +1,6 @@
 import { DnsConfiguration } from '../types/app';
 import { extractRootDomain, normalizeDomain } from '../utils/domainUtils';
+import { VercelDomainResponse, VercelDomainConfig } from './vercelService';
 import dns from 'dns';
 import { promisify } from 'util';
 
@@ -183,6 +184,76 @@ export class DnsService {
     }
 
     return result;
+  }
+
+  /**
+   * Convert Vercel domain response to DNS configuration format
+   * @param domainResponse Vercel domain response
+   * @param customDomain The custom domain being configured
+   * @returns DNS configuration object
+   */
+  static convertVercelToDnsConfiguration(
+    domainResponse: VercelDomainResponse,
+    customDomain: string
+  ): DnsConfiguration {
+    const normalizedDomain = normalizeDomain(customDomain);
+    const rootDomain = extractRootDomain(normalizedDomain);
+    const baseUrl = `https://${normalizedDomain}/`;
+
+    const config: DnsConfiguration = {
+      cnameRecords: [],
+      baseUrl
+    };
+
+    // Extract A records from Vercel DNS response
+    if (domainResponse.dns) {
+      const aRecords = domainResponse.dns.filter(r => r.type === 'A');
+      if (aRecords.length > 0) {
+        // Use the first A record value
+        config.aRecord = {
+          type: 'A',
+          name: '@',
+          value: aRecords[0].value
+        };
+      }
+    }
+
+    // Extract CNAME records
+    if (domainResponse.cname && Array.isArray(domainResponse.cname)) {
+      domainResponse.cname.forEach(cname => {
+        config.cnameRecords.push({
+          type: 'CNAME',
+          name: normalizedDomain.startsWith('www.') ? 'www' : rootDomain,
+          value: cname
+        });
+      });
+    }
+
+    // Also check DNS array for CNAME records
+    if (domainResponse.dns) {
+      const cnameRecords = domainResponse.dns.filter(r => r.type === 'CNAME');
+      cnameRecords.forEach(record => {
+        // Avoid duplicates
+        if (!config.cnameRecords.some(c => c.value === record.value)) {
+          config.cnameRecords.push({
+            type: 'CNAME',
+            name: record.name || 'www',
+            value: record.value
+          });
+        }
+      });
+    }
+
+    // If no CNAME records found, add a default www CNAME
+    if (config.cnameRecords.length === 0 && domainResponse.cname) {
+      config.cnameRecords.push({
+        type: 'CNAME',
+        name: 'www',
+        value: domainResponse.cname[0] || 'cname.vercel-dns.com'
+      });
+    }
+
+    return config;
   }
 }
 

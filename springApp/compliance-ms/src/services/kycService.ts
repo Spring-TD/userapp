@@ -22,6 +22,7 @@ import {
   validateBusinessKYCSubmission
 } from '../utils/validation';
 import { cacService, CACVerificationResult } from './cacService';
+import { premblyService, PremblyIndividualKYCRequest, PremblyBusinessKYCRequest } from './premblyService';
 
 // Service class for KYC operations
 export class KYCService {
@@ -134,6 +135,44 @@ export class KYCService {
       // Calculate risk level based on business factors
       const riskLevel = this.calculateBusinessRiskLevel(data);
       
+      // Try Prembly Business KYC verification if configured
+      let premblyVerificationId: string | undefined;
+      let premblyStatus: KYCStatus | undefined;
+      
+      if (premblyService.isConfigured() && data.businessInfo) {
+        try {
+          // Extract document information for Prembly
+          const document = data.businessDocuments?.[0]; // Use first document
+          
+          const premblyRequest: PremblyBusinessKYCRequest = {
+            companyName: data.businessInfo.companyName,
+            registrationNumber: data.businessInfo.companyRegId || '',
+            country: data.businessInfo.countryOfIncorporation,
+            documentImage: document?.fileUrl || document?.fileData
+          };
+
+          const premblyResponse = await premblyService.verifyBusinessKYC(premblyRequest);
+          
+          if (premblyResponse.status && premblyResponse.data) {
+            premblyVerificationId = premblyResponse.data.verificationId;
+            premblyStatus = premblyResponse.data.status === 'verified' 
+              ? KYCStatus.APPROVED 
+              : premblyResponse.data.status === 'failed' 
+                ? KYCStatus.REJECTED 
+                : KYCStatus.PENDING;
+            
+            logger.info('Prembly business KYC verification completed', {
+              verificationId: premblyVerificationId,
+              status: premblyStatus
+            });
+          }
+        } catch (error: any) {
+          logger.warn('Prembly business KYC verification failed, continuing with manual review', {
+            error: error.message
+          });
+        }
+      }
+      
       const kycProfileData: any = {
         userId: data.userId,
         userType: data.userType,
@@ -145,7 +184,7 @@ export class KYCService {
           uploadDate: new Date(),
           status: KYCStatus.PENDING
         })),
-        status: KYCStatus.PENDING,
+        status: premblyStatus || KYCStatus.PENDING,
         submittedAt: new Date(),
         businessInfo: data.businessInfo,
         businessSurvey: data.businessSurvey,
@@ -153,7 +192,8 @@ export class KYCService {
         shareholders: data.shareholders,
         riskAssessment: data.riskAssessment,
         riskLevel,
-        workflowStatus: ComplianceWorkflowStatus.INITIAL_SCREENING
+        workflowStatus: ComplianceWorkflowStatus.INITIAL_SCREENING,
+        premblyVerificationId // Store Prembly verification ID for reference
       };
       
       const result = await MockKYCProfileModel.save(kycProfileData);
@@ -201,6 +241,24 @@ export class KYCService {
   }
 
   // Calculate risk level for individual customers
+  /**
+   * Map document type to Prembly document type
+   */
+  private mapDocumentTypeToPrembly(documentType: string): 'nin' | 'passport' | 'drivers_license' | 'voters_card' | null {
+    const typeMap: Record<string, 'nin' | 'passport' | 'drivers_license' | 'voters_card'> = {
+      'nin': 'nin',
+      'national_id': 'nin',
+      'passport': 'passport',
+      'drivers_license': 'drivers_license',
+      'driving_license': 'drivers_license',
+      'voters_card': 'voters_card',
+      'voter_card': 'voters_card'
+    };
+
+    const normalizedType = documentType?.toLowerCase().replace(/[_\s]/g, '');
+    return typeMap[normalizedType] || null;
+  }
+
   private calculateIndividualRiskLevel(data: IndividualKYCSubmissionRequest): RiskLevel {
     let riskScore = 0;
     

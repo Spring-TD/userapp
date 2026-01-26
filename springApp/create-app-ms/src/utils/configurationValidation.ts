@@ -5,6 +5,7 @@ import {
   OnboardingConfig,
   SupportConfig,
   PolicyConfig,
+  DnsConfig,
   CreateSupportComponentRequest
 } from '../types/appConfiguration';
 
@@ -358,6 +359,86 @@ export function validateSupportComponent(component: CreateSupportComponentReques
 }
 
 /**
+ * Validate DNS configuration
+ */
+export function validateDnsConfig(dns: Partial<DnsConfig>): void {
+  if (dns.customDomain !== undefined) {
+    if (typeof dns.customDomain !== 'string' && dns.customDomain !== null) {
+      throw new ConfigurationValidationError('Custom domain must be a string or null');
+    }
+    // Domain format validation is handled at the service level with domainUtils
+  }
+
+  if (dns.customDomainActive !== undefined && typeof dns.customDomainActive !== 'boolean') {
+    throw new ConfigurationValidationError('Custom domain active must be a boolean');
+  }
+
+  if (dns.customDomainVerified !== undefined && typeof dns.customDomainVerified !== 'boolean') {
+    throw new ConfigurationValidationError('Custom domain verified must be a boolean');
+  }
+
+  if (dns.vercelProjectId !== undefined && typeof dns.vercelProjectId !== 'string') {
+    throw new ConfigurationValidationError('Vercel project ID must be a string');
+  }
+
+  if (dns.vercelTeamId !== undefined && typeof dns.vercelTeamId !== 'string') {
+    throw new ConfigurationValidationError('Vercel team ID must be a string');
+  }
+
+  if (dns.dnsConfiguration) {
+    if (dns.dnsConfiguration.aRecord) {
+      if (dns.dnsConfiguration.aRecord.type !== 'A') {
+        throw new ConfigurationValidationError('A record type must be "A"');
+      }
+      if (!dns.dnsConfiguration.aRecord.name || typeof dns.dnsConfiguration.aRecord.name !== 'string') {
+        throw new ConfigurationValidationError('A record name is required');
+      }
+      if (!dns.dnsConfiguration.aRecord.value || typeof dns.dnsConfiguration.aRecord.value !== 'string') {
+        throw new ConfigurationValidationError('A record value (IP address) is required');
+      }
+    }
+
+    if (dns.dnsConfiguration.cnameRecords) {
+      if (!Array.isArray(dns.dnsConfiguration.cnameRecords)) {
+        throw new ConfigurationValidationError('CNAME records must be an array');
+      }
+      dns.dnsConfiguration.cnameRecords.forEach((record, index) => {
+        if (record.type !== 'CNAME') {
+          throw new ConfigurationValidationError(`CNAME record ${index} type must be "CNAME"`);
+        }
+        if (!record.name || typeof record.name !== 'string') {
+          throw new ConfigurationValidationError(`CNAME record ${index} name is required`);
+        }
+        if (!record.value || typeof record.value !== 'string') {
+          throw new ConfigurationValidationError(`CNAME record ${index} value is required`);
+        }
+      });
+    }
+
+    if (dns.dnsConfiguration.baseUrl && typeof dns.dnsConfiguration.baseUrl !== 'string') {
+      throw new ConfigurationValidationError('Base URL must be a string');
+    }
+
+    if (dns.dnsConfiguration.txtRecords) {
+      if (!Array.isArray(dns.dnsConfiguration.txtRecords)) {
+        throw new ConfigurationValidationError('TXT records must be an array');
+      }
+      dns.dnsConfiguration.txtRecords.forEach((record, index) => {
+        if (record.type !== 'TXT') {
+          throw new ConfigurationValidationError(`TXT record ${index} type must be "TXT"`);
+        }
+        if (!record.name || typeof record.name !== 'string') {
+          throw new ConfigurationValidationError(`TXT record ${index} name is required`);
+        }
+        if (!record.value || typeof record.value !== 'string') {
+          throw new ConfigurationValidationError(`TXT record ${index} value is required`);
+        }
+      });
+    }
+  }
+}
+
+/**
  * Validate complete configuration update request
  */
 export function validateConfigurationUpdate(config: UpdateConfigurationRequest): void {
@@ -379,6 +460,10 @@ export function validateConfigurationUpdate(config: UpdateConfigurationRequest):
 
   if (config.policy) {
     validatePolicy(config.policy);
+  }
+
+  if (config.dnsConfig) {
+    validateDnsConfig(config.dnsConfig);
   }
 }
 

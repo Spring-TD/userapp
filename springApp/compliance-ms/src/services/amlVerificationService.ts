@@ -4,6 +4,7 @@ import { logger } from '../utils/logger';
 import { auditLogger } from '../utils/audit';
 import { MockKYCDocumentModel } from '../utils/mockDb';
 import { BusinessDocumentData, BusinessDocumentType, KYCStatus } from '../types/kycTypes';
+import { premblyService, PremblyBusinessKYCRequest } from './premblyService';
 
 // AML provider response interface
 export interface AMLProviderResponse {
@@ -155,13 +156,67 @@ export class AMLVerificationService {
 
   /**
    * Call the actual AML provider API
+   * Uses Prembly API if configured, otherwise falls back to mock
    * @param document The document to verify
    * @param providerName The provider to use
    * @returns Provider response
    */
   private async callAMLProvider(document: BusinessDocumentData, providerName: string): Promise<AMLProviderResponse> {
-    // This is a mock implementation - in a real system, this would call the actual provider API
-    logger.info(`Calling ${providerName} API for document verification`, {
+    // Try Prembly API first if configured
+    if (premblyService.isConfigured() && providerName === 'prembly') {
+      logger.info('Using Prembly API for AML verification', {
+        documentId: document.fileName,
+        documentType: document.type
+      });
+
+      try {
+        // Extract company information from document metadata or use defaults
+        const premblyRequest: PremblyBusinessKYCRequest = {
+          companyName: (document as any).companyName || 'Unknown Company',
+          registrationNumber: (document as any).registrationNumber || '',
+          documentImage: document.fileUrl // Assuming fileUrl contains the document
+        };
+
+        const premblyResponse = await premblyService.verifyAML(premblyRequest);
+
+        if (premblyResponse.status && premblyResponse.data) {
+          return {
+            success: true,
+            providerId: 'prembly',
+            verificationId: premblyResponse.data.verificationId,
+            result: {
+              kyb: {
+                verified: premblyResponse.data.kybVerified,
+                companyName: premblyRequest.companyName,
+                registrationNumber: premblyRequest.registrationNumber,
+                status: premblyResponse.data.kybVerified ? 'active' : 'under_review',
+                incorporationDate: undefined
+              },
+              aml: {
+                peps: premblyResponse.data.peps,
+                sanctions: premblyResponse.data.sanctions,
+                adverseMedia: premblyResponse.data.adverseMedia,
+                riskScore: premblyResponse.data.riskScore
+              },
+              overall: {
+                approved: premblyResponse.data.amlClear && premblyResponse.data.kybVerified,
+                suspicious: !premblyResponse.data.amlClear,
+                reason: !premblyResponse.data.amlClear ? 'AML check flagged issues' : undefined
+              }
+            },
+            rawResponse: premblyResponse
+          };
+        }
+      } catch (error: any) {
+        logger.error('Prembly AML verification failed, falling back to mock', {
+          error: error.message,
+          documentId: document.fileName
+        });
+      }
+    }
+
+    // Fallback to mock implementation
+    logger.info(`Using mock implementation for ${providerName} AML verification`, {
       documentId: document.fileName
     });
 

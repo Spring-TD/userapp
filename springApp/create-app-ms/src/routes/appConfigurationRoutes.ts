@@ -29,6 +29,10 @@ router.put('/support', configController.updateSupport);
 // Policy
 router.put('/policy', configController.updatePolicy);
 
+// DNS Configuration
+router.put('/dns', configController.updateDnsConfig);
+router.post('/dns/verify', configController.verifyDomain);
+
 // Template endpoints
 router.post('/templates', configController.createTemplate);
 router.get('/templates', configController.getTemplates);

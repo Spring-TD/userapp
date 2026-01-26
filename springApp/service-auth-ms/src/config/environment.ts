@@ -13,7 +13,7 @@ const envSchema = Joi.object({
   MONGODB_URI: Joi.string().required(),
 
   // Redis
-  REDIS_URL: Joi.string().required(),
+  REDIS_URL: Joi.string().optional(),
   REDIS_PASSWORD: Joi.string().allow('').optional(),
 
   // JWT

@@ -4,6 +4,34 @@ export interface ImageReference {
   altText?: string;
 }
 
+// DNS Configuration for App Configuration
+export interface DnsConfig {
+  customDomain?: string; // Custom domain, e.g., "www.customdomain.com"
+  customDomainActive?: boolean; // Toggle to activate/deactivate custom domain
+  customDomainVerified?: boolean; // Whether DNS is verified
+  customDomainVerifiedAt?: string; // Verification timestamp
+  vercelProjectId?: string; // Vercel project ID
+  vercelTeamId?: string; // Vercel team ID (optional, for team accounts)
+  dnsConfiguration?: {
+    aRecord?: {
+      type: 'A';
+      name: string; // Usually "@" or root domain
+      value: string; // IP address from Vercel
+    };
+    cnameRecords: Array<{
+      type: 'CNAME';
+      name: string; // e.g., "www" or root domain
+      value: string; // CNAME value from Vercel
+    }>;
+    txtRecords?: Array<{
+      type: 'TXT';
+      name: string;
+      value: string; // Verification or other TXT records from Vercel
+    }>;
+    baseUrl: string; // The base URL to use (e.g., "https://yourDomain.com/")
+  };
+}
+
 // Publishing Configuration
 export interface PublishingConfig {
   isPublished: boolean;
@@ -24,6 +52,7 @@ export interface AppConfiguration {
   onboarding: OnboardingConfig;
   support: SupportConfig;
   policy: PolicyConfig;
+  dnsConfig?: DnsConfig; // DNS and custom domain configuration
   isActive: boolean;
   updateVariance?: UpdateVarianceSection[]; // Sections that were modified in this version
   createdAt: string;
@@ -190,6 +219,7 @@ export interface UpdateConfigurationRequest {
   onboarding?: Partial<OnboardingConfig>;
   support?: Partial<SupportConfig>;
   policy?: Partial<PolicyConfig>;
+  dnsConfig?: Partial<DnsConfig>;
 }
 
 export interface CreateTemplateRequest {
