@@ -4,6 +4,25 @@ A comprehensive authentication and user management microservice providing secure
 
 Deployment URL: https://service-auth-ms.fly.dev/
 
+## Table of Contents
+- [Features](#features)
+- [Documentation](#documentation)
+- [Technology Stack](#technology-stack)
+- [Getting Started](#getting-started)
+- [Environment Variables](#environment-variables)
+- [API Documentation](#api-documentation)
+- [SAMS (Service Authentication Microservice) API](#sams-service-authentication-microservice-api)
+- [Implemented Endpoints](#implemented-endpoints)
+- [Data Models](#data-models)
+- [Validation Rules](#validation-rules)
+- [Error Handling](#error-handling)
+- [Implementation Status](#implementation-status)
+- [Security Features](#security-features)
+- [Redis Caching Implementation](#redis-caching-implementation)
+- [SAMS Documentation](#sams-documentation)
+- [Role Management API](#role-management-api)
+- [Default Users](#default-users)
+
 ## Features
 
 ### ✅ Implemented
@@ -333,6 +352,7 @@ The service provides the following API endpoints:
 - `GET /api/v1/services/:serviceId/credentials` - Get service credentials ✅ **Implemented**
 - `POST /api/v1/credentials/validate` - Validate credential ✅ **Implemented**
 - `POST /api/v1/credentials/void/:credentialId` - Void/revoke credential ✅ **Implemented**
+- `POST /api/v1/credentials/:credentialId/regenerate` - Regenerate credential with identical properties ✅ **Implemented**
 
 ## Implemented Endpoints
 
@@ -934,6 +954,16 @@ curl -X POST "http://localhost:3000/api/v1/credentials/validate" \
 
 **Void Credential - `POST /api/v1/credentials/void/:credentialId`**
 Revokes a credential, making it inactive.
+
+**Regenerate Credential - `POST /api/v1/credentials/:credentialId/regenerate`**
+Creates a new credential with identical properties and automatically voids the old one.
+
+```bash
+curl -X POST "http://localhost:3000/api/v1/credentials/{credentialId}/regenerate" \
+  -H "Content-Type: application/json"
+```
+
+The regeneration endpoint preserves all original credential properties (type, permissions, rate limits, expiration, etc.) while creating a new credential value and automatically invalidating the old one.
 
 ### SAMS Usage Workflow
 

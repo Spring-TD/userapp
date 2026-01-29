@@ -311,9 +311,37 @@ export class CredentialModel {
   }
 
   /**
+   * Find credentials by merchant ID (NEW METHOD)
+   */
+  static findByMerchantId(merchantId: string): Credential[] {
+    return Array.from(this.storage.credentials.values()).filter(
+      cred => cred.user_merchant_id === merchantId
+    );
+  }
+
+  /**
+   * Find active credentials by merchant ID (NEW METHOD)
+   */
+  static findActiveByMerchantId(merchantId: string): Credential[] {
+    return this.findByMerchantId(merchantId).filter(
+      cred => cred.status === CredentialStatus.ACTIVE && 
+              (!cred.expires_at || cred.expires_at > new Date())
+    );
+  }
+
+  /**
+   * Find credentials by service ID and merchant ID (NEW METHOD)
+   */
+  static findByServiceIdAndMerchantId(serviceId: string, merchantId: string): Credential[] {
+    return Array.from(this.storage.credentials.values()).filter(
+      cred => cred.service_id === serviceId && cred.user_merchant_id === merchantId
+    );
+  }
+
+  /**
    * Validate credential
    */
-  static validate(credentialValue: string, serviceId?: string): {
+  static validate(credentialValue: string, serviceId?: string, userMerchantId?: string): {
     isValid: boolean;
     credential?: Credential;
     reason?: string;
@@ -330,6 +358,11 @@ export class CredentialModel {
 
     if (credential.expires_at && credential.expires_at <= new Date()) {
       return { isValid: false, reason: 'Credential has expired', credential };
+    }
+
+    // Check if credential is authorized for the specific merchant (NEW CHECK)
+    if (userMerchantId && credential.user_merchant_id && credential.user_merchant_id !== userMerchantId) {
+      return { isValid: false, reason: 'Credential not authorized for this merchant', credential };
     }
 
     if (serviceId && credential.target_service_id && credential.target_service_id !== serviceId) {

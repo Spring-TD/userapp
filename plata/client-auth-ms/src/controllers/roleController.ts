@@ -1,22 +1,33 @@
 
 import { Request, Response } from 'express';
-import { authApiService } from '../services/authApiService';
+import { RoleService } from '../services/RoleService';
 
 export class RoleController {
 
     static async createRole(req: Request, res: Response): Promise<void> {
         try {
-            const token = req.headers.authorization?.replace('Bearer ', '');
-            if (!token) {
+            // Check if user is authenticated and get merchant ID from user context
+            if (!req.user) {
                 res.status(401).json({
                     success: false,
-                    error: 'Authorization token is required'
+                    error: 'Authentication required'
+                });
+                return;
+            }
+
+            // Only merchants and admins should be able to create roles
+            if (req.user.userType !== 'merchant' && req.user.userType !== 'admin') {
+                res.status(403).json({
+                    success: false,
+                    error: 'Insufficient permissions to create roles'
                 });
                 return;
             }
 
             const roleData = req.body;
-            const result = await authApiService.createRole(token, roleData);
+            const merchantId = req.user.userMerchantId || req.user.userId;
+
+            const result = await RoleService.createRole(merchantId, roleData);
 
             res.status(result.success ? 201 : 400).json(result);
         } catch (error) {
@@ -30,16 +41,18 @@ export class RoleController {
 
     static async getRoles(req: Request, res: Response): Promise<void> {
         try {
-            const token = req.headers.authorization?.replace('Bearer ', '');
-            if (!token) {
+            // Check if user is authenticated and get merchant ID from user context
+            if (!req.user) {
                 res.status(401).json({
                     success: false,
-                    error: 'Authorization token is required'
+                    error: 'Authentication required'
                 });
                 return;
             }
 
-            const result = await authApiService.getRoles(token);
+            const merchantId = req.user.userMerchantId || req.user.userId;
+
+            const result = await RoleService.getRoles(merchantId);
             res.status(result.success ? 200 : 400).json(result);
         } catch (error) {
             console.error('Error in getRoles:', error);
@@ -52,10 +65,7 @@ export class RoleController {
 
     static async getPermissions(req: Request, res: Response): Promise<void> {
         try {
-            const token = req.headers.authorization?.replace('Bearer ', '');
-            // Token is optional for permissions in some contexts but let's pass it if present
-
-            const result = await authApiService.getPermissions(token);
+            const result = RoleService.getPermissions();
             res.status(result.success ? 200 : 400).json(result);
         } catch (error) {
             console.error('Error in getPermissions:', error);

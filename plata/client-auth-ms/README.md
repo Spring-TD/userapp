@@ -5,6 +5,16 @@ The Client Authentication Microservice (client-auth-ms) is a comprehensive API g
 
 Deployment URL: https://client-auth-ms.fly.dev/
 
+## Table of Contents
+- [Features](#features)
+- [API Endpoints](#api-endpoints)
+- [Setup Instructions](#setup-instructions)
+- [Environment Variables](#environment-variables)
+- [Architecture](#architecture)
+- [Data Structure & Models](#data-structure--models)
+- [Validation Rules](#validation-rules)
+- [Complete API Gateway Coverage](#complete-api-gateway-coverage)
+
 ## Features
 - **✅ Registration Forms**: Merchant, user, and admin signup with validation
 - **✅ Authentication**: Complete login/logout/refresh token flow  

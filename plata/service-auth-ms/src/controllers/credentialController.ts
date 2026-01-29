@@ -95,8 +95,19 @@ export class CredentialController {
         return;
       }
 
+      // Extract merchant ID from request context (could be from headers, JWT, or session)
+      const userMerchantId = req.headers['x-user-merchant-id'] as string || 
+                           req.body.user_merchant_id || 
+                           (req.user as any)?.user_merchant_id;
+
+      // Create an updated validation request with merchant ID
+      const validationRequest: ValidateCredentialRequest = {
+        ...value!,
+        user_merchant_id: userMerchantId
+      };
+
       // Validate credential
-      const result = await CredentialService.validateCredential(value!);
+      const result = await CredentialService.validateCredential(validationRequest);
 
       res.status(200).json(result);
 
@@ -160,6 +171,47 @@ export class CredentialController {
         success: false,
         error: 'Internal server error',
         message: 'An error occurred while voiding credential'
+      });
+    }
+  }
+
+  /**
+   * POST /api/v1/credentials/:credentialId/regenerate
+   * Regenerate a credential by creating a new one and voiding the old one
+   */
+  static async regenerateCredential(req: Request, res: Response): Promise<void> {
+    try {
+      // Validate credential ID parameter
+      const { error: paramError } = validateInput(credentialIdSchema, req.params);
+      
+      if (paramError) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid credential ID',
+          details: paramError
+        });
+        return;
+      }
+
+      const { credentialId } = req.params;
+      const regeneratedBy = req.user?.email || 'system';
+
+      // Regenerate credential
+      const result = await CredentialService.regenerateCredential(credentialId || '', regeneratedBy || 'system');
+
+      const statusCode = result.success ? 200 : (result.status === 404 ? 404 : 400);
+      res.status(statusCode).json(result);
+
+    } catch (error) {
+      logger.error('Credential regeneration error', { 
+        error, 
+        credentialId: req.params['credentialId'], 
+        body: req.body 
+      });
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error',
+        message: 'An error occurred while regenerating credential'
       });
     }
   }
