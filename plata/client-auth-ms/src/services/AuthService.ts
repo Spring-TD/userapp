@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { RoleService } from './RoleService';
 import jwt from 'jsonwebtoken';
 import { config } from '../config/environment';
+import notificationService, { SendNotificationResponse } from './NotificationService';
 
 // Type for user response without password
 export type UserResponse = Omit<UserAccount, 'password'>;
@@ -374,9 +375,20 @@ export class AuthService {
       // Generate password reset token
       const resetToken = generatePasswordResetToken({ userId: user.id, email: user.email, userType: user.user_type, userMerchantId: 'user_merchant_id' in user ? user.user_merchant_id : undefined });
 
-      // In a real implementation, you would send an email with the reset token
-      // For now, we'll just return success
-      console.log(`Password reset initiated for ${user.email}. Reset token: ${resetToken}`);
+      // Send password reset email via notifications service
+      const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
+      const notificationResult = await notificationService.sendPasswordResetEmail(
+        user.email,
+        resetUrl,
+        `${user.first_name} ${user.last_name}`
+      );
+
+      if (!notificationResult.success) {
+        console.error('Failed to send password reset email:', notificationResult.error);
+        // Still return success to prevent email enumeration attacks
+      } else {
+        console.log(`Password reset email sent to ${user.email}`);
+      }
 
       return {
         success: true
@@ -550,10 +562,18 @@ export class AuthService {
       // Log the OTP generation for debugging
       console.log('OTP generated', { identifier, channel, purpose, code });
 
-      // Send OTP via email or SMS (mock implementation)
+      // Send OTP via notifications service
       if (channel === 'email') {
-        console.log(`OTP ${code} sent to email ${identifier}`);
+        const notificationResult = await notificationService.sendOTP(identifier, code, purpose);
+        if (!notificationResult.success) {
+          console.error('Failed to send OTP email:', notificationResult.error);
+          return {
+            success: false,
+            error: 'Failed to send OTP'
+          };
+        }
       } else if (channel === 'sms') {
+        // For SMS, we would need to implement SMS sending via notifications service
         console.log(`OTP ${code} sent to phone ${identifier}`);
       }
 
@@ -666,8 +686,23 @@ export class AuthService {
 
       await mockDb.createInvitation(invitation);
 
-      // In a real implementation, you would send an email invitation
-      console.log(`Invitation sent to ${request.email} with role ${role.name}`);
+      // Get merchant details to include in invitation email
+      const merchant = await mockDb.findUserById(merchantId);
+
+      // Send invitation email via notifications service
+      const invitationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/accept-invitation?token=${token}`;
+      const notificationResult = await notificationService.sendInvitationEmail(
+        request.email,
+        invitationUrl,
+        merchant ? `${merchant.first_name} ${merchant.last_name}` : 'Merchant',
+        role.name
+      );
+
+      if (!notificationResult.success) {
+        console.error('Failed to send invitation email:', notificationResult.error);
+      } else {
+        console.log(`Invitation email sent to ${request.email}`);
+      }
 
       return {
         success: true,
