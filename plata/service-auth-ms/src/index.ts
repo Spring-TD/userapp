@@ -8,6 +8,7 @@ import { requestLogger } from './middleware/requestLogger';
 import { samsRoutes } from './routes/samsRoutes';
 import { credentialRoutes } from './routes/credentialRoutes';
 import { apiKeyRoutes } from './routes/apiKeyRoutes';
+import { userRoutes } from './routes/userRoutes';
 import { SAMSService } from './services/samsService';
 import { redisCacheService } from './services/redisCacheService';
 import { logger } from './utils/logger';
@@ -54,7 +55,8 @@ app.get('/', (_req, res) => {
       health: '/health',
       services: '/api/v1/services',
       credentials: '/api/v1/credentials',
-      keys: '/api/v1/keys'
+      keys: '/api/v1/keys',
+      user: '/api/v1/user'
     },
     timestamp: new Date().toISOString()
   });
@@ -73,6 +75,7 @@ app.get('/health', (_req, res) => {
 app.use('/api/v1/services', samsRoutes);
 app.use('/api/v1/credentials', credentialRoutes);
 app.use('/api/v1/keys', apiKeyRoutes);
+app.use('/api/v1/user', userRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);
