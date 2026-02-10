@@ -1,12 +1,82 @@
 import { Request, Response } from 'express';
 import { ContractService } from '../services/contractService';
 import { AuthRequest } from '../middleware/auth';
+import { AccountServiceClient, UserRegistrationData } from '../services/accountServiceClient';
 
 export class ContractController {
   private contractService: ContractService;
 
   constructor() {
     this.contractService = new ContractService();
+  }
+
+  createPublicContract = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { email, name, contractData } = req.body;
+
+      // Validate email is provided
+      if (!email) {
+        res.status(400).json({
+          success: false,
+          error: 'Email is required',
+          timestamp: new Date().toISOString()
+        });
+        return;
+      }
+
+      // Create account service client
+      const accountClient = new AccountServiceClient();
+
+      // Create or get user account
+      const accountResult = await accountClient.createUserAccount({
+        email,
+        name: name || email.split('@')[0]
+      });
+
+      if (!accountResult.success) {
+        res.status(400).json({
+          success: false,
+          error: accountResult.message,
+          timestamp: new Date().toISOString()
+        });
+        return;
+      }
+
+      // If we got a user, create the contract with the user ID
+      if (accountResult.user) {
+        const finalContractData = {
+          ...contractData,
+          createdBy: accountResult.user.id,
+          title: contractData.title || 'Untitled Contract',
+          status: 'draft'
+        };
+
+        const contract = await this.contractService.createContract(finalContractData);
+
+        res.status(201).json({
+          success: true,
+          message: 'Contract created successfully',
+          data: {
+            contract,
+            token: accountResult.token, // Return token if available
+            redirectUrl: `/contracts/${contract.id}/edit` // Provide redirect URL for UI
+          },
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          error: 'Account was created but user data is missing',
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to create public contract',
+        timestamp: new Date().toISOString()
+      });
+    }
   }
 
   createContract = async (req: AuthRequest, res: Response): Promise<void> => {

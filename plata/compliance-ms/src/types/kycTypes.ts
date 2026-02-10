@@ -7,6 +7,7 @@ export enum KYCStatus {
   COMPLETED = 'completed',
   FAILED = 'failed',
   REVIEW = 'review',
+  ADMIN_APPROVED = 'admin_approved', // Admin has reviewed and approved before Prembly verification
   APPROVED = 'approved',
   REJECTED = 'rejected'
 }

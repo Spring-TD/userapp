@@ -4,7 +4,7 @@ This microservice handles user account management and authentication for the Air
 
 ## Features
 
-- User Registration
+- User Registration (password optional)
 - User Login
 - Profile Management
 - Authentication Middleware
@@ -42,7 +42,7 @@ This microservice handles user account management and authentication for the Air
 
 ## API Endpoints
 
-- `POST /api/v1/auth/register` - Create a new user
+- `POST /api/v1/auth/register` - Create a new user (password optional)
 - `POST /api/v1/auth/login` - Authenticate user
 - `GET /health` - Health check
 

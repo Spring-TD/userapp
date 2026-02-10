@@ -15,4 +15,7 @@ router.post('/validate', CredentialController.validateCredential);
 // POST /api/v1/credentials/void/:credentialId - Void credential
 router.post('/void/:credentialId', CredentialController.voidCredential);
 
+// POST /api/v1/credentials/:credentialId/regenerate - Regenerate credential
+router.post('/:credentialId/regenerate', CredentialController.regenerateCredential);
+
 export { router as credentialRoutes };

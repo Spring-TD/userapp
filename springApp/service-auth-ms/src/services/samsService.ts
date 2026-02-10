@@ -501,6 +501,9 @@ export class CredentialService {
       if (credentialData.rate_limit !== undefined) {
         credentialParams.rate_limit = credentialData.rate_limit;
       }
+      if (credentialData.user_merchant_id !== undefined) {
+        credentialParams.user_merchant_id = credentialData.user_merchant_id;  // Add merchant ID
+      }
       if (createdBy !== undefined) {
         credentialParams.created_by = createdBy;
       }
@@ -511,6 +514,7 @@ export class CredentialService {
         serviceId,
         targetServiceId: credentialData.target_service_id,
         credentialType: credentialData.credential_type,
+        userMerchantId: credentialData.user_merchant_id,  // Log merchant ID
         createdBy
       });
 
@@ -534,21 +538,126 @@ export class CredentialService {
   }
 
   /**
+   * Create merchant-specific credentials for a service (NEW METHOD)
+   */
+  static async createMerchantCredential(
+    serviceId: string,
+    userMerchantId: string,
+    credentialData: CreateCredentialRequest,
+    createdBy?: string
+  ): Promise<CreateCredentialResponse> {
+    try {
+      // Verify service exists
+      const service = SAMSDatabase.services.findById(serviceId);
+      if (!service) {
+        return {
+          success: false,
+          message: 'Service not found',
+          data: null as any
+        };
+      }
+
+      if (service.status !== ServiceStatus.ACTIVE) {
+        return {
+          success: false,
+          message: 'Cannot create credentials for inactive service',
+          data: null as any
+        };
+      }
+
+      // Verify target service exists if specified
+      if (credentialData.target_service_id) {
+        const targetService = SAMSDatabase.services.findById(credentialData.target_service_id);
+        if (!targetService) {
+          return {
+            success: false,
+            message: 'Target service not found',
+            data: null as any
+          };
+        }
+      }
+
+      // Generate credential value based on type
+      const credentialValue = await this.generateCredentialValue(credentialData.credential_type);
+      const credentialHash = await this.hashCredential(credentialValue);
+
+      // Calculate expiration date
+      const expiresAt = credentialData.expires_in 
+        ? new Date(Date.now() + credentialData.expires_in * 1000)
+        : undefined;
+
+      // Create credential with merchant context
+      const credentialParams: Omit<Credential, 'credential_id' | 'created_at' | 'updated_at' | 'status'> = {
+        service_id: serviceId,
+        credential_type: credentialData.credential_type,
+        credential_value: credentialValue,
+        credential_hash: credentialHash,
+        permissions: credentialData.permissions || [],
+        user_merchant_id: userMerchantId,  // Set the merchant ID for isolation
+      };
+      if (credentialData.target_service_id !== undefined) {
+        credentialParams.target_service_id = credentialData.target_service_id;
+      }
+      if (expiresAt !== undefined) {
+        credentialParams.expires_at = expiresAt;
+      }
+      if (credentialData.rate_limit !== undefined) {
+        credentialParams.rate_limit = credentialData.rate_limit;
+      }
+      if (createdBy !== undefined) {
+        credentialParams.created_by = createdBy;
+      }
+      const credential = SAMSDatabase.credentials.create(credentialParams);
+
+      logger.info('Merchant-specific credential created', {
+        credentialId: credential.credential_id,
+        serviceId,
+        userMerchantId,  // Log merchant ID
+        targetServiceId: credentialData.target_service_id,
+        credentialType: credentialData.credential_type,
+        createdBy
+      });
+
+      // Return credential without hash for security
+      const { credential_hash, ...credentialResponse } = credential;
+
+      return {
+        success: true,
+        message: 'Merchant-specific credential created successfully',
+        data: { credential: credentialResponse }
+      };
+
+    } catch (error) {
+      logger.error('Error creating merchant-specific credential', { error, serviceId, userMerchantId, credentialData });
+      return {
+        success: false,
+        message: 'Internal server error occurred while creating merchant-specific credential',
+        data: null as any
+      };
+    }
+  }
+
+  /**
    * Validate a credential
    */
   static async validateCredential(
     validationData: ValidateCredentialRequest
   ): Promise<ValidateCredentialResponse> {
     try {
+      // Extract user merchant ID from the request if available
+      const userMerchantId = (validationData as any).user_merchant_id || undefined;
+      
       const validation = SAMSDatabase.credentials.validate(
         validationData.credential_value,
-        validationData.service_id
+        validationData.service_id,
+        userMerchantId  // Pass merchant ID for validation
       );
 
       if (!validation.isValid) {
         logger.warn('Credential validation failed', {
           reason: validation.reason,
-          serviceId: validationData.service_id
+          serviceId: validationData.service_id,
+          userMerchantId  // Log merchant ID for debugging
         });
 
         return {
@@ -579,7 +688,8 @@ export class CredentialService {
       logger.info('Credential validated successfully', {
         credentialId: credential!.credential_id,
         serviceId: credential!.service_id,
-        targetServiceId: credential!.target_service_id
+        targetServiceId: credential!.target_service_id,
+        userMerchantId  // Log merchant ID for debugging
       });
 
       // Build response data object with proper handling of optional properties
@@ -667,6 +777,122 @@ export class CredentialService {
       return {
         success: false,
         message: 'Internal server error occurred while voiding credential'
+      };
+    }
+  }
+
+  /**
+   * Regenerate a credential by creating a new one and voiding the old one
+   */
+  static async regenerateCredential(
+    credentialId: string,
+    regeneratedBy?: string
+  ): Promise<CreateCredentialResponse & { status?: number }> {
+    try {
+      // Find the existing credential
+      const existingCredential = SAMSDatabase.credentials.findById(credentialId);
+      if (!existingCredential) {
+        return {
+          success: false,
+          message: 'Credential not found',
+          status: 404,
+          data: null as any
+        };
+      }
+
+      if (existingCredential.status !== CredentialStatus.ACTIVE) {
+        return {
+          success: false,
+          message: 'Cannot regenerate inactive credential',
+          status: 400,
+          data: null as any
+        };
+      }
+
+      // Store original credential details for new credential creation
+      const serviceId = existingCredential.service_id;
+      const targetServiceId = existingCredential.target_service_id;
+      const credentialType = existingCredential.credential_type;
+      const permissions = existingCredential.permissions || [];
+      const rateLimit = existingCredential.rate_limit;
+      const userMerchantId = existingCredential.user_merchant_id;
+      
+      // Calculate expiration (maintain same duration if it had one)
+      let expiresIn: number | undefined;
+      if (existingCredential.expires_at) {
+        const timeDiff = existingCredential.expires_at.getTime() - existingCredential.created_at.getTime();
+        expiresIn = Math.floor(timeDiff / 1000);
+      }
+
+      // Create new credential with same parameters
+      const newCredentialData: any = {
+        credential_type: credentialType,
+        permissions: permissions,
+        user_merchant_id: userMerchantId
+      };
+      
+      // Only add optional properties if they exist
+      if (targetServiceId !== undefined) {
+        newCredentialData.target_service_id = targetServiceId;
+      }
+      if (expiresIn !== undefined) {
+        newCredentialData.expires_in = expiresIn;
+      }
+      if (rateLimit !== undefined) {
+        newCredentialData.rate_limit = rateLimit;
+      }
+
+      const newCredentialResult = await this.createCredential(
+        serviceId,
+        newCredentialData,
+        regeneratedBy || 'system'
+      );
+
+      if (!newCredentialResult.success) {
+        return {
+          success: false,
+          message: 'Failed to create new credential during regeneration',
+          status: 500,
+          data: null as any
+        };
+      }
+
+      // Void the old credential
+      const voidResult = await this.voidCredential(
+        credentialId,
+        { reason: 'Regenerated - replaced with new credential' },
+        regeneratedBy || 'system'
+      );
+
+      if (!voidResult.success) {
+        logger.warn('Failed to void old credential during regeneration', { 
+          credentialId, 
+          newCredentialId: newCredentialResult.data?.credential?.credential_id 
+        });
+        // Continue with success even if void fails, but log the warning
+      }
+
+      logger.info('Credential regenerated successfully', {
+        oldCredentialId: credentialId,
+        newCredentialId: newCredentialResult.data?.credential?.credential_id,
+        serviceId,
+        regeneratedBy
+      });
+
+      return {
+        success: true,
+        message: 'Credential regenerated successfully',
+        status: 200,
+        data: newCredentialResult.data
+      };
+
+    } catch (error) {
+      logger.error('Error regenerating credential', { error, credentialId });
+      return {
+        success: false,
+        message: 'Internal server error occurred while regenerating credential',
+        status: 500,
+        data: null as any
       };
     }
   }

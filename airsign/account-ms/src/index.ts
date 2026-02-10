@@ -24,6 +24,23 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/wallets', walletRoutes);
 app.use('/api/v1/billing', billingRoutes);
 
+// Root Route
+app.get('/', (req: Request, res: Response) => {
+    res.json({ 
+        message: 'AirSign Account Microservice', 
+        status: 'UP', 
+        timestamp: new Date(), 
+        service: 'account-ms',
+        version: '1.0.0',
+        endpoints: {
+            health: '/health',
+            auth: '/api/v1/auth',
+            wallets: '/api/v1/wallets',
+            billing: '/api/v1/billing'
+        }
+    });
+});
+
 // Health Check
 app.get('/health', (req: Request, res: Response) => {
     res.json({ status: 'UP', timestamp: new Date(), service: 'account-ms' });

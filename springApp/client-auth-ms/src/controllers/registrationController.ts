@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { MerchantRegistrationForm, UserRegistrationForm, AdminRegistrationForm } from '../types/forms';
 import { merchantRegistrationSchema, userRegistrationSchema, adminRegistrationSchema, validateForm } from '../utils/validation';
-import { authApiService } from '../services/authApiService';
+import { AuthService } from '../services/AuthService';
 
 interface TypedRequest<T> extends Request {
   body: T;
@@ -21,7 +21,12 @@ export class RegistrationController {
         return;
       }
 
-      const result = await authApiService.registerMerchant(value!);
+      // Generate user_merchant_id for merchant
+      const merchantData = {
+        ...value!,
+        user_merchant_id: `merchant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      };
+      const result = await AuthService.registerMerchant(merchantData);
 
       if (!result.success) {
         res.status(400).json(result);
@@ -51,7 +56,7 @@ export class RegistrationController {
         return;
       }
 
-      const result = await authApiService.registerUser(value!);
+      const result = await AuthService.registerUser(value!);
 
       if (!result.success) {
         res.status(400).json(result);
@@ -81,7 +86,7 @@ export class RegistrationController {
         return;
       }
 
-      const result = await authApiService.registerAdmin(value!);
+      const result = await AuthService.registerAdmin(value!);
 
       if (!result.success) {
         res.status(400).json(result);

@@ -11,14 +11,14 @@ const generateToken = (userId: string) => {
     });
 };
 
-// Regular Email/Password Registration
+// Regular Email Registration
 export const register = async (req: Request, res: Response) => {
     try {
         const { name, email, password } = req.body;
 
         // 1. Validation
-        if (!name || !email || !password) {
-            return res.status(400).json({ error: 'Please provide name, email, and password' });
+        if (!name || !email) {
+            return res.status(400).json({ error: 'Please provide name and email' });
         }
 
         // 2. Check overlap
@@ -27,16 +27,20 @@ export const register = async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'User already exists' });
         }
 
-        // 3. Hash password
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
+        // 3. Create User (password optional)
+        const userData: any = {
+            name,
+            email
+        };
+        
+        if (password) {
+            // Hash password if provided
+            const salt = await bcrypt.genSalt(10);
+            userData.password = await bcrypt.hash(password, salt);
+        }
 
         // 4. Create User
-        const user = await User.create({
-            name,
-            email,
-            password: hashedPassword
-        });
+        const user = await User.create(userData);
 
         // 5. Response
         res.status(201).json({

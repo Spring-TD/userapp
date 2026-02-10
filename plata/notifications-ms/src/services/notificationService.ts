@@ -1,4 +1,5 @@
-import NotificationModel, { INotification } from '../models/Notification';
+import { INotification } from '../models/Notification';
+import { mockDb } from '../utils/mockDatabase';
 import emailService from './emailService';
 import smsService from './smsService';
 import templateService from './templateService';
@@ -14,8 +15,8 @@ export class NotificationService {
       // 1. Validate request
       this.validateRequest(request);
 
-      // 2. Create MongoDB record (status: 'pending')
-      const notification = new NotificationModel({
+      // 2. Create notification record (status: 'pending')
+      const notification = await mockDb.createNotification({
         channel: request.channel,
         recipient: request.recipient,
         template: request.template,
@@ -23,8 +24,6 @@ export class NotificationService {
         status: 'pending',
         retryCount: 0
       });
-
-      await notification.save();
 
       // 3. Load and render template
       let renderedContent: { html?: string; text?: string; message?: string };
@@ -71,34 +70,37 @@ export class NotificationService {
 
         // 5. Update record status
         if (success) {
-          notification.status = 'sent';
-          notification.sentAt = new Date();
-          await notification.save();
+          await mockDb.updateNotification(notification.id, {
+            status: 'sent',
+            sentAt: new Date()
+          });
         } else {
-          notification.status = 'failed';
-          notification.error = 'Failed to send notification';
-          notification.retryCount += 1;
-          await notification.save();
+          await mockDb.updateNotification(notification.id, {
+            status: 'failed',
+            error: 'Failed to send notification',
+            retryCount: notification.retryCount + 1
+          });
         }
       } catch (sendError: any) {
         error = sendError.message;
-        notification.status = 'failed';
-        notification.error = error;
-        notification.retryCount += 1;
-        await notification.save();
+        await mockDb.updateNotification(notification.id, {
+          status: 'failed',
+          error: error,
+          retryCount: notification.retryCount + 1
+        });
       }
 
       // 6. Return response
       if (success) {
         return {
           success: true,
-          id: notification._id.toString(),
+          id: notification.id,
           message: 'Notification sent successfully'
         };
       } else {
         return {
           success: false,
-          id: notification._id.toString(),
+          id: notification.id,
           error: error || 'Failed to send notification'
         };
       }
@@ -115,7 +117,7 @@ export class NotificationService {
    */
   async getNotificationStatus(id: string): Promise<INotification | null> {
     try {
-      const notification = await NotificationModel.findById(id);
+      const notification = await mockDb.findNotificationById(id);
       return notification;
     } catch (error: any) {
       throw new ApiError(500, `Failed to get notification status: ${error.message}`);
@@ -130,13 +132,9 @@ export class NotificationService {
     total: number;
   }> {
     try {
-      const query = { recipient };
-      const total = await NotificationModel.countDocuments(query);
-      const notifications = await NotificationModel.find(query)
-        .sort({ createdAt: -1 })
-        .limit(limit)
-        .skip(offset)
-        .exec();
+      const allNotifications = await mockDb.findNotificationsByRecipient(recipient);
+      const total = allNotifications.length;
+      const notifications = allNotifications.slice(offset, offset + limit);
 
       return { notifications, total };
     } catch (error: any) {
@@ -152,12 +150,9 @@ export class NotificationService {
     total: number;
   }> {
     try {
-      const total = await NotificationModel.countDocuments();
-      const notifications = await NotificationModel.find()
-        .sort({ createdAt: -1 })
-        .limit(limit)
-        .skip(offset)
-        .exec();
+      const allNotifications = await mockDb.getAllNotifications();
+      const total = allNotifications.length;
+      const notifications = allNotifications.slice(offset, offset + limit);
 
       return { notifications, total };
     } catch (error: any) {

@@ -1,17 +1,18 @@
-# Service Authentication Microservice
+# Service Authentication Microservice (SAMS)
 
-A comprehensive authentication and user management microservice providing secure account creation, verification, authentication, and user lifecycle management capabilities for both merchants and regular users. **Now includes inter-service authentication and management.**
+A specialized microservice for service-to-service authentication and management. Provides secure registration, IP whitelisting, credential management, and inter-service communication capabilities for microservice architectures.
 
 Deployment URL: https://service-auth-ms.fly.dev/
 
+## Overview
+
+This service provides capabilities for managing inter-service authentication in a microservices architecture. It handles service registration, IP whitelisting, and credential management for secure service-to-service communication.
+
 ## Table of Contents
 - [Features](#features)
-- [Documentation](#documentation)
 - [Technology Stack](#technology-stack)
 - [Getting Started](#getting-started)
 - [Environment Variables](#environment-variables)
-- [API Documentation](#api-documentation)
-- [SAMS (Service Authentication Microservice) API](#sams-service-authentication-microservice-api)
 - [Implemented Endpoints](#implemented-endpoints)
 - [Data Models](#data-models)
 - [Validation Rules](#validation-rules)
@@ -20,50 +21,27 @@ Deployment URL: https://service-auth-ms.fly.dev/
 - [Security Features](#security-features)
 - [Redis Caching Implementation](#redis-caching-implementation)
 - [SAMS Documentation](#sams-documentation)
-- [Role Management API](#role-management-api)
-- [Default Users](#default-users)
 
 ## Features
 
 ### ✅ Implemented
-- User and merchant account registration
-- Admin account registration 
-- Input validation and sanitization
-- Password complexity requirements
-- Email uniqueness validation
-- Secure password hashing with bcrypt
-- Rate limiting and security headers
-- Structured logging and error handling
-- Comprehensive test coverage
-- JWT-based authentication ✅
-- Redis caching ✅
-- Email verification ✅ 
-- Password management and reset ✅
-- User profile management ✅
-- Administrative account operations ✅
-- OTP generation and verification ✅
-- Role Management and Permissions (RBAC) - Full CRUD operations ✅
-- Merchant User Invitation System ✅
-- Merchant compliance status checking ✅
-- Merchant API Key Management (Public/Secret Keys) ✅
-- Database integration (MongoDB) 🛠️ (configured, using mock database)
-- Comprehensive audit trails 🚧 (structured logging implemented)
-
-## Documentation
-
-- **[Role Management API](./ROLE_MANAGEMENT_API.md)** - Comprehensive guide for role management endpoints
-- **[API Key Management](./API_KEY_MANAGEMENT.md)** - Guide for creating and managing merchant API keys
+- **Service Registration**: Register and manage microservices ✅
+- **IP Whitelisting**: Control service access based on IP addresses ✅
+- **Credential Management**: Create, validate, and revoke service credentials ✅
+- **Service Discovery**: Find and manage registered services ✅
+- **Rate limiting and security headers** ✅
+- **Structured logging and error handling** ✅
+- **Comprehensive test coverage** ✅
+- **Redis caching** ✅
+- **Database integration** (MongoDB - configured, using mock database) ✅
 
 ## Technology Stack
 
 - **Runtime**: Node.js 18+
 - **Framework**: Express.js with TypeScript
 - **Database**: MongoDB (configured, currently using mock database)
-- **Cache**: Redis 7+ ✅ (now fully implemented)
-- **Authentication**: JWT (JSON Web Tokens) ✅
-- **Password Hashing**: bcrypt ✅
+- **Cache**: Redis 7+ ✅
 - **Validation**: Joi ✅
-- **ORM**: Prisma (configured, not yet connected)
 - **Testing**: Jest + Supertest ✅
 - **Security**: helmet, CORS, express-rate-limit ✅
 - **Logging**: Winston ✅
@@ -83,7 +61,7 @@ Deployment URL: https://service-auth-ms.fly.dev/
 
 1. Clone the repository and navigate to the project directory:
    ```bash
-   cd "server/client Auth MS"
+   cd plata/service-auth-ms
    ```
 
 2. Install dependencies:
@@ -112,7 +90,6 @@ PORT=3000                              # Server port (default: 3000)
 
 ### Database Configuration
 ```
-
 # Redis Cache
 REDIS_URL=redis://localhost:6379      # Required
 REDIS_PASSWORD=                        # Optional redis password
@@ -120,70 +97,15 @@ REDIS_PASSWORD=                        # Optional redis password
 
 ### Security Configuration
 ```bash
-# JWT Authentication
-JWT_SECRET=your-super-secure-secret-key-minimum-32-characters  # Required (min 32 chars)
-JWT_EXPIRES_IN=1h                      # JWT token expiration (default: 1h)
-JWT_REFRESH_EXPIRES_IN=7d              # Refresh token expiration (default: 7d)
-
-# Password Hashing
-BCRYPT_ROUNDS=12                       # Password hashing rounds (10-15, default: 12)
-
 # Rate Limiting
 RATE_LIMIT_WINDOW_MS=900000            # Rate limit window in ms (default: 15 minutes)
 RATE_LIMIT_MAX_REQUESTS=100            # Max requests per window (default: 100)
-
-# Account Security
-ACCOUNT_LOCKOUT_ATTEMPTS=5             # Failed login attempts before lockout (default: 5)
-ACCOUNT_LOCKOUT_DURATION=1800          # Account lockout duration in seconds (default: 30 min)
 
 # CORS Settings
 CORS_ALLOWED_ORIGINS=http://localhost:3000  # Comma-separated allowed origins
 ```
 
-### Email Configuration
-```bash
-# SMTP Settings (Required for email verification)
-SMTP_HOST=smtp.gmail.com               # Required
-SMTP_PORT=587                          # Default: 587
-SMTP_SECURE=false                      # Use TLS (default: false)
-SMTP_USER=your-email@gmail.com         # Required
-SMTP_PASS=your-app-password            # Required
-FROM_EMAIL=noreply@yourapp.com         # Required
-```
-
-### SMS Configuration (Optional - Twilio)
-```bash
-# Twilio Settings (Optional for SMS OTP)
-TWILIO_ACCOUNT_SID=your-twilio-sid     # Optional
-TWILIO_AUTH_TOKEN=your-twilio-token    # Optional
-TWILIO_PHONE_NUMBER=+1234567890        # Optional
-```
-
-### OTP Configuration
-```bash
-# OTP Settings
-OTP_EXPIRES_IN=300                     # OTP expiration in seconds (default: 5 min)
-OTP_MAX_ATTEMPTS=3                     # Max OTP verification attempts (default: 3)
-OTP_LOCKOUT_DURATION=900               # OTP lockout duration in seconds (default: 15 min)
-```
-
-### Verification Settings
-```bash
-# Email/Password Reset
-EMAIL_VERIFICATION_EXPIRES_IN=86400    # Email verification expiry in seconds (default: 24 hours)
-PASSWORD_RESET_EXPIRES_IN=3600         # Password reset token expiry in seconds (default: 1 hour)
-```
-
-### Compliance Service Configuration
-```bash
-# Compliance Service
-COMPLIANCE_SERVICE_URL=http://localhost:3003  # Compliance microservice URL (default: http://localhost:3003)
-```
-
 ### Validation Rules
-- **JWT_SECRET**: Must be at least 32 characters long
-- **BCRYPT_ROUNDS**: Must be between 10-15 (higher = more secure but slower)
-- **EMAIL fields**: Must be valid email format
 - **PORT**: Must be a valid port number
 - **Duration fields**: Must be positive integers (in seconds)
 
@@ -193,22 +115,12 @@ COMPLIANCE_SERVICE_URL=http://localhost:3003  # Compliance microservice URL (def
 NODE_ENV=development
 PORT=3000
 
-# Database
-DATABASE_URL=mongodb://localhost:27017/auth_db  # Required
-MONGODB_SSL=false                     # Enable SSL for database connection (default: false)
-MONGODB_REPLICASET=                   # Optional replica set name
-MONGODB_AUTH_SOURCE=                  # Optional authentication database
+# Redis
+REDIS_URL=redis://localhost:6379
 
-# Security
-JWT_SECRET=your-super-secure-secret-key-at-least-32-characters-long
-BCRYPT_ROUNDS=12
-
-# Email
-SMTP_HOST=smtp.gmail.com
-SMTP_USER=your-email@gmail.com
-SMTP_PASS=your-app-password
-FROM_EMAIL=noreply@yourapp.com
-
+# CORS
+CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
+```
 # CORS
 CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
 ```
@@ -260,81 +172,23 @@ You can test the implemented endpoints using curl or any API testing tool:
 # Health check
 curl http://localhost:3000/health
 
-# Register a user (must include user_merchant_id)
-curl -X POST http://localhost:3000/api/v1/auth/register/user \
+# Register a service
+curl -X POST http://localhost:3000/api/v1/services/create \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "test@example.com",
-    "password": "SecurePass123!",
-    "first_name": "John",
-    "last_name": "Doe",
-    "user_merchant_id": "merchant_001",
-    "country": "USA"
+    "name": "Payment Service",
+    "description": "Handles payment processing",
+    "version": "1.0.0",
+    "endpoint_url": "http://payment-ms:3007",
+    "health_check_url": "http://payment-ms:3007/health",
+    "owner_email": "team@example.com",
+    "tags": ["payment", "finance"]
   }'
 ```
 
-## API Documentation
-
-The service provides the following API endpoints:
-
-### Authentication
-- `POST /api/v1/auth/register/user` - Register user account ✅ **Implemented**
-- `POST /api/v1/auth/register/merchant` - Register merchant account ✅ **Implemented**
-- `POST /api/v1/auth/register/admin` - Register admin account  ✅ **Implemented**
-- `POST /api/v1/auth/verify-account` - Verify account with token ✅ **Implemented**
-- `POST /api/v1/auth/login` - User/merchant login ✅ **Implemented**
-- `POST /api/v1/auth/logout` - Logout and invalidate session ✅ **Implemented**
-- `POST /api/v1/auth/refresh` - Refresh JWT token ✅ **Implemented**
-
-### Session Management
-- `GET /api/v1/sessions` - Get active sessions ✅ **Implemented**
-- `DELETE /api/v1/sessions/:sessionId` - Revoke a specific session ✅ 
-
-### OTP Management
-- `POST /api/v1/otp/generate` - Generate OTP code ✅ **Implemented**
-- `POST /api/v1/otp/verify` - Verify OTP code ✅ **Implemented**
-- `POST /api/v1/otp/resend` - Resend OTP code ✅ **Implemented**
-
-### Password Management
-- `POST /api/v1/password/forgot` - Initiate password reset ✅ **Implemented**
-- `POST /api/v1/password/reset` - Reset password with token ✅ **Implemented**
-- `PUT /api/v1/password/change` - Change password (authenticated) ✅ **Implemented**
-
-### User Management
-- `GET /api/v1/user/profile` - Get user profile ✅ **Implemented**
-- `GET /api/v1/user/list` - List users for merchant ✅ **Implemented**
-- `PUT /api/v1/user/profile` - Update user profile ✅ **Implemented**
-- `GET /api/v1/user/info` - Get detailed user information ✅ **Implemented**
-- `POST /api/v1/user/verify-info` - Verify user information ✅ **Implemented**
-- `PUT /api/v1/user/suspend` - Suspend user account (admin) ✅ **Implemented**
-- `PUT /api/v1/user/activate` - Activate suspended account (admin) ✅ 
-- `PUT /api/v1/user/:userId/status` - Update user status (Merchant/Admin) ✅ 
-- `POST /api/v1/user/deactivate` - Deactivate user account ✅ 
-
-### Role Management
-- `POST /api/v1/roles` - Create new role (Merchant) ✅ **Implemented**
-- `GET /api/v1/roles` - Get all roles (Merchant) ✅ **Implemented**
-- `GET /api/v1/roles/permissions` - Get available permissions ✅ **Implemented**
-- `PUT /api/v1/roles/:roleId` - Update existing role (Merchant) ✅ **Implemented**
-- `DELETE /api/v1/roles/:roleId` - Delete role (Merchant) ✅ **Implemented**
-
-### API Key Management
-- `POST /api/v1/keys` - Create new API key pair (Merchant) ✅ **Implemented**
-- `GET /api/v1/keys` - List all API keys (Merchant) ✅ **Implemented**
-- `DELETE /api/v1/keys/:keyId` - Revoke API key (Merchant) ✅ **Implemented**
-
-### Invitation Management
-- `POST /api/v1/invitations` - Create invitation (Merchant) ✅ **Implemented**
-- `GET /api/v1/invitations` - Get invitations (Merchant) ✅ **Implemented**
-- `GET /api/v1/invitations/validate/:token` - Validate invitation token ✅ **Implemented**
-- `POST /api/v1/invitations/accept` - Accept invitation ✅ **Implemented**
-
-### Health Check
-- `GET /health` - Service health status ✅ **Implemented**
-
 ## SAMS (Service Authentication Microservice) API
 
-**NEW:** The service now includes comprehensive service-to-service authentication and management capabilities.
+The service provides comprehensive service-to-service authentication and management capabilities.
 
 ### Service Management
 - `POST /api/v1/services/create` - Create new service registration ✅ **Implemented**
@@ -356,21 +210,21 @@ The service provides the following API endpoints:
 
 ## Implemented Endpoints
 
-### User Registration
-**`POST /api/v1/auth/register/user`**
+### Service Registration
+**`POST /api/v1/services/create`**
 
-**Note**: Users must register under a merchant with a valid `user_merchant_id`.
+Registers a new microservice in the SAMS system.
 
 **Request Body:**
 ```json
 {
-  "email": "john.doe@example.com",
-  "password": "SecurePass123!",
-  "first_name": "John",
-  "last_name": "Doe",
-  "phone": "+1234567890",
-  "user_merchant_id": "merchant_001",
-  "country": "USA"
+  "name": "Payment Service",
+  "description": "Handles payment processing",
+  "version": "1.0.0",
+  "endpoint_url": "http://payment-ms:3007",
+  "health_check_url": "http://payment-ms:3007/health",
+  "owner_email": "team@example.com",
+  "tags": ["payment", "finance"]
 }
 ```
 
@@ -378,99 +232,19 @@ The service provides the following API endpoints:
 ```json
 {
   "success": true,
-  "message": "User registered successfully. Please check your email for verification instructions.",
+  "message": "Service registered successfully",
   "data": {
-    "user": {
+    "service": {
       "id": "550e8400-e29b-41d4-a716-446655440000",
-      "email": "john.doe@example.com",
-      "first_name": "John",
-      "last_name": "Doe",
-      "user_type": "user",
-      "status": "pending",
-      "email_verified": false,
-      "created_at": "2025-01-10T09:00:00.000Z"
-    }
-  }
-}
-```
-
-**Error Response (400 Bad Request):**
-```json
-{
-  "success": false,
-  "error": "Email address is already registered"
-}
-```
-
-### Merchant Registration
-**`POST /api/v1/auth/register/merchant`**
-
-**Request Body:**
-```json
-{
-  "email": "merchant@example.com",
-  "password": "SecurePass123!",
-  "first_name": "John",
-  "last_name": "Smith",
-  "phone": "+1234567890",
-  "user_merchant_id": "merchant_001",
-  "country": "USA"
-}
-```
-
-**Success Response (201 Created):**
-```json
-{
-  "success": true,
-  "message": "Merchant registered successfully. Please check your email for verification instructions.",
-  "data": {
-    "merchant": {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
-      "email": "merchant@example.com",
-      "first_name": "John",
-      "last_name": "Smith",
-      "user_type": "merchant",
-      "status": "pending",
-      "email_verified": false,
-      "user_merchant_id": "merchant_001",
-      "country": "USA",
-      "created_at": "2025-01-10T09:00:00.000Z"
-    }
-  }
-}
-```
-
-### Admin Registration
-**`POST /api/v1/auth/register/admin`**
-
-**Request Body:**
-```json
-{
-  "email": "admin@example.com",
-  "password": "SecurePass123!",
-  "first_name": "Admin",
-  "last_name": "User",
-  "phone": "+1234567890",
-  "country": "USA"
-}
-```
-
-**Success Response (201 Created):**
-```json
-{
-  "success": true,
-  "message": "Admin registered successfully.",
-  "data": {
-    "user": {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
-      "email": "admin@example.com",
-      "first_name": "Admin",
-      "last_name": "User",
-      "user_type": "admin",
-      "status": "active",
-      "email_verified": true,
-      "phone_verified": false,
-      "created_at": "2025-01-10T09:00:00.000Z"
+      "name": "Payment Service",
+      "description": "Handles payment processing",
+      "version": "1.0.0",
+      "endpoint_url": "http://payment-ms:3007",
+      "health_check_url": "http://payment-ms:3007/health",
+      "owner_email": "team@example.com",
+      "tags": ["payment", "finance"],
+      "created_at": "2025-01-10T09:00:00.000Z",
+      "updated_at": "2025-01-10T09:00:00.000Z"
     }
   }
 }
@@ -484,265 +258,93 @@ The service provides the following API endpoints:
 {
   "status": "healthy",
   "timestamp": "2025-01-10T09:00:00.000Z",
-  "service": "client-auth-microservice"
+  "service": "service-auth-microservice"
 }
 ```
 
-### Account Verification
-**`POST /api/v1/auth/verify-account`**
+### Root Endpoint
+**`GET /`**
 
-**Request Body:**
-```json
-{
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
+Provides service information and available endpoints.
 
 **Success Response (200 OK):**
 ```json
 {
-  "success": true,
-  "message": "Account verified successfully",
-  "data": {
-    "user": {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
-      "email": "user@example.com",
-      "first_name": "John",
-      "last_name": "Doe",
-      "user_type": "user",
-      "status": "active",
-      "email_verified": true,
-      "phone_verified": false,
-      "created_at": "2025-01-10T09:00:00.000Z"
-    }
-  }
-}
-```
-
-**Error Response (400 Bad Request):**
-```json
-{
-  "success": false,
-  "error": "Invalid or expired verification token"
-}
-```
-
-### User/Merchant Login
-**`POST /api/v1/auth/login`**
-
-Authenticates a user or merchant and returns access/refresh tokens. For merchants, also checks compliance status with the compliance service.
-
-**Request Body:**
-```json
-{
-  "email": "user@example.com",
-  "password": "SecurePass123!"
-}
-```
-
-**Success Response (200 OK):**
-```json
-{
-  "success": true,
-  "message": "Login successful",
-  "data": {
-    "user": {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
-      "email": "user@example.com",
-      "first_name": "John",
-      "last_name": "Doe",
-      "user_type": "user",
-      "status": "active",
-      "email_verified": true,
-      "phone_verified": false,
-      "last_login_at": "2025-01-10T09:00:00.000Z",
-      "created_at": "2025-01-01T09:00:00.000Z"
-    },
-    "tokens": {
-      "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-      "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-    },
-    "compliance": {
-      "needsCompliance": false,
-      "complianceStatus": "NOT_APPLICABLE"
-    }
-  }
-}
-```
-
-For merchants, the compliance section will indicate if compliance checks are needed:
-```json
-{
-  "success": true,
-  "message": "Login successful",
-  "data": {
-    // ... user and tokens data ...
-    "compliance": {
-      "needsCompliance": true,
-      "complianceStatus": "PENDING"
-    }
-  }
-}
-```
-
-**Error Response (401 Unauthorized):**
-```json
-{
-  "success": false,
-  "error": "Invalid email or password"
-}
-```
-
-**Error Response (400 Bad Request):**
-```json
-{
-  "success": false,
-  "error": "Validation failed",
-  "details": "email is required"
+  "service": "Service Authentication Microservice (SAMS)",
+  "version": "1.0.0",
+  "status": "running",
+  "description": "Service-to-service authentication and management",
+  "endpoints": {
+    "health": "/health",
+    "services": "/api/v1/services",
+    "credentials": "/api/v1/credentials"
+  },
+  "timestamp": "2025-01-10T09:00:00.000Z"
 }
 ```
 
 ## Data Models
 
-### User Types
+### Service Interface
 ```typescript
-enum UserType {
-  USER = 'user',
-  MERCHANT = 'merchant',
-  ADMIN = 'admin'
-}
-
-enum AccountStatus {
-  PENDING = 'pending',
-  ACTIVE = 'active',
-  SUSPENDED = 'suspended',
-  DEACTIVATED = 'deactivated'
-}
-```
-
-### Base User Interface
-```typescript
-interface BaseUser {
-  id: string;
-  email: string;
-  password: string;
-  first_name: string;
-  last_name: string;
-  phone?: string;
-  user_type: UserType;
-  status: AccountStatus;
-  email_verified: boolean;
-  phone_verified: boolean;
-  created_at: Date;
-  updated_at: Date;
-  last_login_at?: Date;
-  failed_login_attempts: number;
-  locked_until?: Date;
-}
-```
-
-### User Interface
-```typescript
-interface User extends BaseUser {
-  user_type: UserType.USER;
-  user_merchant_id: string;
-  country: string;
-}
-```
-
-### Merchant Interface
-```typescript
-interface Merchant extends BaseUser {
-  user_type: UserType.MERCHANT;
-  user_merchant_id: string;
-  country: string;
-}
-```
-
-### Admin Interface
-```typescript
-interface Admin extends BaseUser {
-  user_type: UserType.ADMIN;
-  user_merchant_id: 'admin';
-  country: string;
-}
-\`\`\`
-
-### Role & Permissions
-\`\`\`typescript
-enum Permission {
-  CREATE_ADMIN = 'create_admin',
-  GENERATE_SECRET_KEYS = 'generate_secret_keys',
-  SEE_SECRET_KEYS = 'see_secret_keys',
-  EDIT_PRODUCTS = 'edit_products',
-  CREATE_PRODUCTS = 'create_products',
-  VIEW_PRODUCTS = 'view_products',
-  CHANGE_PASSWORD = 'change_password',
-  SEE_BILLING = 'see_billing',
-  ADD_PAYMENT_METHOD = 'add_payment_method',
-  EDIT_PAYMENT_METHOD = 'edit_payment_method',
-  CREATE_APP = 'create_app',
-  SEE_ACTIVITY_LOG = 'see_activity_log',
-  DOWNLOAD_REPORT = 'download_report'
-}
-
-interface Role {
+interface Service {
   id: string;
   name: string;
   description: string;
-  permissions: Permission[];
-  merchant_id: string;
+  version: string;
+  endpoint_url: string;
+  health_check_url: string;
+  owner_email: string;
+  tags: string[];
   created_at: Date;
-  merchant_id: string;
+  updated_at: Date;
+}
+```
+
+### Credential Interface
+```typescript
+interface Credential {
+  id: string;
+  service_id: string;
+  credential_type: 'api_key' | 'jwt' | 'client_secret';
+  credential_value: string;
+  permissions: string[];
+  rate_limit: number;
+  expires_at: Date;
+  is_active: boolean;
   created_at: Date;
   updated_at: Date;
 }
 
-interface Invitation {
+interface WhitelistedIP {
   id: string;
-  email: string;
-  roleId: string;
-  merchantId: string;
-  token: string;
-  status: 'pending' | 'accepted' | 'expired' | 'revoked';
-  expiresAt: Date;
-  createdAt: Date;
-  updatedAt: Date;
+  service_id: string;
+  ip_address: string;
+  description: string;
+  created_at: Date;
 }
 ```
 
 ## Validation Rules
 
-### Password Requirements
-- Minimum 8 characters, maximum 128 characters
-- Must contain at least one lowercase letter
-- Must contain at least one uppercase letter
-- Must contain at least one number
-- Must contain at least one special character (@$!%*?&)
+### Service Registration
+- **Name**: Required, 1-100 characters
+- **Description**: Optional, max 500 characters
+- **Version**: Required, semantic versioning format
+- **Endpoint URL**: Required, valid URL format
+- **Health Check URL**: Required, valid URL format
+- **Owner Email**: Required, valid email format
+- **Tags**: Optional, array of strings
 
-### Email Validation
-- Must be a valid email format
-- Case-insensitive (converted to lowercase)
-- Must be unique across all user types
+### IP Whitelisting
+- **IP Address**: Required, valid IP address or CIDR notation
+- **Description**: Optional, max 200 characters
 
-### Phone Validation
-- Must be in international format (e.g., +1234567890)
-- Optional field for both users and merchants
-
-### User Requirements
-- Must be associated with a valid merchant via `user_merchant_id`
-- Country: Required field indicating user's location
-- Phone: Optional field in international format
-
-### Merchant Requirements
-- User Merchant ID: Required, unique identifier for merchant
-- Country: Required, user's country location
-
-### Admin Requirements
-- Country: Required, user's country location
-- Phone: Optional field in international format
-- Email verified by default
-- Status set to active by default
+### Credential Management
+- **Credential Type**: Required, must be 'api_key', 'jwt', or 'client_secret'
+- **Permissions**: Optional, array of permission strings
+- **Rate Limit**: Optional, positive integer
+- **Expires In**: Optional, positive integer (seconds)
 
 ## Error Handling
 
@@ -753,15 +355,15 @@ All errors follow a consistent format:
 {
   "success": false,
   "error": "Validation failed",
-  "details": "Password must contain at least one lowercase letter, one uppercase letter, one number, and one special character"
+  "details": "Service name is required"
 }
 ```
 
-**Registration Error (400 Bad Request):**
+**Service Registration Error (400 Bad Request):**
 ```json
 {
   "success": false,
-  "error": "Email address is already registered"
+  "error": "Service with this name already exists"
 }
 ```
 
@@ -782,32 +384,26 @@ All errors follow a consistent format:
 ## Implementation Status
 
 ### ✅ Completed Features
-- User registration with validation
-- Merchant registration with validation
-- Admin registration with validation 
-- Password hashing with bcrypt
+- Service registration with validation
+- IP whitelisting with CIDR support
+- Credential management (create, validate, revoke, regenerate)
+- Service discovery and health monitoring
 - Input validation using Joi
 - Mock database layer
 - Comprehensive test suite
 - Security middleware (helmet, CORS, rate limiting)
 - Structured logging with Winston
 - Error handling middleware
-- JWT-based authentication
 - Redis caching implementation ✅
-- Email verification system ✅
-- Password management and reset ✅
-- OTP generation and verification ✅
-- User profile management ✅
-- Administrative account operations ✅
-- SAMS (Service Authentication Microservice) ✅
-- Merchant compliance status checking ✅
+- Service-to-service authentication ✅
 
 ## Current Database
 
 The service currently uses an in-memory mock database for development and testing. The mock database provides:
-- User storage with email indexing
-- CRUD operations for user management
-- Email uniqueness validation
+- Service storage with unique identifiers
+- Credential management
+- IP whitelisting storage
+- CRUD operations for service management
 - Data persistence during runtime (resets on restart)
 
 ## Project Structure
@@ -826,38 +422,36 @@ src/
 
 ## Security Features
 
-- Password complexity validation
 - Rate limiting on authentication endpoints
-- Account lockout after failed attempts
-- JWT token expiration and refresh
 - CORS configuration
 - Input sanitization and validation
 - SQL injection prevention
 - XSS protection headers
-- Redis-based token blacklisting
+- Redis-based credential management
 - Comprehensive data caching
+- IP-based access control
 
 ## Redis Caching Implementation ✅
 
-The service now includes comprehensive Redis caching capabilities:
+The service includes comprehensive Redis caching capabilities:
 
 ### Features
-- **User Data Caching**: User profiles and authentication data are cached for improved performance
-- **Token Blacklisting**: JWT tokens are blacklisted using Redis with automatic expiration
+- **Service Data Caching**: Service registration and metadata are cached for improved performance
+- **Credential Caching**: Service credentials are cached with automatic expiration
 - **Fallback Support**: In-memory caching when Redis is unavailable
 - **Automatic Cleanup**: Expired cache entries are automatically cleaned up
 - **Connection Management**: Robust Redis connection handling with reconnection logic
 
 ### Cache Keys
-- `user:{userId}` - User profile data
-- `email:{email}` - User lookup by email
-- `blacklist:{token}` - Blacklisted JWT tokens
+- `service:{serviceId}` - Service registration data
+- `credential:{credentialId}` - Credential data
+- `whitelist:{serviceId}` - IP whitelisting data
 
 ### Performance Benefits
-- Reduced database queries for frequently accessed user data
-- Faster authentication token validation
-- Improved response times for user profile endpoints
-- Scalable token blacklist management
+- Reduced database queries for frequently accessed service data
+- Faster credential validation
+- Improved response times for service management endpoints
+- Scalable credential management
 
 ### Configuration
 Redis caching is configured through environment variables:
@@ -867,8 +461,8 @@ REDIS_PASSWORD=your-redis-password  # Optional
 ```
 
 ### Cache TTL (Time To Live)
-- User data: 1 hour (3600 seconds)
-- Token blacklist: Based on token expiration time
+- Service data: 1 hour (3600 seconds)
+- Credential data: Based on expiration time
 - Custom TTL can be set per cache operation
 
 ## SAMS (Service Authentication Microservice) Documentation
@@ -1012,217 +606,4 @@ if (validation.valid) {
 }
 \`\`\`
 
-### Role Management API
 
-#### Create Role
-**\`POST /api/v1/roles\`**
-
-Creates a new role with specific permissions. Only available to merchants.
-
-**Request Body:**
-\`\`\`json
-{
-  "name": "Support Agent",
-  "description": "Role for customer support staff",
-  "permissions": [
-    "view_products",
-    "see_activity_log",
-    "change_password"
-  ]
-}
-\`\`\`
-
-**Success Response (201 Created):**
-\`\`\`json
-{
-  "success": true,
-  "message": "Role created successfully",
-  "data": {
-    "role": {
-      "id": "role-uuid-1234",
-      "name": "Support Agent",
-      "description": "Role for customer support staff",
-      "permissions": ["view_products", "see_activity_log", "change_password"],
-      "merchant_id": "merchant-uuid-5678",
-      "created_at": "2025-01-10T12:00:00.000Z",
-      "updated_at": "2025-01-10T12:00:00.000Z"
-    }
-  }
-}
-\`\`\`
-
-#### Get Roles
-**\`GET /api/v1/roles\`**
-
-Retrieves all roles created by the authenticated merchant.
-
-#### Get Permissions
-**\`GET /api/v1/roles/permissions\`**
-
-Returns a list of all available permissions that can be assigned to roles.
-
-**Success Response (200 OK):**
-\`\`\`json
-{
-  "success": true,
-  "data": {
-    "permissions": [
-      "create_admin",
-      "generate_secret_keys",
-      "see_secret_keys",
-      "edit_products",
-      "create_products",
-      "view_products",
-      "change_password",
-      "see_billing",
-      "add_payment_method",
-      "edit_payment_method",
-      "create_app",
-      "see_activity_log",
-      "download_report"
-    ]
-  }
-}
-```
-
-#### Update Role
-**`PUT /api/v1/roles/:roleId`**
-
-Updates an existing role. Only the merchant who created the role can update it.
-
-**Authentication:** Required (Merchant only)
-
-**URL Parameters:**
-- `roleId`: The UUID of the role to update
-
-**Request Body:**
-```json
-{
-  "name": "Senior Manager",
-  "description": "Senior manager with extended access",
-  "permissions": [
-    "view_products",
-    "edit_products",
-    "create_products",
-    "see_billing",
-    "add_payment_method",
-    "create_app",
-    "see_activity_log"
-  ]
-}
-```
-
-**Success Response (200 OK):**
-```json
-{
-  "success": true,
-  "message": "Role updated successfully",
-  "data": {
-    "role": {
-      "id": "role-uuid-1234",
-      "name": "Senior Manager",
-      "description": "Senior manager with extended access",
-      "permissions": [
-        "view_products",
-        "edit_products",
-        "create_products",
-        "see_billing",
-        "add_payment_method",
-        "create_app",
-        "see_activity_log"
-      ],
-      "merchant_id": "merchant-uuid-5678",
-      "created_at": "2025-01-10T12:00:00.000Z",
-      "updated_at": "2025-01-10T13:00:00.000Z"
-    }
-  }
-}
-```
-
-**Error Responses:**
-- `404 Not Found`: Role not found
-- `403 Forbidden`: You do not have permission to update this role
-- `400 Bad Request`: Validation failed
-
-#### Delete Role
-**`DELETE /api/v1/roles/:roleId`**
-
-Deletes a role. Only the merchant who created the role can delete it. Roles cannot be deleted if users are currently assigned to them.
-
-**Authentication:** Required (Merchant only)
-
-**URL Parameters:**
-- `roleId`: The UUID of the role to delete
-
-**Success Response (200 OK):**
-```json
-{
-  "success": true,
-  "message": "Role deleted successfully"
-}
-```
-
-**Error Responses:**
-- `404 Not Found`: Role not found
-- `403 Forbidden`: You do not have permission to delete this role
-- `400 Bad Request`: Cannot delete role: X user(s) are currently assigned to this role
-
-
-### Default Users
-
-The service automatically creates a default merchant and several test users when it starts:
-
-#### Default Merchant
-- **Email**: merchant@example.com
-- **Password**: DefaultPass123!
-- **First Name**: Default
-- **Last Name**: Merchant
-- **Phone**: +1234567890
-- **Country**: US
-- **User Merchant ID**: default-merchant-id
-- **Status**: Active (email verified)
-
-This merchant account is created with verified email status and active account status during server initialization.
-
-
-#### Default Admin
-- **Email**: admin@example.com
-- **Password**: AdminPass123!
-- **Name**: Default Admin
-- **Phone**: +1234567891
-- **Country**: US
-
-#### Default Invited Users (Merchant Organization)
-
-The system also creates three invited users for the default merchant, each with different role assignments:
-
-**1. Merchant Admin User**
-- **Email**: merchant-admin@example.com
-- **Password**: DefaultPass123!
-- **First Name**: Merchant
-- **Last Name**: Admin
-- **Role**: Admin (full access to all permissions)
-- **Merchant ID**: default-merchant-id
-- **Status**: Active (email verified)
-
-**2. Merchant Manager User**
-- **Email**: merchant-manager@example.com
-- **Password**: DefaultPass123!
-- **First Name**: Merchant
-- **Last Name**: Manager
-- **Role**: Manager (operational access)
-- **Permissions**: view_products, edit_products, create_products, see_billing, add_payment_method, edit_payment_method, create_app, see_activity_log, download_report
-- **Merchant ID**: default-merchant-id
-- **Status**: Active (email verified)
-
-**3. Merchant Support User**
-- **Email**: merchant-support@example.com
-- **Password**: DefaultPass123!
-- **First Name**: Merchant
-- **Last Name**: Support
-- **Role**: Support (read-only access)
-- **Permissions**: view_products, see_activity_log, see_billing
-- **Merchant ID**: default-merchant-id
-- **Status**: Active (email verified)
-
-These users demonstrate the role-based access control (RBAC) system and can be used for testing different permission levels.

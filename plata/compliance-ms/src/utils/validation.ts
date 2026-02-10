@@ -149,7 +149,7 @@ export const kycSubmissionSchema = Joi.object({
 
 // KYC status update validation schema
 export const kycStatusUpdateSchema = Joi.object({
-  status: Joi.string().valid('pending', 'in_progress', 'completed', 'failed', 'review', 'approved', 'rejected').required(),
+  status: Joi.string().valid('pending', 'in_progress', 'completed', 'failed', 'review', 'admin_approved', 'approved', 'rejected').required(),
   rejectionReason: Joi.string().when('status', {
     is: 'rejected',
     then: Joi.required(),

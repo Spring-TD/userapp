@@ -14,9 +14,10 @@ Deployment URL: https://compliance-ms.fly.dev/
 - Shareholder liveness testing
 - Administrative compliance management
 - API-based compliance checking
-- **CAC Certificate Verification** - Verify business registration with the Nigerian Corporate Affairs Commission
-- **AML Document Verification** - Verify business documents using third-party KYB/AML providers
-- **Sanctions List Checking** - Check individuals and businesses against international sanctions lists
+- **CAC Certificate Verification** - Verify business registration with the Nigerian Corporate Affairs Commission (via Prembly API)
+- **AML Document Verification** - Verify business documents using Prembly API (KYB/AML providers)
+- **Sanctions List Checking** - Check individuals and businesses against international sanctions lists (via Prembly API)
+- **Prembly Integration** - Comprehensive identity verification and compliance platform integration
 
 ## Technology Stack
 
@@ -28,6 +29,7 @@ Deployment URL: https://compliance-ms.fly.dev/
 - **Testing**: Jest + Supertest
 - **Security**: helmet, CORS, express-rate-limit
 - **Logging**: Winston
+- **Verification Provider**: Prembly API (KYC, AML, CAC, Sanctions, Liveness)
 
 ## API Documentation
 
@@ -197,10 +199,12 @@ Checks the KYC compliance status for a user or merchant.
 
 **Possible Status Values:**
 - `PENDING` - KYC submission received, under review
+- `IN_PROGRESS` - KYC processing in progress
+- `REVIEW` - Additional review required
+- `ADMIN_APPROVED` - Document approved by admin (ready for Prembly verification)
 - `APPROVED` - KYC verification completed successfully
 - `REJECTED` - KYC verification failed
-- `REVIEW` - Additional review required
-- `EXPIRED` - KYC documents have expired
+- `FAILED` - KYC verification failed
 - `COMPLETED` - All requirements fulfilled
 
 **Possible Risk Level Values:**
@@ -297,6 +301,216 @@ Retrieves all compliance documents from all user profiles in the system.
 }
 
 ```
+
+### Admin Approve Document for Prembly Verification
+**`POST /api/v1/compliance/admin/document/:documentId/approve`**
+
+Approves a document for Prembly verification. Documents must be approved by an admin before they can be verified through Prembly API.
+
+**Authentication**: Requires valid JWT token with Compliance Officer role
+
+**Authorization**: This endpoint is restricted to Compliance Officers only.
+
+**Path Parameters:**
+- `documentId`: The ID of the document to approve
+
+**Request Body:**
+```json
+{
+  "notes": "Optional notes about the approval"
+}
+```
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Document approved for Prembly verification",
+  "data": {
+    "documentId": "doc-123",
+    "status": "admin_approved",
+    "approvedBy": "admin-user-id",
+    "approvedAt": "2025-01-10T10:00:00.000Z",
+    "notes": "Document looks good, ready for Prembly verification"
+  }
+}
+```
+
+**Error Responses:**
+- **400 Bad Request**: Document cannot be approved (not in PENDING or REVIEW status)
+- **401 Unauthorized**: Missing or invalid authentication
+- **403 Forbidden**: User is not a compliance officer
+- **404 Not Found**: Document not found
+
+**Note**: Documents must be in `PENDING` or `REVIEW` status to be approved. Once approved, the status changes to `admin_approved` and the document becomes eligible for Prembly verification.
+
+### Update Document Status
+**`PUT /api/v1/compliance/admin/document/:documentId/status`**
+
+Updates the status of a document. Can be used to reject documents or update to other statuses.
+
+**Authentication**: Requires valid JWT token with Compliance Officer role
+
+**Authorization**: This endpoint is restricted to Compliance Officers only.
+
+**Path Parameters:**
+- `documentId`: The ID of the document to update
+
+**Request Body:**
+```json
+{
+  "status": "rejected",
+  "rejectionReason": "Required if status is 'rejected'"
+}
+```
+
+**Valid Status Values:**
+- `pending` - Document is pending review
+- `in_progress` - Document is being processed
+- `review` - Document requires additional review
+- `admin_approved` - Document approved by admin (ready for Prembly verification)
+- `approved` - Document approved after Prembly verification
+- `rejected` - Document rejected
+- `failed` - Document verification failed
+- `completed` - Document processing completed
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Document status updated successfully",
+  "data": {
+    "documentId": "doc-123",
+    "status": "rejected",
+    "rejectionReason": "Document is unclear or missing required information"
+  }
+}
+```
+
+**Error Responses:**
+- **400 Bad Request**: Invalid status or missing rejectionReason for rejected status
+- **401 Unauthorized**: Missing or invalid authentication
+- **403 Forbidden**: User is not a compliance officer
+- **404 Not Found**: Document not found
+
+**Example - Reject Document:**
+```bash
+PUT /api/v1/compliance/admin/document/doc-123/status
+{
+  "status": "rejected",
+  "rejectionReason": "Document quality is too poor to verify"
+}
+```
+
+### Verify AML Document (Prembly)
+**`POST /api/v1/compliance/admin/document/:documentId/verify-aml`**
+
+Verifies a document using Prembly AML verification. **Requires document to be admin-approved first.**
+
+**Authentication**: Requires valid JWT token with Compliance Officer role
+
+**Authorization**: This endpoint is restricted to Compliance Officers only.
+
+**Path Parameters:**
+- `documentId`: The ID of the document to verify
+
+**Request Body:**
+```json
+{
+  "provider": "prembly"
+}
+```
+
+**Prerequisites**: Document must have status `admin_approved` before verification can proceed.
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Document verification completed and approved",
+  "data": {
+    "documentId": "doc-123",
+    "verificationResult": {
+      "verificationId": "verification-123",
+      "kybVerified": true,
+      "amlClear": true,
+      "overallApproved": true,
+      "riskScore": 25
+    },
+    "status": "approved",
+    "message": "Document approved"
+  }
+}
+```
+
+**Error Responses:**
+- **400 Bad Request**: Document must be approved by admin before Prembly verification
+- **401 Unauthorized**: Missing or invalid authentication
+- **403 Forbidden**: User is not a compliance officer
+- **404 Not Found**: Document not found
+
+**Note**: If the document is not in `admin_approved` status, the verification will fail with a 400 error indicating that admin approval is required first.
+
+### Verify CAC Certificate (Prembly)
+**`POST /api/v1/compliance/admin/businesses/:userId/verify-certificate`**
+
+Verifies a business Certificate of Incorporation with the Nigerian Corporate Affairs Commission using Prembly API. **Requires business documents to be admin-approved first.**
+
+**Authentication**: Requires valid JWT token with Compliance Officer role
+
+**Authorization**: This endpoint is restricted to Compliance Officers only.
+
+**Path Parameters:**
+- `userId`: The ID of the business user
+
+**Request Body:**
+```json
+{
+  "registrationNumber": "RC123456",
+  "companyName": "Example Business Ltd"
+}
+```
+
+**Prerequisites**: Business documents (especially certificate of incorporation) must have status `admin_approved` before verification can proceed.
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Certificate verification completed",
+  "data": {
+    "verificationResult": {
+      "success": true,
+      "valid": true,
+      "message": "CAC verification completed",
+      "data": {
+        "companyName": "Example Business Ltd",
+        "registrationNumber": "RC123456",
+        "registrationDate": "2020-01-15",
+        "status": "Active",
+        "address": "123 Business Street, Lagos, Nigeria",
+        "directors": [
+          {
+            "name": "John Doe",
+            "position": "Managing Director"
+          }
+        ]
+      }
+    },
+    "userId": "user-456",
+    "verifiedBy": "admin-user-id",
+    "verifiedAt": "2025-01-10T10:30:00.000Z"
+  }
+}
+```
+
+**Error Responses:**
+- **400 Bad Request**: Business documents must be approved by admin before Prembly verification
+- **401 Unauthorized**: Missing or invalid authentication
+- **403 Forbidden**: User is not a compliance officer
+- **404 Not Found**: User profile not found
+
+**Note**: If business documents are not in `admin_approved` status, the verification will fail with a 400 error indicating that admin approval is required first.
 
 ### Get Business Information
 **`GET /api/v1/kyc/business/business-info`**

@@ -1,6 +1,6 @@
 # fly.toml app configuration file for contract-ms
 
-app = 'fuspay-contract-ms'
+app = 'compliance-ms-plata'
 primary_region = 'lhr'
 
 [build]

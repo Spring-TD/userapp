@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { authApiService } from '../services/authApiService';
+import { AuthService } from '../services/AuthService';
 
 export class PasswordController {
   static async forgot(req: Request, res: Response): Promise<void> {
@@ -14,7 +14,7 @@ export class PasswordController {
         return;
       }
 
-      const result = await authApiService.forgotPassword(email);
+      const result = await AuthService.initiatePasswordReset(email);
       res.status(result.success ? 200 : 400).json(result);
     } catch (error) {
       console.error('Error in forgotPassword:', error);
@@ -27,9 +27,9 @@ export class PasswordController {
 
   static async reset(req: Request, res: Response): Promise<void> {
     try {
-      const { token, password } = req.body;
+      const { token, newPassword } = req.body;
 
-      if (!token || !password) {
+      if (!token || !newPassword) {
         res.status(400).json({
           success: false,
           error: 'Token and new password are required'
@@ -37,7 +37,7 @@ export class PasswordController {
         return;
       }
 
-      const result = await authApiService.resetPassword(token, password);
+      const result = await AuthService.resetPassword(token, newPassword);
       res.status(result.success ? 200 : 400).json(result);
     } catch (error) {
       console.error('Error in resetPassword:', error);
@@ -50,16 +50,16 @@ export class PasswordController {
 
   static async change(req: Request, res: Response): Promise<void> {
     try {
-      const token = req.headers.authorization?.replace('Bearer ', '');
-      const { currentPassword, newPassword } = req.body;
-
-      if (!token) {
+      // Check if user is authenticated
+      if (!req.user) {
         res.status(401).json({
           success: false,
-          error: 'Authorization token is required'
+          error: 'Authentication required'
         });
         return;
       }
+
+      const { currentPassword, newPassword } = req.body;
 
       if (!currentPassword || !newPassword) {
         res.status(400).json({
@@ -69,7 +69,7 @@ export class PasswordController {
         return;
       }
 
-      const result = await authApiService.changePassword(token, currentPassword, newPassword);
+      const result = await AuthService.changePassword(req.user.userId, currentPassword, newPassword);
       res.status(result.success ? 200 : 400).json(result);
     } catch (error) {
       console.error('Error in changePassword:', error);

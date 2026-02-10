@@ -2,6 +2,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { kycService } from '../services/kycService';
 import { logger } from '../utils/logger';
+import { auditLogger } from '../utils/audit';
 import { KYCStatus, UserType, RiskLevel, BusinessType, ComplianceWorkflowStatus } from '../types/kycTypes';
 import { livenessService } from '../services/livenessService';
 import { amlVerificationService, AMLVerificationResult } from '../services/amlVerificationService';

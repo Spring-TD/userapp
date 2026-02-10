@@ -46,6 +46,7 @@ export interface Service {
   owner_email?: string;
   tags?: string[];
   metadata?: Record<string, any>;
+  user_merchant_id?: string; // Add merchant context
   created_at: Date;
   updated_at: Date;
   created_by?: string;
@@ -117,6 +118,7 @@ export interface Credential {
   created_at: Date;
   updated_at: Date;
   created_by?: string;
+  user_merchant_id?: string; // Add merchant context for multi-tenant isolation
 }
 
 /**
@@ -129,6 +131,7 @@ export interface CreateCredentialRequest {
   permissions?: string[];
   rate_limit?: number;
   description?: string;
+  user_merchant_id?: string; // Add merchant context for multi-tenant isolation
 }
 
 /**
@@ -149,6 +152,7 @@ export interface ValidateCredentialRequest {
   credential_value: string;
   service_id?: string; // The service requesting validation
   requested_permissions?: string[];
+  user_merchant_id?: string; // The merchant context for validation
 }
 
 /**

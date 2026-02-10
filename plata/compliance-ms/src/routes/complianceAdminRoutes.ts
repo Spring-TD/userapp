@@ -48,7 +48,9 @@ router.post('/businesses/:userId/verify-certificate', KYCController.verifyCertif
 // Document management routes
 router.put('/document/:documentId/status', KYCController.updateKYCDocumentStatus);
 router.get('/document/:documentId', KYCController.getKYCDocument);
-// AML verification route
+// Approve document for Prembly verification (must be done before Prembly check)
+router.post('/document/:documentId/approve', KYCController.approveDocumentForVerification);
+// AML verification route (requires admin approval first)
 router.post('/document/:documentId/verify-aml', KYCController.verifyAMLDocument);
 
 // Workflow management routes

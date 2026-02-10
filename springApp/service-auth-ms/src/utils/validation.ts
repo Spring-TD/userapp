@@ -164,7 +164,8 @@ export const createCredentialSchema = Joi.object({
 export const validateCredentialSchema = Joi.object({
   credential_value: Joi.string().required(),
   service_id: Joi.string().uuid().optional(),
-  requested_permissions: Joi.array().items(Joi.string().max(50)).max(20).optional()
+  requested_permissions: Joi.array().items(Joi.string().max(50)).max(20).optional(),
+  user_merchant_id: Joi.string().max(50).optional()
 });
 
 // Credential ID parameter validation

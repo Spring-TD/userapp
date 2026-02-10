@@ -53,7 +53,7 @@ if (process.env.NODE_ENV !== 'test') {
 
 // Export environment variables
 export const NODE_ENV = process.env.NODE_ENV as string;
-export const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3001;
+export const PORT = process.env.PORT ? parseInt(process.env.PORT) : 4003;
 export const MONGODB_URI = process.env.MONGODB_URI as string;
 export const JWT_SECRET = process.env.JWT_SECRET as string;
 export const CORS_ALLOWED_ORIGINS = process.env.CORS_ALLOWED_ORIGINS as string;
@@ -122,3 +122,8 @@ export const OPENSANCTIONS_API_KEY = process.env.OPENSANCTIONS_API_KEY as string
 // Export Redis environment variables (optional)
 export const REDIS_URL = process.env.REDIS_URL as string | undefined;
 export const REDIS_PASSWORD = process.env.REDIS_PASSWORD as string | undefined;
+
+// Export Prembly API environment variables (optional)
+export const PREMBLY_API_KEY = process.env.PREMBLY_API_KEY as string | undefined;
+export const PREMBLY_API_SECRET = process.env.PREMBLY_API_SECRET as string | undefined;
+export const PREMBLY_BASE_URL = process.env.PREMBLY_BASE_URL as string | undefined;

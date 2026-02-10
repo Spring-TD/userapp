@@ -11,6 +11,8 @@ export class RedisCacheService {
   private isConnected = false;
   private cacheTtl = 3600; // Default TTL in seconds (1 hour)
   private fallbackCache = new Map<string, { value: any; expiration: number }>();
+  private connectionAttempts = 0;
+  private maxConnectionAttempts = 2;
 
   constructor(ttl?: number) {
     this.cacheTtl = ttl || this.cacheTtl;
@@ -22,19 +24,39 @@ export class RedisCacheService {
    */
   private async initializeRedis(): Promise<void> {
     try {
+      // Skip Redis initialization if URL is not configured
+      if (!config.redis.url || config.redis.url.trim() === '') {
+        logger.info('Redis URL not configured, using in-memory cache only');
+        this.isConnected = false;
+        return;
+      }
+
       this.redisClient = createClient({
         url: config.redis.url,
         password: config.redis.password || undefined,
       });
 
-      this.redisClient.on('error', (err) => {
-        logger.error('Redis connection error', { error: err.message });
+      this.redisClient.on('error', (err: Error) => {
+        this.connectionAttempts++;
+        logger.error('Redis connection error', { 
+          error: err.message, 
+          attempt: this.connectionAttempts,
+          maxAttempts: this.maxConnectionAttempts 
+        });
+        
+        if (this.connectionAttempts >= this.maxConnectionAttempts) {
+          logger.warn(`Max Redis connection attempts (${this.maxConnectionAttempts}) reached. Stopping retries and using in-memory cache.`);
+          this.isConnected = false;
+          return;
+        }
+        
         this.isConnected = false;
       });
 
       this.redisClient.on('connect', () => {
         logger.info('Redis connected successfully');
         this.isConnected = true;
+        this.connectionAttempts = 0; // Reset counter on successful connection
       });
 
       this.redisClient.on('disconnect', () => {

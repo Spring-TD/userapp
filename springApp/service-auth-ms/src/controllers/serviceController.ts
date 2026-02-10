@@ -123,7 +123,7 @@ export class ServiceController {
    * GET /api/v1/services/health
    * Get SAMS system health status
    */
-  static async getSystemHealth(res: Response): Promise<void> {
+  static async getSystemHealth(_req: Request, res: Response): Promise<void> {
     try {
       const healthStatus = {
         status: 'healthy',

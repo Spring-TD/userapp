@@ -110,6 +110,115 @@ Returns service health status.
 
 ---
 
+### Public Contract Creation Endpoint
+
+Base URL: `/api/v1/contracts/public/create`
+
+#### Create Contract (Public)
+```http
+POST /api/v1/contracts/public/create
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "name": "John Doe",
+  "contractData": {
+    "title": "My New Contract",
+    "content": "Contract content here...",
+    "description": "Description of the contract"
+  }
+}
+```
+
+Creates a new user account if it doesn't exist and then creates a new contract for the user.
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Contract created successfully",
+  "data": {
+    "contract": { /* contract object */ },
+    "token": "jwt_token", // Authentication token for the newly created account
+    "redirectUrl": "/contracts/contract-id/edit" // URL to redirect user to edit contract
+  },
+  "timestamp": "2024-01-01T00:00:00.000Z"
+}
+```
+
+---
+
+### Public Contract Signing Workflow
+
+The service provides a complete public workflow for external users to sign contracts:
+
+#### 1. Request OTP
+```http
+POST /api/v1/contracts/public/request-otp
+Content-Type: application/json
+
+{
+  "email": "signer@example.com",
+  "contractUrl": "http://localhost:3009/contracts/65a1b2c3d4e5f6g7h8i9j0k1"
+}
+```
+
+Sends a 6-digit OTP to the user's email for verification.
+
+#### 2. Verify OTP and Create Account
+```http
+POST /api/v1/contracts/public/verify-otp
+Content-Type: application/json
+
+{
+  "email": "signer@example.com",
+  "otp": "123456",
+  "contractOrderId": "65a1b2c3d4e5f6g7h8i9j0k1"
+}
+```
+
+Verifies the OTP and automatically creates an account for the user.
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Verification successful",
+  "data": {
+    "token": "jwt_token",
+    "contractFormId": "form_123",
+    "contractUrl": "http://localhost:3009/contracts/form/form_123",
+    "userId": "user_123"
+  },
+  "timestamp": "2024-01-01T00:00:00.000Z"
+}
+```
+
+#### 3. Get Contract Form
+```http
+GET /api/v1/contracts/public/form/:formId
+```
+
+Retrieves the contract form for the user to review and sign.
+
+#### 4. Submit Signed Contract
+```http
+POST /api/v1/contracts/public/form/:formId/submit
+Content-Type: application/json
+
+{
+  "contract_from": {
+    "fullName": "John Doe",
+    "signature": "base64_signature_data",
+    "facialCapture": "base64_facial_data" // Required for certain contract types
+  }
+}
+```
+
+Submits the completed contract form.
+
+---
+
 ### Contract Endpoints
 
 Base URL: `/api/v1/contracts`

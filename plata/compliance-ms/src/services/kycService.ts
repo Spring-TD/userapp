@@ -22,6 +22,7 @@ import {
   validateBusinessKYCSubmission
 } from '../utils/validation';
 import { cacService, CACVerificationResult } from './cacService';
+import { premblyService, PremblyIndividualKYCRequest, PremblyBusinessKYCRequest } from './premblyService';
 
 // Service class for KYC operations
 export class KYCService {
@@ -134,6 +135,13 @@ export class KYCService {
       // Calculate risk level based on business factors
       const riskLevel = this.calculateBusinessRiskLevel(data);
       
+      // Documents are submitted as PENDING and require admin approval before Prembly verification
+      // Admin must review and approve documents first, then Prembly verification can proceed
+      logger.info('Business KYC submitted - documents require admin approval before Prembly verification', {
+        userId: data.userId,
+        documentCount: data.businessDocuments.length
+      });
+      
       const kycProfileData: any = {
         userId: data.userId,
         userType: data.userType,
@@ -143,9 +151,9 @@ export class KYCService {
           fileType: doc.fileType,
           fileSize: doc.fileSize,
           uploadDate: new Date(),
-          status: KYCStatus.PENDING
+          status: KYCStatus.PENDING // All documents start as PENDING, require admin approval
         })),
-        status: KYCStatus.PENDING,
+        status: KYCStatus.PENDING, // Profile status is PENDING until admin approves documents
         submittedAt: new Date(),
         businessInfo: data.businessInfo,
         businessSurvey: data.businessSurvey,
@@ -154,6 +162,7 @@ export class KYCService {
         riskAssessment: data.riskAssessment,
         riskLevel,
         workflowStatus: ComplianceWorkflowStatus.INITIAL_SCREENING
+        // premblyVerificationId will be set after admin approval and Prembly verification
       };
       
       const result = await MockKYCProfileModel.save(kycProfileData);
@@ -201,6 +210,24 @@ export class KYCService {
   }
 
   // Calculate risk level for individual customers
+  /**
+   * Map document type to Prembly document type
+   */
+  private mapDocumentTypeToPrembly(documentType: string): 'nin' | 'passport' | 'drivers_license' | 'voters_card' | null {
+    const typeMap: Record<string, 'nin' | 'passport' | 'drivers_license' | 'voters_card'> = {
+      'nin': 'nin',
+      'national_id': 'nin',
+      'passport': 'passport',
+      'drivers_license': 'drivers_license',
+      'driving_license': 'drivers_license',
+      'voters_card': 'voters_card',
+      'voter_card': 'voters_card'
+    };
+
+    const normalizedType = documentType?.toLowerCase().replace(/[_\s]/g, '');
+    return typeMap[normalizedType] || null;
+  }
+
   private calculateIndividualRiskLevel(data: IndividualKYCSubmissionRequest): RiskLevel {
     let riskScore = 0;
     
@@ -1682,6 +1709,30 @@ export class KYCService {
         };
       }
 
+      // Check if business documents have been approved by admin before Prembly verification
+      const businessDocuments = userProfile.documents || [];
+      const certificateDocument = businessDocuments.find((doc: any) => 
+        doc.type === 'certificate_of_incorporation' || doc.type === 'business_registration'
+      );
+      
+      if (certificateDocument && certificateDocument.status !== KYCStatus.ADMIN_APPROVED) {
+        return {
+          success: false,
+          error: `Certificate document must be approved by admin before Prembly verification. Current status: ${certificateDocument.status}. Please approve the document first.`
+        };
+      }
+
+      // If no specific certificate document found, check if any business document is admin-approved
+      if (!certificateDocument && businessDocuments.length > 0) {
+        const hasAdminApproved = businessDocuments.some((doc: any) => doc.status === KYCStatus.ADMIN_APPROVED);
+        if (!hasAdminApproved) {
+          return {
+            success: false,
+            error: 'At least one business document must be approved by admin before Prembly verification. Please approve the documents first.'
+          };
+        }
+      }
+
       // Perform CAC verification
       const verificationResult = await cacService.verifyCertificateOfIncorporation(
         registrationNumber,
@@ -1790,13 +1841,21 @@ export class KYCService {
   }
 
   // Update KYC document status
-  async updateKYCDocumentStatus(documentId: string, status: KYCStatus, rejectionReason?: string): Promise<{
+  async updateKYCDocumentStatus(
+    documentId: string, 
+    status: KYCStatus, 
+    rejectionReason?: string,
+    updatedBy?: string,
+    notes?: string
+  ): Promise<{
     success: boolean;
     message?: string;
     data?: {
       documentId: string;
       status: KYCStatus;
       rejectionReason: string | undefined;
+      updatedBy?: string;
+      notes?: string;
     };
     error?: string;
   }> {
@@ -1812,12 +1871,16 @@ export class KYCService {
       }
       
       // Update the document status
+      const updateData: any = {
+        status,
+        ...(rejectionReason && { rejectionReason }),
+        ...(updatedBy && { updatedBy }),
+        ...(notes && { notes })
+      };
+      
       const updatedDocument = await MockKYCDocumentModel.findByIdAndUpdate(
         documentId,
-        {
-          status,
-          ...(rejectionReason && { rejectionReason })
-        },
+        updateData,
         { new: true }
       );
       
@@ -1828,10 +1891,11 @@ export class KYCService {
         };
       }
       
-      auditLogger('DOCUMENT_STATUS_UPDATE', 'system', {
+      auditLogger('DOCUMENT_STATUS_UPDATE', updatedBy || 'system', {
         documentId,
         newStatus: status,
-        rejectionReason
+        rejectionReason,
+        notes
       });
       
       return {
@@ -1840,7 +1904,9 @@ export class KYCService {
         data: {
           documentId: updatedDocument._id,
           status: updatedDocument.status,
-          rejectionReason: updatedDocument.rejectionReason
+          rejectionReason: updatedDocument.rejectionReason,
+          ...(updatedBy && { updatedBy }),
+          ...(notes && { notes })
         }
       };
     } catch (error) {

@@ -14,6 +14,7 @@ export interface ContractOrder {
   contract_id: string;
   contract_reference: string; // Unique human-readable reference code
   contract_type: ContractTypeEnum;
+  contract_content?: string; // Contract content/template
   expiration: string; // ISO timestamp
   redirect_url?: string;
   contract_url: string; // Auto-generated URL to access the contract
@@ -27,6 +28,7 @@ export interface CreateContractOrderRequest {
   contract_to?: ContractTo;
   contract_id: string;
   contract_type: ContractTypeEnum;
+  contract_content?: string; // Contract content/template
   expiration: string | Date;
   redirect_url?: string;
 }

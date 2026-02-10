@@ -7,6 +7,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
 import { samsRoutes } from './routes/samsRoutes';
 import { credentialRoutes } from './routes/credentialRoutes';
+import { apiKeyRoutes } from './routes/apiKeyRoutes';
 import { SAMSService } from './services/samsService';
 import { redisCacheService } from './services/redisCacheService';
 import { logger } from './utils/logger';
@@ -52,7 +53,8 @@ app.get('/', (_req, res) => {
     endpoints: {
       health: '/health',
       services: '/api/v1/services',
-      credentials: '/api/v1/credentials'
+      credentials: '/api/v1/credentials',
+      keys: '/api/v1/keys'
     },
     timestamp: new Date().toISOString()
   });
@@ -70,6 +72,7 @@ app.get('/health', (_req, res) => {
 // SAMS (Service Authentication Microservice) routes
 app.use('/api/v1/services', samsRoutes);
 app.use('/api/v1/credentials', credentialRoutes);
+app.use('/api/v1/keys', apiKeyRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);

@@ -1,7 +1,7 @@
 # Client Authentication Microservice
 
 ## Overview
-The Client Authentication Microservice (client-auth-ms) is a comprehensive API gateway that handles all client-facing authentication operations. It acts as the single entry point for frontend applications, providing form validation, request forwarding, and seamless integration with the backend authentication service (service-auth-ms). This service now supports the complete authentication workflow including registration, login, password management, OTP verification, and user profile management.
+The Client Authentication Microservice (client-auth-ms) supports the complete authentication workflow including registration, login, password management, OTP verification, and user profile management.
 
 Deployment URL: https://client-auth-ms.fly.dev/
 
@@ -26,7 +26,6 @@ Deployment URL: https://client-auth-ms.fly.dev/
 - **✅ Invitation Management**: Invite users, validate tokens, accept invitations
 - **✅ Session Management**: View active sessions and revoke device access
 - **✅ Administrative Operations**: User suspension and activation
-- **✅ API Gateway**: Centralized routing and validation
 - **✅ CORS Support**: Configured for frontend integration
 - **✅ Health Check**: Service monitoring endpoint
 
@@ -586,7 +585,7 @@ interface Admin extends BaseUser {
 - OTP codes must be 6 digits
 - Password reset tokens must be valid and not expired
 
-## Complete API Gateway Coverage ✅
+## Complete Coverage ✅
 
 The client-auth-ms now provides complete coverage of all authentication operations:
 
@@ -604,10 +603,3 @@ The client-auth-ms now provides complete coverage of all authentication operatio
 | **Administration** | Suspend/Activate users, Verify info | ✅ Complete |
 | **Health & Monitoring** | Health check endpoint | ✅ Complete |
 
-### Frontend Integration Benefits
-- **Single Entry Point**: All authentication operations through one service
-- **Consistent API**: Uniform request/response patterns across all endpoints
-- **Built-in Validation**: Request validation at the gateway level
-- **Error Handling**: Standardized error responses
-- **Token Management**: Centralized JWT token handling
-- **CORS Support**: Pre-configured for frontend integration

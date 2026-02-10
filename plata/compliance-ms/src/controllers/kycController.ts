@@ -2,6 +2,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { kycService } from '../services/kycService';
 import { logger } from '../utils/logger';
+import { auditLogger } from '../utils/audit';
 import { KYCStatus, UserType, RiskLevel, BusinessType, ComplianceWorkflowStatus } from '../types/kycTypes';
 import { livenessService } from '../services/livenessService';
 import { amlVerificationService, AMLVerificationResult } from '../services/amlVerificationService';
@@ -258,6 +259,92 @@ export class KYCController {
     }
   }
 
+  // Approve document for Prembly verification (Admin must approve before Prembly check)
+  static async approveDocumentForVerification(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { documentId } = req.params;
+      const { notes } = req.body;
+      const adminId = req.user?.userId;
+      
+      if (!adminId) {
+        return res.status(401).json({
+          success: false,
+          error: 'Admin authentication required'
+        });
+      }
+      
+      // Get the document by ID
+      const documentResult = await kycService.getKYCDocument(documentId);
+      
+      if (!documentResult.success) {
+        logger.warn('Document approval failed - document not found', {
+          documentId,
+          error: documentResult.error
+        });
+        
+        return res.status(404).json({
+          success: false,
+          error: documentResult.error || 'Document not found'
+        });
+      }
+      
+      const document = documentResult.data;
+      
+      // Check if document is in PENDING or REVIEW status
+      if (document.status !== KYCStatus.PENDING && document.status !== KYCStatus.REVIEW) {
+        return res.status(400).json({
+          success: false,
+          error: `Document cannot be approved. Current status: ${document.status}. Only PENDING or REVIEW documents can be approved for verification.`
+        });
+      }
+      
+      // Update document status to ADMIN_APPROVED
+      const result = await kycService.updateKYCDocumentStatus(
+        documentId, 
+        KYCStatus.ADMIN_APPROVED, 
+        undefined,
+        adminId,
+        notes
+      );
+      
+      if (!result.success) {
+        logger.warn('Document approval failed', {
+          documentId,
+          error: result.error
+        });
+        
+        return res.status(500).json(result);
+      }
+      
+      logger.info('Document approved for Prembly verification', {
+        documentId,
+        approvedBy: adminId,
+        notes
+      });
+      
+      auditLogger('DOCUMENT_APPROVED_FOR_VERIFICATION', adminId, {
+        documentId,
+        previousStatus: document.status,
+        newStatus: KYCStatus.ADMIN_APPROVED,
+        notes
+      });
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Document approved for Prembly verification',
+        data: {
+          documentId,
+          status: KYCStatus.ADMIN_APPROVED,
+          approvedBy: adminId,
+          approvedAt: new Date(),
+          notes
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // Verify AML document using third-party provider
   static async verifyAMLDocument(req: Request, res: Response, next: NextFunction) {
     try {
@@ -279,6 +366,14 @@ export class KYCController {
       }
       
       const document = documentResult.data;
+      
+      // Check if document has been approved by admin before Prembly verification
+      if (document.status !== KYCStatus.ADMIN_APPROVED) {
+        return res.status(400).json({
+          success: false,
+          error: `Document must be approved by admin before Prembly verification. Current status: ${document.status}. Please approve the document first.`
+        });
+      }
       
       // Verify the document using the AML provider
       const verificationResult: AMLVerificationResult = await amlVerificationService.verifyDocument(document, provider);

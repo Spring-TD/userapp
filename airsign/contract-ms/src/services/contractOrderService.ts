@@ -40,6 +40,7 @@ export class ContractOrderService {
         contract_id: data.contract_id,
         contract_reference: contractReference,
         contract_type: data.contract_type,
+        contract_content: data.contract_content,
         expiration: expirationDate,
         redirect_url: data.redirect_url,
         contract_url: '', // Will be set after creation
@@ -144,6 +145,7 @@ export class ContractOrderService {
       contract_id: order.contract_id,
       contract_reference: order.contract_reference,
       contract_type: order.contract_type,
+      contract_content: order.contract_content,
       expiration: order.expiration.toISOString(),
       redirect_url: order.redirect_url,
       contract_url: order.contract_url,

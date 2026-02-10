@@ -2,6 +2,7 @@
 import axios from 'axios';
 import { logger } from '../utils/logger';
 import { CAC_API_URL, CAC_API_KEY } from '../config/environment';
+import { premblyService, PremblyCACRequest } from './premblyService';
 
 // Define the response structure from the CAC API
 interface CACApiResponse {
@@ -41,6 +42,7 @@ export interface CACVerificationResult {
 export class CACService {
   /**
    * Verify a Certificate of Incorporation with the Nigerian Corporate Affairs Commission
+   * Uses Prembly API if configured, otherwise falls back to direct CAC API or mock
    * @param registrationNumber The company registration number
    * @param companyName The company name
    * @returns Verification result
@@ -50,50 +52,86 @@ export class CACService {
     companyName: string
   ): Promise<CACVerificationResult> {
     try {
-      // Check if CAC API is configured
-      if (!CAC_API_URL || !CAC_API_KEY) {
-        logger.warn('CAC API not configured', {
-          CAC_API_URL: CAC_API_URL ? 'configured' : 'missing',
-          CAC_API_KEY: CAC_API_KEY ? 'configured' : 'missing'
+      // Try Prembly API first if configured
+      if (premblyService.isConfigured()) {
+        logger.info('Using Prembly API for CAC verification', {
+          registrationNumber,
+          companyName
         });
-        
+
+        const premblyRequest: PremblyCACRequest = {
+          registrationNumber,
+          companyName
+        };
+
+        const premblyResponse = await premblyService.verifyCAC(premblyRequest);
+
+        if (premblyResponse.status && premblyResponse.data) {
+          return {
+            success: true,
+            valid: premblyResponse.data.verified,
+            message: premblyResponse.message || 'CAC verification completed',
+            data: {
+              companyName: premblyResponse.data.companyName,
+              registrationNumber: premblyResponse.data.registrationNumber,
+              registrationDate: premblyResponse.data.registrationDate,
+              status: premblyResponse.data.status,
+              address: premblyResponse.data.address,
+              directors: premblyResponse.data.directors
+            }
+          };
+        } else {
+          logger.warn('Prembly CAC verification failed, falling back to alternative method', {
+            message: premblyResponse.message
+          });
+        }
+      }
+
+      // Fallback to direct CAC API if configured
+      if (CAC_API_URL && CAC_API_KEY) {
+        logger.info('Using direct CAC API for verification', {
+          registrationNumber,
+          companyName
+        });
+
+        // Make API call to CAC service
+        const response = await axios.post<CACApiResponse>(
+          `${CAC_API_URL}/verify-certificate`,
+          {
+            registrationNumber,
+            companyName
+          },
+          {
+            headers: {
+              'Authorization': `Bearer ${CAC_API_KEY}`,
+              'Content-Type': 'application/json'
+            },
+            timeout: 10000 // 10 second timeout
+          }
+        );
+
+        logger.info('CAC verification completed', {
+          registrationNumber,
+          companyName,
+          status: response.status,
+          valid: response.data?.valid
+        });
+
         return {
-          success: false,
-          valid: false,
-          message: 'CAC verification service not configured',
-          error: 'CAC API not configured'
+          success: true,
+          valid: response.data?.valid || false,
+          message: response.data?.message || 'Verification completed',
+          data: response.data?.data
         };
       }
 
-      // Make API call to CAC service
-      const response = await axios.post<CACApiResponse>(
-        `${CAC_API_URL}/verify-certificate`,
-        {
-          registrationNumber,
-          companyName
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${CAC_API_KEY}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: 10000 // 10 second timeout
-        }
-      );
-
-      logger.info('CAC verification completed', {
+      // Fallback to mock if no API is configured
+      logger.warn('No CAC API configured, using mock verification', {
         registrationNumber,
-        companyName,
-        status: response.status,
-        valid: response.data?.valid
+        companyName
       });
 
-      return {
-        success: true,
-        valid: response.data?.valid || false,
-        message: response.data?.message || 'Verification completed',
-        data: response.data?.data
-      };
+      return this.mockVerifyCertificateOfIncorporation(registrationNumber, companyName);
     } catch (error: any) {
       logger.error('Error verifying Certificate of Incorporation with CAC', {
         registrationNumber,

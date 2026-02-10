@@ -1,20 +1,21 @@
 import { Router } from 'express';
 import { UserController } from '../controllers/userController';
+import { authenticate } from '../middleware/auth';
 
 const router = Router();
 
 // User profile management routes
-router.get('/list', UserController.listUsers);
-router.get('/profile', UserController.getProfile);
-router.put('/profile', UserController.updateProfile);
-router.put('/:userId/status', UserController.updateStatus);
-router.post('/deactivate', UserController.deactivate);
-router.put('/callbacks', UserController.updateCallbackUrls);
+router.get('/list', authenticate, UserController.listUsers);
+router.get('/profile', authenticate, UserController.getProfile);
+router.put('/profile', authenticate, UserController.updateProfile);
+router.put('/:userId/status', authenticate, UserController.updateStatus);
+router.post('/deactivate', authenticate, UserController.deactivate);
+router.put('/callbacks', authenticate, UserController.updateCallbackUrls);
 
 // Admin user management routes
-router.get('/info/:userId', UserController.getInfo);
-router.post('/verify-info/:userId', UserController.verifyInfo);
-router.put('/suspend/:userId', UserController.suspend);
-router.put('/activate/:userId', UserController.activate);
+router.get('/info/:userId', authenticate, UserController.getInfo);
+router.post('/verify-info/:userId', authenticate, UserController.verifyInfo);
+router.put('/suspend/:userId', authenticate, UserController.suspend);
+router.put('/activate/:userId', authenticate, UserController.activate);
 
 export { router as userRoutes };

@@ -14,6 +14,7 @@ export interface IContractOrder extends Document {
   contract_id: string;
   contract_reference: string; // Unique human-readable reference code
   contract_type: ContractTypeEnum;
+  contract_content?: string; // Contract content/template
   expiration: Date;
   redirect_url?: string;
   contract_url: string;
@@ -72,6 +73,10 @@ const ContractOrderSchema: Schema = new Schema(
       required: true,
       enum: Object.values(ContractTypeEnum),
       index: true
+    },
+    contract_content: {
+      type: String,
+      trim: true
     },
     expiration: {
       type: Date,
