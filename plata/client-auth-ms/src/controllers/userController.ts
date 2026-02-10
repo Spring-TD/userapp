@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { AuthService } from '../services/AuthService';
+import { validateForm, updateEmailSchema } from '../utils/validation';
 
 export class UserController {
   // Get user profile
@@ -52,6 +53,54 @@ export class UserController {
       });
     } catch (error) {
       console.error('Error updating user profile:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  }
+
+  // Update email (Developer → Security: new email + confirm email; requires current password)
+  static async updateEmail(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      const validation = validateForm<{ newEmail: string; confirmEmail: string; currentPassword: string }>(
+        updateEmailSchema,
+        req.body
+      );
+      if (validation.error) {
+        res.status(400).json({
+          success: false,
+          error: validation.error
+        });
+        return;
+      }
+
+      const { newEmail, currentPassword } = validation.value!;
+      const result = await AuthService.updateEmail(req.user.userId, currentPassword, newEmail);
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: result.error
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Email updated successfully. Please verify your new email address.',
+        data: { user: result.user }
+      });
+    } catch (error) {
+      console.error('Error updating email:', error);
       res.status(500).json({
         success: false,
         error: 'Internal server error'

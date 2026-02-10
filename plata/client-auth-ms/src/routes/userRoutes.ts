@@ -8,6 +8,7 @@ const router = Router();
 router.get('/list', authenticate, UserController.listUsers);
 router.get('/profile', authenticate, UserController.getProfile);
 router.put('/profile', authenticate, UserController.updateProfile);
+router.put('/email', authenticate, UserController.updateEmail);
 router.put('/:userId/status', authenticate, UserController.updateStatus);
 router.post('/deactivate', authenticate, UserController.deactivate);
 router.put('/callbacks', authenticate, UserController.updateCallbackUrls);

@@ -48,10 +48,16 @@ class MockDatabase {
 
   /**
    * Update user
+   * When email is updated, maintains the emailIndex (old email removed, new email added).
    */
   async updateUser(id: string, updates: Partial<UserAccount>): Promise<UserAccount | null> {
     const user = this.users.get(id);
     if (!user) return null;
+
+    if (updates.email !== undefined && updates.email !== user.email) {
+      this.emailIndex.delete(user.email.toLowerCase());
+      this.emailIndex.set(updates.email.toLowerCase(), id);
+    }
 
     const updatedUser = {
       ...user,
