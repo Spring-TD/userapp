@@ -546,6 +546,64 @@ export class AuthService {
   }
 
   /**
+   * Update email for authenticated user.
+   * Requires current password. Sets email_verified to false until new email is verified.
+   */
+  static async updateEmail(userId: string, currentPassword: string, newEmail: string): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
+    try {
+      const user = await mockDb.findUserById(userId);
+      if (!user) {
+        return { success: false, error: 'User not found' };
+      }
+
+      if (user.status !== AccountStatus.ACTIVE) {
+        return { success: false, error: 'Account is not active' };
+      }
+
+      const isPasswordValid = await comparePassword(currentPassword, user.password);
+      if (!isPasswordValid) {
+        return { success: false, error: 'Current password is incorrect' };
+      }
+
+      const normalizedNew = newEmail.trim().toLowerCase();
+      if (normalizedNew === user.email.toLowerCase()) {
+        return { success: false, error: 'New email is the same as your current email' };
+      }
+
+      const existingUser = await mockDb.findUserByEmail(newEmail);
+      if (existingUser) {
+        return { success: false, error: 'Email address is already in use' };
+      }
+
+      const updatedUser = await mockDb.updateUser(userId, {
+        email: newEmail.trim(),
+        email_verified: false
+      });
+      if (!updatedUser) {
+        return { success: false, error: 'Failed to update email' };
+      }
+
+      // Send verification email to new address (optional; don't fail the request if it fails)
+      try {
+        const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?email=${encodeURIComponent(updatedUser.email)}`;
+        await notificationService.sendEmailVerificationEmail(
+          updatedUser.email,
+          verificationUrl,
+          `${updatedUser.first_name} ${updatedUser.last_name}`.trim() || 'User'
+        );
+      } catch (notifError) {
+        console.error('Failed to send email verification to new address:', notifError);
+      }
+
+      const { password: _p, ...userResponse } = updatedUser;
+      return { success: true, user: userResponse };
+    } catch (error) {
+      console.error('Error updating email:', error);
+      return { success: false, error: 'Internal server error while updating email' };
+    }
+  }
+
+  /**
    * Generate OTP
    */
   static async generateOTP(request: { identifier: string; channel: 'email' | 'sms'; purpose: 'verification' | 'password-reset' | 'login' }): Promise<{ success: boolean; reference?: string; expiresIn?: number; error?: string }> {

@@ -3,7 +3,7 @@
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'client-auth-ms-plata'
+app = 'client-auth-ms'
 primary_region = 'lhr'
 
 [build]

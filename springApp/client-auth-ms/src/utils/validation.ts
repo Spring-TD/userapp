@@ -71,6 +71,20 @@ export const adminRegistrationSchema = Joi.object({
   password: passwordSchema
 });
 
+export const updateEmailSchema = Joi.object({
+  newEmail: Joi.string().email().required().messages({
+    'string.email': 'Please enter a valid email address',
+    'any.required': 'New email is required'
+  }),
+  confirmEmail: Joi.string().email().valid(Joi.ref('newEmail')).required().messages({
+    'any.only': 'Emails do not match',
+    'any.required': 'Please confirm your email'
+  }),
+  currentPassword: Joi.string().required().messages({
+    'any.required': 'Current password is required to change email'
+  })
+});
+
 export const validateForm = <T>(schema: Joi.ObjectSchema, data: any): { error?: string; value?: T } => {
   const { error, value } = schema.validate(data, { 
     abortEarly: false,
