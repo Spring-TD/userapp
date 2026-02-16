@@ -24,7 +24,17 @@ class ApplicationService {
                 throw new Error('Product not found');
             }
 
-            // 2. Check if product requires approval
+            // 2. Enforce server-side: product must be active for this merchant (app)
+            const merchantId = product.appId;
+            if (!merchantId) {
+                throw new Error('Product is not active for this merchant. Only active products can be applied for.');
+            }
+            const pricing = await productService.getProductPricing(input.productId, merchantId);
+            if (pricing?.isActive !== true) {
+                throw new Error('Product is not active for this merchant. Only active products can be applied for.');
+            }
+
+            // 3. Check if product requires approval
             // Loan and Mortgage products require admin approval
             const requiresApproval = ['Loan', 'Mortgage'].includes(product.type);
 

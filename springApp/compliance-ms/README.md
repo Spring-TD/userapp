@@ -41,7 +41,7 @@ Submit KYC information for an individual customer to create a KYC order.
 **Authentication**: Requires valid JWT token for individual customers
 
 **Request Body:**
-``json
+```json
 {
   "personalInfo": {
     "firstName": "John",
@@ -69,7 +69,7 @@ Submit KYC information for an individual customer to create a KYC order.
 ```
 
 **Success Response (201 Created):**
-```json
+````json
 {
   "success": true,
   "data": {
@@ -90,7 +90,7 @@ Submit KYC information for a business customer to create a KYC order.
 **Authentication**: Requires valid JWT token for business customers
 
 **Request Body:**
-``json
+```json
 {
   "businessInfo": {
     "companyName": "Example Business Ltd",
@@ -149,7 +149,7 @@ Submit KYC information for a business customer to create a KYC order.
 ```
 
 **Success Response (201 Created):**
-```json
+````json
 {
   "success": true,
   "data": {
@@ -174,7 +174,7 @@ Checks the KYC compliance status for a user or merchant.
 - `userId`: The ID of the user to check compliance status for
 
 **Success Response (200 OK):**
-```json
+````json
 {
   "success": true,
   "data": {
@@ -190,7 +190,7 @@ Checks the KYC compliance status for a user or merchant.
 ```
 
 **Not Found Response (404 Not Found):**
-```json
+````json
 {
   "success": false,
   "error": "No KYC profile found for this user"
@@ -223,7 +223,7 @@ Retrieves a list of all registered users in the compliance system.
 **Authorization**: This endpoint is restricted to Compliance Officers only. Regular users cannot access this endpoint.
 
 **Success Response (200 OK):**
-``json
+```json
 {
   "success": true,
   "data": [
@@ -244,7 +244,7 @@ Retrieves a list of all registered users in the compliance system.
 ```
 
 **Error Response (500 Internal Server Error):**
-```json
+````json
 {
   "success": false,
   "error": "Error retrieving all users"
@@ -273,7 +273,7 @@ Retrieves all compliance documents from all user profiles in the system.
 **Authorization**: This endpoint is restricted to Compliance Officers only. Regular users cannot access this endpoint.
 
 **Success Response (200 OK):**
-``json
+```json
 {
   "success": true,
   "data": [
@@ -303,7 +303,7 @@ Retrieves all compliance documents from all user profiles in the system.
 ```
 
 ### Admin Approve Document for Prembly Verification
-**`POST /api/v1/compliance/admin/document/:documentId/approve`**
+**`POST /api/v1/kyc/admin/document/:documentId/approve`**
 
 Approves a document for Prembly verification. Documents must be approved by an admin before they can be verified through Prembly API.
 
@@ -315,14 +315,14 @@ Approves a document for Prembly verification. Documents must be approved by an a
 - `documentId`: The ID of the document to approve
 
 **Request Body:**
-```json
+````json
 {
   "notes": "Optional notes about the approval"
 }
 ```
 
 **Success Response (200 OK):**
-```json
+````json
 {
   "success": true,
   "message": "Document approved for Prembly verification",
@@ -345,7 +345,7 @@ Approves a document for Prembly verification. Documents must be approved by an a
 **Note**: Documents must be in `PENDING` or `REVIEW` status to be approved. Once approved, the status changes to `admin_approved` and the document becomes eligible for Prembly verification.
 
 ### Update Document Status
-**`PUT /api/v1/compliance/admin/document/:documentId/status`**
+**`PUT /api/v1/kyc/admin/document/:documentId/status`**
 
 Updates the status of a document. Can be used to reject documents or update to other statuses.
 
@@ -357,7 +357,7 @@ Updates the status of a document. Can be used to reject documents or update to o
 - `documentId`: The ID of the document to update
 
 **Request Body:**
-```json
+````json
 {
   "status": "rejected",
   "rejectionReason": "Required if status is 'rejected'"
@@ -375,7 +375,7 @@ Updates the status of a document. Can be used to reject documents or update to o
 - `completed` - Document processing completed
 
 **Success Response (200 OK):**
-```json
+````json
 {
   "success": true,
   "message": "Document status updated successfully",
@@ -395,7 +395,7 @@ Updates the status of a document. Can be used to reject documents or update to o
 
 **Example - Reject Document:**
 ```bash
-PUT /api/v1/compliance/admin/document/doc-123/status
+PUT /api/v1/kyc/admin/document/doc-123/status
 {
   "status": "rejected",
   "rejectionReason": "Document quality is too poor to verify"
@@ -403,7 +403,7 @@ PUT /api/v1/compliance/admin/document/doc-123/status
 ```
 
 ### Verify AML Document (Prembly)
-**`POST /api/v1/compliance/admin/document/:documentId/verify-aml`**
+**`POST /api/v1/kyc/admin/document/:documentId/verify-aml`**
 
 Verifies a document using Prembly AML verification. **Requires document to be admin-approved first.**
 
@@ -415,7 +415,7 @@ Verifies a document using Prembly AML verification. **Requires document to be ad
 - `documentId`: The ID of the document to verify
 
 **Request Body:**
-```json
+````json
 {
   "provider": "prembly"
 }
@@ -424,7 +424,7 @@ Verifies a document using Prembly AML verification. **Requires document to be ad
 **Prerequisites**: Document must have status `admin_approved` before verification can proceed.
 
 **Success Response (200 OK):**
-```json
+````json
 {
   "success": true,
   "message": "Document verification completed and approved",
@@ -452,7 +452,7 @@ Verifies a document using Prembly AML verification. **Requires document to be ad
 **Note**: If the document is not in `admin_approved` status, the verification will fail with a 400 error indicating that admin approval is required first.
 
 ### Verify CAC Certificate (Prembly)
-**`POST /api/v1/compliance/admin/businesses/:userId/verify-certificate`**
+**`POST /api/v1/kyc/admin/businesses/:userId/verify-certificate`**
 
 Verifies a business Certificate of Incorporation with the Nigerian Corporate Affairs Commission using Prembly API. **Requires business documents to be admin-approved first.**
 
@@ -464,7 +464,7 @@ Verifies a business Certificate of Incorporation with the Nigerian Corporate Aff
 - `userId`: The ID of the business user
 
 **Request Body:**
-```json
+````json
 {
   "registrationNumber": "RC123456",
   "companyName": "Example Business Ltd"
@@ -474,7 +474,7 @@ Verifies a business Certificate of Incorporation with the Nigerian Corporate Aff
 **Prerequisites**: Business documents (especially certificate of incorporation) must have status `admin_approved` before verification can proceed.
 
 **Success Response (200 OK):**
-```json
+````json
 {
   "success": true,
   "message": "Certificate verification completed",
@@ -512,6 +512,44 @@ Verifies a business Certificate of Incorporation with the Nigerian Corporate Aff
 
 **Note**: If business documents are not in `admin_approved` status, the verification will fail with a 400 error indicating that admin approval is required first.
 
+### Check Sanctions (Prembly)
+**`POST /api/v1/kyc/admin/check-sanctions`**
+
+Checks an individual or business against international sanctions lists. Uses Prembly API when configured, otherwise falls back to OpenSanctions API or mock.
+
+**Authentication**: Requires valid JWT token with Compliance Officer role
+
+**Authorization**: This endpoint is restricted to Compliance Officers only.
+
+**Request Body:**
+````json
+{
+  "name": "John Doe",
+  "companyId": "optional-company-id",
+  "country": "NG"
+}
+```
+
+**Success Response (200 OK):**
+````json
+{
+  "success": true,
+  "data": {
+    "flagged": false,
+    "matches": [],
+    "message": "optional"
+  }
+}
+```
+
+**Error Response (500 Internal Server Error):**
+````json
+{
+  "success": false,
+  "error": "Internal server error during sanctions check"
+}
+```
+
 ### Get Business Information
 **`GET /api/v1/kyc/business/business-info`**
 
@@ -520,7 +558,7 @@ Retrieves the business information for a merchant user.
 **Authentication**: Requires valid JWT token for business customers
 
 **Success Response (200 OK):**
-``json
+```json
 {
   "success": true,
   "data": {
@@ -535,7 +573,7 @@ Retrieves the business information for a merchant user.
 ```
 
 **Error Response (404 Not Found):**
-``json
+```json
 {
   "success": false,
   "error": "No KYC profile found for this user"
@@ -550,7 +588,7 @@ Retrieves the business survey data for a merchant user.
 **Authentication**: Requires valid JWT token for business customers
 
 **Success Response (200 OK):**
-``json
+```json
 {
   "success": true,
   "data": {
@@ -563,7 +601,7 @@ Retrieves the business survey data for a merchant user.
 ```
 
 **Error Response (404 Not Found):**
-``json
+```json
 {
   "success": false,
   "error": "No KYC profile found for this user"
@@ -578,7 +616,7 @@ Retrieves the shareholders (beneficial owners) information for a merchant user.
 **Authentication**: Requires valid JWT token for business customers
 
 **Success Response (200 OK):**
-```json
+````json
 {
   "success": true,
   "data": [
@@ -606,7 +644,7 @@ Retrieves the shareholders (beneficial owners) information for a merchant user.
 ```
 
 **Error Response (404 Not Found):**
-```json
+````json
 {
   "success": false,
   "error": "No KYC profile found for this user"
@@ -621,7 +659,7 @@ Retrieves the business risk assessment data for a merchant user.
 **Authentication**: Requires valid JWT token for business customers
 
 **Success Response (200 OK):**
-``json
+```json
 {
   "success": true,
   "data": {
@@ -635,7 +673,7 @@ Retrieves the business risk assessment data for a merchant user.
 ```
 
 **Error Response (404 Not Found):**
-```json
+````json
 {
   "success": false,
   "error": "No KYC profile found for this user"
@@ -650,7 +688,7 @@ Updates the business information for a merchant user.
 **Authentication**: Requires valid JWT token for business customers
 
 **Request Body:**
-```json
+````json
 {
   "companyName": "Updated Business Ltd",
   "industry": "Technology",
@@ -662,7 +700,7 @@ Updates the business information for a merchant user.
 ```
 
 **Success Response (200 OK):**
-```json
+````json
 {
   "success": true,
   "message": "Business information updated successfully"
@@ -670,7 +708,7 @@ Updates the business information for a merchant user.
 ```
 
 **Error Response (400 Bad Request):**
-```json
+````json
 {
   "success": false,
   "error": "Error updating business information"
@@ -685,7 +723,7 @@ Updates the business survey data for a merchant user.
 **Authentication**: Requires valid JWT token for business customers
 
 **Request Body:**
-```json
+````json
 {
   "businessType": "investment product",
   "country": "NG",
@@ -695,7 +733,7 @@ Updates the business survey data for a merchant user.
 ```
 
 **Success Response (200 OK):**
-```json
+````json
 {
   "success": true,
   "message": "Business survey updated successfully"
@@ -703,7 +741,7 @@ Updates the business survey data for a merchant user.
 ```
 
 **Error Response (400 Bad Request):**
-```json
+````json
 {
   "success": false,
   "error": "Error updating business survey"
@@ -718,7 +756,7 @@ Updates the shareholders (beneficial owners) information for a merchant user.
 **Authentication**: Requires valid JWT token for business customers
 
 **Request Body:**
-```json
+````json
 [
   {
     "fullName": "John Doe",
@@ -762,7 +800,7 @@ Updates the shareholders (beneficial owners) information for a merchant user.
 ```
 
 **Success Response (200 OK):**
-```json
+````json
 {
   "success": true,
   "message": "Shareholders updated successfully"
@@ -770,7 +808,7 @@ Updates the shareholders (beneficial owners) information for a merchant user.
 ```
 
 **Error Response (400 Bad Request):**
-```json
+````json
 {
   "success": false,
   "error": "Error updating shareholders"
@@ -785,7 +823,7 @@ Retrieves enhanced due diligence information for high-risk business customers.
 **Authentication**: Requires valid JWT token for business customers with high-risk approval
 
 **Success Response (200 OK):**
-```json
+````json
 {
   "success": true,
   "data": {
@@ -854,7 +892,7 @@ Retrieves enhanced due diligence information for high-risk business customers.
 ```
 
 **Error Response (404 Not Found):**
-```json
+````json
 {
   "success": false,
   "error": "No KYC profile found for this user"
@@ -869,7 +907,7 @@ Retrieves corporate structure information for corporation and LLC business types
 **Authentication**: Requires valid JWT token for business customers with corporation or LLC business type
 
 **Success Response (200 OK):**
-```json
+````json
 {
   "success": true,
   "data": {
@@ -918,7 +956,7 @@ Retrieves corporate structure information for corporation and LLC business types
 ```
 
 **Error Response (404 Not Found):**
-```json
+````json
 {
   "success": false,
   "error": "No KYC profile found for this user"
@@ -933,7 +971,7 @@ Retrieves verification information for non-profit business types.
 **Authentication**: Requires valid JWT token for business customers with non-profit business type
 
 **Success Response (200 OK):**
-```json
+````json
 {
   "success": true,
   "data": {
@@ -974,7 +1012,7 @@ Retrieves verification information for non-profit business types.
 ```
 
 **Error Response (404 Not Found):**
-```json
+````json
 {
   "success": false,
   "error": "No KYC profile found for this user"
@@ -989,7 +1027,7 @@ Retrieves verification information for government entity business types.
 **Authentication**: Requires valid JWT token for business customers with government entity business type
 
 **Success Response (200 OK):**
-```json
+````json
 {
   "success": true,
   "data": {
@@ -1030,7 +1068,7 @@ Retrieves verification information for government entity business types.
 ```
 
 **Error Response (404 Not Found):**
-```json
+````json
 {
   "success": false,
   "error": "No KYC profile found for this user"

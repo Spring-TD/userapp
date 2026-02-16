@@ -2,7 +2,7 @@
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 
 
-app = 'platter-compliance-ms'
+app = 'compliance-ms'
 primary_region = 'lhr'
 
 [build]

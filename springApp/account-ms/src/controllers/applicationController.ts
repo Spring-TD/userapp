@@ -27,7 +27,8 @@ class ApplicationController {
             return;
         } catch (error: any) {
             console.error('Error in applyForProduct:', error);
-            res.status(500).json({
+            const isForbidden = error?.message?.includes('not active for this merchant');
+            res.status(isForbidden ? 403 : 500).json({
                 success: false,
                 error: error.message || 'Internal server error'
             });

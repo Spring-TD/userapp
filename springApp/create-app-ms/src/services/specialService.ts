@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { config } from '../config/environment';
 import { App } from '../types/app';
+import { ApiError } from '../middleware/errorHandler';
 
 interface Product {
   id: string;
@@ -330,13 +331,37 @@ export class SpecialService {
     }
   }
 
+  /**
+   * Ensures the product is active for its merchant (app). Throws ApiError(403) if not.
+   * Used to enforce server-side isActive on subscribe/apply.
+   */
+  private static async ensureProductIsActive(productId: string): Promise<void> {
+    const baseUrl = this.PRODUCT_SERVICE_URL;
+    const productRes = await axios.get(`${baseUrl}/api/v1/products/${productId}`).catch(() => null);
+    if (!productRes?.data?.success || !productRes.data.data) {
+      throw new ApiError(404, 'Product not found');
+    }
+    const product = productRes.data.data as Product;
+    const merchantId = product.appId;
+    if (!merchantId) {
+      throw new ApiError(403, 'Product is not active for this merchant. Only active products can be subscribed to or applied for.');
+    }
+    const configRes = await axios.get(`${baseUrl}/api/v1/products/config/${merchantId}/${productId}`).catch(() => null);
+    const config = configRes?.data?.data;
+    if (!config || config.isActive !== true) {
+      throw new ApiError(403, 'Product is not active for this merchant. Only active products can be subscribed to or applied for.');
+    }
+  }
+
   // 20. Subscribe a user to a product
   static async subscribeUserToProduct(userId: string, productId: string): Promise<Subscription | null> {
     try {
+      await this.ensureProductIsActive(productId);
       // This would typically be implemented in a subscription service
       // For now, we'll return null as a placeholder
       return null;
     } catch (error) {
+      if (error instanceof ApiError) throw error;
       console.error(`Error subscribing user ${userId} to product ${productId}:`, error);
       return null;
     }
@@ -357,10 +382,12 @@ export class SpecialService {
   // 22. Apply to product
   static async applyToProduct(userId: string, productId: string, applicationData: any): Promise<ProductApplication | null> {
     try {
+      await this.ensureProductIsActive(productId);
       // This would typically be implemented in an application service
       // For now, we'll return null as a placeholder
       return null;
     } catch (error) {
+      if (error instanceof ApiError) throw error;
       console.error(`Error applying for product ${productId} by user ${userId}:`, error);
       return null;
     }
