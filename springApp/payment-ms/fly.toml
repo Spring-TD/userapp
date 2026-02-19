@@ -1,12 +1,15 @@
 # fly.toml app configuration file for payment-ms
 
-app = 'fuspay-payment-ms'
+app = 'payment-ms'
 primary_region = 'lhr'
+
+[env]
+  PORT = '4007'
 
 [build]
 
 [http_service]
-  internal_port = 3007
+  internal_port = 4007
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true

@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { mockDb } from '../utils/mockDatabase';
+import { db as mockDb } from '../utils/mongoDatabase';
 import { Role, Permission, CreateRoleRequest } from '../models/User';
 
 export class RoleService {
@@ -139,7 +139,7 @@ export class RoleService {
 
       // Check if any users are assigned to this role
       const usersWithRole = await mockDb.findUsersByMerchantId(merchantId);
-      const usersAssignedToRole = usersWithRole.filter(user => 
+      const usersAssignedToRole = usersWithRole.filter(user =>
         user.user_type === 'user' && 'role_id' in user && user.role_id === roleId
       );
 

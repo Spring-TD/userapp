@@ -72,7 +72,7 @@ app.use('/verify-email', verifyEmailRoutes);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-const server = app.listen(config.port, () => {
+const server = app.listen(config.port, '0.0.0.0', () => {
   console.log(`🚀 Client Auth Microservice running on port ${config.port}`);
   console.log(`📱 Environment: ${config.nodeEnv}`);
   console.log(`🔗 Service Auth URL: ${config.serviceAuthUrl}`);

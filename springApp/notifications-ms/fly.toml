@@ -3,8 +3,11 @@
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'notifications-ms'
-primary_region = 'cdg'
+app = 'springtd-notifications-ms'
+primary_region = 'lhr'
+
+[env]
+  PORT = '4009'
 
 [build]
 
@@ -20,4 +23,3 @@ primary_region = 'cdg'
   memory = '1gb'
   cpu_kind = 'shared'
   cpus = 1
-

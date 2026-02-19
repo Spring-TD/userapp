@@ -3,13 +3,16 @@
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'platter-billing-ms'
+app = 'billing-ms'
 primary_region = 'lhr'
+
+[env]
+  PORT = '4006'
 
 [build]
 
 [http_service]
-  internal_port = 3006
+  internal_port = 4006
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true

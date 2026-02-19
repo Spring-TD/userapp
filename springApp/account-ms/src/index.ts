@@ -38,6 +38,20 @@ app.use('/api/v1/savings-accounts', savingsRoutes);
 app.use('/api/v1/mortgages', mortgageRoutes);
 app.use('/api/v1/keys', apiKeyRoutes);
 
+
+// Root route (for verifying service is running)
+app.get('/', (req, res) => {
+  res.status(200).json({
+    service: 'Account Management Microservice',
+    status: 'Running',
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      health: '/health',
+      api: '/api/v1'
+    }
+  });
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });

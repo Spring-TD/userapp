@@ -15,5 +15,5 @@ export const config: EnvironmentConfig = {
   nodeEnv: process.env.NODE_ENV || 'development',
   corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:4001'],
   logLevel: process.env.LOG_LEVEL || 'info',
-  serverProductServiceUrl: process.env.SERVER_PRODUCT_SERVICE_URL || 'https://account-ms-plata.fly.dev/,http://localhost:3005'
+  serverProductServiceUrl: process.env.SERVER_PRODUCT_SERVICE_URL || 'http://localhost:3005'
 };

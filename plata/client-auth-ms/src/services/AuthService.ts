@@ -1,5 +1,5 @@
 import { User, Merchant, UserType, AccountStatus, UserAccount, Role, Permission, CreateRoleRequest } from '../models/User';
-import { mockDb } from '../utils/mockDatabase';
+import { db as mockDb } from '../utils/mongoDatabase';
 import { hashPassword, comparePassword, generateAccessToken, generateRefreshToken, verifyToken, generatePasswordResetToken } from '../utils/crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { RoleService } from './RoleService';
@@ -268,7 +268,7 @@ export class AuthService {
         // Update failed login attempts
         const newFailedAttempts = user.failed_login_attempts + 1;
         let lockedUntil: Date | undefined;
-        
+
         if (newFailedAttempts >= 5) { // Assuming 5 attempts is the threshold
           lockedUntil = new Date();
           lockedUntil.setTime(lockedUntil.getTime() + 30 * 60 * 1000); // Lock for 30 minutes
@@ -321,7 +321,7 @@ export class AuthService {
 
       // Return user without password
       const { password: pwd, ...userWithoutPassword } = user;
-      
+
       return {
         success: true,
         user: userWithoutPassword,
@@ -410,14 +410,14 @@ export class AuthService {
       let tokenData;
       try {
         const decoded = jwt.verify(token, config.jwt.secret) as any;
-        
+
         if (decoded.type !== 'password_reset') {
           return {
             success: false,
             error: 'Invalid password reset token'
           };
         }
-        
+
         // We'll use the decoded payload as tokenData
         tokenData = { valid: true, payload: decoded };
       } catch (error) {
@@ -780,7 +780,7 @@ export class AuthService {
   static async getInvitations(merchantId: string): Promise<{ success: boolean; invitations?: any[]; error?: string }> {
     try {
       const invitations = await mockDb.findInvitationsByMerchantId(merchantId);
-      
+
       return {
         success: true,
         invitations

@@ -3,18 +3,23 @@
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'fuspay-create-app-ms'
+app = 'create-app-ms'
 primary_region = 'lhr'
 
 [build]
 
 [http_service]
-  internal_port = 3002
+  internal_port = 4002
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
   processes = ['app']
+
+[mounts]
+  source = "create_app_data"
+  destination = "/data"
+  processes = ["app"]
 
 [[vm]]
   memory = '1gb'

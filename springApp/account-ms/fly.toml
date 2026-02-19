@@ -3,13 +3,16 @@
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'fuspay-account-ms'
+app = 'account-ms'
 primary_region = 'lhr'
+
+[env]
+  PORT = '4008'
 
 [build]
 
 [http_service]
-  internal_port = 3008
+  internal_port = 4008
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true

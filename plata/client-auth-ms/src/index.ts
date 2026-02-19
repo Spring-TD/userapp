@@ -13,6 +13,7 @@ import { verifyEmailRoutes } from './routes/verifyEmailRoutes';
 import { roleRoutes } from './routes/roleRoutes';
 import { invitationRoutes } from './routes/invitationRoutes';
 import { sessionRoutes } from './routes/sessionRoutes';
+import { connectDb } from './config/db';
 
 const app = express();
 
@@ -72,17 +73,26 @@ app.use('/verify-email', verifyEmailRoutes);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-const server = app.listen(config.port, () => {
-  console.log(`🚀 Client Auth Microservice running on port ${config.port}`);
-  console.log(`📱 Environment: ${config.nodeEnv}`);
-  console.log(`🔗 Service Auth URL: ${config.serviceAuthUrl}`);
-});
+async function start() {
+  await connectDb();
 
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully');
-  server.close(() => {
-    console.log('Process terminated');
+  const server = app.listen(config.port, () => {
+    console.log(`🚀 Client Auth Microservice running on port ${config.port}`);
+    console.log(`📱 Environment: ${config.nodeEnv}`);
+    console.log(`🔗 Service Auth URL: ${config.serviceAuthUrl}`);
   });
+
+  process.on('SIGTERM', () => {
+    console.log('SIGTERM received, shutting down gracefully');
+    server.close(() => {
+      console.log('Process terminated');
+    });
+  });
+}
+
+start().catch((err) => {
+  console.error('❌ Failed to start server:', err);
+  process.exit(1);
 });
 
 export default app;
