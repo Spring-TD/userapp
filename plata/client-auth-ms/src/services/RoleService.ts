@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+
 import { db as mockDb } from '../utils/mongoDatabase';
 import { Role, Permission, CreateRoleRequest } from '../models/User';
 
@@ -17,18 +17,12 @@ export class RoleService {
         };
       }
 
-      const now = new Date();
-      const role: Role = {
-        id: uuidv4(),
+      const createdRole = await mockDb.createRole({
         merchant_id: merchantId,
         name: roleData.name,
         description: roleData.description,
         permissions: roleData.permissions,
-        created_at: now,
-        updated_at: now
-      };
-
-      const createdRole = await mockDb.createRole(role);
+      });
 
       return {
         success: true,
