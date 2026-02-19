@@ -1,7 +1,16 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import { Invitation } from './User';
 
-export interface InvitationDocument extends Omit<Invitation, 'id' | 'createdAt' | 'updatedAt'>, Document { }
+export interface InvitationDocument extends Document {
+    email: string;
+    roleId: string;
+    merchantId: string;
+    token: string;
+    status: 'pending' | 'accepted' | 'expired';
+    expiresAt: Date;
+    createdAt: Date;
+    updatedAt: Date;
+}
 
 const invitationSchema = new Schema<InvitationDocument>(
     {
@@ -24,9 +33,6 @@ const invitationSchema = new Schema<InvitationDocument>(
 
 // Automatically remove expired invitation documents from MongoDB
 invitationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-
-// Fast lookup by token (used when accepting an invitation)
-invitationSchema.index({ token: 1 });
 
 // Prevent duplicate pending invitations for the same email within a merchant
 invitationSchema.index({ merchantId: 1, email: 1, status: 1 });

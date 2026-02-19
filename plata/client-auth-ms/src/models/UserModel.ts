@@ -1,7 +1,28 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import { UserType, AccountStatus, UserAccount } from './User';
 
-export interface UserDocument extends Omit<UserAccount, 'id'>, Document { }
+export interface UserDocument extends Document {
+    email: string;
+    password: string;
+    first_name: string;
+    last_name: string;
+    phone?: string;
+    user_type: UserType;
+    status: AccountStatus;
+    email_verified: boolean;
+    phone_verified: boolean;
+    user_merchant_id: string;
+    country: string;
+    role_id?: string;
+    callback_url?: string;
+    error_logs_url?: string;
+    last_login_at?: Date;
+    deactivated_at?: Date | null;
+    failed_login_attempts: number;
+    locked_until?: Date;
+    created_at: Date;
+    updated_at: Date;
+}
 
 const userSchema = new Schema<UserDocument>(
     {

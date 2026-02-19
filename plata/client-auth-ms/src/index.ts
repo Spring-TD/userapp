@@ -14,6 +14,7 @@ import { roleRoutes } from './routes/roleRoutes';
 import { invitationRoutes } from './routes/invitationRoutes';
 import { sessionRoutes } from './routes/sessionRoutes';
 import { connectDb } from './config/db';
+import { seedDatabase } from './utils/seeder';
 
 const app = express();
 
@@ -74,13 +75,26 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 async function start() {
-  await connectDb();
+  const port = config.port;
+  const host = '0.0.0.0';
 
-  const server = app.listen(config.port, () => {
-    console.log(`🚀 Client Auth Microservice running on port ${config.port}`);
+  const server = app.listen(port, host, () => {
+    console.log(`🚀 Client Auth Microservice running on ${host}:${port}`);
     console.log(`📱 Environment: ${config.nodeEnv}`);
     console.log(`🔗 Service Auth URL: ${config.serviceAuthUrl}`);
   });
+
+  try {
+    await connectDb();
+    await seedDatabase();
+    console.log('✅ Startup sequence complete');
+  } catch (err) {
+    console.error('❌ Error during startup sequence:', err);
+    // We don't exit(1) immediately to allow the process to stay alive 
+    // so we can inspect logs or reach the health endpoint if needed.
+    // However, for Fly.io, it's often better to exit if critical infra is down.
+    // But let's keep it alive for now to debug port issues.
+  }
 
   process.on('SIGTERM', () => {
     console.log('SIGTERM received, shutting down gracefully');
@@ -91,7 +105,7 @@ async function start() {
 }
 
 start().catch((err) => {
-  console.error('❌ Failed to start server:', err);
+  console.error('❌ Critical startup failure:', err);
   process.exit(1);
 });
 

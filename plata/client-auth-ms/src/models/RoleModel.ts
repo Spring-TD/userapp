@@ -1,7 +1,14 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import { Permission, Role } from './User';
 
-export interface RoleDocument extends Omit<Role, 'id'>, Document { }
+export interface RoleDocument extends Document {
+    name: string;
+    description: string;
+    permissions: Permission[];
+    merchant_id: string;
+    created_at: Date;
+    updated_at: Date;
+}
 
 const roleSchema = new Schema<RoleDocument>(
     {
