@@ -6,6 +6,9 @@ const router = express.Router();
 // Create a new account
 router.post('/accounts', accountController.createAccount);
 
+// Get all accounts
+router.get('/accounts', accountController.getAllAccounts);
+
 // Get account by ID
 router.get('/accounts/:id', accountController.getAccountById);
 

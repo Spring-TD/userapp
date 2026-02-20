@@ -61,7 +61,7 @@ app.use('/api/v1/records', recordRoutes);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-const server = app.listen(config.port, () => {
+const server = app.listen(config.port, '0.0.0.0', () => {
   logger.info(`🚀 Payment Microservice running on port ${config.port}`);
   logger.info(`📱 Environment: ${config.nodeEnv}`);
   logger.info(`🔗 Service Auth URL: ${config.serviceAuthUrl}`);

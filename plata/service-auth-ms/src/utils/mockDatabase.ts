@@ -4,30 +4,31 @@ import { Invitation } from '../models/Invitation';
 import { ApiKey, ApiKeyStatus } from '../models/ApiKey';
 import { Session } from '../models/Session';
 import { v4 as uuidv4 } from 'uuid';
+import {
+  UserModel,
+  RoleModel,
+  InvitationModel,
+  ApiKeyModel,
+  SessionModel
+} from '../models/authModels';
 
-// Mock in-memory database
+// Database adapter (formerly MockDatabase)
 class MockDatabase {
-  private users: Map<string, UserAccount> = new Map();
-  private emailIndex: Map<string, string> = new Map(); // email -> userId mapping
-  private roles: Map<string, Role> = new Map();
-  private invitations: Map<string, Invitation> = new Map();
-  private apiKeys: Map<string, ApiKey> = new Map();
-  private sessions: Map<string, Session> = new Map();
 
   /**
    * Find user by email
    */
   async findUserByEmail(email: string): Promise<UserAccount | null> {
-    const userId = this.emailIndex.get(email.toLowerCase());
-    if (!userId) return null;
-    return this.users.get(userId) || null;
+    const user = await UserModel.findOne({ email: email.toLowerCase() });
+    return user ? (user.toObject() as unknown as UserAccount) : null;
   }
 
   /**
    * Find user by ID
    */
   async findUserById(id: string): Promise<UserAccount | null> {
-    return this.users.get(id) || null;
+    const user = await UserModel.findById(id);
+    return user ? (user.toObject() as unknown as UserAccount) : null;
   }
 
   /**
@@ -37,314 +38,281 @@ class MockDatabase {
     const id = uuidv4();
     const now = new Date();
 
-    const user: UserAccount = {
+    const user = new UserModel({
+      _id: id, // Set _id to match uuid
       ...userData,
-      id,
+      email: userData.email.toLowerCase(),
       created_at: now,
       updated_at: now,
       failed_login_attempts: 0
-    } as UserAccount;
+    });
 
-    this.users.set(id, user);
-    this.emailIndex.set(userData.email.toLowerCase(), id);
-
-    return user;
+    const savedUser = await user.save();
+    return savedUser.toObject() as unknown as UserAccount;
   }
 
   /**
    * Update user
    */
   async updateUser(id: string, updates: Partial<UserAccount>): Promise<UserAccount | null> {
-    const user = this.users.get(id);
-    if (!user) return null;
-
-    const updatedUser = {
-      ...user,
-      ...updates,
-      updated_at: new Date()
-    } as UserAccount;
-
-    this.users.set(id, updatedUser);
-    return updatedUser;
+    const user = await UserModel.findByIdAndUpdate(
+      id,
+      { ...updates, updated_at: new Date() },
+      { new: true }
+    );
+    return user ? (user.toObject() as unknown as UserAccount) : null;
   }
 
   /**
    * Delete user
    */
   async deleteUser(id: string): Promise<boolean> {
-    const user = this.users.get(id);
-    if (!user) return false;
-
-    this.users.delete(id);
-    this.emailIndex.delete(user.email.toLowerCase());
-    return true;
+    const result = await UserModel.deleteOne({ _id: id });
+    return result.deletedCount ? result.deletedCount > 0 : false;
   }
 
   /**
    * Get all users (for testing purposes)
    */
   async getAllUsers(): Promise<UserAccount[]> {
-    return Array.from(this.users.values());
+    const users = await UserModel.find({});
+    return users.map(u => u.toObject() as unknown as UserAccount);
   }
 
   /**
    * Find users by merchant ID
    */
   async findUsersByMerchantId(merchantId: string): Promise<UserAccount[]> {
-    const result: UserAccount[] = [];
-    for (const user of this.users.values()) {
-      if ('user_merchant_id' in user && user.user_merchant_id === merchantId && user.user_type === 'user') {
-        result.push(user);
-      }
-    }
-    return result;
+    const users = await UserModel.find({
+      user_merchant_id: merchantId,
+      user_type: 'user'
+    });
+    return users.map(u => u.toObject() as unknown as UserAccount);
   }
 
   /**
    * Create a new role
    */
   async createRole(role: Role): Promise<Role> {
-    this.roles.set(role.id, role);
-    return role;
+    // Role interface has 'id', we should use it for _id
+    const newRole = new RoleModel({
+      _id: role.id,
+      ...role
+    });
+    const savedRole = await newRole.save();
+    return savedRole.toObject() as unknown as Role;
   }
 
   /**
    * Find role by ID
    */
   async findRoleById(id: string): Promise<Role | null> {
-    return this.roles.get(id) || null;
+    const role = await RoleModel.findById(id);
+    return role ? (role.toObject() as unknown as Role) : null;
   }
-
 
   /**
    * Find roles by merchant ID
    */
   async findRolesByMerchantId(merchantId: string): Promise<Role[]> {
-    const result: Role[] = [];
-    for (const role of this.roles.values()) {
-      if (role.merchant_id === merchantId) {
-        result.push(role);
-      }
-    }
-    return result;
+    const roles = await RoleModel.find({ merchant_id: merchantId });
+    return roles.map(r => r.toObject() as unknown as Role);
   }
 
   /**
    * Update role
    */
   async updateRole(id: string, updates: Partial<Role>): Promise<Role | null> {
-    const role = this.roles.get(id);
-    if (!role) return null;
-
-    const updatedRole = {
-      ...role,
-      ...updates,
-      updated_at: new Date()
-    };
-
-    this.roles.set(id, updatedRole);
-    return updatedRole;
+    const role = await RoleModel.findByIdAndUpdate(
+      id,
+      { ...updates, updated_at: new Date() },
+      { new: true }
+    );
+    return role ? (role.toObject() as unknown as Role) : null;
   }
 
   /**
    * Delete role
    */
   async deleteRole(id: string): Promise<boolean> {
-    return this.roles.delete(id);
+    const result = await RoleModel.deleteOne({ _id: id });
+    return result.deletedCount ? result.deletedCount > 0 : false;
   }
 
   /**
    * Create invitation
    */
   async createInvitation(invitation: Invitation): Promise<Invitation> {
-    this.invitations.set(invitation.id, invitation);
-    return invitation;
+    const newInvitation = new InvitationModel({
+      _id: invitation.id,
+      ...invitation
+    });
+    const saved = await newInvitation.save();
+    return saved.toObject() as unknown as Invitation;
   }
 
   /**
    * Find invitation by token
    */
   async findInvitationByToken(token: string): Promise<Invitation | null> {
-    for (const invite of this.invitations.values()) {
-      if (invite.token === token) {
-        return invite;
-      }
-    }
-    return null;
+    const invite = await InvitationModel.findOne({ token });
+    return invite ? (invite.toObject() as unknown as Invitation) : null;
   }
 
   /**
    * Find invitation by ID
    */
   async findInvitationById(id: string): Promise<Invitation | null> {
-    return this.invitations.get(id) || null;
+    const invite = await InvitationModel.findById(id);
+    return invite ? (invite.toObject() as unknown as Invitation) : null;
   }
 
   /**
    * Update invitation
    */
   async updateInvitation(id: string, updates: Partial<Invitation>): Promise<Invitation | null> {
-    const invite = this.invitations.get(id);
-    if (!invite) return null;
-
-    const updatedInvite = {
-      ...invite,
-      ...updates,
-      updatedAt: new Date()
-    };
-
-    this.invitations.set(id, updatedInvite);
-    return updatedInvite;
+    const invite = await InvitationModel.findByIdAndUpdate(
+      id,
+      { ...updates, updatedAt: new Date() },
+      { new: true }
+    );
+    return invite ? (invite.toObject() as unknown as Invitation) : null;
   }
 
   /**
    * Find invitations by merchant ID
    */
   async findInvitationsByMerchantId(merchantId: string): Promise<Invitation[]> {
-    const result: Invitation[] = [];
-    for (const invite of this.invitations.values()) {
-      if (invite.merchantId === merchantId) {
-        result.push(invite);
-      }
-    }
-    return result;
+    const invites = await InvitationModel.find({ merchantId });
+    return invites.map(i => i.toObject() as unknown as Invitation);
   }
 
   /**
    * Create ApiKey
    */
   async createApiKey(apiKey: ApiKey): Promise<ApiKey> {
-    this.apiKeys.set(apiKey.id, apiKey);
-    return apiKey;
+    const newKey = new ApiKeyModel({
+      _id: apiKey.id,
+      ...apiKey
+    });
+    const saved = await newKey.save();
+    return saved.toObject() as unknown as ApiKey;
   }
 
   /**
    * Find ApiKey by ID
    */
   async findApiKeyById(id: string): Promise<ApiKey | null> {
-    return this.apiKeys.get(id) || null;
+    const key = await ApiKeyModel.findById(id);
+    return key ? (key.toObject() as unknown as ApiKey) : null;
   }
 
   /**
    * Find ApiKey by Public Key
    */
   async findApiKeyByPublicKey(publicKey: string): Promise<ApiKey | null> {
-    for (const key of this.apiKeys.values()) {
-      if (key.public_key === publicKey) {
-        return key;
-      }
-    }
-    return null;
+    const key = await ApiKeyModel.findOne({ public_key: publicKey });
+    return key ? (key.toObject() as unknown as ApiKey) : null;
   }
 
   /**
    * Find ApiKeys by Merchant ID
    */
   async findApiKeysByMerchantId(merchantId: string): Promise<ApiKey[]> {
-    const result: ApiKey[] = [];
-    for (const key of this.apiKeys.values()) {
-      if (key.merchant_id === merchantId && key.status !== ApiKeyStatus.REVOKED) {
-        result.push(key);
-      }
-    }
-    return result;
+    const keys = await ApiKeyModel.find({
+      merchant_id: merchantId,
+      status: { $ne: ApiKeyStatus.REVOKED }
+    });
+    return keys.map(k => k.toObject() as unknown as ApiKey);
   }
 
   /**
    * Update ApiKey
    */
   async updateApiKey(id: string, updates: Partial<ApiKey>): Promise<ApiKey | null> {
-    const key = this.apiKeys.get(id);
-    if (!key) return null;
-
-    const updatedKey = {
-      ...key,
-      ...updates,
-      updated_at: new Date()
-    };
-
-    this.apiKeys.set(id, updatedKey);
-    return updatedKey;
+    const key = await ApiKeyModel.findByIdAndUpdate(
+      id,
+      { ...updates, updated_at: new Date() },
+      { new: true }
+    );
+    return key ? (key.toObject() as unknown as ApiKey) : null;
   }
 
   /**
    * Delete ApiKey (Revoke)
-   * We typically revoke keys rather than deleting them immediately, but this method deletes from DB.
-   * Prefer using updateApiKey to set status to REVOKED.
    */
   async deleteApiKey(id: string): Promise<boolean> {
-    return this.apiKeys.delete(id);
+    const result = await ApiKeyModel.deleteOne({ _id: id });
+    return result.deletedCount ? result.deletedCount > 0 : false;
   }
 
   /**
    * Create Session
    */
   async createSession(session: Session): Promise<Session> {
-    this.sessions.set(session.id, session);
-    return session;
+    const newSession = new SessionModel({
+      _id: session.id,
+      ...session
+    });
+    const saved = await newSession.save();
+    return saved.toObject() as unknown as Session;
   }
 
   /**
    * Find Session by ID
    */
   async findSessionById(id: string): Promise<Session | null> {
-    return this.sessions.get(id) || null;
+    const session = await SessionModel.findById(id);
+    return session ? (session.toObject() as unknown as Session) : null;
   }
 
   /**
    * Find Sessions by User ID
    */
   async findSessionsByUserId(userId: string): Promise<Session[]> {
-    const result: Session[] = [];
-    for (const session of this.sessions.values()) {
-      if (session.userId === userId && session.isValid) {
-        result.push(session);
-      }
-    }
-    return result;
+    const sessions = await SessionModel.find({
+      userId,
+      isValid: true
+    });
+    return sessions.map(s => s.toObject() as unknown as Session);
   }
 
   /**
    * Find Session by Refresh Token
    */
   async findSessionByRefreshToken(refreshToken: string): Promise<Session | null> {
-    for (const session of this.sessions.values()) {
-      if (session.refreshToken === refreshToken) {
-        return session;
-      }
-    }
-    return null;
+    const session = await SessionModel.findOne({ refreshToken });
+    return session ? (session.toObject() as unknown as Session) : null;
   }
 
   /**
    * Invalidate Session
    */
   async invalidateSession(id: string): Promise<boolean> {
-    const session = this.sessions.get(id);
-    if (!session) return false;
-
-    session.isValid = false;
-    this.sessions.set(id, session);
-    return true;
+    const result = await SessionModel.updateOne(
+      { _id: id },
+      { isValid: false }
+    );
+    return result.modifiedCount > 0;
   }
 
   /**
    * Delete Session
    */
   async deleteSession(id: string): Promise<boolean> {
-    return this.sessions.delete(id);
+    const result = await SessionModel.deleteOne({ _id: id });
+    return result.deletedCount ? result.deletedCount > 0 : false;
   }
 
   /**
    * Clear all data (for testing purposes)
    */
   async clearAll(): Promise<void> {
-    this.users.clear();
-    this.emailIndex.clear();
-    this.roles.clear();
-    this.invitations.clear();
-    this.apiKeys.clear();
-    this.sessions.clear();
+    await UserModel.deleteMany({});
+    await RoleModel.deleteMany({});
+    await InvitationModel.deleteMany({});
+    await ApiKeyModel.deleteMany({});
+    await SessionModel.deleteMany({});
   }
 }
 

@@ -38,6 +38,26 @@ app.use('/api/v1/savings-accounts', savingsRoutes);
 app.use('/api/v1/mortgages', mortgageRoutes);
 app.use('/api/v1/keys', apiKeyRoutes);
 
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    service: 'Account Microservice',
+    version: '1.0.0',
+    status: 'running',
+    endpoints: {
+      health: '/health',
+      accounts: '/api/v1/accounts',
+      applications: '/api/v1/applications',
+      loans: '/api/v1/loans',
+      savings: '/api/v1/savings-accounts',
+      mortgages: '/api/v1/mortgages',
+      keys: '/api/v1/keys'
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
@@ -45,7 +65,8 @@ app.get('/health', (req, res) => {
 
 // 404 handler
 app.use((req, res) => {
-  res.status(404).json({ error: 'Route not found' });
+  console.log(`404 - Not Found: ${req.method} ${req.url}`);
+  res.status(404).json({ error: 'Route not found', path: req.url, method: req.method });
 });
 
 // Error handler

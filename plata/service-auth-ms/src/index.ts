@@ -12,6 +12,7 @@ import { userRoutes } from './routes/userRoutes';
 import { SAMSService } from './services/samsService';
 import { redisCacheService } from './services/redisCacheService';
 import { logger } from './utils/logger';
+import { connectDb } from './config/database';
 
 const app = express();
 
@@ -88,6 +89,7 @@ if (require.main === module) {
 
   // Initialize services
   Promise.all([
+    connectDb(), // Connect to MongoDB
     redisCacheService.getStats(), // This ensures Redis connection is established
     SAMSService.initialize()
   ]).then(() => {

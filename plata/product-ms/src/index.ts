@@ -58,7 +58,7 @@ app.use('/api/v1/configurations', configurationRoutes);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-const server = app.listen(config.port, () => {
+const server = app.listen(config.port, '0.0.0.0', () => {
   console.log(`🚀 Product Microservice running on port ${config.port}`);
   console.log(`📱 Environment: ${config.nodeEnv}`);
 });

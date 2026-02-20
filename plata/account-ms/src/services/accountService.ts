@@ -111,6 +111,11 @@ class AccountService {
     return createdAccount;
   }
 
+  // Get all accounts
+  async getAllAccounts(): Promise<Account[]> {
+    return await mockDb.getAllAccounts();
+  }
+
   // Get account by ID
   async getAccountById(id: string): Promise<Account | null> {
     return await mockDb.getAccountById(id);

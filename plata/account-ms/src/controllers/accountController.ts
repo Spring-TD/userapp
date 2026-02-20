@@ -21,6 +21,16 @@ class AccountController {
     }
   }
 
+  // Get all accounts
+  async getAllAccounts(req: Request, res: Response): Promise<Response> {
+    try {
+      const accounts = await accountService.getAllAccounts();
+      return res.status(200).json(accounts);
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message });
+    }
+  }
+
   // Get account by ID
   async getAccountById(req: Request, res: Response): Promise<Response> {
     try {

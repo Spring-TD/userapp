@@ -59,7 +59,7 @@ app.use('/api/v1/billing', billingRoutes);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-const server = app.listen(config.port, () => {
+const server = app.listen(config.port, '0.0.0.0', () => {
   console.log(`🚀 Billing Microservice running on port ${config.port}`);
   console.log(`📱 Environment: ${config.nodeEnv}`);
   console.log(`🔗 Service Auth URL: ${config.serviceAuthUrl}`);
@@ -68,12 +68,12 @@ const server = app.listen(config.port, () => {
   console.log(`   💰 Payment Processing`);
   console.log(`   📊 Subscription Management`);
   console.log(`   🧾 Transaction History`);
-  
+
   // Start the billing scheduler
   const billingScheduler = BillingScheduler.getInstance();
   const billingInterval = parseInt(process.env.RECURRING_BILLING_INTERVAL || '3600000'); // Default: 1 hour
   billingScheduler.start(billingInterval);
-  
+
   // Start the pricing scheduler
   const pricingScheduler = PricingScheduler.getInstance();
   const pricingInterval = parseInt(process.env.PRICING_INTERVAL || '3600000'); // Default: 1 hour
@@ -82,14 +82,14 @@ const server = app.listen(config.port, () => {
 
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully');
-  
+
   // Stop schedulers
   const billingScheduler = BillingScheduler.getInstance();
   billingScheduler.stop();
-  
+
   const pricingScheduler = PricingScheduler.getInstance();
   pricingScheduler.stop();
-  
+
   server.close(() => {
     console.log('Process terminated');
   });
