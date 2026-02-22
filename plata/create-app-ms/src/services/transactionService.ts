@@ -1,10 +1,8 @@
 import { Transaction, TransactionQueryParams } from '../types/app';
 import { ApiError } from '../middleware/errorHandler';
+import { TransactionMongoModel } from '../models/transaction.mongo';
 
 export class TransactionService {
-  // In-memory storage for transactions (in a real implementation, this would be a database)
-  private static transactions: Transaction[] = [];
-
   /**
    * Get all transactions for an app with optional filtering and pagination
    * @param appId The ID of the app
@@ -19,39 +17,40 @@ export class TransactionService {
       throw new ApiError(400, 'App ID is required');
     }
 
-    // Filter transactions by appId
-    let filteredTransactions = this.transactions.filter(t => t.appId === appId);
+    const filter: any = { appId };
 
     // Apply filters
     if (queryParams.type) {
-      filteredTransactions = filteredTransactions.filter(t => t.type === queryParams.type);
+      filter.type = queryParams.type;
     }
 
     if (queryParams.status) {
-      filteredTransactions = filteredTransactions.filter(t => t.status === queryParams.status);
+      filter.status = queryParams.status;
     }
 
-    if (queryParams.startDate) {
-      const startDate = new Date(queryParams.startDate);
-      filteredTransactions = filteredTransactions.filter(t => new Date(t.createdAt) >= startDate);
+    if (queryParams.startDate || queryParams.endDate) {
+      filter.createdAt = {};
+      if (queryParams.startDate) {
+        filter.createdAt.$gte = new Date(queryParams.startDate).toISOString();
+      }
+      if (queryParams.endDate) {
+        filter.createdAt.$lte = new Date(queryParams.endDate).toISOString();
+      }
     }
 
-    if (queryParams.endDate) {
-      const endDate = new Date(queryParams.endDate);
-      filteredTransactions = filteredTransactions.filter(t => new Date(t.createdAt) <= endDate);
-    }
+    let query = TransactionMongoModel.find(filter);
+
+    // Apply sorting (newest first)
+    query = query.sort({ createdAt: -1 });
 
     // Apply pagination
     if (queryParams.page && queryParams.limit) {
-      const startIndex = (queryParams.page - 1) * queryParams.limit;
-      const endIndex = startIndex + queryParams.limit;
-      filteredTransactions = filteredTransactions.slice(startIndex, endIndex);
+      const skip = (queryParams.page - 1) * queryParams.limit;
+      query = query.skip(skip).limit(queryParams.limit);
     }
 
-    // Sort by createdAt descending (newest first)
-    filteredTransactions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-    return filteredTransactions;
+    const transactions = await query.exec();
+    return transactions.map(t => t.toJSON() as unknown as Transaction);
   }
 
   /**
@@ -64,8 +63,8 @@ export class TransactionService {
       throw new ApiError(400, 'Transaction ID is required');
     }
 
-    const transaction = this.transactions.find(t => t.id === transactionId);
-    return transaction || null;
+    const transaction = await TransactionMongoModel.findById(transactionId);
+    return transaction ? (transaction.toJSON() as unknown as Transaction) : null;
   }
 
   /**
@@ -74,15 +73,13 @@ export class TransactionService {
    * @returns The created transaction
    */
   static async createTransaction(transactionData: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>): Promise<Transaction> {
-    const newTransaction: Transaction = {
-      id: this.generateId(),
+    const newTransaction = await TransactionMongoModel.create({
       ...transactionData,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
-    };
+    });
 
-    this.transactions.push(newTransaction);
-    return newTransaction;
+    return newTransaction.toJSON() as unknown as Transaction;
   }
 
   /**
@@ -95,37 +92,63 @@ export class TransactionService {
       throw new ApiError(400, 'App ID is required');
     }
 
-    const appTransactions = this.transactions.filter(t => t.appId === appId);
-    
-    const totalTransactions = appTransactions.length;
-    const totalCreditAmount = appTransactions
-      .filter(t => t.type === 'credit')
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    const totalDebitAmount = appTransactions
-      .filter(t => t.type === 'debit')
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    const pendingTransactions = appTransactions.filter(t => t.status === 'pending').length;
-    const completedTransactions = appTransactions.filter(t => t.status === 'completed').length;
-    const failedTransactions = appTransactions.filter(t => t.status === 'failed').length;
+    // Using aggregation for better performance
+    const stats = await TransactionMongoModel.aggregate([
+      { $match: { appId } },
+      {
+        $group: {
+          _id: null,
+          totalTransactions: { $sum: 1 },
+          totalCreditAmount: {
+            $sum: {
+              $cond: [{ $eq: ["$type", "credit"] }, "$amount", 0]
+            }
+          },
+          totalDebitAmount: {
+            $sum: {
+              $cond: [{ $eq: ["$type", "debit"] }, "$amount", 0]
+            }
+          },
+          pendingTransactions: {
+            $sum: {
+              $cond: [{ $eq: ["$status", "pending"] }, 1, 0]
+            }
+          },
+          completedTransactions: {
+            $sum: {
+              $cond: [{ $eq: ["$status", "completed"] }, 1, 0]
+            }
+          },
+          failedTransactions: {
+            $sum: {
+              $cond: [{ $eq: ["$status", "failed"] }, 1, 0]
+            }
+          }
+        }
+      }
+    ]);
 
+    if (stats.length === 0) {
+      return {
+        totalTransactions: 0,
+        totalCreditAmount: 0,
+        totalDebitAmount: 0,
+        pendingTransactions: 0,
+        completedTransactions: 0,
+        failedTransactions: 0,
+        netAmount: 0
+      };
+    }
+
+    const result = stats[0];
     return {
-      totalTransactions,
-      totalCreditAmount,
-      totalDebitAmount,
-      pendingTransactions,
-      completedTransactions,
-      failedTransactions,
-      netAmount: totalCreditAmount - totalDebitAmount
+      totalTransactions: result.totalTransactions,
+      totalCreditAmount: result.totalCreditAmount,
+      totalDebitAmount: result.totalDebitAmount,
+      pendingTransactions: result.pendingTransactions,
+      completedTransactions: result.completedTransactions,
+      failedTransactions: result.failedTransactions,
+      netAmount: result.totalCreditAmount - result.totalDebitAmount
     };
-  }
-
-  /**
-   * Generate a random ID (for testing purposes)
-   * @returns A random ID string
-   */
-  private static generateId(): string {
-    return Math.random().toString(36).substr(2, 9);
   }
 }

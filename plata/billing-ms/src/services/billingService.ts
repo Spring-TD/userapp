@@ -1,67 +1,64 @@
 import { BillingType, Invoice, Payment, Subscription, Transaction, OneTimeBilling } from '../types/billingTypes';
-import { PricingService } from './pricingService';
+import { InvoiceModel } from '../models/invoice.mongo';
+import { PaymentModel } from '../models/payment.mongo';
+import { SubscriptionModel } from '../models/subscription.mongo';
+import { TransactionModel } from '../models/transaction.mongo';
+import { OneTimeBillingModel } from '../models/oneTimeBilling.mongo';
 import axios from 'axios';
 
 export class BillingService {
   static async createInvoice(invoiceData: Partial<Invoice>): Promise<Invoice> {
-    // Implementation will be added later
-    return {
-      id: 'inv_' + Date.now(),
+    const invoice = new InvoiceModel({
       merchantId: invoiceData.merchantId || '',
       amount: invoiceData.amount || 0,
       currency: invoiceData.currency || 'USD',
       items: invoiceData.items || [],
       billingType: invoiceData.billingType || BillingType.ONE_TIME,
-      status: 'pending',
-      issuedDate: new Date(),
-      createdAt: new Date(),
-      updatedAt: new Date()
-    } as Invoice;
+      status: invoiceData.status || 'pending',
+      issuedDate: invoiceData.issuedDate || new Date(),
+      dueDate: invoiceData.dueDate,
+      paidDate: invoiceData.paidDate,
+      notes: invoiceData.notes,
+      customerId: invoiceData.customerId
+    });
+
+    const saved = await invoice.save();
+    return saved.toJSON() as unknown as Invoice;
   }
 
   static async getInvoice(id: string): Promise<Invoice | null> {
-    // Implementation will be added later
-    return {
-      id,
-      merchantId: 'merchant_123',
-      amount: 100.00,
-      currency: 'USD',
-      items: [],
-      billingType: BillingType.ONE_TIME,
-      status: 'paid',
-      issuedDate: new Date(),
-      paidDate: new Date(),
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+    const invoice = await InvoiceModel.findById(id);
+    if (!invoice) return null;
+    return invoice.toJSON() as unknown as Invoice;
   }
 
   static async listInvoices(filters?: any): Promise<Invoice[]> {
-    // Implementation will be added later
-    return [];
+    const query: any = {};
+    if (filters?.merchantId) query.merchantId = filters.merchantId;
+    if (filters?.status) query.status = filters.status;
+    if (filters?.billingType) query.billingType = filters.billingType;
+
+    const invoices = await InvoiceModel.find(query).sort({ createdAt: -1 });
+    return invoices.map(inv => inv.toJSON() as unknown as Invoice);
   }
 
   static async updateInvoice(id: string, updateData: Partial<Invoice>): Promise<Invoice | null> {
-    // Implementation will be added later
-    const existing = await this.getInvoice(id);
-    if (!existing) return null;
-    
-    return {
-      ...existing,
-      ...updateData,
-      updatedAt: new Date()
-    };
+    const invoice = await InvoiceModel.findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      { new: true }
+    );
+    if (!invoice) return null;
+    return invoice.toJSON() as unknown as Invoice;
   }
 
   static async deleteInvoice(id: string): Promise<boolean> {
-    // Implementation will be added later
-    return true;
+    const result = await InvoiceModel.findByIdAndDelete(id);
+    return !!result;
   }
 
   static async processPayment(paymentData: Partial<Payment>): Promise<Payment> {
-    // Implementation will be added later
-    return {
-      id: 'pay_' + Date.now(),
+    const payment = new PaymentModel({
       merchantId: paymentData.merchantId || '',
       amount: paymentData.amount || 0,
       currency: paymentData.currency || 'USD',
@@ -69,36 +66,32 @@ export class BillingService {
       method: paymentData.method || 'card',
       status: 'completed',
       processedAt: new Date(),
-      createdAt: new Date(),
-      updatedAt: new Date()
-    } as Payment;
+      invoiceId: paymentData.invoiceId,
+      customerId: paymentData.customerId,
+      transactionId: paymentData.transactionId
+    });
+
+    const saved = await payment.save();
+    return saved.toJSON() as unknown as Payment;
   }
 
   static async getPayment(id: string): Promise<Payment | null> {
-    // Implementation will be added later
-    return {
-      id,
-      merchantId: 'merchant_123',
-      amount: 100.00,
-      currency: 'USD',
-      billingType: BillingType.ONE_TIME,
-      method: 'card',
-      status: 'completed',
-      processedAt: new Date(),
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+    const payment = await PaymentModel.findById(id);
+    if (!payment) return null;
+    return payment.toJSON() as unknown as Payment;
   }
 
   static async listPayments(filters?: any): Promise<Payment[]> {
-    // Implementation will be added later
-    return [];
+    const query: any = {};
+    if (filters?.merchantId) query.merchantId = filters.merchantId;
+    if (filters?.status) query.status = filters.status;
+
+    const payments = await PaymentModel.find(query).sort({ createdAt: -1 });
+    return payments.map(p => p.toJSON() as unknown as Payment);
   }
 
   static async createSubscription(subscriptionData: Partial<Subscription>): Promise<Subscription> {
-    // Implementation will be added later
-    return {
-      id: 'sub_' + Date.now(),
+    const subscription = new SubscriptionModel({
       merchantId: subscriptionData.merchantId || '',
       customerId: subscriptionData.customerId || '',
       planId: subscriptionData.planId || '',
@@ -108,75 +101,59 @@ export class BillingService {
       interval: subscriptionData.interval || 'month',
       intervalCount: subscriptionData.intervalCount || 1,
       status: 'active',
-      startDate: new Date(),
-      nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
-      createdAt: new Date(),
-      updatedAt: new Date()
-    } as Subscription;
+      startDate: subscriptionData.startDate || new Date(),
+      nextBillingDate: subscriptionData.nextBillingDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      endDate: subscriptionData.endDate,
+      trialEnd: subscriptionData.trialEnd
+    });
+
+    const saved = await subscription.save();
+    return saved.toJSON() as unknown as Subscription;
   }
 
   static async getSubscription(id: string): Promise<Subscription | null> {
-    // Implementation will be added later
-    return {
-      id,
-      merchantId: 'merchant_123',
-      customerId: 'customer_123',
-      planId: 'basic',
-      amount: 29.99,
-      currency: 'USD',
-      billingType: BillingType.RECURRING,
-      interval: 'month',
-      intervalCount: 1,
-      status: 'active',
-      startDate: new Date(),
-      nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+    const subscription = await SubscriptionModel.findById(id);
+    if (!subscription) return null;
+    return subscription.toJSON() as unknown as Subscription;
   }
 
   static async listSubscriptions(filters?: any): Promise<Subscription[]> {
-    // Implementation will be added later
-    return [];
+    const query: any = {};
+    if (filters?.merchantId) query.merchantId = filters.merchantId;
+    if (filters?.status) query.status = filters.status;
+
+    const subscriptions = await SubscriptionModel.find(query).sort({ createdAt: -1 });
+    return subscriptions.map(s => s.toJSON() as unknown as Subscription);
   }
 
   static async updateSubscription(id: string, updateData: Partial<Subscription>): Promise<Subscription | null> {
-    // Implementation will be added later
-    const existing = await this.getSubscription(id);
-    if (!existing) return null;
-    
-    return {
-      ...existing,
-      ...updateData,
-      updatedAt: new Date()
-    };
+    const subscription = await SubscriptionModel.findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      { new: true }
+    );
+    if (!subscription) return null;
+    return subscription.toJSON() as unknown as Subscription;
   }
 
   static async getTransaction(id: string): Promise<Transaction | null> {
-    // Implementation will be added later
-    return {
-      id,
-      merchantId: 'merchant_123',
-      amount: 100.00,
-      currency: 'USD',
-      billingType: BillingType.ONE_TIME,
-      type: 'payment',
-      status: 'completed',
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+    const transaction = await TransactionModel.findById(id);
+    if (!transaction) return null;
+    return transaction.toJSON() as unknown as Transaction;
   }
 
   static async listTransactions(filters?: any): Promise<Transaction[]> {
-    // Implementation will be added later
-    return [];
+    const query: any = {};
+    if (filters?.merchantId) query.merchantId = filters.merchantId;
+    if (filters?.status) query.status = filters.status;
+    if (filters?.type) query.type = filters.type;
+
+    const transactions = await TransactionModel.find(query).sort({ createdAt: -1 });
+    return transactions.map(t => t.toJSON() as unknown as Transaction);
   }
 
   /**
    * Check if user has sufficient funds in their wallet
-   * @param walletId - The ID of the user's wallet
-   * @param amount - The amount to check
-   * @returns Object with success status and wallet information or error message
    */
   static async checkWalletBalance(walletId: string, amount: number): Promise<{
     success: boolean;
@@ -186,16 +163,15 @@ export class BillingService {
   }> {
     try {
       const walletServiceUrl = process.env.WALLET_SERVICE_URL || 'http://localhost:3004';
-      
-      // Get wallet information
+
       const response = await axios.get(`${walletServiceUrl}/api/v1/wallets/${walletId}`, {
-        timeout: 5000 // 5 second timeout
+        timeout: 5000
       });
-      
+
       if (response.status === 200 && response.data.success) {
         const wallet = response.data.data;
         const hasSufficientFunds = wallet.mainBalance >= amount;
-        
+
         return {
           success: true,
           hasSufficientFunds,
@@ -209,7 +185,6 @@ export class BillingService {
         };
       }
     } catch (error: any) {
-      // Handle different types of errors
       if (error.code === 'ECONNABORTED') {
         return {
           success: false,
@@ -217,21 +192,18 @@ export class BillingService {
           error: 'Wallet service timeout - unable to check balance'
         };
       } else if (error.response) {
-        // Server responded with error status
         return {
           success: false,
           hasSufficientFunds: false,
           error: `Wallet service error: ${error.response.status} - ${error.response.data?.error || 'Unknown error'}`
         };
       } else if (error.request) {
-        // Request was made but no response received
         return {
           success: false,
           hasSufficientFunds: false,
           error: 'Unable to connect to wallet service'
         };
       } else {
-        // Something else happened
         return {
           success: false,
           hasSufficientFunds: false,
@@ -243,10 +215,6 @@ export class BillingService {
 
   /**
    * Debit user wallet for billing
-   * @param userId - The ID of the user
-   * @param amount - The amount to debit
-   * @param description - Description of the debit
-   * @returns Object with success status and transaction information or error message
    */
   static async debitUserWallet(userId: string, amount: number, description: string): Promise<{
     success: boolean;
@@ -255,16 +223,15 @@ export class BillingService {
   }> {
     try {
       const walletServiceUrl = process.env.WALLET_SERVICE_URL || 'http://localhost:3004';
-      
-      // Debit the user's wallet
+
       const response = await axios.post(`${walletServiceUrl}/api/v1/wallets/treasury/debit`, {
         userId,
         amount,
         description
       }, {
-        timeout: 5000 // 5 second timeout
+        timeout: 5000
       });
-      
+
       if (response.status === 200 && response.data.success) {
         return {
           success: true,
@@ -277,16 +244,13 @@ export class BillingService {
         };
       }
     } catch (error: any) {
-      // Handle different types of errors
       if (error.code === 'ECONNABORTED') {
         return {
           success: false,
           error: 'Wallet service timeout - unable to debit wallet'
         };
       } else if (error.response) {
-        // Server responded with error status
         if (error.response.status === 400 && error.response.data?.error?.includes('Insufficient balance')) {
-          // Specific handling for insufficient funds
           return {
             success: false,
             error: 'INSUFFICIENT_FUNDS'
@@ -297,13 +261,11 @@ export class BillingService {
           error: `Wallet service error: ${error.response.status} - ${error.response.data?.error || 'Unknown error'}`
         };
       } else if (error.request) {
-        // Request was made but no response received
         return {
           success: false,
           error: 'Unable to connect to wallet service'
         };
       } else {
-        // Something else happened
         return {
           success: false,
           error: error.message || 'Unknown error occurred while debiting wallet'
@@ -314,8 +276,6 @@ export class BillingService {
 
   /**
    * Suspend user account due to insufficient funds
-   * @param userId - The ID of the user to suspend
-   * @returns Object with success status and result information
    */
   static async suspendUserAccount(userId: string): Promise<{
     success: boolean;
@@ -323,17 +283,8 @@ export class BillingService {
     error?: string;
   }> {
     try {
-      // In a real implementation, this would call the user service or account service
-      // to suspend the user's account. For now, we'll log the action.
       console.log(`[BILLING SERVICE] Suspending account for user ${userId} due to insufficient funds`);
-      
-      // Simulate account suspension
-      // This would typically involve:
-      // 1. Updating user status in the database
-      // 2. Notifying other services
-      // 3. Logging the suspension
-      
-      // For demonstration, we'll just return success
+
       return {
         success: true,
         message: 'User account suspended successfully'
@@ -349,11 +300,6 @@ export class BillingService {
 
   /**
    * Process a billing operation with insufficient funds handling
-   * @param walletId - The ID of the user's wallet
-   * @param userId - The ID of the user
-   * @param amount - The amount to bill
-   * @param description - Description of the billing operation
-   * @returns Object with success status and result information
    */
   static async processBillingWithInsufficientFundsHandling(
     walletId: string,
@@ -367,7 +313,6 @@ export class BillingService {
     error?: string;
   }> {
     try {
-      // Validate inputs
       if (!walletId || !userId || amount <= 0) {
         return {
           success: false,
@@ -376,16 +321,13 @@ export class BillingService {
           error: 'walletId, userId, and amount (positive value) are required'
         };
       }
-      
-      // Attempt to debit the user's wallet
+
       const debitResult = await this.debitUserWallet(userId, amount, description);
-      
+
       if (!debitResult.success) {
-        // Check if it's an insufficient funds error
         if (debitResult.error === 'INSUFFICIENT_FUNDS') {
-          // Insufficient funds - suspend account and indicate redirect to billing page
           const suspensionResult = await this.suspendUserAccount(userId);
-          
+
           if (!suspensionResult.success) {
             return {
               success: false,
@@ -394,15 +336,13 @@ export class BillingService {
               error: suspensionResult.error
             };
           }
-          
-          // Account suspended, user should be redirected to billing page
+
           return {
             success: true,
             requiresBillingPageRedirect: true,
             message: 'Insufficient funds. Account suspended. User should be redirected to billing page to resolve.'
           };
         } else {
-          // Some other error occurred
           return {
             success: false,
             requiresBillingPageRedirect: false,
@@ -411,8 +351,7 @@ export class BillingService {
           };
         }
       }
-      
-      // Billing successful
+
       return {
         success: true,
         requiresBillingPageRedirect: false,
@@ -430,125 +369,114 @@ export class BillingService {
 
   /**
    * Create a one-time billing entry
-   * @param billingData - The one-time billing data
-   * @returns The created one-time billing object
    */
   static async createOneTimeBilling(billingData: Omit<OneTimeBilling, 'type' | 'billingCycle'>): Promise<OneTimeBilling> {
-    // Implementation will be added later
-    return {
+    const billing = new OneTimeBillingModel({
       amount: billingData.amount,
-      type: 'one-time', // Fixed value as per requirements
-      billingCycle: '', // Empty string as per requirements
+      type: 'one-time',
+      billingCycle: '',
       billTo: billingData.billTo,
       billingFor: billingData.billingFor,
       billingTitle: billingData.billingTitle
-    };
+    });
+
+    const saved = await billing.save();
+    return saved.toJSON() as unknown as OneTimeBilling;
   }
 
   /**
    * Get a one-time billing entry by ID
-   * @param id - The ID of the one-time billing entry
-   * @returns The one-time billing object or null if not found
    */
   static async getOneTimeBilling(id: string): Promise<OneTimeBilling | null> {
-    // Implementation will be added later
-    // This is a placeholder implementation
-    return null;
+    const billing = await OneTimeBillingModel.findById(id);
+    if (!billing) return null;
+    return billing.toJSON() as unknown as OneTimeBilling;
   }
 
   /**
    * List one-time billing entries with optional filters
-   * @param filters - Optional filters for the query
-   * @returns Array of one-time billing entries
    */
   static async listOneTimeBillings(filters?: any): Promise<OneTimeBilling[]> {
-    // Implementation will be added later
-    return [];
+    const query: any = {};
+    if (filters?.billTo) query.billTo = filters.billTo;
+
+    const billings = await OneTimeBillingModel.find(query).sort({ createdAt: -1 });
+    return billings.map(b => b.toJSON() as unknown as OneTimeBilling);
   }
 
   /**
    * Process a one-time billing payment
-   * @param billingId - The ID of the one-time billing entry
-   * @returns The processed payment object
    */
   static async processOneTimeBillingPayment(billingId: string): Promise<Payment> {
-    // Implementation will be added later
-    return {
-      id: 'pay_' + Date.now(),
-      merchantId: '',
-      amount: 0,
+    const billing = await OneTimeBillingModel.findById(billingId);
+
+    const payment = new PaymentModel({
+      merchantId: billing?.billTo || '',
+      amount: billing?.amount || 0,
       currency: 'USD',
       billingType: BillingType.ONE_TIME,
       method: 'card',
-      status: 'pending',
-      createdAt: new Date(),
-      updatedAt: new Date()
-    } as Payment;
+      status: 'pending'
+    });
+
+    const saved = await payment.save();
+    return saved.toJSON() as unknown as Payment;
   }
 
   /**
    * Process a transfer operation and create a one-time billing entry
-   * @param transferData - The transfer data including amount, user reference, and description
-   * @returns The created one-time billing object
    */
-  static async processTransfer(transferData: { 
-    amount: number; 
-    userId: string; 
+  static async processTransfer(transferData: {
+    amount: number;
+    userId: string;
     description: string;
     title?: string;
   }): Promise<OneTimeBilling> {
-    // Create a one-time billing entry for the transfer
     const billingData = {
       amount: transferData.amount,
       billTo: transferData.userId,
       billingFor: transferData.description || 'Transfer operation',
       billingTitle: transferData.title || 'Transfer'
     };
-    
+
     return await this.createOneTimeBilling(billingData);
   }
 
   /**
    * Process a withdrawal operation and create a one-time billing entry
-   * @param withdrawalData - The withdrawal data including amount, user reference, and description
-   * @returns The created one-time billing object
    */
-  static async processWithdrawal(withdrawalData: { 
-    amount: number; 
-    userId: string; 
+  static async processWithdrawal(withdrawalData: {
+    amount: number;
+    userId: string;
     description: string;
     title?: string;
   }): Promise<OneTimeBilling> {
-    // Create a one-time billing entry for the withdrawal
     const billingData = {
       amount: withdrawalData.amount,
       billTo: withdrawalData.userId,
       billingFor: withdrawalData.description || 'Withdrawal operation',
       billingTitle: withdrawalData.title || 'Withdrawal'
     };
-    
+
     return await this.createOneTimeBilling(billingData);
   }
 
   /**
    * Process a payout operation and create a one-time billing entry
-   * @param payoutData - The payout data including amount, user reference, and description
-   * @returns The created one-time billing object
    */
-  static async processPayout(payoutData: { 
-    amount: number; 
-    userId: string; 
+  static async processPayout(payoutData: {
+    amount: number;
+    userId: string;
     description: string;
     title?: string;
   }): Promise<OneTimeBilling> {
-    // Create a one-time billing entry for the payout
     const billingData = {
       amount: payoutData.amount,
       billTo: payoutData.userId,
       billingFor: payoutData.description || 'Payout operation',
       billingTitle: payoutData.title || 'Payout'
     };
-    
+
     return await this.createOneTimeBilling(billingData);
   }
 }

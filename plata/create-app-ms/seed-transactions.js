@@ -1,9 +1,21 @@
 // Script to seed some sample transactions for testing
 const { TransactionService } = require('./dist/services/transactionService');
+const mongoose = require('mongoose');
+require('dotenv').config();
 
 async function seedTransactions() {
+  // Connect to MongoDB
+  try {
+    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/create-app-ms';
+    await mongoose.connect(mongoUri);
+    console.log('Connected to MongoDB for seeding');
+  } catch (err) {
+    console.error('Database connection failed', err);
+    process.exit(1);
+  }
+
   console.log('Seeding sample transactions...');
-  
+
   // Create sample transactions for testing
   const transactions = [
     {
@@ -50,6 +62,7 @@ async function seedTransactions() {
   }
 
   console.log('Transaction seeding completed!');
+  await mongoose.disconnect();
 }
 
 // Run the seeding function

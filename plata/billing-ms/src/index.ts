@@ -7,6 +7,7 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { billingRoutes } from './routes/billingRoutes';
 import { PricingScheduler } from './services/pricingScheduler';
 import { BillingScheduler } from './services/billingScheduler';
+import { connectToDatabase } from './config/database';
 
 const app = express();
 
@@ -59,25 +60,31 @@ app.use('/api/v1/billing', billingRoutes);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-const server = app.listen(config.port, '0.0.0.0', () => {
-  console.log(`🚀 Billing Microservice running on port ${config.port}`);
-  console.log(`📱 Environment: ${config.nodeEnv}`);
-  console.log(`🔗 Service Auth URL: ${config.serviceAuthUrl}`);
-  console.log(`🌐 Billing Service Features:`);
-  console.log(`   🔄 Invoicing`);
-  console.log(`   💰 Payment Processing`);
-  console.log(`   📊 Subscription Management`);
-  console.log(`   🧾 Transaction History`);
+// Declare server variable in outer scope
+let server: any;
 
-  // Start the billing scheduler
-  const billingScheduler = BillingScheduler.getInstance();
-  const billingInterval = parseInt(process.env.RECURRING_BILLING_INTERVAL || '3600000'); // Default: 1 hour
-  billingScheduler.start(billingInterval);
+// Connect to database before starting
+connectToDatabase().then(() => {
+  server = app.listen(config.port, '0.0.0.0', () => {
+    console.log(`🚀 Billing Microservice running on port ${config.port}`);
+    console.log(`📱 Environment: ${config.nodeEnv}`);
+    console.log(`🔗 Service Auth URL: ${config.serviceAuthUrl}`);
+    console.log(`🌐 Billing Service Features:`);
+    console.log(`   🔄 Invoicing`);
+    console.log(`   💰 Payment Processing`);
+    console.log(`   📊 Subscription Management`);
+    console.log(`   🧾 Transaction History`);
 
-  // Start the pricing scheduler
-  const pricingScheduler = PricingScheduler.getInstance();
-  const pricingInterval = parseInt(process.env.PRICING_INTERVAL || '3600000'); // Default: 1 hour
-  pricingScheduler.start(pricingInterval);
+    // Start the billing scheduler
+    const billingScheduler = BillingScheduler.getInstance();
+    const billingInterval = parseInt(process.env.RECURRING_BILLING_INTERVAL || '3600000'); // Default: 1 hour
+    billingScheduler.start(billingInterval);
+
+    // Start the pricing scheduler
+    const pricingScheduler = PricingScheduler.getInstance();
+    const pricingInterval = parseInt(process.env.PRICING_INTERVAL || '3600000'); // Default: 1 hour
+    pricingScheduler.start(pricingInterval);
+  });
 });
 
 process.on('SIGTERM', () => {

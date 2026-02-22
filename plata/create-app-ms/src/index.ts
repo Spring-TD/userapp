@@ -52,8 +52,16 @@ app.use('/api/v1/special', specialRoutes);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-const server = app.listen(config.port, '0.0.0.0', () => {
-  console.log(`Create App Microservice running on port ${config.port}`);
+// Declare server variable in outer scope
+let server: any;
+
+import { connectToDatabase } from './config/database';
+
+// Connect to database before starting
+connectToDatabase().then(() => {
+  server = app.listen(config.port, '0.0.0.0', () => {
+    console.log(`Create App Microservice running on port ${config.port}`);
+  });
 });
 
 // Graceful shutdown

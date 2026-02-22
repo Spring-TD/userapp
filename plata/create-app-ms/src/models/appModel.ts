@@ -1,73 +1,56 @@
 import { App, CreateAppRequest } from '../types/app';
+import { AppMongoModel } from './app.mongo';
 
 export class AppModel {
-  private static apps: App[] = [];
-
   static async createApp(appData: CreateAppRequest): Promise<App> {
     // Ensure merchantId is provided (should be guaranteed by controller)
     if (!appData.merchantId) {
       throw new Error('Merchant ID is required');
     }
 
-    const newApp: App = {
-      id: this.generateId(),
-      name: appData.name,
-      websiteUrl: appData.websiteUrl,
-      alias: appData.alias,
-      description: appData.description,
-      merchantId: appData.merchantId,
+    const newApp = await AppMongoModel.create({
+      ...appData,
       status: 'draft',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       productKeys: []
-    };
+    });
 
-    this.apps.push(newApp);
-    return newApp;
+    return newApp.toJSON() as unknown as App;
   }
 
   static async getAppById(id: string): Promise<App | null> {
-    const app = this.apps.find(a => a.id === id);
-    return app || null;
+    const app = await AppMongoModel.findById(id);
+    return app ? (app.toJSON() as unknown as App) : null;
   }
 
   static async getAppsByMerchantId(merchantId: string): Promise<App[]> {
-    return this.apps.filter(a => a.merchantId === merchantId);
+    const apps = await AppMongoModel.find({ merchantId });
+    return apps.map(app => app.toJSON() as unknown as App);
   }
 
   static async updateApp(id: string, updateData: Partial<App>): Promise<App | null> {
-    const appIndex = this.apps.findIndex(a => a.id === id);
-    
-    if (appIndex === -1) {
-      return null;
-    }
+    const defaultUpdate = { updatedAt: new Date().toISOString() };
+    const dataWithTimestamp = { ...updateData, ...defaultUpdate };
 
-    const updatedApp = {
-      ...this.apps[appIndex],
-      ...updateData,
-      updatedAt: new Date().toISOString()
-    };
+    // Using findByIdAndUpdate
+    // Mongoose handles validation against schema
+    const updatedApp = await AppMongoModel.findByIdAndUpdate(
+      id,
+      { $set: dataWithTimestamp },
+      { new: true, runValidators: true }
+    );
 
-    this.apps[appIndex] = updatedApp as App;
-    return updatedApp as App;
+    return updatedApp ? (updatedApp.toJSON() as unknown as App) : null;
   }
 
   static async deleteApp(id: string): Promise<boolean> {
-    const appIndex = this.apps.findIndex(a => a.id === id);
-    
-    if (appIndex === -1) {
-      return false;
-    }
-
-    this.apps.splice(appIndex, 1);
-    return true;
+    const result = await AppMongoModel.findByIdAndDelete(id);
+    return !!result;
   }
 
   static async getAllApps(): Promise<App[]> {
-    return this.apps;
-  }
-
-  private static generateId(): string {
-    return Math.random().toString(36).substr(2, 9);
+    const apps = await AppMongoModel.find();
+    return apps.map(app => app.toJSON() as unknown as App);
   }
 }

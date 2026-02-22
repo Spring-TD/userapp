@@ -12,6 +12,7 @@ interface Config {
   specialApiKey: string;
   publicKey: string;
   jwtSecret: string;
+  mongoUri: string;
 }
 
 export const config: Config = {
@@ -22,5 +23,6 @@ export const config: Config = {
   walletServiceUrl: process.env.WALLET_SERVICE_URL || 'http://localhost:3004',
   specialApiKey: process.env.SPECIAL_API_KEY || 'default-special-key',
   publicKey: process.env.PUBLIC_KEY || 'default-public-key',
-  jwtSecret: process.env.JWT_SECRET || 'fallback_secret_key'
+  jwtSecret: process.env.JWT_SECRET || 'fallback_secret_key',
+  mongoUri: process.env.MONGODB_URI || 'mongodb://localhost:27017/create-app-ms'
 };

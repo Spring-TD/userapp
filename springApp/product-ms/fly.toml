@@ -7,12 +7,12 @@ app = 'product-ms'
 primary_region = 'cdg'
 
 [env]
-  PORT = '3005'
+  PORT = '4005'
 
 [build]
 
 [http_service]
-  internal_port = 3005
+  internal_port = 4005
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true
