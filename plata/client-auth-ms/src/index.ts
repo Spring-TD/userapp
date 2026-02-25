@@ -14,7 +14,6 @@ import { roleRoutes } from './routes/roleRoutes';
 import { invitationRoutes } from './routes/invitationRoutes';
 import { sessionRoutes } from './routes/sessionRoutes';
 import { connectDb } from './config/db';
-import { seedDatabase } from './utils/seeder';
 
 const app = express();
 
@@ -86,7 +85,6 @@ async function start() {
 
   try {
     await connectDb();
-    await seedDatabase();
     console.log('✅ Startup sequence complete');
   } catch (err) {
     console.error('❌ Error during startup sequence:', err);

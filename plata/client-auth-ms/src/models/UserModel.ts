@@ -14,6 +14,7 @@ export interface UserDocument extends Document {
     user_merchant_id: string;
     country: string;
     role_id?: string;
+    user_ref?: string;
     callback_url?: string;
     error_logs_url?: string;
     last_login_at?: Date;
@@ -46,6 +47,7 @@ const userSchema = new Schema<UserDocument>(
         user_merchant_id: { type: String },
         country: { type: String },
         role_id: { type: String },
+        user_ref: { type: String },
         callback_url: { type: String },
         error_logs_url: { type: String },
         last_login_at: { type: Date },

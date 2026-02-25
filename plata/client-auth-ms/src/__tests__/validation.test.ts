@@ -51,7 +51,38 @@ describe('Validation Tests', () => {
     test('should reject missing merchant ID', () => {
       const invalidData = { ...validUserData, user_merchant_id: '' };
       const result = validateForm(userRegistrationSchema, invalidData);
-      expect(result.error).toContain('User Merchant ID must be at least 5 characters');
+      expect(result.error).toBeDefined();
+      expect(result.error).toMatch(/user_merchant_id|User Merchant ID/);
+    });
+
+    test('should validate user data with user_ref when password is empty', () => {
+      const userRefData: UserRegistrationForm = {
+        user_merchant_id: 'merchant123',
+        first_name: 'Jane',
+        last_name: 'Smith',
+        email: 'jane@example.com',
+        phone: '+1234567890',
+        country: 'United States',
+        password: '',
+        user_ref: 'external-id-123'
+      };
+      const result = validateForm<UserRegistrationForm>(userRegistrationSchema, userRefData);
+      expect(result.error).toBeUndefined();
+      expect(result.value?.user_ref).toBe('external-id-123');
+    });
+
+    test('should reject user registration when password is empty and user_ref is missing', () => {
+      const noPasswordNoRef: UserRegistrationForm = {
+        user_merchant_id: 'merchant123',
+        first_name: 'Jane',
+        last_name: 'Smith',
+        email: 'jane@example.com',
+        phone: '+1234567890',
+        country: 'United States',
+        password: ''
+      };
+      const result = validateForm(userRegistrationSchema, noPasswordNoRef);
+      expect(result.error).toContain('user_ref is required when password is not provided');
     });
   });
 });

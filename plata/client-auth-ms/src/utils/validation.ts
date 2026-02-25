@@ -43,6 +43,24 @@ const userMerchantIdSchema = Joi.string().min(5).max(50).required().messages({
   'any.required': 'User Merchant ID is required'
 });
 
+// Optional password: when provided must meet strength rules; when empty, user_ref is required
+const optionalPasswordSchema = Joi.string()
+  .min(8)
+  .max(128)
+  .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
+  .allow('')
+  .optional()
+  .messages({
+    'string.min': 'Password must be at least 8 characters long',
+    'string.max': 'Password must not exceed 128 characters',
+    'string.pattern.base': 'Password must contain at least one lowercase letter, one uppercase letter, one number, and one special character'
+  });
+
+const userRefSchema = Joi.string().min(1).max(255).messages({
+  'string.min': 'user_ref cannot be empty when provided',
+  'string.max': 'user_ref must not exceed 255 characters'
+});
+
 export const merchantRegistrationSchema = Joi.object({
   first_name: nameSchema,
   last_name: nameSchema,
@@ -52,6 +70,7 @@ export const merchantRegistrationSchema = Joi.object({
   password: passwordSchema
 });
 
+// Optional logic: if password field is empty, user_ref is required
 export const userRegistrationSchema = Joi.object({
   user_merchant_id: userMerchantIdSchema,
   first_name: nameSchema,
@@ -59,7 +78,14 @@ export const userRegistrationSchema = Joi.object({
   email: emailSchema,
   phone: phoneSchema,
   country: countrySchema,
-  password: passwordSchema
+  password: optionalPasswordSchema,
+  user_ref: userRefSchema.when('password', {
+    is: Joi.string().min(1),
+    then: userRefSchema.optional(),
+    otherwise: userRefSchema.required().messages({
+      'any.required': 'user_ref is required when password is not provided'
+    })
+  })
 });
 
 export const adminRegistrationSchema = Joi.object({

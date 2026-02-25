@@ -2,7 +2,7 @@
 import { createHash } from 'crypto';
 import { logger } from '../utils/logger';
 import { auditLogger } from '../utils/audit';
-import { MockKYCDocumentModel } from '../utils/mockDb';
+import { KYCDocumentModelMongo as MockKYCDocumentModel } from '../utils/kycProfileMongo';
 import { BusinessDocumentData, BusinessDocumentType, KYCStatus } from '../types/kycTypes';
 import { premblyService, PremblyBusinessKYCRequest } from './premblyService';
 

@@ -15,7 +15,7 @@ import {
 } from '../types/kycTypes';
 import { logger } from '../utils/logger';
 import { auditLogger } from '../utils/audit';
-import { MockKYCProfileModel, MockKYCDocumentModel } from '../utils/mockDb';
+import { KYCProfileModelMongo as MockKYCProfileModel, KYCDocumentModelMongo as MockKYCDocumentModel } from '../utils/kycProfileMongo';
 import { 
   validateKYCSubmission, 
   validateIndividualKYCSubmission,

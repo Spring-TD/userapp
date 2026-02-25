@@ -41,7 +41,7 @@ app.get('/', (_req, res) => {
 // Health check endpoint
 app.get('/health', (_req, res) => {
   const dbState = mongoose.connection.readyState;
-  const database = dbState === 1 ? 'mongodb' : 'mock (in-memory)';
+  const database = dbState === 1 ? 'mongodb' : 'none';
   res.json({
     success: true,
     message: 'Notifications Microservice is running',

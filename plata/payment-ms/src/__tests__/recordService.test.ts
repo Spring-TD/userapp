@@ -3,9 +3,8 @@ import recordStorage from '../models/recordModel';
 import { RecordType, LedgerEntryType, TransactionStatus, TransactionType, FinancialCategory } from '../types/record';
 
 describe('RecordService', () => {
-  beforeEach(() => {
-    // Clear storage before each test
-    recordStorage.clear();
+  beforeEach(async () => {
+    await recordStorage.clear();
   });
 
   describe('createRecord', () => {

@@ -1,7 +1,8 @@
 import { Wallet, MerchantWallet, UserWallet, WalletStatus, Transaction, TransactionType, TransactionStatus, MerchantWalletType } from '../models/Wallet';
 import { logger } from '../utils/logger';
 import axios, { AxiosRequestConfig } from 'axios';
-import { mockDB } from './mockDB';
+import * as walletRepo from '../repositories/walletRepository';
+import * as transactionRepo from '../repositories/transactionRepository';
 
 export interface CreateMerchantWalletData {
   merchantId: string;
@@ -64,35 +65,21 @@ export class WalletService {
     error?: string 
   }> {
     try {
-      // Check if merchant wallet of this type already exists
-      for (const wallet of mockDB.wallets.values()) {
-        if (wallet.walletType === 'MERCHANT' && 
-            (wallet as MerchantWallet).merchantId === data.merchantId &&
-            (wallet as MerchantWallet).merchantWalletType === data.merchantWalletType) {
-          return {
-            success: false,
-            error: `${data.merchantWalletType} wallet already exists for this merchant`
-          };
-        }
+      const existing = await walletRepo.getMerchantWalletByType(data.merchantId, data.merchantWalletType);
+      if (existing) {
+        return {
+          success: false,
+          error: `${data.merchantWalletType} wallet already exists for this merchant`
+        };
       }
 
-      // Create new merchant wallet
-      const newWallet: MerchantWallet = {
-        id: `wallet_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        merchantId: data.merchantId,
+      const newWallet = await walletRepo.createWallet({
         walletType: 'MERCHANT',
-        merchantWalletType: data.merchantWalletType,
+        merchantId: data.merchantId,
         name: data.name,
-        balance: 0,
-        mainBalance: 0,
-        ledgerBalance: 0,
         currency: data.currency,
-        status: WalletStatus.ACTIVE,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-
-      mockDB.wallets.set(newWallet.id, newWallet);
+        merchantWalletType: data.merchantWalletType
+      }) as MerchantWallet;
       logger.info('Merchant wallet created', { 
         walletId: newWallet.id, 
         merchantId: data.merchantId,
@@ -210,28 +197,12 @@ export class WalletService {
     error?: string 
   }> {
     try {
-      // Find merchant wallet of specific type
-      for (const wallet of mockDB.wallets.values()) {
-        if (wallet.walletType === 'MERCHANT' && 
-            (wallet as MerchantWallet).merchantId === merchantId &&
-            (wallet as MerchantWallet).merchantWalletType === walletType) {
-          return {
-            success: true,
-            wallet: wallet as MerchantWallet
-          };
-        }
-      }
-
-      return {
-        success: false,
-        error: `${walletType} wallet not found for merchant`
-      };
+      const wallet = await walletRepo.getMerchantWalletByType(merchantId, walletType);
+      if (wallet) return { success: true, wallet };
+      return { success: false, error: `${walletType} wallet not found for merchant` };
     } catch (error) {
       logger.error('Error retrieving merchant wallet', { error });
-      return {
-        success: false,
-        error: 'Failed to retrieve merchant wallet'
-      };
+      return { success: false, error: 'Failed to retrieve merchant wallet' };
     }
   }
 
@@ -244,26 +215,11 @@ export class WalletService {
     error?: string 
   }> {
     try {
-      const merchantWallets: MerchantWallet[] = [];
-
-      // Find all merchant wallets for this merchant
-      for (const wallet of mockDB.wallets.values()) {
-        if (wallet.walletType === 'MERCHANT' && 
-            (wallet as MerchantWallet).merchantId === merchantId) {
-          merchantWallets.push(wallet as MerchantWallet);
-        }
-      }
-
-      return {
-        success: true,
-        wallets: merchantWallets
-      };
+      const wallets = await walletRepo.getAllMerchantWallets(merchantId);
+      return { success: true, wallets };
     } catch (error) {
       logger.error('Error retrieving merchant wallets', { error });
-      return {
-        success: false,
-        error: 'Failed to retrieve merchant wallets'
-      };
+      return { success: false, error: 'Failed to retrieve merchant wallets' };
     }
   }
 
@@ -276,45 +232,22 @@ export class WalletService {
     error?: string 
   }> {
     try {
-      // Check if user wallet already exists
-      for (const wallet of mockDB.wallets.values()) {
-        if (wallet.walletType === 'USER' && (wallet as UserWallet).userId === data.userId) {
-          return {
-            success: false,
-            error: 'User wallet already exists'
-          };
-        }
+      const existing = await walletRepo.getUserWallet(data.userId);
+      if (existing) {
+        return { success: false, error: 'User wallet already exists' };
       }
-
-      // Create new user wallet
-      const newWallet: UserWallet = {
-        id: `wallet_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        userId: data.userId,
-        merchantId: data.merchantId,
+      const newWallet = await walletRepo.createWallet({
         walletType: 'USER',
+        merchantId: data.merchantId,
+        userId: data.userId,
         name: data.name,
-        balance: 0,
-        mainBalance: 0,
-        ledgerBalance: 0,
-        currency: data.currency,
-        status: WalletStatus.ACTIVE,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-
-      mockDB.wallets.set(newWallet.id, newWallet);
+        currency: data.currency
+      }) as UserWallet;
       logger.info('User wallet created', { walletId: newWallet.id, userId: data.userId, merchantId: data.merchantId });
-
-      return {
-        success: true,
-        wallet: newWallet
-      };
+      return { success: true, wallet: newWallet };
     } catch (error) {
       logger.error('Error creating user wallet', { error });
-      return {
-        success: false,
-        error: 'Failed to create user wallet'
-      };
+      return { success: false, error: 'Failed to create user wallet' };
     }
   }
 
@@ -327,26 +260,12 @@ export class WalletService {
     error?: string 
   }> {
     try {
-      // Find user wallet
-      for (const wallet of mockDB.wallets.values()) {
-        if (wallet.walletType === 'USER' && (wallet as UserWallet).userId === userId) {
-          return {
-            success: true,
-            wallet: wallet as UserWallet
-          };
-        }
-      }
-
-      return {
-        success: false,
-        error: 'User wallet not found'
-      };
+      const wallet = await walletRepo.getUserWallet(userId);
+      if (wallet) return { success: true, wallet };
+      return { success: false, error: 'User wallet not found' };
     } catch (error) {
       logger.error('Error retrieving user wallet', { error });
-      return {
-        success: false,
-        error: 'Failed to retrieve user wallet'
-      };
+      return { success: false, error: 'Failed to retrieve user wallet' };
     }
   }
 
@@ -359,25 +278,11 @@ export class WalletService {
     error?: string 
   }> {
     try {
-      const userWallets: UserWallet[] = [];
-
-      // Find all user wallets for this merchant
-      for (const wallet of mockDB.wallets.values()) {
-        if (wallet.walletType === 'USER' && (wallet as UserWallet).merchantId === merchantId) {
-          userWallets.push(wallet as UserWallet);
-        }
-      }
-
-      return {
-        success: true,
-        wallets: userWallets
-      };
+      const wallets = await walletRepo.getUserWalletsByMerchant(merchantId);
+      return { success: true, wallets };
     } catch (error) {
       logger.error('Error retrieving user wallets by merchant', { error });
-      return {
-        success: false,
-        error: 'Failed to retrieve user wallets'
-      };
+      return { success: false, error: 'Failed to retrieve user wallets' };
     }
   }
 
@@ -390,60 +295,35 @@ export class WalletService {
     error?: string 
   }> {
     try {
-      const wallet = mockDB.wallets.get(walletId);
+      const wallet = await walletRepo.getWalletById(walletId);
+      if (!wallet) return { success: false, error: 'Wallet not found' };
+      if (wallet.status !== WalletStatus.ACTIVE) return { success: false, error: 'Wallet is not active' };
 
-      if (!wallet) {
-        return {
-          success: false,
-          error: 'Wallet not found'
-        };
-      }
-
-      if (wallet.status !== WalletStatus.ACTIVE) {
-        return {
-          success: false,
-          error: 'Wallet is not active'
-        };
-      }
-
-      // Capture balance before update
       const balanceBefore = wallet.mainBalance;
-      
-      // Update balance
-      wallet.mainBalance += amount;
-      wallet.balance = wallet.mainBalance; // Keep balance in sync with mainBalance
-      wallet.ledgerBalance += amount; // For immediate updates, both balances change together
-      wallet.updatedAt = new Date();
+      const newMain = wallet.mainBalance + amount;
+      const newLedger = wallet.ledgerBalance + amount;
+      const updated = await walletRepo.updateWallet(walletId, {
+        mainBalance: newMain,
+        ledgerBalance: newLedger,
+        updatedAt: new Date()
+      });
+      if (!updated) return { success: false, error: 'Failed to update wallet' };
 
-      // Create transaction record
-      const transaction: Transaction = {
-        id: `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        walletId: wallet.id,
-        amount: amount,
+      await transactionRepo.createTransaction({
+        walletId,
+        amount,
         type: amount >= 0 ? TransactionType.CREDIT : TransactionType.DEBIT,
         status: TransactionStatus.COMPLETED,
-        description: description,
-        balanceBefore: balanceBefore,
-        balanceAfter: wallet.mainBalance,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
+        description,
+        balanceBefore,
+        balanceAfter: newMain
+      });
 
-      mockDB.transactions.set(transaction.id, transaction);
-      mockDB.wallets.set(wallet.id, wallet);
-
-      logger.info('Wallet balance updated', { walletId, newBalance: wallet.mainBalance });
-
-      return {
-        success: true,
-        wallet: wallet
-      };
+      logger.info('Wallet balance updated', { walletId, newBalance: newMain });
+      return { success: true, wallet: updated };
     } catch (error) {
       logger.error('Error updating wallet balance', { error });
-      return {
-        success: false,
-        error: 'Failed to update wallet balance'
-      };
+      return { success: false, error: 'Failed to update wallet balance' };
     }
   }
 
@@ -456,25 +336,12 @@ export class WalletService {
     error?: string 
   }> {
     try {
-      const wallet = mockDB.wallets.get(walletId);
-
-      if (!wallet) {
-        return {
-          success: false,
-          error: 'Wallet not found'
-        };
-      }
-
-      return {
-        success: true,
-        wallet: wallet
-      };
+      const wallet = await walletRepo.getWalletById(walletId);
+      if (!wallet) return { success: false, error: 'Wallet not found' };
+      return { success: true, wallet };
     } catch (error) {
       logger.error('Error retrieving wallet', { error });
-      return {
-        success: false,
-        error: 'Failed to retrieve wallet'
-      };
+      return { success: false, error: 'Failed to retrieve wallet' };
     }
   }
 
@@ -487,48 +354,13 @@ export class WalletService {
     error?: string 
   }> {
     try {
-      const wallet = mockDB.wallets.get(walletId);
-      
-      if (!wallet) {
-        return {
-          success: false,
-          error: 'Wallet not found'
-        };
-      }
-
-      const filteredTransactions: Transaction[] = [];
-
-      // Filter transactions based on criteria
-      for (const transaction of mockDB.transactions.values()) {
-        if (transaction.walletId === walletId) {
-          // Check date range
-          const transactionDate = new Date(transaction.createdAt);
-          const startDate = filterData.startDate ? new Date(filterData.startDate) : null;
-          const endDate = filterData.endDate ? new Date(filterData.endDate) : null;
-
-          if (startDate && transactionDate < startDate) continue;
-          if (endDate && transactionDate > endDate) continue;
-
-          // Check transaction type
-          if (filterData.type && transaction.type !== filterData.type) continue;
-
-          filteredTransactions.push(transaction);
-        }
-      }
-
-      // Sort by date (newest first)
-      filteredTransactions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-      return {
-        success: true,
-        transactions: filteredTransactions
-      };
+      const wallet = await walletRepo.getWalletById(walletId);
+      if (!wallet) return { success: false, error: 'Wallet not found' };
+      const transactions = await transactionRepo.filterTransactions(walletId, filterData);
+      return { success: true, transactions };
     } catch (error) {
       logger.error('Error filtering wallet transactions', { error });
-      return {
-        success: false,
-        error: 'Failed to filter wallet transactions'
-      };
+      return { success: false, error: 'Failed to filter wallet transactions' };
     }
   }
 
@@ -636,62 +468,29 @@ export class WalletService {
     error?: string 
   }> {
     try {
-      const fromWallet = mockDB.wallets.get(transferData.fromWalletId);
-      const toWallet = mockDB.wallets.get(transferData.toWalletId);
+      const fromWallet = await walletRepo.getWalletById(transferData.fromWalletId);
+      const toWallet = await walletRepo.getWalletById(transferData.toWalletId);
+      if (!fromWallet) return { success: false, error: 'Source wallet not found' };
+      if (!toWallet) return { success: false, error: 'Destination wallet not found' };
+      if (fromWallet.status !== WalletStatus.ACTIVE) return { success: false, error: 'Source wallet is not active' };
+      if (toWallet.status !== WalletStatus.ACTIVE) return { success: false, error: 'Destination wallet is not active' };
+      if (fromWallet.mainBalance < transferData.amount) return { success: false, error: 'Insufficient balance in source wallet' };
 
-      if (!fromWallet) {
-        return {
-          success: false,
-          error: 'Source wallet not found'
-        };
-      }
-
-      if (!toWallet) {
-        return {
-          success: false,
-          error: 'Destination wallet not found'
-        };
-      }
-
-      if (fromWallet.status !== WalletStatus.ACTIVE) {
-        return {
-          success: false,
-          error: 'Source wallet is not active'
-        };
-      }
-
-      if (toWallet.status !== WalletStatus.ACTIVE) {
-        return {
-          success: false,
-          error: 'Destination wallet is not active'
-        };
-      }
-
-      // Check if source wallet has sufficient balance
-      if (fromWallet.mainBalance < transferData.amount) {
-        return {
-          success: false,
-          error: 'Insufficient balance in source wallet'
-        };
-      }
-
-      // Capture balances before update
       const fromBalanceBefore = fromWallet.mainBalance;
       const toBalanceBefore = toWallet.mainBalance;
-      
-      // Update balances
-      fromWallet.mainBalance -= transferData.amount;
-      fromWallet.balance = fromWallet.mainBalance;
-      toWallet.mainBalance += transferData.amount;
-      toWallet.balance = toWallet.mainBalance;
-      fromWallet.ledgerBalance -= transferData.amount;
-      toWallet.ledgerBalance += transferData.amount;
-      fromWallet.updatedAt = new Date();
-      toWallet.updatedAt = new Date();
+      const fromNewMain = fromWallet.mainBalance - transferData.amount;
+      const fromNewLedger = fromWallet.ledgerBalance - transferData.amount;
+      const toNewMain = toWallet.mainBalance + transferData.amount;
+      const toNewLedger = toWallet.ledgerBalance + transferData.amount;
+      const now = new Date();
 
-      // Create transaction record for source wallet (debit)
-      const debitTransaction: Transaction = {
-        id: `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      const [updatedFrom, updatedTo] = await Promise.all([
+        walletRepo.updateWallet(fromWallet.id, { mainBalance: fromNewMain, ledgerBalance: fromNewLedger, updatedAt: now }),
+        walletRepo.updateWallet(toWallet.id, { mainBalance: toNewMain, ledgerBalance: toNewLedger, updatedAt: now })
+      ]);
+      if (!updatedFrom || !updatedTo) return { success: false, error: 'Failed to update wallets' };
+
+      const debitTransaction = await transactionRepo.createTransaction({
         walletId: fromWallet.id,
         amount: -transferData.amount,
         type: TransactionType.DEBIT,
@@ -699,14 +498,9 @@ export class WalletService {
         description: `Transfer out: ${transferData.description}`,
         referenceId: toWallet.id,
         balanceBefore: fromBalanceBefore,
-        balanceAfter: fromWallet.mainBalance,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-
-      // Create transaction record for destination wallet (credit)
-      const creditTransaction: Transaction = {
-        id: `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}_credit`,
+        balanceAfter: fromNewMain
+      });
+      await transactionRepo.createTransaction({
         walletId: toWallet.id,
         amount: transferData.amount,
         type: TransactionType.CREDIT,
@@ -714,34 +508,14 @@ export class WalletService {
         description: `Transfer in: ${transferData.description}`,
         referenceId: fromWallet.id,
         balanceBefore: toBalanceBefore,
-        balanceAfter: toWallet.mainBalance,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-
-      mockDB.transactions.set(debitTransaction.id, debitTransaction);
-      mockDB.transactions.set(creditTransaction.id, creditTransaction);
-      mockDB.wallets.set(fromWallet.id, fromWallet);
-      mockDB.wallets.set(toWallet.id, toWallet);
-
-      logger.info('Money transferred between wallets', { 
-        fromWalletId: fromWallet.id, 
-        toWalletId: toWallet.id, 
-        amount: transferData.amount 
+        balanceAfter: toNewMain
       });
 
-      return {
-        success: true,
-        fromWallet,
-        toWallet,
-        transaction: debitTransaction
-      };
+      logger.info('Money transferred between wallets', { fromWalletId: fromWallet.id, toWalletId: toWallet.id, amount: transferData.amount });
+      return { success: true, fromWallet: updatedFrom, toWallet: updatedTo, transaction: debitTransaction };
     } catch (error) {
       logger.error('Error transferring money between wallets', { error });
-      return {
-        success: false,
-        error: 'Failed to transfer money between wallets'
-      };
+      return { success: false, error: 'Failed to transfer money between wallets' };
     }
   }
 
@@ -817,80 +591,33 @@ export class WalletService {
     error?: string 
   }> {
     try {
-      // Find the user wallet
-      let userWallet: UserWallet | undefined;
-      for (const wallet of mockDB.wallets.values()) {
-        if (wallet.walletType === 'USER' && (wallet as UserWallet).userId === debitData.userId) {
-          userWallet = wallet as UserWallet;
-          break;
-        }
-      }
+      const userWallet = await walletRepo.getUserWallet(debitData.userId);
+      if (!userWallet) return { success: false, error: 'User wallet not found' };
+      if (userWallet.status !== WalletStatus.ACTIVE) return { success: false, error: 'User wallet is not active' };
+      if (userWallet.mainBalance < debitData.amount) return { success: false, error: 'Insufficient balance in user wallet' };
 
-      if (!userWallet) {
-        return {
-          success: false,
-          error: 'User wallet not found'
-        };
-      }
-
-      if (userWallet.status !== WalletStatus.ACTIVE) {
-        return {
-          success: false,
-          error: 'User wallet is not active'
-        };
-      }
-
-      // Check if wallet has sufficient balance
-      if (userWallet.mainBalance < debitData.amount) {
-        return {
-          success: false,
-          error: 'Insufficient balance in user wallet'
-        };
-      }
-
-      // Capture balance before update
       const balanceBefore = userWallet.mainBalance;
-      
-      // Update balance
-      userWallet.mainBalance -= debitData.amount;
-      userWallet.balance = userWallet.mainBalance;
-      userWallet.ledgerBalance -= debitData.amount;
-      userWallet.updatedAt = new Date();
+      const newMain = userWallet.mainBalance - debitData.amount;
+      const newLedger = userWallet.ledgerBalance - debitData.amount;
+      const now = new Date();
+      const updated = await walletRepo.updateWallet(userWallet.id, { mainBalance: newMain, ledgerBalance: newLedger, updatedAt: now });
+      if (!updated) return { success: false, error: 'Failed to update wallet' };
 
-      // Create transaction record
-      const transaction: Transaction = {
-        id: `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      const transaction = await transactionRepo.createTransaction({
         walletId: userWallet.id,
         amount: -debitData.amount,
         type: TransactionType.DEBIT,
         status: TransactionStatus.COMPLETED,
         description: debitData.description,
-        balanceBefore: balanceBefore,
-        balanceAfter: userWallet.mainBalance,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-
-      mockDB.transactions.set(transaction.id, transaction);
-      mockDB.wallets.set(userWallet.id, userWallet);
-
-      logger.info('User wallet debited', { 
-        walletId: userWallet.id, 
-        userId: debitData.userId, 
-        amount: debitData.amount 
+        balanceBefore,
+        balanceAfter: newMain
       });
 
-      return {
-        success: true,
-        wallet: userWallet,
-        transaction
-      };
+      logger.info('User wallet debited', { walletId: userWallet.id, userId: debitData.userId, amount: debitData.amount });
+      return { success: true, wallet: updated, transaction };
     } catch (error) {
       logger.error('Error debiting user wallet', { error });
-      return {
-        success: false,
-        error: 'Failed to debit user wallet'
-      };
+      return { success: false, error: 'Failed to debit user wallet' };
     }
   }
 
@@ -1099,43 +826,28 @@ export class WalletService {
         };
       }
 
-      // Capture balance before update
       const balanceBefore = treasuryWallet.mainBalance;
-      
-      // Update balance
-      treasuryWallet.mainBalance -= debitData.amount;
-      treasuryWallet.balance = treasuryWallet.mainBalance;
-      treasuryWallet.ledgerBalance -= debitData.amount;
-      treasuryWallet.updatedAt = new Date();
-
-      // Create transaction record
-      const transaction: Transaction = {
-        id: `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      const newMain = treasuryWallet.mainBalance - debitData.amount;
+      const newLedger = treasuryWallet.ledgerBalance - debitData.amount;
+      const now = new Date();
+      const updated = await walletRepo.updateWallet(treasuryWallet.id, { mainBalance: newMain, ledgerBalance: newLedger, updatedAt: now });
+      if (!updated) return { success: false, error: 'Failed to update wallet' };
+      const transaction = await transactionRepo.createTransaction({
         walletId: treasuryWallet.id,
         amount: -debitData.amount,
         type: TransactionType.DEBIT,
         status: TransactionStatus.COMPLETED,
         description: debitData.description,
-        balanceBefore: balanceBefore,
-        balanceAfter: treasuryWallet.mainBalance,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-
-      mockDB.transactions.set(transaction.id, transaction);
-      mockDB.wallets.set(treasuryWallet.id, treasuryWallet);
-
+        balanceBefore,
+        balanceAfter: newMain
+      });
       logger.info('Treasury wallet debited', { 
         walletId: treasuryWallet.id, 
         merchantId: debitData.merchantId, 
         amount: debitData.amount 
       });
 
-      return {
-        success: true,
-        wallet: treasuryWallet,
-        transaction
-      };
+      return { success: true, wallet: updated, transaction };
     } catch (error) {
       logger.error('Error debiting Treasury wallet', { error });
       return {
@@ -1181,43 +893,28 @@ export class WalletService {
         };
       }
 
-      // Capture balance before update
       const balanceBefore = operationWallet.mainBalance;
-      
-      // Update balance
-      operationWallet.mainBalance -= debitData.amount;
-      operationWallet.balance = operationWallet.mainBalance;
-      operationWallet.ledgerBalance -= debitData.amount;
-      operationWallet.updatedAt = new Date();
-
-      // Create transaction record
-      const transaction: Transaction = {
-        id: `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      const newMain = operationWallet.mainBalance - debitData.amount;
+      const newLedger = operationWallet.ledgerBalance - debitData.amount;
+      const now = new Date();
+      const updated = await walletRepo.updateWallet(operationWallet.id, { mainBalance: newMain, ledgerBalance: newLedger, updatedAt: now });
+      if (!updated) return { success: false, error: 'Failed to update wallet' };
+      const transaction = await transactionRepo.createTransaction({
         walletId: operationWallet.id,
         amount: -debitData.amount,
         type: TransactionType.DEBIT,
         status: TransactionStatus.COMPLETED,
         description: debitData.description,
-        balanceBefore: balanceBefore,
-        balanceAfter: operationWallet.mainBalance,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-
-      mockDB.transactions.set(transaction.id, transaction);
-      mockDB.wallets.set(operationWallet.id, operationWallet);
-
+        balanceBefore,
+        balanceAfter: newMain
+      });
       logger.info('Operation wallet debited', { 
         walletId: operationWallet.id, 
         merchantId: debitData.merchantId, 
         amount: debitData.amount 
       });
 
-      return {
-        success: true,
-        wallet: operationWallet,
-        transaction
-      };
+      return { success: true, wallet: updated, transaction };
     } catch (error) {
       logger.error('Error debiting Operation wallet', { error });
       return {
@@ -1263,43 +960,28 @@ export class WalletService {
         };
       }
 
-      // Capture balance before update
       const balanceBefore = kycWallet.mainBalance;
-      
-      // Update balance
-      kycWallet.mainBalance -= debitData.amount;
-      kycWallet.balance = kycWallet.mainBalance;
-      kycWallet.ledgerBalance -= debitData.amount;
-      kycWallet.updatedAt = new Date();
-
-      // Create transaction record
-      const transaction: Transaction = {
-        id: `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      const newMain = kycWallet.mainBalance - debitData.amount;
+      const newLedger = kycWallet.ledgerBalance - debitData.amount;
+      const now = new Date();
+      const updated = await walletRepo.updateWallet(kycWallet.id, { mainBalance: newMain, ledgerBalance: newLedger, updatedAt: now });
+      if (!updated) return { success: false, error: 'Failed to update wallet' };
+      const transaction = await transactionRepo.createTransaction({
         walletId: kycWallet.id,
         amount: -debitData.amount,
         type: TransactionType.DEBIT,
         status: TransactionStatus.COMPLETED,
         description: debitData.description,
-        balanceBefore: balanceBefore,
-        balanceAfter: kycWallet.mainBalance,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-
-      mockDB.transactions.set(transaction.id, transaction);
-      mockDB.wallets.set(kycWallet.id, kycWallet);
-
+        balanceBefore,
+        balanceAfter: newMain
+      });
       logger.info('KYC wallet debited', { 
         walletId: kycWallet.id, 
         merchantId: debitData.merchantId, 
         amount: debitData.amount 
       });
 
-      return {
-        success: true,
-        wallet: kycWallet,
-        transaction
-      };
+      return { success: true, wallet: updated, transaction };
     } catch (error) {
       logger.error('Error debiting KYC wallet', { error });
       return {
@@ -1354,33 +1036,22 @@ export class WalletService {
         };
       }
 
-      // Capture balance before update
       const balanceBefore = kycWallet.mainBalance;
-      
-      // Update balance
-      kycWallet.mainBalance -= amount;
-      kycWallet.balance = kycWallet.mainBalance;
-      kycWallet.ledgerBalance -= amount;
-      kycWallet.updatedAt = new Date();
-
-      // Create transaction record specifically for KYC fee
-      const transaction: Transaction = {
-        id: `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      const newMain = kycWallet.mainBalance - amount;
+      const newLedger = kycWallet.ledgerBalance - amount;
+      const now = new Date();
+      const updated = await walletRepo.updateWallet(kycWallet.id, { mainBalance: newMain, ledgerBalance: newLedger, updatedAt: now });
+      if (!updated) return { success: false, error: 'Failed to update wallet' };
+      const transaction = await transactionRepo.createTransaction({
         walletId: kycWallet.id,
         amount: -amount,
         type: TransactionType.DEBIT,
         status: TransactionStatus.COMPLETED,
-        description: description,
-        referenceId: 'KYC_FEE', // Special identifier for KYC fees
-        balanceBefore: balanceBefore,
-        balanceAfter: kycWallet.mainBalance,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-
-      mockDB.transactions.set(transaction.id, transaction);
-      mockDB.wallets.set(kycWallet.id, kycWallet);
-
+        description,
+        referenceId: 'KYC_FEE',
+        balanceBefore,
+        balanceAfter: newMain
+      });
       logger.info('KYC fee processed', { 
         walletId: kycWallet.id, 
         merchantId, 
@@ -1388,11 +1059,7 @@ export class WalletService {
         description
       });
 
-      return {
-        success: true,
-        wallet: kycWallet,
-        transaction
-      };
+      return { success: true, wallet: updated, transaction };
     } catch (error) {
       logger.error('Error processing KYC fee', { error });
       return {
@@ -1493,45 +1160,29 @@ export class WalletService {
         };
       }
 
-      // Capture balance before update
       const balanceBefore = userWallet.mainBalance;
-      
-      // Update wallet balance (debit the amount)
-      userWallet.mainBalance -= apiCallData.amount;
-      userWallet.balance = userWallet.mainBalance;
-      userWallet.ledgerBalance -= apiCallData.amount; // Update ledger balance when API call is complete
-      userWallet.updatedAt = new Date();
-
-      // Create transaction record
-      const transaction: Transaction = {
-        id: `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      const newMain = userWallet.mainBalance - apiCallData.amount;
+      const newLedger = userWallet.ledgerBalance - apiCallData.amount;
+      const now = new Date();
+      const updated = await walletRepo.updateWallet(userWallet.id, { mainBalance: newMain, ledgerBalance: newLedger, updatedAt: now });
+      if (!updated) return { success: false, error: 'Failed to update wallet' };
+      const transaction = await transactionRepo.createTransaction({
         walletId: userWallet.id,
         amount: -apiCallData.amount,
         type: TransactionType.DEBIT,
         status: TransactionStatus.COMPLETED,
         description: `API Call: ${apiCallData.description}`,
         referenceId: apiCallData.endpoint,
-        balanceBefore: balanceBefore,
-        balanceAfter: userWallet.mainBalance,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-
-      mockDB.transactions.set(transaction.id, transaction);
-      mockDB.wallets.set(userWallet.id, userWallet);
-
+        balanceBefore,
+        balanceAfter: newMain
+      });
       logger.info('User wallet debited for API call', { 
         walletId: userWallet.id, 
         userId: apiCallData.userId, 
         amount: apiCallData.amount 
       });
 
-      return {
-        success: true,
-        wallet: userWallet,
-        transaction,
-        apiResponse
-      };
+      return { success: true, wallet: updated, transaction, apiResponse };
     } catch (error) {
       logger.error('Error making user API call', { error });
       return {

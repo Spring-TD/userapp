@@ -1,5 +1,5 @@
 import { INotification } from '../models/Notification';
-import { mockDb } from '../utils/mockDatabase';
+import { notificationDbMongo as mockDb } from '../utils/notificationDbMongo';
 import emailService from './emailService';
 import smsService from './smsService';
 import templateService from './templateService';

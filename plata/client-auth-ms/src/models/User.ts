@@ -51,6 +51,7 @@ export interface User extends BaseUser {
   user_merchant_id: string;
   country: string;
   role_id?: string; // ID of the role assigned to this user
+  user_ref?: string; // External user reference (required when password is not set)
 }
 
 export interface Merchant extends BaseUser {

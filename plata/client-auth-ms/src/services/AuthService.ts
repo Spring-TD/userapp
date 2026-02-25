@@ -21,12 +21,13 @@ export interface LoginResponse {
 
 export interface UserRegistrationData {
   email: string;
-  password: string;
+  password?: string;
   first_name: string;
   last_name: string;
   phone?: string;
   user_merchant_id?: string;
   country: string;
+  user_ref?: string;
 }
 
 export interface MerchantRegistrationData {
@@ -54,6 +55,15 @@ export class AuthService {
    */
   static async registerUser(userData: UserRegistrationData): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
     try {
+      // Optional logic: if password is empty, user_ref is required (enforced by validation)
+      const hasPassword = userData.password != null && userData.password.trim() !== '';
+      if (!hasPassword && !userData.user_ref) {
+        return {
+          success: false,
+          error: 'user_ref is required when password is not provided'
+        };
+      }
+
       // Check if email already exists
       const existingUser = await mockDb.findUserByEmail(userData.email);
       if (existingUser) {
@@ -63,8 +73,10 @@ export class AuthService {
         };
       }
 
-      // Hash the password
-      const hashedPassword = await hashPassword(userData.password);
+      // Hash the password when provided; otherwise use a non-login placeholder for user_ref-only accounts
+      const hashedPassword = hasPassword
+        ? await hashPassword(userData.password!)
+        : await hashPassword(`__no_password_${userData.user_ref}_${Date.now()}__`);
 
       // Create the user
       const newUser: Omit<User, 'id'> & { created_at: Date; updated_at: Date; failed_login_attempts: number } = {
@@ -79,6 +91,7 @@ export class AuthService {
         phone_verified: false,
         user_merchant_id: userData.user_merchant_id || '',
         country: userData.country,
+        ...(userData.user_ref && { user_ref: userData.user_ref }),
         created_at: new Date(),
         updated_at: new Date(),
         last_login_at: undefined,

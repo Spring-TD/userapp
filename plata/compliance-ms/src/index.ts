@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 import { kycRoutes } from './routes/kycRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { logger } from './utils/logger';
-import { seedMockData, getDbStats } from './utils/mockDb';
+import { getKycDbStats } from './utils/kycProfileMongo';
 import { redisCacheService } from './services/RedisCacheService';
 import mongoose from 'mongoose';
 import { connectToDatabase, disconnectFromDatabase } from './config/database';
@@ -30,9 +30,6 @@ app.use(helmet());
 app.use(morgan('combined', { 
   stream: { write: (message) => logger.info(message.trim()) } 
 }));
-
-// Initialize mock database with seed data (used alongside MongoDB for in-memory KYC data until migrated)
-seedMockData();
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -59,8 +56,14 @@ app.get('/', (req, res) => {
 
 // Health check endpoint
 app.get('/health', async (req, res) => {
-  const stats = getDbStats();
-  // Get Redis cache stats if available
+  let stats = { kycProfiles: 0, documents: 0, statuses: {}, userTypes: {} };
+  try {
+    if (mongoose.connection.readyState === 1) {
+      stats = await getKycDbStats();
+    }
+  } catch (error) {
+    logger.error('Failed to get KYC stats', { error });
+  }
   let cacheStats = { count: 0, isRedisConnected: false };
   try {
     cacheStats = await redisCacheService.getStats();
@@ -68,7 +71,7 @@ app.get('/health', async (req, res) => {
     logger.error('Failed to get cache stats', { error });
   }
   const dbState = mongoose.connection.readyState;
-  const database = dbState === 1 ? 'mongodb' : 'mock';
+  const database = dbState === 1 ? 'mongodb' : 'none';
 
   res.json({
     status: 'healthy',
@@ -131,12 +134,16 @@ process.on('SIGINT', () => {
 // Connect to MongoDB then start server (skip in test so tests can use app without connecting)
 if (process.env.NODE_ENV !== 'test') {
   connectToDatabase()
-    .then(() => {
-      server = app.listen(PORT, '0.0.0.0', () => {
+    .then(async () => {
+      server = app.listen(PORT, '0.0.0.0', async () => {
         logger.info(`Compliance service running on port ${PORT}`);
-        logger.info('MongoDB connected; mock database initialized with sample data');
-        const stats = getDbStats();
-        logger.info('Database stats:', stats);
+        logger.info('MongoDB connected; KYC data stored in MongoDB');
+        try {
+          const stats = await getKycDbStats();
+          logger.info('Database stats:', stats);
+        } catch (e) {
+          logger.warn('Could not fetch initial KYC stats', e);
+        }
       });
     })
     .catch((err) => {

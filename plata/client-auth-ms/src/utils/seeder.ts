@@ -49,7 +49,7 @@ export async function seedDatabase() {
             error_logs_url: 'https://webhook.site/logs'
         } as any);
 
-        // 3. Create Merchant's User
+        // 3. Create Merchant's User (password-based)
         await db.createUser({
             email: 'user@example.com',
             password: commonPassword,
@@ -62,12 +62,30 @@ export async function seedDatabase() {
             phone_verified: true,
             country: 'US',
             user_merchant_id: merchantId
-        });
+        } as any);
+
+        // 4. Create User with user_ref (external ref, no login password)
+        const placeholderPassword = await hashPassword(`__no_password_seeded-external-ref__`);
+        await db.createUser({
+            email: 'user-ref@example.com',
+            password: placeholderPassword,
+            first_name: 'External',
+            last_name: 'Merchant User',
+            phone: '+2348155500022',
+            user_type: UserType.USER,
+            status: AccountStatus.ACTIVE,
+            email_verified: true,
+            phone_verified: false,
+            country: 'NG',
+            user_merchant_id: merchantId,
+            user_ref: 'seeded-external-ref'
+        } as any);
 
         console.log('✅ Seeding complete!');
         console.log('   Admin: admin@example.com / Password123!');
         console.log('   Merchant: merchant@example.com / Password123!');
-        console.log('   User: user@example.com / Password123!');
+        console.log('   User (password): user@example.com / Password123!');
+        console.log('   User (user_ref): user-ref@example.com / user_ref=seeded-external-ref');
     } catch (error) {
         console.error('❌ Error seeding database:', error);
     }

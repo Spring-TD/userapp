@@ -42,7 +42,7 @@ export class RecordService {
       });
 
       // Check if record already exists for this user
-      const existingRecord = recordStorage.findRecordByUserId(request.userId);
+      const existingRecord = await recordStorage.findRecordByUserId(request.userId);
       if (existingRecord) {
         logger.warn('Record already exists for user', { userId: request.userId });
         return {
@@ -86,7 +86,7 @@ export class RecordService {
           updatedAt: now
         };
 
-        const createdRecord = recordStorage.createMerchantRecord(merchantRecord);
+        const createdRecord = await recordStorage.createMerchantRecord(merchantRecord);
 
         logger.info('Merchant record created successfully', {
           recordId: createdRecord.recordId,
@@ -124,7 +124,7 @@ export class RecordService {
           updatedAt: now
         };
 
-        const createdRecord = recordStorage.createMerchantUserRecord(merchantUserRecord);
+        const createdRecord = await recordStorage.createMerchantUserRecord(merchantUserRecord);
 
         logger.info('Merchant-user record created successfully', {
           recordId: createdRecord.recordId,
@@ -158,7 +158,7 @@ export class RecordService {
    */
   async getRecordByUserId(userId: string): Promise<MerchantRecord | MerchantUserRecord | null> {
     try {
-      return recordStorage.findRecordByUserId(userId);
+      return await recordStorage.findRecordByUserId(userId);
     } catch (error) {
       logger.error('Error retrieving record by user ID', { error, userId });
       return null;
@@ -170,7 +170,7 @@ export class RecordService {
    */
   async getRecordById(recordId: string): Promise<MerchantRecord | MerchantUserRecord | null> {
     try {
-      return recordStorage.findRecordById(recordId);
+      return await recordStorage.findRecordById(recordId);
     } catch (error) {
       logger.error('Error retrieving record by ID', { error, recordId });
       return null;
@@ -182,7 +182,7 @@ export class RecordService {
    */
   async getRecordByEmail(email: string): Promise<MerchantRecord | MerchantUserRecord | null> {
     try {
-      return recordStorage.findRecordByEmail(email);
+      return await recordStorage.findRecordByEmail(email);
     } catch (error) {
       logger.error('Error retrieving record by email', { error, email });
       return null;
@@ -212,7 +212,7 @@ export class RecordService {
     }
   ): Promise<LedgerEntry | null> {
     try {
-      const record = recordStorage.findRecordById(recordId);
+      const record = await recordStorage.findRecordById(recordId);
       if (!record) {
         logger.error('Record not found for ledger entry', { recordId });
         return null;
@@ -275,7 +275,7 @@ export class RecordService {
       };
 
       // Add entry to storage
-      const createdEntry = recordStorage.addLedgerEntry(ledgerEntry);
+      const createdEntry = await recordStorage.addLedgerEntry(ledgerEntry);
 
       // Update record balances
       const updates: any = {
@@ -290,9 +290,9 @@ export class RecordService {
       }
 
       if (record.recordType === RecordType.MERCHANT) {
-        recordStorage.updateMerchantRecord(recordId, updates);
+        await recordStorage.updateMerchantRecord(recordId, updates);
       } else {
-        recordStorage.updateMerchantUserRecord(recordId, updates);
+        await recordStorage.updateMerchantUserRecord(recordId, updates);
       }
 
       logger.info('Comprehensive ledger entry added', {
@@ -319,7 +319,7 @@ export class RecordService {
    */
   async getLedgerEntries(query: LedgerQueryParams): Promise<LedgerEntry[]> {
     try {
-      return recordStorage.getLedgerEntries(query);
+      return await recordStorage.getLedgerEntries(query);
     } catch (error) {
       logger.error('Error retrieving ledger entries', { error, recordId: query.recordId });
       return [];
@@ -331,7 +331,7 @@ export class RecordService {
    */
   async getLedgerSummary(recordId: string): Promise<LedgerSummary | null> {
     try {
-      return recordStorage.getLedgerSummary(recordId);
+      return await recordStorage.getLedgerSummary(recordId);
     } catch (error) {
       logger.error('Error retrieving ledger summary', { error, recordId });
       return null;
@@ -343,7 +343,7 @@ export class RecordService {
    */
   async getAllMerchantRecords(): Promise<MerchantRecord[]> {
     try {
-      return recordStorage.getAllMerchantRecords();
+      return await recordStorage.getAllMerchantRecords();
     } catch (error) {
       logger.error('Error retrieving merchant records', { error });
       return [];
@@ -355,7 +355,7 @@ export class RecordService {
    */
   async getMerchantUsersByMerchantId(userMerchantId: string): Promise<MerchantUserRecord[]> {
     try {
-      return recordStorage.getMerchantUsersByMerchantId(userMerchantId);
+      return await recordStorage.getMerchantUsersByMerchantId(userMerchantId);
     } catch (error) {
       logger.error('Error retrieving merchant-user records', { error, userMerchantId });
       return [];
@@ -367,16 +367,16 @@ export class RecordService {
    */
   async deactivateRecord(recordId: string): Promise<boolean> {
     try {
-      const record = recordStorage.findRecordById(recordId);
+      const record = await recordStorage.findRecordById(recordId);
       if (!record) {
         logger.error('Record not found for deactivation', { recordId });
         return false;
       }
 
       if (record.recordType === RecordType.MERCHANT) {
-        recordStorage.updateMerchantRecord(recordId, { isActive: false });
+        await recordStorage.updateMerchantRecord(recordId, { isActive: false });
       } else {
-        recordStorage.updateMerchantUserRecord(recordId, { isActive: false });
+        await recordStorage.updateMerchantUserRecord(recordId, { isActive: false });
       }
 
       logger.info('Record deactivated', { recordId });
@@ -392,16 +392,16 @@ export class RecordService {
    */
   async activateRecord(recordId: string): Promise<boolean> {
     try {
-      const record = recordStorage.findRecordById(recordId);
+      const record = await recordStorage.findRecordById(recordId);
       if (!record) {
         logger.error('Record not found for activation', { recordId });
         return false;
       }
 
       if (record.recordType === RecordType.MERCHANT) {
-        recordStorage.updateMerchantRecord(recordId, { isActive: true });
+        await recordStorage.updateMerchantRecord(recordId, { isActive: true });
       } else {
-        recordStorage.updateMerchantUserRecord(recordId, { isActive: true });
+        await recordStorage.updateMerchantUserRecord(recordId, { isActive: true });
       }
 
       logger.info('Record activated', { recordId });
