@@ -79,6 +79,35 @@ export interface KYCProfile {
   }>;
   // Updated from beneficialOwners to shareholders
   shareholders?: Array<Shareholder>;
+  // Additional fields for comprehensive KYC profiles
+  personalInfo?: {
+    firstName: string;
+    lastName: string;
+    dateOfBirth: Date;
+    nationality: string;
+    occupation: string;
+    sourceOfFunds: string;
+  };
+  riskAssessment?: {
+    politicallyExposed: boolean;
+    sanctionListCheck: boolean;
+    annualTurnover?: number;
+    expectedTransactionVolume?: number;
+    highRiskJurisdiction?: boolean;
+    adverseMediaCheck?: boolean;
+  };
+  riskLevel?: RiskLevel;
+  workflowStatus?: ComplianceWorkflowStatus;
+  businessInfo?: AboutTheBusinessData;
+  businessSurvey?: BusinessSurveyData;
+  beneficialOwners?: Array<Shareholder>;
+  directors?: Array<{
+    fullName: string;
+    position: string;
+    email?: string;
+    phoneNumber?: string;
+    nationality?: string;
+  }>;
 }
 
 // Enhanced KYC profile interface

@@ -614,7 +614,7 @@ export class WalletService {
       });
 
       logger.info('User wallet debited', { walletId: userWallet.id, userId: debitData.userId, amount: debitData.amount });
-      return { success: true, wallet: updated, transaction };
+      return { success: true, wallet: updated as UserWallet, transaction };
     } catch (error) {
       logger.error('Error debiting user wallet', { error });
       return { success: false, error: 'Failed to debit user wallet' };
@@ -847,7 +847,7 @@ export class WalletService {
         amount: debitData.amount 
       });
 
-      return { success: true, wallet: updated, transaction };
+      return { success: true, wallet: updated as MerchantWallet, transaction };
     } catch (error) {
       logger.error('Error debiting Treasury wallet', { error });
       return {
@@ -914,7 +914,7 @@ export class WalletService {
         amount: debitData.amount 
       });
 
-      return { success: true, wallet: updated, transaction };
+      return { success: true, wallet: updated as MerchantWallet, transaction };
     } catch (error) {
       logger.error('Error debiting Operation wallet', { error });
       return {
@@ -981,7 +981,7 @@ export class WalletService {
         amount: debitData.amount 
       });
 
-      return { success: true, wallet: updated, transaction };
+      return { success: true, wallet: updated as MerchantWallet, transaction };
     } catch (error) {
       logger.error('Error debiting KYC wallet', { error });
       return {
@@ -1059,7 +1059,7 @@ export class WalletService {
         description
       });
 
-      return { success: true, wallet: updated, transaction };
+      return { success: true, wallet: updated as MerchantWallet, transaction };
     } catch (error) {
       logger.error('Error processing KYC fee', { error });
       return {
@@ -1182,7 +1182,7 @@ export class WalletService {
         amount: apiCallData.amount 
       });
 
-      return { success: true, wallet: updated, transaction, apiResponse };
+      return { success: true, wallet: updated as UserWallet, transaction, apiResponse };
     } catch (error) {
       logger.error('Error making user API call', { error });
       return {

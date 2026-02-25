@@ -5,7 +5,7 @@ export interface IWalletDocument extends Omit<Wallet, 'id'>, Document {
   _id: mongoose.Types.ObjectId;
 }
 
-const WalletSchema = new Schema<IWalletDocument>(
+const WalletSchema = new Schema<any>(
   {
     walletType: { type: String, enum: ['MERCHANT', 'USER'], required: true },
     merchantId: { type: String, required: true },
