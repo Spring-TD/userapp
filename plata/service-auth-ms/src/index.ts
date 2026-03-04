@@ -76,6 +76,7 @@ app.get('/health', (_req, res) => {
 
 // OpenAPI / Swagger documentation (generated from JSDoc in routes)
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get('/api-docs.json', (_req, res) => res.json(swaggerSpec));
 
 // SAMS (Service Authentication Microservice) routes
 app.use('/api/v1/services', samsRoutes);

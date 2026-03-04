@@ -64,6 +64,7 @@ app.get('/health', (_req, res) => {
 
 // OpenAPI / Swagger documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get('/api-docs.json', (_req, res) => res.json(swaggerSpec));
 
 // API routes
 app.use('/api/v1/payments', paymentRoutes);

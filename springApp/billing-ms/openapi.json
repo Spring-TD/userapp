@@ -1,0 +1,705 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Spring Billing Microservice API",
+    "version": "1.0.0",
+    "description": "Spring Billing, invoicing, payment processing, subscriptions, recurring billing, and pricing APIs. Import this spec into Swagger Editor, Postman, or other API tools."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4006",
+      "description": "Development"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "InvoiceItem": {
+        "type": "object",
+        "required": ["id", "description", "quantity", "unitPrice", "total"],
+        "properties": {
+          "id": { "type": "string" },
+          "description": { "type": "string" },
+          "quantity": { "type": "number" },
+          "unitPrice": { "type": "number" },
+          "total": { "type": "number" }
+        }
+      },
+      "CreateInvoiceRequest": {
+        "type": "object",
+        "required": ["merchantId", "amount", "currency", "billingType"],
+        "properties": {
+          "merchantId": { "type": "string" },
+          "customerId": { "type": "string" },
+          "amount": { "type": "number" },
+          "currency": { "type": "string", "default": "USD" },
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/InvoiceItem" } },
+          "billingType": { "type": "string", "enum": ["one_time", "recurring"] },
+          "status": { "type": "string", "enum": ["draft", "pending", "paid", "overdue", "cancelled"] },
+          "dueDate": { "type": "string", "format": "date-time" },
+          "notes": { "type": "string" }
+        }
+      },
+      "UpdateInvoiceRequest": {
+        "type": "object",
+        "properties": {
+          "amount": { "type": "number" },
+          "currency": { "type": "string" },
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/InvoiceItem" } },
+          "status": { "type": "string", "enum": ["draft", "pending", "paid", "overdue", "cancelled"] },
+          "dueDate": { "type": "string", "format": "date-time" },
+          "notes": { "type": "string" }
+        }
+      },
+      "ProcessPaymentRequest": {
+        "type": "object",
+        "required": ["invoiceId", "amount", "currency"],
+        "properties": {
+          "invoiceId": { "type": "string" },
+          "merchantId": { "type": "string" },
+          "amount": { "type": "number" },
+          "currency": { "type": "string" },
+          "paymentMethod": { "type": "string" },
+          "metadata": { "type": "object" }
+        }
+      },
+      "CreateSubscriptionRequest": {
+        "type": "object",
+        "required": ["merchantId", "planId", "billingCycle"],
+        "properties": {
+          "merchantId": { "type": "string" },
+          "planId": { "type": "string" },
+          "billingCycle": { "type": "string" },
+          "amount": { "type": "number" },
+          "currency": { "type": "string" },
+          "metadata": { "type": "object" }
+        }
+      },
+      "UpdateSubscriptionRequest": {
+        "type": "object",
+        "properties": {
+          "planId": { "type": "string" },
+          "billingCycle": { "type": "string" },
+          "amount": { "type": "number" },
+          "status": { "type": "string" },
+          "metadata": { "type": "object" }
+        }
+      },
+      "CheckBillingStatusRequest": {
+        "type": "object",
+        "required": ["userId", "amount"],
+        "properties": {
+          "userId": { "type": "string" },
+          "amount": { "type": "number" },
+          "currency": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      },
+      "RecurringBillingRequest": {
+        "type": "object",
+        "required": ["billingType", "billingCycle", "billingFor", "billingTitle"],
+        "properties": {
+          "billingType": { "type": "string", "enum": ["recurring", "one_time"] },
+          "billingCycle": { "type": "number" },
+          "billingTarget": { "type": "number" },
+          "billingCount": { "type": "number" },
+          "billToType": { "type": "string", "enum": ["merchants", "users"] },
+          "billingFor": { "type": "string" },
+          "billingTitle": { "type": "string" },
+          "billingException": {
+            "type": "object",
+            "properties": {
+              "maxAttempts": { "type": "number" },
+              "currentAttempts": { "type": "number" }
+            }
+          }
+        }
+      },
+      "UpdateRecurringBillingRequest": {
+        "type": "object",
+        "properties": {
+          "billingCycle": { "type": "number" },
+          "billingTarget": { "type": "number" },
+          "billingTitle": { "type": "string" },
+          "billingFor": { "type": "string" }
+        }
+      },
+      "OneTimeBillingRequest": {
+        "type": "object",
+        "required": ["merchantId", "amount", "currency"],
+        "properties": {
+          "merchantId": { "type": "string" },
+          "amount": { "type": "number" },
+          "currency": { "type": "string" },
+          "description": { "type": "string" },
+          "metadata": { "type": "object" }
+        }
+      },
+      "TransferRequest": {
+        "type": "object",
+        "required": ["fromUserId", "toUserId", "amount", "currency"],
+        "properties": {
+          "fromUserId": { "type": "string" },
+          "toUserId": { "type": "string" },
+          "amount": { "type": "number" },
+          "currency": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      },
+      "WithdrawalRequest": {
+        "type": "object",
+        "required": ["userId", "amount", "currency"],
+        "properties": {
+          "userId": { "type": "string" },
+          "amount": { "type": "number" },
+          "currency": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      },
+      "PayoutRequest": {
+        "type": "object",
+        "required": ["merchantId", "amount", "currency"],
+        "properties": {
+          "merchantId": { "type": "string" },
+          "amount": { "type": "number" },
+          "currency": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      },
+      "PricingScheduleRequest": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "conditions": { "type": "object" },
+          "billToType": { "type": "string" },
+          "billingCycle": { "type": "number" },
+          "amount": { "type": "number" },
+          "currency": { "type": "string" }
+        }
+      },
+      "ProductCreatedTriggerRequest": {
+        "type": "object",
+        "properties": {
+          "productId": { "type": "string" },
+          "merchantId": { "type": "string" },
+          "metadata": { "type": "object" }
+        }
+      },
+      "WalletFundedTriggerRequest": {
+        "type": "object",
+        "properties": {
+          "userId": { "type": "string" },
+          "amount": { "type": "number" },
+          "walletId": { "type": "string" }
+        }
+      },
+      "MerchantUsersCountTriggerRequest": {
+        "type": "object",
+        "properties": {
+          "merchantId": { "type": "string" },
+          "usersCount": { "type": "number" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/v1/billing/invoices": {
+      "post": {
+        "summary": "Create invoice",
+        "tags": ["Billing - Invoices"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateInvoiceRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Invoice created" },
+          "400": { "description": "Bad request" }
+        }
+      },
+      "get": {
+        "summary": "List invoices",
+        "tags": ["Billing - Invoices"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "query", "name": "merchantId", "schema": { "type": "string" } },
+          { "in": "query", "name": "status", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Invoice list" } }
+      }
+    },
+    "/api/v1/billing/invoices/{id}": {
+      "get": {
+        "summary": "Get invoice by ID",
+        "tags": ["Billing - Invoices"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Invoice details" } }
+      },
+      "put": {
+        "summary": "Update invoice",
+        "tags": ["Billing - Invoices"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateInvoiceRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Invoice updated" } }
+      },
+      "delete": {
+        "summary": "Delete invoice",
+        "tags": ["Billing - Invoices"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Invoice deleted" } }
+      }
+    },
+    "/api/v1/billing/payments": {
+      "post": {
+        "summary": "Process payment",
+        "tags": ["Billing - Payments"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ProcessPaymentRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Payment processed" } }
+      },
+      "get": {
+        "summary": "List payments",
+        "tags": ["Billing - Payments"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Payment list" } }
+      }
+    },
+    "/api/v1/billing/payments/{id}": {
+      "get": {
+        "summary": "Get payment by ID",
+        "tags": ["Billing - Payments"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Payment details" } }
+      }
+    },
+    "/api/v1/billing/subscriptions": {
+      "post": {
+        "summary": "Create subscription",
+        "tags": ["Billing - Subscriptions"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateSubscriptionRequest" }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Subscription created" } }
+      },
+      "get": {
+        "summary": "List subscriptions",
+        "tags": ["Billing - Subscriptions"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Subscription list" } }
+      }
+    },
+    "/api/v1/billing/subscriptions/{id}": {
+      "get": {
+        "summary": "Get subscription by ID",
+        "tags": ["Billing - Subscriptions"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Subscription details" } }
+      },
+      "put": {
+        "summary": "Update subscription",
+        "tags": ["Billing - Subscriptions"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateSubscriptionRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Subscription updated" } }
+      }
+    },
+    "/api/v1/billing/transactions": {
+      "get": {
+        "summary": "List transactions",
+        "tags": ["Billing - Transactions"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Transaction list" } }
+      }
+    },
+    "/api/v1/billing/transactions/{id}": {
+      "get": {
+        "summary": "Get transaction by ID",
+        "tags": ["Billing - Transactions"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Transaction details" } }
+      }
+    },
+    "/api/v1/billing/check-billing-status": {
+      "post": {
+        "summary": "Check billing status",
+        "tags": ["Billing"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CheckBillingStatusRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Billing status" } }
+      }
+    },
+    "/api/v1/billing/billing-page/{userId}": {
+      "get": {
+        "summary": "Get billing page info for user",
+        "tags": ["Billing"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "userId", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Billing page info" } }
+      }
+    },
+    "/api/v1/billing/recurring-billing/trigger": {
+      "post": {
+        "summary": "Trigger recurring billing",
+        "tags": ["Billing - Recurring"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Triggered" } }
+      }
+    },
+    "/api/v1/billing/recurring-billing/status": {
+      "get": {
+        "summary": "Get recurring billing status",
+        "tags": ["Billing - Recurring"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Status" } }
+      }
+    },
+    "/api/v1/billing/recurring-billings": {
+      "post": {
+        "summary": "Create recurring billing",
+        "tags": ["Billing - Recurring"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RecurringBillingRequest" }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Created" } }
+      },
+      "get": {
+        "summary": "List recurring billings",
+        "tags": ["Billing - Recurring"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "List" } }
+      }
+    },
+    "/api/v1/billing/recurring-billings/{id}": {
+      "get": {
+        "summary": "Get recurring billing by ID",
+        "tags": ["Billing - Recurring"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Details" } }
+      },
+      "put": {
+        "summary": "Update recurring billing",
+        "tags": ["Billing - Recurring"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateRecurringBillingRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Updated" } }
+      }
+    },
+    "/api/v1/billing/recurring-billings/{id}/cancel": {
+      "post": {
+        "summary": "Cancel recurring billing",
+        "tags": ["Billing - Recurring"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Cancelled" } }
+      }
+    },
+    "/api/v1/billing/recurring-billings/{id}/pause": {
+      "post": {
+        "summary": "Pause recurring billing",
+        "tags": ["Billing - Recurring"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Paused" } }
+      }
+    },
+    "/api/v1/billing/recurring-billings/{id}/resume": {
+      "post": {
+        "summary": "Resume recurring billing",
+        "tags": ["Billing - Recurring"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Resumed" } }
+      }
+    },
+    "/api/v1/billing/one-time-billings": {
+      "post": {
+        "summary": "Create one-time billing",
+        "tags": ["Billing - One-time"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/OneTimeBillingRequest" }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Created" } }
+      },
+      "get": {
+        "summary": "List one-time billings",
+        "tags": ["Billing - One-time"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "List" } }
+      }
+    },
+    "/api/v1/billing/one-time-billings/{id}": {
+      "get": {
+        "summary": "Get one-time billing by ID",
+        "tags": ["Billing - One-time"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Details" } }
+      }
+    },
+    "/api/v1/billing/one-time-billings/{id}/process-payment": {
+      "post": {
+        "summary": "Process payment for one-time billing",
+        "tags": ["Billing - One-time"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Payment processed" } }
+      }
+    },
+    "/api/v1/billing/transfers": {
+      "post": {
+        "summary": "Process transfer",
+        "tags": ["Billing - Transfers"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/TransferRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Transfer processed" } }
+      }
+    },
+    "/api/v1/billing/withdrawals": {
+      "post": {
+        "summary": "Process withdrawal",
+        "tags": ["Billing - Withdrawals"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/WithdrawalRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Withdrawal processed" } }
+      }
+    },
+    "/api/v1/billing/payouts": {
+      "post": {
+        "summary": "Process payout",
+        "tags": ["Billing - Payouts"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PayoutRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Payout processed" } }
+      }
+    },
+    "/api/v1/billing/pricing/pricing-schedules": {
+      "post": {
+        "summary": "Create pricing schedule",
+        "tags": ["Billing - Pricing"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PricingScheduleRequest" }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Schedule created" } }
+      },
+      "get": {
+        "summary": "List pricing schedules",
+        "tags": ["Billing - Pricing"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Schedule list" } }
+      }
+    },
+    "/api/v1/billing/pricing/pricing-schedules/{id}": {
+      "get": {
+        "summary": "Get pricing schedule by ID",
+        "tags": ["Billing - Pricing"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Schedule details" } }
+      },
+      "put": {
+        "summary": "Update pricing schedule",
+        "tags": ["Billing - Pricing"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PricingScheduleRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Updated" } }
+      }
+    },
+    "/api/v1/billing/pricing/pricing-schedules/{id}/cancel": {
+      "post": {
+        "summary": "Cancel pricing schedule",
+        "tags": ["Billing - Pricing"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Cancelled" } }
+      }
+    },
+    "/api/v1/billing/pricing/pricing-schedules/{id}/pause": {
+      "post": {
+        "summary": "Pause pricing schedule",
+        "tags": ["Billing - Pricing"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Paused" } }
+      }
+    },
+    "/api/v1/billing/pricing/pricing-schedules/{id}/resume": {
+      "post": {
+        "summary": "Resume pricing schedule",
+        "tags": ["Billing - Pricing"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Resumed" } }
+      }
+    },
+    "/api/v1/billing/pricing/pricing-schedules/trigger": {
+      "post": {
+        "summary": "Manually trigger pricing process",
+        "tags": ["Billing - Pricing"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Triggered" } }
+      }
+    },
+    "/api/v1/billing/billing/triggers/product-created": {
+      "post": {
+        "summary": "Handle product created event",
+        "tags": ["Billing - Triggers"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ProductCreatedTriggerRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Event handled" } }
+      }
+    },
+    "/api/v1/billing/billing/triggers/wallet-funded": {
+      "post": {
+        "summary": "Handle wallet funded event",
+        "tags": ["Billing - Triggers"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/WalletFundedTriggerRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Event handled" } }
+      }
+    },
+    "/api/v1/billing/billing/triggers/merchant-users-count": {
+      "post": {
+        "summary": "Handle merchant users count event",
+        "tags": ["Billing - Triggers"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/MerchantUsersCountTriggerRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Event handled" } }
+      }
+    }
+  },
+  "tags": [
+    { "name": "Billing - Invoices", "description": "Invoice CRUD" },
+    { "name": "Billing - Payments", "description": "Payment processing" },
+    { "name": "Billing - Subscriptions", "description": "Subscription management" },
+    { "name": "Billing - Transactions", "description": "Transaction history" },
+    { "name": "Billing - Recurring", "description": "Recurring billing" },
+    { "name": "Billing - One-time", "description": "One-time billing" },
+    { "name": "Billing - Transfers", "description": "Transfers" },
+    { "name": "Billing - Withdrawals", "description": "Withdrawals" },
+    { "name": "Billing - Payouts", "description": "Payouts" },
+    { "name": "Billing - Pricing", "description": "Pricing schedules" },
+    { "name": "Billing - Triggers", "description": "Event triggers" }
+  ]
+}

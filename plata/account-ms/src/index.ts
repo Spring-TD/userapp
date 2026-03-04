@@ -6,6 +6,7 @@ import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './config/swagger';
 import { config } from './config/environment';
 import { setupProxies } from './middleware/proxyMiddleware';
+import { getSpecUrls, handleSpecRequest } from './specHub';
 
 const app = express();
 const PORT = config.port;
@@ -40,8 +41,18 @@ app.get('/', (req, res) => {
   });
 });
 
-// OpenAPI / Swagger documentation
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+// OpenAPI / Swagger documentation (hub: dropdown of all service specs)
+const specBasePath = '/api-docs/specs';
+const specUrls = getSpecUrls(specBasePath);
+app.get(`${specBasePath}/:serviceId`, (req, res, next) => {
+  handleSpecRequest(req, res).catch(next);
+});
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  swaggerOptions: {
+    urls: specUrls,
+    'urls.primaryName': specUrls[0]?.name ?? 'Gateway (API Overview)',
+  },
+}));
 
 // Health check endpoint (no database)
 app.get('/health', (req, res) => {
