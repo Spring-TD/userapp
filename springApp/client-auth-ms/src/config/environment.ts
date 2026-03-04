@@ -15,6 +15,8 @@ interface BcryptConfig {
 interface EnvironmentConfig {
   port: number;
   nodeEnv: string;
+  /** MongoDB connection (MONGODB_URI for DigitalOcean, DATABASE_URL for docker-compose) */
+  mongoUri: string;
   serviceAuthUrl: string;
   notificationsServiceUrl: string;
   corsOrigins: string[];
@@ -26,6 +28,7 @@ interface EnvironmentConfig {
 export const config: EnvironmentConfig = {
   port: parseInt(process.env.PORT || '3001', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
+  mongoUri: process.env.MONGODB_URI || process.env.DATABASE_URL || 'mongodb://localhost:27017/client_auth_db',
   serviceAuthUrl: process.env.SERVICE_AUTH_URL || 'http://localhost:3000',
   notificationsServiceUrl: process.env.NOTIFICATIONS_SERVICE_URL || 'http://localhost:4009',
   corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:3001'],

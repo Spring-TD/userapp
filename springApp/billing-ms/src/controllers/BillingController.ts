@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { BillingService } from '../services/billingService';
-import { BillingScheduler } from '../services/billingScheduler.js';
+import { BillingScheduler } from '../services/billingScheduler';
 import { RecurringBillingService } from '../services/recurringBillingService';
 
 export class BillingController {
@@ -328,24 +328,30 @@ export class BillingController {
   static async getBillingPageInfo(req: Request, res: Response) {
     try {
       const { userId } = req.params;
-      
+
       if (!userId) {
         return res.status(400).json({
           success: false,
           message: 'Missing required parameter: userId'
         });
       }
-      
-      // In a real implementation, this would fetch user billing information
-      // For now, we'll return mock data
+
+      const [invoices, payments] = await Promise.all([
+        BillingService.listInvoices({ merchantId: userId }),
+        BillingService.listPayments({ merchantId: userId })
+      ]);
+
+      const pendingInvoices = invoices.filter(inv => inv.status === 'pending' || inv.status === 'overdue');
+      const outstandingBalance = pendingInvoices.reduce((sum, inv) => sum + inv.amount, 0);
+
       const billingInfo = {
         userId,
-        outstandingBalance: 0,
-        pendingCharges: [],
+        outstandingBalance,
+        pendingCharges: pendingInvoices,
         paymentMethods: [],
-        billingHistory: []
+        billingHistory: payments.slice(0, 50)
       };
-      
+
       return res.status(200).json({
         success: true,
         message: 'Billing information retrieved successfully',
@@ -434,30 +440,14 @@ export class BillingController {
   static async getRecurringBilling(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      // In a real implementation, this would fetch from database
-      // For now, we'll return mock data
-      const result = {
-        id,
-        amount: 200,
-        billingType: 'recurring',
-        billingCycle: 30,
-        billingTarget: 20000,
-        billingCount: 1,
-        billTo: 'user_ref',
-        billingFor: 'description',
-        billingTitle: 'name this billing',
-        billingException: {
-          maxAttempts: 3,
-          currentAttempts: 0
-        },
-        status: 'active',
-        startDate: new Date(),
-        nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-        totalBilled: 0,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-      
+      const result = await RecurringBillingService.getRecurringBilling(id);
+      if (!result) {
+        return res.status(404).json({
+          success: false,
+          message: 'Recurring billing not found',
+          data: null
+        });
+      }
       res.status(200).json({
         success: true,
         message: 'Recurring billing retrieved successfully',
@@ -477,32 +467,8 @@ export class BillingController {
    */
   static async listRecurringBillings(req: Request, res: Response) {
     try {
-      // In a real implementation, this would query the database
-      // For now, we'll return mock data
-      const result = [
-        {
-          id: 'rb_123',
-          amount: 200,
-          billingType: 'recurring',
-          billingCycle: 30,
-          billingTarget: 20000,
-          billingCount: 1,
-          billTo: 'user_ref',
-          billingFor: 'description',
-          billingTitle: 'name this billing',
-          billingException: {
-            maxAttempts: 3,
-            currentAttempts: 0
-          },
-          status: 'active',
-          startDate: new Date(),
-          nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-          totalBilled: 0,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        }
-      ];
-      
+      const filters = req.query as { billTo?: string; status?: string };
+      const result = await RecurringBillingService.listRecurringBillings(filters);
       res.status(200).json({
         success: true,
         message: 'Recurring billings retrieved successfully',
@@ -524,15 +490,14 @@ export class BillingController {
     try {
       const { id } = req.params;
       const updateData = req.body;
-      
-      // In a real implementation, this would update in database
-      // For now, we'll return mock data
-      const result = {
-        id,
-        ...updateData,
-        updatedAt: new Date()
-      };
-      
+      const result = await RecurringBillingService.updateRecurringBillingPublic(id, updateData);
+      if (!result) {
+        return res.status(404).json({
+          success: false,
+          message: 'Recurring billing not found',
+          data: null
+        });
+      }
       res.status(200).json({
         success: true,
         message: 'Recurring billing updated successfully',

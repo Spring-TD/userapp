@@ -1,6 +1,7 @@
-import { Payment, PaymentMethod, PaymentStatus, PaymentRequest } from '../types/payment';
+import { Payment, PaymentStatus, PaymentRequest } from '../types/payment';
 import { v4 as uuidv4 } from 'uuid';
 import logger from '../utils/logger';
+import { db } from '../db/database';
 
 export class PaymentService {
   /**
@@ -10,7 +11,6 @@ export class PaymentService {
     try {
       logger.info('Processing payment', { userId: paymentRequest.userId, amount: paymentRequest.amount });
 
-      // Create payment record
       const payment: Payment = {
         paymentId: uuidv4(),
         userId: paymentRequest.userId,
@@ -28,8 +28,9 @@ export class PaymentService {
       payment.status = PaymentStatus.COMPLETED;
       payment.transactionId = `txn_${uuidv4()}`;
 
-      logger.info('Payment processed successfully', { paymentId: payment.paymentId });
-      return payment;
+      const saved = await db.createPayment(payment);
+      logger.info('Payment processed successfully', { paymentId: saved.paymentId });
+      return saved;
     } catch (error) {
       logger.error('Error processing payment', error);
       throw error;
@@ -42,8 +43,7 @@ export class PaymentService {
   async getPaymentById(paymentId: string): Promise<Payment | null> {
     try {
       logger.info('Retrieving payment', { paymentId });
-      // TODO: Implement database query
-      return null;
+      return await db.findPaymentById(paymentId);
     } catch (error) {
       logger.error('Error retrieving payment', error);
       throw error;

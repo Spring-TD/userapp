@@ -1,109 +1,99 @@
+import mongoose from 'mongoose';
 import { App, CreateAppRequest } from '../types/app';
+import AppDocumentModel from '../db/AppDocument';
+import type { IAppDocument } from '../db/AppDocument';
+
+function docToApp(doc: mongoose.Document | null): App | null {
+  if (!doc) return null;
+  const o = doc.toObject() as IAppDocument & { _id: mongoose.Types.ObjectId; createdAt?: Date; updatedAt?: Date };
+  const { _id, __v, createdAt, updatedAt, ...rest } = o;
+  return {
+    ...rest,
+    id: _id.toString(),
+    createdAt: (createdAt instanceof Date ? createdAt.toISOString() : (o as unknown as { createdAt: string }).createdAt) ?? new Date().toISOString(),
+    updatedAt: (updatedAt instanceof Date ? updatedAt.toISOString() : (o as unknown as { updatedAt: string }).updatedAt) ?? new Date().toISOString()
+  } as App;
+}
+
+function docsToApps(docs: mongoose.Document[]): App[] {
+  return docs.map((d) => docToApp(d)).filter((a): a is App => a != null);
+}
 
 export class AppModel {
-  private static apps: App[] = [];
-
   static async createApp(appData: CreateAppRequest): Promise<App> {
-    // Ensure merchantId is provided (should be guaranteed by controller)
     if (!appData.merchantId) {
       throw new Error('Merchant ID is required');
     }
 
-    const newApp: App = {
-      id: this.generateId(),
+    const doc = await AppDocumentModel.create({
       name: appData.name,
       websiteUrl: appData.websiteUrl,
       alias: appData.alias,
       description: appData.description,
       merchantId: appData.merchantId,
-      subdomain: appData.subdomain || '', // Will be set by service layer
-      customDomain: undefined,
-      customDomainActive: false,
-      customDomainVerified: false,
+      subdomain: appData.subdomain ?? '',
       status: 'draft',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
       productKeys: []
-    };
+    });
 
-    this.apps.push(newApp);
-    return newApp;
+    return docToApp(doc)!;
   }
 
   static async getAppById(id: string): Promise<App | null> {
-    const app = this.apps.find(a => a.id === id);
-    return app || null;
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return null;
+    }
+    const doc = await AppDocumentModel.findById(id);
+    return docToApp(doc);
   }
 
   static async getAppsByMerchantId(merchantId: string): Promise<App[]> {
-    return this.apps.filter(a => a.merchantId === merchantId);
+    const docs = await AppDocumentModel.find({ merchantId });
+    return docsToApps(docs);
   }
 
   static async updateApp(id: string, updateData: Partial<App>): Promise<App | null> {
-    const appIndex = this.apps.findIndex(a => a.id === id);
-    
-    if (appIndex === -1) {
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
       return null;
     }
-
-    const updatedApp = {
-      ...this.apps[appIndex],
-      ...updateData,
-      updatedAt: new Date().toISOString()
-    };
-
-    this.apps[appIndex] = updatedApp as App;
-    return updatedApp as App;
+    const { id: _omitId, ...safe } = updateData as Partial<App> & { id?: string };
+    const doc = await AppDocumentModel.findByIdAndUpdate(id, { $set: safe }, { new: true });
+    return docToApp(doc);
   }
 
   static async deleteApp(id: string): Promise<boolean> {
-    const appIndex = this.apps.findIndex(a => a.id === id);
-    
-    if (appIndex === -1) {
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
       return false;
     }
-
-    this.apps.splice(appIndex, 1);
-    return true;
+    const result = await AppDocumentModel.findByIdAndDelete(id);
+    return !!result;
   }
 
   static async getAllApps(): Promise<App[]> {
-    return this.apps;
+    const docs = await AppDocumentModel.find({});
+    return docsToApps(docs);
   }
 
   static async getAppBySubdomain(subdomain: string): Promise<App | null> {
-    if (!subdomain) {
-      return null;
-    }
-    const app = this.apps.find(a => a.subdomain === subdomain);
-    return app || null;
+    if (!subdomain) return null;
+    const doc = await AppDocumentModel.findOne({ subdomain });
+    return docToApp(doc);
   }
 
   static async getAllSubdomains(): Promise<string[]> {
-    return this.apps
-      .map(app => app.subdomain)
-      .filter(subdomain => subdomain && subdomain.length > 0);
+    const docs = await AppDocumentModel.find({ subdomain: { $exists: true, $ne: '' } }).select('subdomain');
+    return docs.map((d) => (d as unknown as { subdomain: string }).subdomain).filter(Boolean);
   }
 
   static async getAppByCustomDomain(domain: string): Promise<App | null> {
-    if (!domain) {
-      return null;
-    }
-    // Normalize domain for comparison
-    const normalizedDomain = domain.toLowerCase().trim();
-    const app = this.apps.find(a => 
-      a.customDomain && a.customDomain.toLowerCase().trim() === normalizedDomain
-    );
-    return app || null;
+    if (!domain) return null;
+    const normalized = domain.toLowerCase().trim();
+    const doc = await AppDocumentModel.findOne({ customDomain: normalized });
+    return docToApp(doc);
   }
 
   static async getAllCustomDomains(): Promise<string[]> {
-    return this.apps
-      .map(app => app.customDomain)
-      .filter(domain => domain && domain.length > 0) as string[];
-  }
-
-  private static generateId(): string {
-    return Math.random().toString(36).substr(2, 9);
+    const docs = await AppDocumentModel.find({ customDomain: { $exists: true, $ne: '' } }).select('customDomain');
+    return docs.map((d) => (d as unknown as { customDomain: string }).customDomain).filter(Boolean);
   }
 }

@@ -11,9 +11,9 @@ import {
 } from '../types/productConfiguration';
 import axios from 'axios';
 import { config } from '../config/environment';
+import { db } from '../db/database';
 
 export class ProductService {
-  private productConfigurations: ProductConfiguration[] = [];
 
   // Fetch all products from server product-ms
   async getAllProducts(): Promise<Product[]> {
@@ -89,18 +89,12 @@ export class ProductService {
   // Note: Actual product creation happens in server/product-ms
   // This service only handles merchant-specific configurations
 
-  // Create merchant-specific product configuration
+  // Create merchant-specific product configuration (persisted in MongoDB)
   async createProductConfiguration(configData: CreateProductConfigurationRequest, merchantId: string): Promise<MerchantProductConfiguration> {
-    // This method creates merchant-specific configurations only, not the actual products
-    // Products are created in the server folder's product service
-    const newConfiguration: MerchantProductConfiguration = {
-      id: this.generateId(),
+    return db.createMerchantConfiguration({
       productId: configData.productId,
       merchantId,
-      isActive: false, // Default to inactive
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      // Pricing configuration defaults
+      isActive: false,
       pricingType: undefined,
       pricingCondition: undefined,
       upperCap: undefined,
@@ -110,10 +104,7 @@ export class ProductService {
       markupRate: 0,
       customTerms: {},
       enabledFeatures: []
-    };
-
-    this.productConfigurations.push(newConfiguration);
-    return newConfiguration;
+    });
   }
 
   // Methods for actual product creation and updates are not implemented
@@ -121,147 +112,65 @@ export class ProductService {
   // Product creation/update/delete happens in server/product-ms
 
   async getProductConfiguration(productId: string): Promise<ProductConfiguration | null> {
-    const configuration = this.productConfigurations.find(c => c.productId === productId);
-    return configuration || null;
+    return db.findConfigurationByProductId(productId);
   }
 
   async updateProductConfiguration(productId: string, updateData: UpdateProductConfigurationRequest): Promise<ProductConfiguration | null> {
-    // This method is not used in the read-only service
-    // Use updateMerchantProductConfiguration for merchant-specific configs
-    return null;
+    // Update the first merchant config found for this product (configuration API has no merchantId)
+    const existing = await db.findConfigurationByProductId(productId);
+    if (!existing || !('merchantId' in existing)) return null;
+    return db.updateMerchantConfiguration(
+      existing.merchantId,
+      productId,
+      updateData.configuration ?? {}
+    );
   }
 
   async deleteProductConfiguration(productId: string): Promise<boolean> {
-    // This method is not used in the read-only service
-    return false;
+    return db.deleteConfigurationByProductId(productId);
   }
 
   // Get merchant-specific product configuration
   async getMerchantProductConfiguration(merchantId: string, productId: string): Promise<MerchantProductConfiguration | null> {
-    const configuration = this.productConfigurations.find(
-      (c): c is MerchantProductConfiguration => 
-        'merchantId' in c && c.merchantId === merchantId && c.productId === productId
-    );
-    return configuration || null;
+    return db.findMerchantConfiguration(merchantId, productId);
   }
 
-  // Toggle product activation for a merchant
+  // Toggle product activation for a merchant (persisted in MongoDB)
   async toggleProductActivation(merchantId: string, productId: string, activate: boolean): Promise<boolean> {
-    const existingConfig = this.productConfigurations.find(
-      (c): c is MerchantProductConfiguration => 
-        'merchantId' in c && c.merchantId === merchantId && c.productId === productId
-    );
-    
-    if (existingConfig) {
-      existingConfig.isActive = activate;
-      existingConfig.updatedAt = new Date().toISOString();
-      return true;
-    } else {
-      // Create new configuration for this merchant/product combination
-      const newConfiguration: MerchantProductConfiguration = {
-        id: this.generateId(),
-        productId,
-        merchantId,
-        isActive: activate,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        // Pricing configuration defaults
-        pricingType: undefined,
-        pricingCondition: undefined,
-        upperCap: undefined,
-        lowerCap: undefined,
-        springTDFee: undefined,
-        serviceFee: undefined,
-        markupRate: 0,
-        customTerms: {},
-        enabledFeatures: []
-      };
-      
-      this.productConfigurations.push(newConfiguration);
-      return true;
-    }
-  }
-
-  // Update merchant-specific product configuration (e.g., interest rate adjustments)
-  async updateMerchantProductConfiguration(
-    merchantId: string, 
-    productId: string, 
-    updateData: Partial<MerchantProductConfiguration>
-  ): Promise<MerchantProductConfiguration | null> {
-    const configIndex = this.productConfigurations.findIndex(
-      (c): c is MerchantProductConfiguration => 
-        'merchantId' in c && c.merchantId === merchantId && c.productId === productId
-    );
-
-    if (configIndex === -1) {
-      // Create new configuration if it doesn't exist
-      const newConfiguration: MerchantProductConfiguration = {
-        id: this.generateId(),
-        productId,
-        merchantId,
-        isActive: true, // Default to active
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        // Pricing configuration defaults
-        pricingType: undefined,
-        pricingCondition: undefined,
-        upperCap: undefined,
-        lowerCap: undefined,
-        springTDFee: undefined,
-        serviceFee: undefined,
-        markupRate: 0,
-        customTerms: {},
-        enabledFeatures: [],
-        ...updateData
-      };
-      
-      this.productConfigurations.push(newConfiguration);
-      return newConfiguration;
-    }
-
-    const existingConfig = this.productConfigurations[configIndex] as MerchantProductConfiguration;
-    
-    const updatedConfiguration: MerchantProductConfiguration = {
-      id: existingConfig.id,
-      productId: existingConfig.productId,
-      merchantId: existingConfig.merchantId,
-      isActive: updateData.isActive ?? existingConfig.isActive,
-      // Pricing configuration - preserve existing values if not provided
-      pricingType: updateData.pricingType ?? existingConfig.pricingType,
-      pricingCondition: updateData.pricingCondition ?? existingConfig.pricingCondition,
-      upperCap: updateData.upperCap ?? existingConfig.upperCap,
-      lowerCap: updateData.lowerCap ?? existingConfig.lowerCap,
-      springTDFee: updateData.springTDFee ?? existingConfig.springTDFee,
-      serviceFee: updateData.serviceFee ?? existingConfig.serviceFee,
-      markupRate: updateData.markupRate ?? existingConfig.markupRate,
-      customTerms: updateData.customTerms ?? existingConfig.customTerms,
-      enabledFeatures: updateData.enabledFeatures ?? existingConfig.enabledFeatures,
-      createdAt: existingConfig.createdAt,
-      updatedAt: new Date().toISOString()
-    };
-
-    this.productConfigurations[configIndex] = updatedConfiguration;
-    return updatedConfiguration;
-  }
-
-  private getDefaultConfiguration(productId: string): Partial<ProductConfiguration> {
-    // Return default configuration values
-    return {
-      isActive: false,
-      // Pricing configuration defaults
-      pricingType: undefined,
-      pricingCondition: undefined,
-      upperCap: undefined,
-      lowerCap: undefined,
-      springTDFee: undefined,
-      serviceFee: undefined,
-      markupRate: 0, // Default markup is 0%
+    await db.upsertMerchantConfiguration({
+      productId,
+      merchantId,
+      isActive: activate,
+      markupRate: 0,
       customTerms: {},
       enabledFeatures: []
-    };
+    });
+    return true;
   }
 
-  private generateId(): string {
-    return Math.random().toString(36).substr(2, 9);
+  // Update merchant-specific product configuration (e.g., interest rate adjustments) - persisted in MongoDB
+  async updateMerchantProductConfiguration(
+    merchantId: string,
+    productId: string,
+    updateData: Partial<MerchantProductConfiguration>
+  ): Promise<MerchantProductConfiguration | null> {
+    const updated = await db.updateMerchantConfiguration(merchantId, productId, updateData);
+    if (updated) return updated;
+    // Upsert if no existing config
+    return db.upsertMerchantConfiguration({
+      productId,
+      merchantId,
+      isActive: updateData.isActive ?? true,
+      pricingType: updateData.pricingType,
+      pricingCondition: updateData.pricingCondition,
+      upperCap: updateData.upperCap,
+      lowerCap: updateData.lowerCap,
+      springTDFee: updateData.springTDFee,
+      serviceFee: updateData.serviceFee,
+      markupRate: updateData.markupRate ?? 0,
+      customTerms: updateData.customTerms ?? {},
+      enabledFeatures: updateData.enabledFeatures ?? []
+    });
   }
+
 }

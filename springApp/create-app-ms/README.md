@@ -4,6 +4,15 @@ The Create App Microservice handles the creation and management of applications 
 
 Deployment URL: https://create-app-ms.fly.dev/
 
+## Database
+
+This service uses **MongoDB** for persistence (apps, app configurations, and templates). Set `MONGODB_URI` in your environment or `.env` file.
+
+- **DigitalOcean Managed MongoDB:** Use the connection string from your cluster (see `.env.example` for the format).
+- **Local:** Default is `mongodb://localhost:27017/create_app_db` if `MONGODB_URI` is not set.
+
+Copy `.env.example` to `.env` and set `MONGODB_URI` to your DigitalOcean or local MongoDB URL.
+
 ## Features
 
 - Create new applications with detailed information (App Name, Website URL, App Alias, App Description)

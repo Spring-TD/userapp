@@ -1,3 +1,122 @@
+/**
+ * Compliance admin routes (mounted at /api/v1/kyc/admin). Requires compliance officer role.
+ *
+ * @openapi
+ * /api/v1/kyc/admin/profiles:
+ *   get:
+ *     summary: Search KYC profiles
+ *     tags: [KYC - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Profile list
+ * /api/v1/kyc/admin/profiles/pending-review:
+ *   get:
+ *     summary: Get pending reviews
+ *     tags: [KYC - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Pending list
+ * /api/v1/kyc/admin/profiles/high-risk:
+ *   get:
+ *     summary: Get high-risk profiles
+ *     tags: [KYC - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: High-risk list
+ * /api/v1/kyc/admin/check-sanctions:
+ *   post:
+ *     summary: Check sanctions
+ *     tags: [KYC - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Sanctions check result
+ * /api/v1/kyc/admin/individuals/{userId}:
+ *   get:
+ *     summary: Get individual profile
+ *     tags: [KYC - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Individual profile
+ * /api/v1/kyc/admin/businesses/{userId}:
+ *   get:
+ *     summary: Get business profile
+ *     tags: [KYC - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Business profile
+ * /api/v1/kyc/admin/document/{documentId}/status:
+ *   put:
+ *     summary: Update document status
+ *     tags: [KYC - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Status updated
+ * /api/v1/kyc/admin/document/{documentId}/verify-aml:
+ *   post:
+ *     summary: Verify document via AML
+ *     tags: [KYC - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: AML verification result
+ * /api/v1/kyc/admin/reports/risk-summary:
+ *   get:
+ *     summary: Get risk summary report
+ *     tags: [KYC - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Risk summary
+ * /api/v1/kyc/admin/reports/compliance-metrics:
+ *   get:
+ *     summary: Get compliance metrics
+ *     tags: [KYC - Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Compliance metrics
+ */
 // src/routes/complianceAdminRoutes.ts
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';

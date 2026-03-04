@@ -3,13 +3,13 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthController } from '../controllers/authController';
 import { AuthService } from '../services/authService';
 import { generateEmailVerificationToken, verifyEmailVerificationToken } from '../utils/crypto';
-import { mockDb } from '../utils/mockDatabase';
+import { db as mockDb } from '../db/database';
 import { UserType, AccountStatus } from '../models/User';
 
 // Mock dependencies
 jest.mock('../services/authService');
 jest.mock('../utils/crypto');
-jest.mock('../utils/mockDatabase');
+jest.mock('../db/database');
 jest.mock('../utils/logger');
 
 const mockAuthService = AuthService as jest.Mocked<typeof AuthService>;

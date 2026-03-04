@@ -179,7 +179,8 @@ npm start
 - `PORT` - Port to run the service on (default: 3006)
 - `SERVICE_AUTH_URL` - URL for the service authentication microservice
 - `WALLET_SERVICE_URL` - URL for the wallet microservice (default: http://localhost:3004)
-- `DATABASE_URL` - Connection string for the database
+- `MONGODB_URI` - MongoDB connection string (recommended for DigitalOcean Managed MongoDB)
+- `DATABASE_URL` - Alternative MongoDB connection string (used by docker-compose; fallback if MONGODB_URI is not set)
 - `JWT_SECRET` - Secret key for JWT token signing
 - `RECURRING_BILLING_INTERVAL` - Interval for recurring billing processing in milliseconds (default: 3600000 - 1 hour)
 - `PRICING_INTERVAL` - Interval for pricing schedule processing in milliseconds (default: 3600000 - 1 hour)

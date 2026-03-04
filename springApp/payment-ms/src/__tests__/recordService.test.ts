@@ -1,11 +1,23 @@
+import mongoose from 'mongoose';
 import recordService from '../services/recordService';
-import recordStorage from '../models/recordModel';
+import { db } from '../db/database';
 import { RecordType, LedgerEntryType, TransactionStatus, TransactionType, FinancialCategory } from '../types/record';
 
+const TEST_MONGO_URI = process.env.MONGODB_URI || process.env.DATABASE_URL || 'mongodb://localhost:27017/payment_db_test';
+
 describe('RecordService', () => {
-  beforeEach(() => {
-    // Clear storage before each test
-    recordStorage.clear();
+  beforeAll(async () => {
+    if (mongoose.connection.readyState !== 1) {
+      await mongoose.connect(TEST_MONGO_URI);
+    }
+  });
+
+  afterAll(async () => {
+    await mongoose.connection.close();
+  });
+
+  beforeEach(async () => {
+    await db.clearAll();
   });
 
   describe('createRecord', () => {

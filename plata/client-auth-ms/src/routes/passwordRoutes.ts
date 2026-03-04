@@ -1,3 +1,31 @@
+/**
+ * Password routes (mounted at /api/v1/password).
+ *
+ * @openapi
+ * /api/v1/password/forgot:
+ *   post:
+ *     summary: Forgot password
+ *     tags: [Password]
+ *     responses:
+ *       200:
+ *         description: Reset email sent
+ * /api/v1/password/reset:
+ *   post:
+ *     summary: Reset password
+ *     tags: [Password]
+ *     responses:
+ *       200:
+ *         description: Password reset
+ * /api/v1/password/change:
+ *   put:
+ *     summary: Change password
+ *     tags: [Password]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Password changed
+ */
 import { Router } from 'express';
 import { PasswordController } from '../controllers/passwordController';
 

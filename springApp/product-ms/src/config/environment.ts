@@ -5,6 +5,8 @@ dotenv.config();
 interface EnvironmentConfig {
   port: number;
   nodeEnv: string;
+  /** MongoDB connection (MONGODB_URI for DigitalOcean, DATABASE_URL for docker-compose) */
+  mongoUri: string;
   corsOrigins: string[];
   logLevel: string;
   serverProductServiceUrl: string;
@@ -13,6 +15,7 @@ interface EnvironmentConfig {
 export const config: EnvironmentConfig = {
   port: parseInt(process.env.PORT || '4005', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
+  mongoUri: process.env.MONGODB_URI || process.env.DATABASE_URL || 'mongodb://localhost:27017/product_ms',
   corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:4001'],
   logLevel: process.env.LOG_LEVEL || 'info',
   serverProductServiceUrl: process.env.SERVER_PRODUCT_SERVICE_URL || 'http://localhost:3005'

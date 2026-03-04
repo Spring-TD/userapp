@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './config/swagger';
 import { config } from './config/environment';
 import { setupProxies } from './middleware/proxyMiddleware';
 
@@ -37,6 +39,9 @@ app.get('/', (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+// OpenAPI / Swagger documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Health check endpoint (no database)
 app.get('/health', (req, res) => {

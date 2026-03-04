@@ -54,7 +54,7 @@ if (process.env.NODE_ENV !== 'test') {
 // Export environment variables
 export const NODE_ENV = process.env.NODE_ENV as string;
 export const PORT = process.env.PORT ? parseInt(process.env.PORT) : 4003;
-export const MONGODB_URI = process.env.MONGODB_URI as string;
+export const MONGODB_URI = (process.env.MONGODB_URI || process.env.DATABASE_URL) as string;
 export const JWT_SECRET = process.env.JWT_SECRET as string;
 export const CORS_ALLOWED_ORIGINS = process.env.CORS_ALLOWED_ORIGINS as string;
 export const KYC_DOCUMENT_TYPES = process.env.KYC_DOCUMENT_TYPES as string;

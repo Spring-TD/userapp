@@ -23,7 +23,7 @@ Deployment URL: https://compliance-ms.fly.dev/
 
 - **Runtime**: Node.js 18+
 - **Framework**: Express.js with TypeScript
-- **Database**: MongoDB (configured, currently using mock database)
+- **Database**: MongoDB (Mongoose); use MONGODB_URI or DATABASE_URL for connection (e.g. DigitalOcean Managed MongoDB)
 - **Authentication**: JWT (JSON Web Tokens)
 - **Validation**: Joi
 - **Testing**: Jest + Supertest

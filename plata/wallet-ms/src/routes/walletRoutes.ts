@@ -1,3 +1,647 @@
+/**
+ * Wallet routes (mounted at /api/v1/wallets)
+ * Merchant (Treasury, Operation, KYC), user wallets, and funding callbacks.
+ * Most endpoints require JWT; funding callback is public for provider webhooks.
+ *
+ * @openapi
+ * /api/v1/wallets/merchant:
+ *   post:
+ *     summary: Create merchant wallet
+ *     tags: [Wallets - Merchant]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - currency
+ *               - merchantWalletType
+ *             properties:
+ *               name:
+ *                 type: string
+ *               currency:
+ *                 type: string
+ *                 minLength: 3
+ *                 maxLength: 3
+ *               merchantWalletType:
+ *                 type: string
+ *                 enum: [TREASURY, OPERATION, KYC]
+ *     responses:
+ *       201:
+ *         description: Merchant wallet created
+ * /api/v1/wallets/merchant/all:
+ *   post:
+ *     summary: Create all merchant wallets (Treasury, Operation, KYC)
+ *     tags: [Wallets - Merchant]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               currency:
+ *                 type: string
+ *                 default: USD
+ *     responses:
+ *       201:
+ *         description: All merchant wallets created
+ * /api/v1/wallets/merchant/{merchantId}/type/{walletType}:
+ *   get:
+ *     summary: Get merchant wallet by type
+ *     tags: [Wallets - Merchant]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: merchantId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: walletType
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [TREASURY, OPERATION, KYC]
+ *     responses:
+ *       200:
+ *         description: Merchant wallet
+ * /api/v1/wallets/merchant/{merchantId}/all:
+ *   get:
+ *     summary: Get all merchant wallets
+ *     tags: [Wallets - Merchant]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: merchantId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of merchant wallets
+ * /api/v1/wallets/merchant/{merchantId}/users:
+ *   get:
+ *     summary: Get user wallets by merchant
+ *     tags: [Wallets - Merchant]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: merchantId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of user wallets for merchant
+ * /api/v1/wallets/merchant/balance:
+ *   put:
+ *     summary: Update merchant wallet balance
+ *     tags: [Wallets - Merchant]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *             properties:
+ *               amount:
+ *                 type: number
+ *               description:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Balance updated
+ * /api/v1/wallets/treasury/{merchantId}/transactions:
+ *   get:
+ *     summary: Filter treasury transactions
+ *     tags: [Wallets - Treasury]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: merchantId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [CREDIT, DEBIT]
+ *     responses:
+ *       200:
+ *         description: Treasury transactions
+ * /api/v1/wallets/treasury/transfer:
+ *   post:
+ *     summary: Transfer out from treasury
+ *     tags: [Wallets - Treasury]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - fromWalletId
+ *               - toWalletId
+ *               - amount
+ *               - description
+ *             properties:
+ *               fromWalletId:
+ *                 type: string
+ *               toWalletId:
+ *                 type: string
+ *               amount:
+ *                 type: number
+ *               description:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Transfer completed
+ * /api/v1/wallets/treasury/debit:
+ *   post:
+ *     summary: Debit user wallet (from treasury flow)
+ *     tags: [Wallets - Treasury]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - userId
+ *               - amount
+ *               - description
+ *             properties:
+ *               userId:
+ *                 type: string
+ *               amount:
+ *                 type: number
+ *               description:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Debit completed
+ * /api/v1/wallets/treasury/debit-merchant:
+ *   post:
+ *     summary: Debit treasury wallet
+ *     tags: [Wallets - Treasury]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - merchantId
+ *               - amount
+ *               - description
+ *             properties:
+ *               merchantId:
+ *                 type: string
+ *               amount:
+ *                 type: number
+ *               description:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Debit completed
+ * /api/v1/wallets/operation/{merchantId}/transactions:
+ *   get:
+ *     summary: Filter operation wallet transactions
+ *     tags: [Wallets - Operation]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: merchantId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [CREDIT, DEBIT]
+ *     responses:
+ *       200:
+ *         description: Operation transactions
+ * /api/v1/wallets/operation-to-kyc:
+ *   post:
+ *     summary: Transfer from operation to KYC wallet
+ *     tags: [Wallets - Operation]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *               - description
+ *             properties:
+ *               amount:
+ *                 type: number
+ *               description:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Transfer completed
+ * /api/v1/wallets/kyc-to-operation:
+ *   post:
+ *     summary: Transfer from KYC to operation wallet
+ *     tags: [Wallets - Operation]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *               - description
+ *             properties:
+ *               amount:
+ *                 type: number
+ *               description:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Transfer completed
+ * /api/v1/wallets/operation/debit:
+ *   post:
+ *     summary: Debit operation wallet
+ *     tags: [Wallets - Operation]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *               - description
+ *             properties:
+ *               amount:
+ *                 type: number
+ *               description:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Debit completed
+ * /api/v1/wallets/kyc/{merchantId}/transactions:
+ *   get:
+ *     summary: Filter KYC wallet transactions
+ *     tags: [Wallets - KYC]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: merchantId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [CREDIT, DEBIT]
+ *     responses:
+ *       200:
+ *         description: KYC transactions
+ * /api/v1/wallets/kyc/debit:
+ *   post:
+ *     summary: Debit KYC wallet
+ *     tags: [Wallets - KYC]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *               - description
+ *             properties:
+ *               amount:
+ *                 type: number
+ *               description:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Debit completed
+ * /api/v1/wallets/kyc/fee:
+ *   post:
+ *     summary: Process KYC fee
+ *     tags: [Wallets - KYC]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *               - description
+ *             properties:
+ *               amount:
+ *                 type: number
+ *               description:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: KYC fee processed
+ * /api/v1/wallets/user:
+ *   post:
+ *     summary: Create user wallet
+ *     tags: [Wallets - User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - currency
+ *             properties:
+ *               name:
+ *                 type: string
+ *               currency:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: User wallet created
+ * /api/v1/wallets/user/{userId}:
+ *   get:
+ *     summary: Get user wallet
+ *     tags: [Wallets - User]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: User wallet details
+ * /api/v1/wallets/user/{userId}/balance:
+ *   put:
+ *     summary: Update user wallet balance
+ *     tags: [Wallets - User]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *             properties:
+ *               amount:
+ *                 type: number
+ *               description:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Balance updated
+ * /api/v1/wallets/user/{userId}/transactions:
+ *   get:
+ *     summary: Filter user transactions
+ *     tags: [Wallets - User]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [CREDIT, DEBIT]
+ *     responses:
+ *       200:
+ *         description: User transactions
+ * /api/v1/wallets/user/{userId}/transfer:
+ *   post:
+ *     summary: Transfer out from user wallet
+ *     tags: [Wallets - User]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - toWalletId
+ *               - amount
+ *               - description
+ *             properties:
+ *               toWalletId:
+ *                 type: string
+ *               amount:
+ *                 type: number
+ *               description:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Transfer completed
+ * /api/v1/wallets/user/{userId}/api-call:
+ *   post:
+ *     summary: Make user API call (debit for external API)
+ *     tags: [Wallets - User]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - endpoint
+ *               - method
+ *               - amount
+ *               - description
+ *             properties:
+ *               endpoint:
+ *                 type: string
+ *                 format: uri
+ *               method:
+ *                 type: string
+ *               headers:
+ *                 type: object
+ *               body:
+ *                 type: object
+ *               amount:
+ *                 type: number
+ *               description:
+ *                 type: string
+ *               apiKey:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: API call processed
+ * /api/v1/wallets/funding/callback:
+ *   post:
+ *     summary: Funding callback (payment provider webhook)
+ *     tags: [Wallets - Funding]
+ *     description: Public endpoint; no auth. Called by payment providers when funding completes.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *               - currency
+ *               - transactionId
+ *               - paymentMethod
+ *               - status
+ *             properties:
+ *               walletId:
+ *                 type: string
+ *               userId:
+ *                 type: string
+ *               amount:
+ *                 type: number
+ *               currency:
+ *                 type: string
+ *               transactionId:
+ *                 type: string
+ *               paymentMethod:
+ *                 type: string
+ *                 enum: [CARD, BANK_TRANSFER, WALLET, OTHER]
+ *               status:
+ *                 type: string
+ *                 enum: [SUCCESS, COMPLETED, PENDING, FAILED, CANCELLED]
+ *               description:
+ *                 type: string
+ *               providerReference:
+ *                 type: string
+ *               merchantId:
+ *                 type: string
+ *               merchantWalletType:
+ *                 type: string
+ *                 enum: [TREASURY, OPERATION, KYC]
+ *     responses:
+ *       200:
+ *         description: Callback processed
+ * /api/v1/wallets/funding/status/{transactionId}:
+ *   get:
+ *     summary: Check funding status
+ *     tags: [Wallets - Funding]
+ *     description: Public endpoint to check status of a funding transaction.
+ *     parameters:
+ *       - in: path
+ *         name: transactionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Funding status
+ */
+
 import { Router } from 'express';
 import { WalletController } from '../controllers/walletController';
 import { FundingController } from '../controllers/fundingController';

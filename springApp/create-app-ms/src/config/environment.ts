@@ -6,6 +6,7 @@ dotenv.config();
 interface Config {
   port: number;
   nodeEnv: string;
+  mongoUri: string;
   serviceAuthUrl: string;
   productServiceUrl: string;
   walletServiceUrl: string;
@@ -23,6 +24,7 @@ interface Config {
 export const config: Config = {
   port: parseInt(process.env.PORT || '4002', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
+  mongoUri: process.env.MONGODB_URI || process.env.DATABASE_URL || 'mongodb://localhost:27017/create_app_db',
   serviceAuthUrl: process.env.SERVICE_AUTH_URL || 'http://localhost:4000',
   productServiceUrl: process.env.PRODUCT_SERVICE_URL || 'http://localhost:4005',
   walletServiceUrl: process.env.WALLET_SERVICE_URL || 'http://localhost:4004',

@@ -1,3 +1,146 @@
+/**
+ * Business KYC routes (mounted at /api/v1/kyc/business).
+ *
+ * @openapi
+ * /api/v1/kyc/business/submit:
+ *   post:
+ *     summary: Submit business KYC
+ *     tags: [KYC - Business]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: KYC submitted
+ * /api/v1/kyc/business/status:
+ *   get:
+ *     summary: Get business KYC status
+ *     tags: [KYC - Business]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: KYC status
+ * /api/v1/kyc/business/documents:
+ *   get:
+ *     summary: Get business KYC documents
+ *     tags: [KYC - Business]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of documents
+ * /api/v1/kyc/business/document/{documentId}:
+ *   get:
+ *     summary: Get document by ID
+ *     tags: [KYC - Business]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Document details
+ * /api/v1/kyc/business/business-info:
+ *   get:
+ *     summary: Get business info
+ *     tags: [KYC - Business]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Business info
+ *   put:
+ *     summary: Update business info
+ *     tags: [KYC - Business]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Updated
+ * /api/v1/kyc/business/business-survey:
+ *   get:
+ *     summary: Get business survey
+ *     tags: [KYC - Business]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Survey data
+ *   put:
+ *     summary: Update business survey
+ *     tags: [KYC - Business]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Updated
+ * /api/v1/kyc/business/beneficial-owners:
+ *   get:
+ *     summary: Get beneficial owners
+ *     tags: [KYC - Business]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Beneficial owners
+ *   put:
+ *     summary: Update beneficial owners
+ *     tags: [KYC - Business]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Updated
+ * /api/v1/kyc/business/risk-assessment:
+ *   get:
+ *     summary: Get business risk assessment
+ *     tags: [KYC - Business]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Risk assessment
+ * /api/v1/kyc/business/enhanced-due-diligence:
+ *   get:
+ *     summary: Get enhanced due diligence (high-risk)
+ *     tags: [KYC - Business]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: EDD status
+ * /api/v1/kyc/business/corporate-structure:
+ *   get:
+ *     summary: Get corporate structure
+ *     tags: [KYC - Business]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Corporate structure
+ * /api/v1/kyc/business/non-profit-verification:
+ *   get:
+ *     summary: Get non-profit verification
+ *     tags: [KYC - Business]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Verification status
+ * /api/v1/kyc/business/government-verification:
+ *   get:
+ *     summary: Get government verification
+ *     tags: [KYC - Business]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Verification status
+ */
 // src/routes/businessKycRoutes.ts
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';

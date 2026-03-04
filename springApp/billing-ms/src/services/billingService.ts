@@ -1,175 +1,162 @@
+import mongoose from 'mongoose';
 import { BillingType, Invoice, Payment, Subscription, Transaction, OneTimeBilling } from '../types/billingTypes';
+import { InvoiceModel, PaymentModel, SubscriptionModel, TransactionModel } from '../models';
 import { PricingService } from './pricingService';
 import axios from 'axios';
 
+function toPlainId(doc: { _id: mongoose.Types.ObjectId; [key: string]: unknown } | null): unknown {
+  if (!doc) return null;
+  const obj = doc.toObject ? doc.toObject() : { ...doc };
+  const { _id, ...rest } = obj as { _id: mongoose.Types.ObjectId; [key: string]: unknown };
+  return { id: _id?.toString(), ...rest };
+}
+
 export class BillingService {
   static async createInvoice(invoiceData: Partial<Invoice>): Promise<Invoice> {
-    // Implementation will be added later
-    return {
-      id: 'inv_' + Date.now(),
+    const items = (invoiceData.items || []).map(item => ({
+      id: item.id || `item_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+      description: item.description,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      total: item.total
+    }));
+    const doc = await InvoiceModel.create({
       merchantId: invoiceData.merchantId || '',
-      amount: invoiceData.amount || 0,
+      customerId: invoiceData.customerId,
+      amount: invoiceData.amount ?? 0,
       currency: invoiceData.currency || 'USD',
-      items: invoiceData.items || [],
+      items,
       billingType: invoiceData.billingType || BillingType.ONE_TIME,
-      status: 'pending',
-      issuedDate: new Date(),
-      createdAt: new Date(),
-      updatedAt: new Date()
-    } as Invoice;
+      status: invoiceData.status || 'pending',
+      dueDate: invoiceData.dueDate,
+      issuedDate: invoiceData.issuedDate || new Date(),
+      paidDate: invoiceData.paidDate,
+      notes: invoiceData.notes
+    });
+    return toPlainId(doc) as Invoice;
   }
 
   static async getInvoice(id: string): Promise<Invoice | null> {
-    // Implementation will be added later
-    return {
-      id,
-      merchantId: 'merchant_123',
-      amount: 100.00,
-      currency: 'USD',
-      items: [],
-      billingType: BillingType.ONE_TIME,
-      status: 'paid',
-      issuedDate: new Date(),
-      paidDate: new Date(),
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+    if (!mongoose.Types.ObjectId.isValid(id)) return null;
+    const doc = await InvoiceModel.findById(id).lean();
+    if (!doc) return null;
+    const { _id, ...rest } = doc;
+    return { id: _id.toString(), ...rest } as Invoice;
   }
 
-  static async listInvoices(filters?: any): Promise<Invoice[]> {
-    // Implementation will be added later
-    return [];
+  static async listInvoices(filters?: { merchantId?: string; status?: string }): Promise<Invoice[]> {
+    const query: Record<string, unknown> = {};
+    if (filters?.merchantId) query.merchantId = filters.merchantId;
+    if (filters?.status) query.status = filters.status;
+    const docs = await InvoiceModel.find(query).sort({ createdAt: -1 }).lean();
+    return docs.map(d => ({ id: (d as any)._id.toString(), ...d } as unknown as Invoice));
   }
 
   static async updateInvoice(id: string, updateData: Partial<Invoice>): Promise<Invoice | null> {
-    // Implementation will be added later
-    const existing = await this.getInvoice(id);
-    if (!existing) return null;
-    
-    return {
-      ...existing,
-      ...updateData,
-      updatedAt: new Date()
-    };
+    if (!mongoose.Types.ObjectId.isValid(id)) return null;
+    const doc = await InvoiceModel.findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      { new: true }
+    ).lean();
+    if (!doc) return null;
+    return { id: (doc as any)._id.toString(), ...doc } as unknown as Invoice;
   }
 
   static async deleteInvoice(id: string): Promise<boolean> {
-    // Implementation will be added later
-    return true;
+    if (!mongoose.Types.ObjectId.isValid(id)) return false;
+    const result = await InvoiceModel.findByIdAndDelete(id);
+    return !!result;
   }
 
   static async processPayment(paymentData: Partial<Payment>): Promise<Payment> {
-    // Implementation will be added later
-    return {
-      id: 'pay_' + Date.now(),
+    const doc = await PaymentModel.create({
+      invoiceId: paymentData.invoiceId,
       merchantId: paymentData.merchantId || '',
-      amount: paymentData.amount || 0,
+      customerId: paymentData.customerId,
+      amount: paymentData.amount ?? 0,
       currency: paymentData.currency || 'USD',
       billingType: paymentData.billingType || BillingType.ONE_TIME,
       method: paymentData.method || 'card',
-      status: 'completed',
-      processedAt: new Date(),
-      createdAt: new Date(),
-      updatedAt: new Date()
-    } as Payment;
+      status: paymentData.status || 'completed',
+      transactionId: paymentData.transactionId,
+      processedAt: paymentData.processedAt || new Date()
+    });
+    return toPlainId(doc) as Payment;
   }
 
   static async getPayment(id: string): Promise<Payment | null> {
-    // Implementation will be added later
-    return {
-      id,
-      merchantId: 'merchant_123',
-      amount: 100.00,
-      currency: 'USD',
-      billingType: BillingType.ONE_TIME,
-      method: 'card',
-      status: 'completed',
-      processedAt: new Date(),
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+    if (!mongoose.Types.ObjectId.isValid(id)) return null;
+    const doc = await PaymentModel.findById(id).lean();
+    if (!doc) return null;
+    return { id: (doc as any)._id.toString(), ...doc } as unknown as Payment;
   }
 
-  static async listPayments(filters?: any): Promise<Payment[]> {
-    // Implementation will be added later
-    return [];
+  static async listPayments(filters?: { merchantId?: string }): Promise<Payment[]> {
+    const query: Record<string, unknown> = {};
+    if (filters?.merchantId) query.merchantId = filters.merchantId;
+    const docs = await PaymentModel.find(query).sort({ createdAt: -1 }).lean();
+    return docs.map(d => ({ id: (d as any)._id.toString(), ...d } as unknown as Payment));
   }
 
   static async createSubscription(subscriptionData: Partial<Subscription>): Promise<Subscription> {
-    // Implementation will be added later
-    return {
-      id: 'sub_' + Date.now(),
+    const nextBillingDate = subscriptionData.nextBillingDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const doc = await SubscriptionModel.create({
       merchantId: subscriptionData.merchantId || '',
       customerId: subscriptionData.customerId || '',
       planId: subscriptionData.planId || '',
-      amount: subscriptionData.amount || 0,
+      amount: subscriptionData.amount ?? 0,
       currency: subscriptionData.currency || 'USD',
       billingType: subscriptionData.billingType || BillingType.RECURRING,
       interval: subscriptionData.interval || 'month',
-      intervalCount: subscriptionData.intervalCount || 1,
-      status: 'active',
-      startDate: new Date(),
-      nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
-      createdAt: new Date(),
-      updatedAt: new Date()
-    } as Subscription;
+      intervalCount: subscriptionData.intervalCount ?? 1,
+      status: subscriptionData.status || 'active',
+      startDate: subscriptionData.startDate || new Date(),
+      nextBillingDate,
+      endDate: subscriptionData.endDate,
+      trialEnd: subscriptionData.trialEnd
+    });
+    return toPlainId(doc) as Subscription;
   }
 
   static async getSubscription(id: string): Promise<Subscription | null> {
-    // Implementation will be added later
-    return {
-      id,
-      merchantId: 'merchant_123',
-      customerId: 'customer_123',
-      planId: 'basic',
-      amount: 29.99,
-      currency: 'USD',
-      billingType: BillingType.RECURRING,
-      interval: 'month',
-      intervalCount: 1,
-      status: 'active',
-      startDate: new Date(),
-      nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+    if (!mongoose.Types.ObjectId.isValid(id)) return null;
+    const doc = await SubscriptionModel.findById(id).lean();
+    if (!doc) return null;
+    return { id: (doc as any)._id.toString(), ...doc } as unknown as Subscription;
   }
 
-  static async listSubscriptions(filters?: any): Promise<Subscription[]> {
-    // Implementation will be added later
-    return [];
+  static async listSubscriptions(filters?: { merchantId?: string; customerId?: string }): Promise<Subscription[]> {
+    const query: Record<string, unknown> = {};
+    if (filters?.merchantId) query.merchantId = filters.merchantId;
+    if (filters?.customerId) query.customerId = filters.customerId;
+    const docs = await SubscriptionModel.find(query).sort({ createdAt: -1 }).lean();
+    return docs.map(d => ({ id: (d as any)._id.toString(), ...d } as unknown as Subscription));
   }
 
   static async updateSubscription(id: string, updateData: Partial<Subscription>): Promise<Subscription | null> {
-    // Implementation will be added later
-    const existing = await this.getSubscription(id);
-    if (!existing) return null;
-    
-    return {
-      ...existing,
-      ...updateData,
-      updatedAt: new Date()
-    };
+    if (!mongoose.Types.ObjectId.isValid(id)) return null;
+    const doc = await SubscriptionModel.findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      { new: true }
+    ).lean();
+    if (!doc) return null;
+    return { id: (doc as any)._id.toString(), ...doc } as unknown as Subscription;
   }
 
   static async getTransaction(id: string): Promise<Transaction | null> {
-    // Implementation will be added later
-    return {
-      id,
-      merchantId: 'merchant_123',
-      amount: 100.00,
-      currency: 'USD',
-      billingType: BillingType.ONE_TIME,
-      type: 'payment',
-      status: 'completed',
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+    if (!mongoose.Types.ObjectId.isValid(id)) return null;
+    const doc = await TransactionModel.findById(id).lean();
+    if (!doc) return null;
+    return { id: (doc as any)._id.toString(), ...doc } as unknown as Transaction;
   }
 
-  static async listTransactions(filters?: any): Promise<Transaction[]> {
-    // Implementation will be added later
-    return [];
+  static async listTransactions(filters?: { merchantId?: string }): Promise<Transaction[]> {
+    const query: Record<string, unknown> = {};
+    if (filters?.merchantId) query.merchantId = filters.merchantId;
+    const docs = await TransactionModel.find(query).sort({ createdAt: -1 }).lean();
+    return docs.map(d => ({ id: (d as any)._id.toString(), ...d } as unknown as Transaction));
   }
 
   /**

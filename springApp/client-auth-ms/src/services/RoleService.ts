@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { mockDb } from '../utils/mockDatabase';
+import { db } from '../db/database';
 import { Role, Permission, CreateRoleRequest } from '../models/User';
 
 export class RoleService {
@@ -28,7 +28,7 @@ export class RoleService {
         updated_at: now
       };
 
-      const createdRole = await mockDb.createRole(role);
+      const createdRole = await db.createRole(role);
 
       return {
         success: true,
@@ -47,7 +47,7 @@ export class RoleService {
    */
   static async getRoles(merchantId: string): Promise<{ success: boolean; roles?: Role[]; error?: string }> {
     try {
-      const roles = await mockDb.findRolesByMerchantId(merchantId);
+      const roles = await db.findRolesByMerchantId(merchantId);
       return {
         success: true,
         roles
@@ -66,7 +66,7 @@ export class RoleService {
   static async updateRole(merchantId: string, roleId: string, roleData: CreateRoleRequest): Promise<{ success: boolean; role?: Role; error?: string }> {
     try {
       // First, verify the role exists and belongs to this merchant
-      const existingRole = await mockDb.findRoleById(roleId);
+      const existingRole = await db.findRoleById(roleId);
       if (!existingRole) {
         return {
           success: false,
@@ -91,7 +91,7 @@ export class RoleService {
       }
 
       // Update the role
-      const updatedRole = await mockDb.updateRole(roleId, {
+      const updatedRole = await db.updateRole(roleId, {
         name: roleData.name,
         description: roleData.description,
         permissions: roleData.permissions
@@ -122,7 +122,7 @@ export class RoleService {
   static async deleteRole(merchantId: string, roleId: string): Promise<{ success: boolean; error?: string }> {
     try {
       // First, verify the role exists and belongs to this merchant
-      const existingRole = await mockDb.findRoleById(roleId);
+      const existingRole = await db.findRoleById(roleId);
       if (!existingRole) {
         return {
           success: false,
@@ -138,7 +138,7 @@ export class RoleService {
       }
 
       // Check if any users are assigned to this role
-      const usersWithRole = await mockDb.findUsersByMerchantId(merchantId);
+      const usersWithRole = await db.findUsersByMerchantId(merchantId);
       const usersAssignedToRole = usersWithRole.filter(user => 
         user.user_type === 'user' && 'role_id' in user && user.role_id === roleId
       );
@@ -151,7 +151,7 @@ export class RoleService {
       }
 
       // Delete the role
-      const deleted = await mockDb.deleteRole(roleId);
+      const deleted = await db.deleteRole(roleId);
 
       if (!deleted) {
         return {

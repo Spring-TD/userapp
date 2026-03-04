@@ -1,6 +1,7 @@
 import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import mongoose from 'mongoose';
 import { config } from './config/environment';
 import { corsMiddleware } from './middleware/cors';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
@@ -53,7 +54,8 @@ app.get('/health', (_req, res) => {
     success: true,
     message: 'Client Auth Microservice is running',
     timestamp: new Date().toISOString(),
-    version: '1.0.0'
+    version: '1.0.0',
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
   });
 });
 
@@ -72,6 +74,16 @@ app.use('/verify-email', verifyEmailRoutes);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
+// Connect to MongoDB before starting server
+mongoose.connect(config.mongoUri)
+  .then(() => {
+    console.log('✅ Connected to MongoDB');
+  })
+  .catch((err) => {
+    console.error('❌ MongoDB connection error:', err);
+    process.exit(1);
+  });
+
 const server = app.listen(config.port, '0.0.0.0', () => {
   console.log(`🚀 Client Auth Microservice running on port ${config.port}`);
   console.log(`📱 Environment: ${config.nodeEnv}`);
@@ -81,7 +93,20 @@ const server = app.listen(config.port, '0.0.0.0', () => {
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully');
   server.close(() => {
-    console.log('Process terminated');
+    mongoose.connection.close().then(() => {
+      console.log('Process terminated');
+      process.exit(0);
+    });
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down gracefully');
+  server.close(() => {
+    mongoose.connection.close().then(() => {
+      console.log('Process terminated');
+      process.exit(0);
+    });
   });
 });
 

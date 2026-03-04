@@ -1,6 +1,7 @@
 import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import mongoose from 'mongoose';
 import { config } from './config/environment';
 import corsMiddleware from './middleware/cors';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
@@ -48,7 +49,8 @@ app.get('/health', (_req, res) => {
     success: true,
     message: 'Billing Microservice is running',
     timestamp: new Date().toISOString(),
-    version: '1.0.0'
+    version: '1.0.0',
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
   });
 });
 
@@ -58,6 +60,16 @@ app.use('/api/v1/billing', billingRoutes);
 // Error handling middleware
 app.use(notFoundHandler);
 app.use(errorHandler);
+
+// Connect to MongoDB before starting server
+mongoose.connect(config.mongoUri)
+  .then(() => {
+    console.log('✅ Connected to MongoDB');
+  })
+  .catch((err) => {
+    console.error('❌ MongoDB connection error:', err);
+    process.exit(1);
+  });
 
 const server = app.listen(config.port, () => {
   console.log(`🚀 Billing Microservice running on port ${config.port}`);
@@ -82,16 +94,29 @@ const server = app.listen(config.port, () => {
 
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully');
-  
-  // Stop schedulers
   const billingScheduler = BillingScheduler.getInstance();
   billingScheduler.stop();
-  
   const pricingScheduler = PricingScheduler.getInstance();
   pricingScheduler.stop();
-  
   server.close(() => {
-    console.log('Process terminated');
+    mongoose.connection.close().then(() => {
+      console.log('Process terminated');
+      process.exit(0);
+    });
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down gracefully');
+  const billingScheduler = BillingScheduler.getInstance();
+  billingScheduler.stop();
+  const pricingScheduler = PricingScheduler.getInstance();
+  pricingScheduler.stop();
+  server.close(() => {
+    mongoose.connection.close().then(() => {
+      console.log('Process terminated');
+      process.exit(0);
+    });
   });
 });
 

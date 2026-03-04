@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { CreateInvitationRequest, Invitation } from '../models/Invitation';
-import { mockDb } from '../utils/mockDatabase';
+import { db } from '../db/database';
 import { emailService } from './emailService';
 
 import { User, UserType, AccountStatus } from '../models/User';
@@ -13,7 +13,7 @@ export class InvitationService {
      */
     async createInvitation(merchantId: string, request: CreateInvitationRequest): Promise<Invitation> {
         // Validate role exists and belongs to merchant (or is a system role if we had any)
-        const role = await mockDb.findRoleById(request.roleId);
+        const role = await db.findRoleById(request.roleId);
         if (!role) {
             throw new Error('Role not found');
         }
@@ -24,7 +24,7 @@ export class InvitationService {
         }
 
         // Check if user already exists
-        const existingUser = await mockDb.findUserByEmail(request.email);
+        const existingUser = await db.findUserByEmail(request.email);
         if (existingUser) {
             throw new Error('User already exists');
         }
@@ -45,10 +45,10 @@ export class InvitationService {
             updatedAt: now
         };
 
-        await mockDb.createInvitation(invitation);
+        await db.createInvitation(invitation);
 
         // Get merchant details for email
-        const merchant = await mockDb.findUserById(merchantId);
+        const merchant = await db.findUserById(merchantId);
         const merchantName = merchant ? `${merchant.first_name} ${merchant.last_name}` : 'Merchant';
         const invitationUrl = `${process.env['FRONTEND_URL'] || 'http://localhost:3000'}/accept-invitation?token=${token}`;
 
@@ -67,7 +67,7 @@ export class InvitationService {
      * Get invitations for a merchant
      */
     async getInvitations(merchantId: string): Promise<Invitation[]> {
-        return mockDb.findInvitationsByMerchantId(merchantId);
+        return db.findInvitationsByMerchantId(merchantId);
     }
 
     /**
@@ -80,7 +80,7 @@ export class InvitationService {
         phone?: string;
     }): Promise<User> {
 
-        const invitation = await mockDb.findInvitationByToken(token);
+        const invitation = await db.findInvitationByToken(token);
 
         if (!invitation) {
             throw new Error('Invalid invitation token');
@@ -91,7 +91,7 @@ export class InvitationService {
         }
 
         if (new Date() > invitation.expiresAt) {
-            await mockDb.updateInvitation(invitation.id, { status: 'expired' });
+            await db.updateInvitation(invitation.id, { status: 'expired' });
             throw new Error('Invitation expired');
         }
 
@@ -113,10 +113,10 @@ export class InvitationService {
             role_id: invitation.roleId
         };
 
-        const createdUser = await mockDb.createUser(newUser) as User;
+        const createdUser = await db.createUser(newUser) as User;
 
         // Update invitation status
-        await mockDb.updateInvitation(invitation.id, { status: 'accepted' });
+        await db.updateInvitation(invitation.id, { status: 'accepted' });
 
         return createdUser;
     }
@@ -125,13 +125,13 @@ export class InvitationService {
      * Validate invitation token (for frontend to show details)
      */
     async validateInvitationToken(token: string): Promise<{ email: string, roleName: string, merchantName: string } | null> {
-        const invitation = await mockDb.findInvitationByToken(token);
+        const invitation = await db.findInvitationByToken(token);
         if (!invitation || invitation.status !== 'pending' || new Date() > invitation.expiresAt) {
             return null;
         }
 
-        const role = await mockDb.findRoleById(invitation.roleId);
-        const merchant = await mockDb.findUserById(invitation.merchantId);
+        const role = await db.findRoleById(invitation.roleId);
+        const merchant = await db.findUserById(invitation.merchantId);
 
         return {
             email: invitation.email,

@@ -9,7 +9,7 @@ This microservice provides centralized notification functionality for the Spring
 - **SMS Notifications**: Send SMS via Twilio
 - **Template Support**: Reusable email and SMS templates with variable substitution
 - **Delivery Tracking**: Track notification status and delivery
-- **MongoDB Persistence**: Store all notification records for auditing
+- **MongoDB Persistence**: Store all notification records in a real database (Digital Ocean, Atlas, or local MongoDB—no mock data)
 - **Graceful Degradation**: Service continues to work even if email/SMS providers are not configured
 
 ## Tech Stack
@@ -23,7 +23,9 @@ This microservice provides centralized notification functionality for the Spring
 
 ## Deployment
 
-The service is deployed on Fly.io and is accessible at: https://notifications-ms.fly.dev
+**Docker Compose:** The service is included in the root `docker-compose.yml`. It uses the stack MongoDB by default. To use Digital Ocean MongoDB instead, set `DATABASE_URL` (or `MONGODB_URI`) in your environment before running `docker-compose up`.
+
+**Fly.io:** The service can be deployed on Fly.io and is accessible at: https://notifications-ms.fly.dev
 
 Health check endpoint: https://notifications-ms.fly.dev/health
 
@@ -47,7 +49,14 @@ Health check endpoint: https://notifications-ms.fly.dev/health
 
 ### Configuration
 
-Create a `.env` file with the following variables:
+Copy `.env.example` to `.env` and set your variables. The service uses **real MongoDB** (no mock data). For production, use a Digital Ocean Managed MongoDB (or MongoDB Atlas) connection string.
+
+**Digital Ocean MongoDB:** In your `.env`, set one of:
+- `MONGODB_URI="mongodb+srv://doadmin:YOUR_PASSWORD@db-mongodb-YOUR_CLUSTER.mongo.ondigitalocean.com/notifications_db?tls=true&authSource=admin&replicaSet=db-mongodb"`
+- `DATABASE_URL` (same format)
+- `MONGO_URI` (same format)
+
+**Local development:** Use the default in `.env.example` or:
 
 ```env
 # Server

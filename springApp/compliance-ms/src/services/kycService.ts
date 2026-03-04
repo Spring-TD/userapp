@@ -15,7 +15,7 @@ import {
 } from '../types/kycTypes';
 import { logger } from '../utils/logger';
 import { auditLogger } from '../utils/audit';
-import { MockKYCProfileModel, MockKYCDocumentModel } from '../utils/mockDb';
+import { KYCProfileDb } from '../db/kycProfileDb';
 import { 
   validateKYCSubmission, 
   validateIndividualKYCSubmission,
@@ -71,7 +71,7 @@ export class KYCService {
         workflowStatus: ComplianceWorkflowStatus.INITIAL_SCREENING
       };
       
-      const result = await MockKYCProfileModel.save(kycProfileData);
+      const result = await KYCProfileDb.save(kycProfileData);
       
       logger.info('Individual KYC submitted successfully', {
         userId: data.userId,
@@ -165,7 +165,7 @@ export class KYCService {
         // premblyVerificationId will be set after admin approval and Prembly verification
       };
       
-      const result = await MockKYCProfileModel.save(kycProfileData);
+      const result = await KYCProfileDb.save(kycProfileData);
       
       logger.info('Business KYC submitted successfully', {
         userId: data.userId,
@@ -342,7 +342,7 @@ export class KYCService {
           submittedAt: new Date()
         };
         
-        const result = await MockKYCProfileModel.save(kycProfileData);
+        const result = await KYCProfileDb.save(kycProfileData);
         
         // Get document count safely
         let documentCount = 0;
@@ -401,7 +401,7 @@ export class KYCService {
     error?: string;
   }> {
     try {
-      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      const kycProfile: any = await KYCProfileDb.findOne({ userId });
       
       if (!kycProfile) {
         return {
@@ -437,7 +437,7 @@ export class KYCService {
     error?: string;
   }> {
     try {
-      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      const kycProfile: any = await KYCProfileDb.findOne({ userId });
       
       if (!kycProfile) {
         return {
@@ -472,7 +472,7 @@ export class KYCService {
     error?: string;
   }> {
     try {
-      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      const kycProfile: any = await KYCProfileDb.findOne({ userId });
       
       if (!kycProfile) {
         return {
@@ -507,7 +507,7 @@ export class KYCService {
     error?: string;
   }> {
     try {
-      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      const kycProfile: any = await KYCProfileDb.findOne({ userId });
       
       if (!kycProfile) {
         return {
@@ -542,7 +542,7 @@ export class KYCService {
     error?: string;
   }> {
     try {
-      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      const kycProfile: any = await KYCProfileDb.findOne({ userId });
       
       if (!kycProfile) {
         return {
@@ -577,7 +577,7 @@ export class KYCService {
     error?: string;
   }> {
     try {
-      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      const kycProfile: any = await KYCProfileDb.findOne({ userId });
       
       if (!kycProfile) {
         return {
@@ -594,7 +594,7 @@ export class KYCService {
       }
       
       // Update the personal info
-      const updatedProfile = await MockKYCProfileModel.findByIdAndUpdate(
+      const updatedProfile = await KYCProfileDb.findByIdAndUpdate(
         kycProfile._id,
         { personalInfo },
         { new: true }
@@ -626,7 +626,7 @@ export class KYCService {
     error?: string;
   }> {
     try {
-      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      const kycProfile: any = await KYCProfileDb.findOne({ userId });
       
       if (!kycProfile) {
         return {
@@ -643,7 +643,7 @@ export class KYCService {
       }
       
       // Update the business info
-      const updatedProfile = await MockKYCProfileModel.findByIdAndUpdate(
+      const updatedProfile = await KYCProfileDb.findByIdAndUpdate(
         kycProfile._id,
         { businessInfo },
         { new: true }
@@ -675,7 +675,7 @@ export class KYCService {
     error?: string;
   }> {
     try {
-      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      const kycProfile: any = await KYCProfileDb.findOne({ userId });
       
       if (!kycProfile) {
         return {
@@ -692,7 +692,7 @@ export class KYCService {
       }
       
       // Update the business survey
-      const updatedProfile = await MockKYCProfileModel.findByIdAndUpdate(
+      const updatedProfile = await KYCProfileDb.findByIdAndUpdate(
         kycProfile._id,
         { businessSurvey },
         { new: true }
@@ -724,7 +724,7 @@ export class KYCService {
     error?: string;
   }> {
     try {
-      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      const kycProfile: any = await KYCProfileDb.findOne({ userId });
       
       if (!kycProfile) {
         return {
@@ -741,7 +741,7 @@ export class KYCService {
       }
       
       // Update the shareholders
-      const updatedProfile = await MockKYCProfileModel.findByIdAndUpdate(
+      const updatedProfile = await KYCProfileDb.findByIdAndUpdate(
         kycProfile._id,
         { shareholders },
         { new: true }
@@ -773,7 +773,7 @@ export class KYCService {
     error?: string;
   }> {
     try {
-      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      const kycProfile: any = await KYCProfileDb.findOne({ userId });
       
       if (!kycProfile) {
         return {
@@ -816,7 +816,7 @@ export class KYCService {
     error?: string;
   }> {
     try {
-      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      const kycProfile: any = await KYCProfileDb.findOne({ userId });
       
       if (!kycProfile) {
         return {
@@ -858,7 +858,7 @@ export class KYCService {
     error?: string;
   }> {
     try {
-      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      const kycProfile: any = await KYCProfileDb.findOne({ userId });
       
       if (!kycProfile) {
         return {
@@ -900,7 +900,7 @@ export class KYCService {
     error?: string;
   }> {
     try {
-      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      const kycProfile: any = await KYCProfileDb.findOne({ userId });
       
       if (!kycProfile) {
         return {
@@ -949,7 +949,7 @@ export class KYCService {
   }> {
     try {
       // Check if profile already exists
-      const existingProfile: any = await MockKYCProfileModel.findOne({ userId });
+      const existingProfile: any = await KYCProfileDb.findOne({ userId });
       
       if (existingProfile) {
         return {
@@ -967,7 +967,7 @@ export class KYCService {
         submittedAt: new Date()
       };
       
-      const result = await MockKYCProfileModel.save(profileData);
+      const result = await KYCProfileDb.save(profileData);
       
       return {
         success: true,
@@ -1012,7 +1012,7 @@ export class KYCService {
   async updateWorkflowStatus(kycId: string, workflowStatus: ComplianceWorkflowStatus, updatedBy?: string) {
     try {
       // Update the workflow status in the database
-      const updatedProfile: any = await MockKYCProfileModel.findByIdAndUpdate(
+      const updatedProfile: any = await KYCProfileDb.findByIdAndUpdate(
         kycId,
         {
           workflowStatus,
@@ -1065,7 +1065,7 @@ export class KYCService {
   async getPendingWorkflows() {
     try {
       // Query the database for pending workflows
-      const pendingWorkflows: any = await MockKYCProfileModel.find({
+      const pendingWorkflows: any = await KYCProfileDb.find({
         workflowStatus: {
           $in: [
             ComplianceWorkflowStatus.INITIAL_SCREENING,
@@ -1107,7 +1107,7 @@ export class KYCService {
   async getPendingReviews() {
     try {
       // Query the database for profiles pending review
-      const pendingReviews: any = await MockKYCProfileModel.find({
+      const pendingReviews: any = await KYCProfileDb.find({
         status: KYCStatus.REVIEW
       });
 
@@ -1142,7 +1142,7 @@ export class KYCService {
   async getHighRiskProfiles() {
     try {
       // Query the database for high-risk profiles
-      const highRiskProfiles: any = await MockKYCProfileModel.find({
+      const highRiskProfiles: any = await KYCProfileDb.find({
         riskLevel: {
           $in: [RiskLevel.HIGH, RiskLevel.VERY_HIGH]
         }
@@ -1180,7 +1180,7 @@ export class KYCService {
   async getRiskSummaryReport() {
     try {
       // Query the database for all profiles to generate risk summary
-      const allProfiles: any = await MockKYCProfileModel.find({});
+      const allProfiles: any = await KYCProfileDb.find({});
       
       // Calculate risk distribution
       const riskDistribution: Record<string, number> = {};
@@ -1230,7 +1230,7 @@ export class KYCService {
   async getComplianceMetrics() {
     try {
       // Query the database for all profiles and documents
-      const allProfiles: any = await MockKYCProfileModel.find({});
+      const allProfiles: any = await KYCProfileDb.find({});
       
       // Calculate metrics
       const statusDistribution: Record<string, number> = {};
@@ -1285,7 +1285,7 @@ export class KYCService {
   async getDocumentStatusReport() {
     try {
       // Query the database for all profiles to analyze documents
-      const allProfiles: any = await MockKYCProfileModel.find({});
+      const allProfiles: any = await KYCProfileDb.find({});
       
       // Calculate document metrics
       let totalDocuments = 0;
@@ -1332,7 +1332,7 @@ export class KYCService {
   async getAllUsers() {
     try {
       // Query the database for all profiles
-      const allProfiles: any = await MockKYCProfileModel.find({});
+      const allProfiles: any = await KYCProfileDb.find({});
       
       const users = allProfiles.map((profile: any) => ({
         userId: profile.userId,
@@ -1369,7 +1369,7 @@ export class KYCService {
   async getAllComplianceDocuments() {
     try {
       // Query the database for all profiles to get all documents
-      const allProfiles: any = await MockKYCProfileModel.find({});
+      const allProfiles: any = await KYCProfileDb.find({});
       
       const allDocuments: any[] = [];
       
@@ -1412,7 +1412,7 @@ export class KYCService {
   async approveDisapproveUser(userId: string, status: 'approved' | 'rejected', note?: string, updatedBy?: string) {
     try {
       // Find the user's KYC profile
-      const userProfile: any = await MockKYCProfileModel.findOne({ userId });
+      const userProfile: any = await KYCProfileDb.findOne({ userId });
       
       if (!userProfile) {
         return {
@@ -1422,7 +1422,7 @@ export class KYCService {
       }
 
       // Update the profile status
-      const updatedProfile = await MockKYCProfileModel.findByIdAndUpdate(
+      const updatedProfile = await KYCProfileDb.findByIdAndUpdate(
         userProfile._id,
         {
           status: status === 'approved' ? KYCStatus.APPROVED : KYCStatus.REJECTED,
@@ -1482,7 +1482,7 @@ export class KYCService {
   async sendMessageToUser(userId: string, message: string, sentBy?: string) {
     try {
       // Find the user's KYC profile
-      const userProfile: any = await MockKYCProfileModel.findOne({ userId });
+      const userProfile: any = await KYCProfileDb.findOne({ userId });
       
       if (!userProfile) {
         return {
@@ -1502,7 +1502,7 @@ export class KYCService {
       };
 
       // Update the profile with the new message
-      const updatedProfile = await MockKYCProfileModel.findByIdAndUpdate(
+      const updatedProfile = await KYCProfileDb.findByIdAndUpdate(
         userProfile._id,
         {
           $push: {
@@ -1552,7 +1552,7 @@ export class KYCService {
   async blockUser(userId: string, reason?: string, blockedBy?: string) {
     try {
       // Find the user's KYC profile
-      const userProfile: any = await MockKYCProfileModel.findOne({ userId });
+      const userProfile: any = await KYCProfileDb.findOne({ userId });
       
       if (!userProfile) {
         return {
@@ -1562,7 +1562,7 @@ export class KYCService {
       }
 
       // Update the profile to mark user as blocked
-      const updatedProfile = await MockKYCProfileModel.findByIdAndUpdate(
+      const updatedProfile = await KYCProfileDb.findByIdAndUpdate(
         userProfile._id,
         {
           isBlocked: true,
@@ -1619,7 +1619,7 @@ export class KYCService {
   async unblockUser(userId: string, unblockedBy?: string) {
     try {
       // Find the user's KYC profile
-      const userProfile: any = await MockKYCProfileModel.findOne({ userId });
+      const userProfile: any = await KYCProfileDb.findOne({ userId });
       
       if (!userProfile) {
         return {
@@ -1629,7 +1629,7 @@ export class KYCService {
       }
 
       // Update the profile to mark user as unblocked
-      const updatedProfile = await MockKYCProfileModel.findByIdAndUpdate(
+      const updatedProfile = await KYCProfileDb.findByIdAndUpdate(
         userProfile._id,
         {
           isBlocked: false,
@@ -1693,7 +1693,7 @@ export class KYCService {
   }> {
     try {
       // Find the user's KYC profile
-      const userProfile: any = await MockKYCProfileModel.findOne({ userId });
+      const userProfile: any = await KYCProfileDb.findOne({ userId });
       
       if (!userProfile) {
         return {
@@ -1796,7 +1796,7 @@ export class KYCService {
     error?: string;
   }> {
     try {
-      const updatedProfile = await MockKYCProfileModel.findByIdAndUpdate(
+      const updatedProfile = await KYCProfileDb.findByIdAndUpdate(
         kycId,
         {
           status,
@@ -1861,7 +1861,7 @@ export class KYCService {
   }> {
     try {
       // Find the document by ID
-      const document = await MockKYCDocumentModel.findById(documentId);
+      const document = await KYCProfileDb.findDocumentById(documentId);
       
       if (!document) {
         return {
@@ -1878,7 +1878,7 @@ export class KYCService {
         ...(notes && { notes })
       };
       
-      const updatedDocument = await MockKYCDocumentModel.findByIdAndUpdate(
+      const updatedDocument = await KYCProfileDb.findDocumentByIdAndUpdate(
         documentId,
         updateData,
         { new: true }
@@ -1903,8 +1903,8 @@ export class KYCService {
         message: 'Document status updated successfully',
         data: {
           documentId: updatedDocument._id,
-          status: updatedDocument.status,
-          rejectionReason: updatedDocument.rejectionReason,
+          status: updatedDocument.status as KYCStatus,
+          rejectionReason: updatedDocument.rejectionReason as string | undefined,
           ...(updatedBy && { updatedBy }),
           ...(notes && { notes })
         }
@@ -1929,7 +1929,7 @@ export class KYCService {
     error?: string;
   }> {
     try {
-      const document = await MockKYCDocumentModel.findById(documentId);
+      const document = await KYCProfileDb.findDocumentById(documentId);
       
       if (!document) {
         return {
@@ -1963,7 +1963,7 @@ export class KYCService {
   }> {
     try {
       // Find the KYC profile for the user
-      const profile: any = await MockKYCProfileModel.findOne({ userId });
+      const profile: any = await KYCProfileDb.findOne({ userId });
       
       if (!profile) {
         return {
@@ -2009,7 +2009,7 @@ export class KYCService {
         if (filters.endDate) query.submittedAt.$lte = new Date(filters.endDate);
       }
 
-      const profiles = await MockKYCProfileModel.find(query);
+      const profiles = await KYCProfileDb.find(query);
 
       return {
         success: true,

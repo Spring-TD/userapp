@@ -1,6 +1,7 @@
 import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import mongoose from 'mongoose';
 import { config } from './config/environment';
 import corsMiddleware from './middleware/cors';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
@@ -49,7 +50,8 @@ app.get('/health', (_req, res) => {
     success: true,
     message: 'Payment Microservice is running',
     timestamp: new Date().toISOString(),
-    version: '1.0.0'
+    version: '1.0.0',
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
   });
 });
 
@@ -61,26 +63,55 @@ app.use('/api/v1/records', recordRoutes);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-const server = app.listen(config.port, () => {
-  logger.info(`🚀 Payment Microservice running on port ${config.port}`);
-  logger.info(`📱 Environment: ${config.nodeEnv}`);
-  logger.info(`🔗 Service Auth URL: ${config.serviceAuthUrl}`);
-  logger.info(`🔗 Billing Service URL: ${config.billingServiceUrl}`);
-  logger.info(`🔗 Wallet Service URL: ${config.walletServiceUrl}`);
-  logger.info(`🌐 Payment Service Features:`);
-  logger.info(`   💳 Card Payments`);
-  logger.info(`   🏦 Bank Transfers`);
-  logger.info(`   💰 PayPal Integration`);
-  logger.info(`   ₿ Crypto Payments`);
-  logger.info(`   📊 Merchant Record Management`);
-  logger.info(`   📒 Debit/Credit Ledger Tracking`);
-});
+async function start(): Promise<void> {
+  if (!config.mongoUri) {
+    logger.error('MONGODB_URI or DATABASE_URL is required');
+    process.exit(1);
+  }
+  try {
+    await mongoose.connect(config.mongoUri);
+    logger.info('Connected to MongoDB (Digital Ocean)');
+  } catch (err) {
+    logger.error('MongoDB connection error:', err);
+    process.exit(1);
+  }
 
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM received, shutting down gracefully');
-  server.close(() => {
-    logger.info('Process terminated');
+  const server = app.listen(config.port, () => {
+    logger.info(`🚀 Payment Microservice running on port ${config.port}`);
+    logger.info(`📱 Environment: ${config.nodeEnv}`);
+    logger.info(`🗄️ MongoDB: connected`);
+    logger.info(`🔗 Service Auth URL: ${config.serviceAuthUrl}`);
+    logger.info(`🔗 Billing Service URL: ${config.billingServiceUrl}`);
+    logger.info(`🔗 Wallet Service URL: ${config.walletServiceUrl}`);
+    logger.info(`🌐 Payment Service Features:`);
+    logger.info(`   💳 Card Payments`);
+    logger.info(`   🏦 Bank Transfers`);
+    logger.info(`   💰 PayPal Integration`);
+    logger.info(`   ₿ Crypto Payments`);
+    logger.info(`   📊 Merchant Record Management`);
+    logger.info(`   📒 Debit/Credit Ledger Tracking`);
   });
+
+  async function shutdown(): Promise<void> {
+    logger.info('SIGTERM received, shutting down gracefully');
+    server.close(() => {
+      mongoose.connection.close().then(() => {
+        logger.info('MongoDB connection closed');
+        process.exit(0);
+      }).catch((err) => {
+        logger.error('Error closing MongoDB', err);
+        process.exit(1);
+      });
+    });
+  }
+
+  process.on('SIGTERM', () => void shutdown());
+  process.on('SIGINT', () => void shutdown());
+}
+
+start().catch((err) => {
+  logger.error('Failed to start server', err);
+  process.exit(1);
 });
 
 export default app;

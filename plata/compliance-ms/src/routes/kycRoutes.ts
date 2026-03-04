@@ -1,3 +1,153 @@
+/**
+ * KYC routes (mounted at /api/v1/kyc). Includes legacy routes and sub-routers for individual, business, admin, and liveness.
+ *
+ * @openapi
+ * /api/v1/kyc/submit:
+ *   post:
+ *     summary: Submit KYC (legacy)
+ *     tags: [KYC]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: KYC submitted
+ * /api/v1/kyc/status/{userId}:
+ *   get:
+ *     summary: Get KYC status by user
+ *     tags: [KYC]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: KYC status
+ * /api/v1/kyc/profile/{userId}:
+ *   post:
+ *     summary: Create minimal KYC profile
+ *     tags: [KYC]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       201:
+ *         description: Profile created
+ * /api/v1/kyc/documents/{userId}:
+ *   get:
+ *     summary: Get all KYC documents for user
+ *     tags: [KYC]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of documents
+ * /api/v1/kyc/document/{documentId}:
+ *   get:
+ *     summary: Get KYC document by ID
+ *     tags: [KYC]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Document details
+ *   put:
+ *     summary: Update document status
+ *     tags: [KYC]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Status updated
+ * /api/v1/kyc/review/{kycId}:
+ *   post:
+ *     summary: Review KYC submission
+ *     tags: [KYC]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: kycId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Review recorded
+ * /api/v1/kyc/search:
+ *   get:
+ *     summary: Search KYC profiles
+ *     tags: [KYC]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Search results
+ * /api/v1/kyc/business/{merchantId}/shareholders/create:
+ *   post:
+ *     summary: Create shareholder data
+ *     tags: [KYC - Business]
+ *     parameters:
+ *       - in: path
+ *         name: merchantId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       201:
+ *         description: Shareholder created
+ * /api/v1/kyc/business/{merchantId}/shareholders:
+ *   get:
+ *     summary: Get shareholder data
+ *     tags: [KYC - Business]
+ *     parameters:
+ *       - in: path
+ *         name: merchantId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Shareholder data
+ *   put:
+ *     summary: Update shareholder data
+ *     tags: [KYC - Business]
+ *     parameters:
+ *       - in: path
+ *         name: merchantId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Shareholder updated
+ */
 // src/routes/kycRoutes.ts
 import { Router } from 'express';
 import { validateKYCSubmission } from '../middleware/kycValidation';

@@ -1,11 +1,12 @@
+/// <reference types="jest" />
 import request from 'supertest';
 import app from '../index';
-import { mockDb } from '../utils/mockDatabase';
+import { db } from '../db/database';
 
 describe('AuthController - Registration', () => {
   beforeEach(async () => {
-    // Clear mock database before each test
-    await mockDb.clearAll();
+    // Clear database before each test (use test MongoDB)
+    await db.clearAll();
   });
 
   describe('POST /api/v1/auth/register/user', () => {

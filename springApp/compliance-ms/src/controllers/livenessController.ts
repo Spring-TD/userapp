@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { livenessService } from '../services/livenessService';
 import { logger } from '../utils/logger';
-import { MockKYCProfileModel } from '../utils/mockDb';
 import { Shareholder } from '../types/kycTypes';
 
 export class LivenessController {

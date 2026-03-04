@@ -2,7 +2,7 @@
 import { createHash } from 'crypto';
 import { logger } from '../utils/logger';
 import { auditLogger } from '../utils/audit';
-import { MockKYCDocumentModel } from '../utils/mockDb';
+import { KYCProfileDb } from '../db/kycProfileDb';
 import { BusinessDocumentData, BusinessDocumentType, KYCStatus } from '../types/kycTypes';
 import { premblyService, PremblyBusinessKYCRequest } from './premblyService';
 
@@ -312,7 +312,7 @@ export class AMLVerificationService {
         });
 
         // Update document status to REVIEW
-        const updatedDoc = await MockKYCDocumentModel.findByIdAndUpdate(
+        const updatedDoc = await KYCProfileDb.findDocumentByIdAndUpdate(
           documentId,
           {
             status: KYCStatus.REVIEW,
@@ -343,7 +343,7 @@ export class AMLVerificationService {
         });
 
         // Update document status to REJECTED
-        const updatedDoc = await MockKYCDocumentModel.findByIdAndUpdate(
+        const updatedDoc = await KYCProfileDb.findDocumentByIdAndUpdate(
           documentId,
           {
             status: KYCStatus.REJECTED,
@@ -372,7 +372,7 @@ export class AMLVerificationService {
       });
 
       // Update document status to APPROVED
-      const updatedDoc = await MockKYCDocumentModel.findByIdAndUpdate(
+      const updatedDoc = await KYCProfileDb.findDocumentByIdAndUpdate(
         documentId,
         {
           status: KYCStatus.APPROVED

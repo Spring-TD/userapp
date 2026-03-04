@@ -3,6 +3,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './config/swagger';
 import { kycRoutes } from './routes/kycRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { logger } from './utils/logger';
@@ -83,6 +85,9 @@ app.get('/health', async (req, res) => {
     stats
   });
 });
+
+// OpenAPI / Swagger documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // API routes
 app.use('/api/v1/kyc', kycRoutes);

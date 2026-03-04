@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import mongoose from 'mongoose';
 import { config } from './config/environment';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
@@ -67,7 +68,8 @@ app.get('/health', (_req, res) => {
   res.status(200).json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
-    service: 'service-auth-microservice'
+    service: 'service-auth-microservice',
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
   });
 });
 
@@ -86,19 +88,42 @@ app.use(errorHandler);
 if (require.main === module) {
   const PORT = config.server.port || 3000;
 
-  // Initialize services
+  // Connect to MongoDB and initialize services
   Promise.all([
-    redisCacheService.getStats(), // This ensures Redis connection is established
+    mongoose.connect(config.mongodb.uri).then(() => {
+      console.log('✅ MongoDB database connected');
+      logger.info('Connected to MongoDB (DigitalOcean)');
+    }),
+    redisCacheService.getStats(),
     SAMSService.initialize()
   ]).then(() => {
     logger.info('Redis cache service initialized');
     logger.info('SAMS service initialized');
 
-    // Explicitly bind to 0.0.0.0
-    app.listen(PORT, '0.0.0.0', () => {
+    const server = app.listen(PORT, '0.0.0.0', () => {
       logger.info(`Service Authentication Microservice (SAMS) running on port ${PORT}`);
       logger.info(`Environment: ${config.env}`);
       logger.info('SAMS initialized - service-to-service authentication only');
+    });
+
+    process.on('SIGTERM', () => {
+      logger.info('SIGTERM received, shutting down gracefully');
+      server.close(() => {
+        mongoose.connection.close().then(() => {
+          logger.info('Process terminated');
+          process.exit(0);
+        });
+      });
+    });
+
+    process.on('SIGINT', () => {
+      logger.info('SIGINT received, shutting down gracefully');
+      server.close(() => {
+        mongoose.connection.close().then(() => {
+          logger.info('Process terminated');
+          process.exit(0);
+        });
+      });
     });
   }).catch((error) => {
     logger.error('Failed to initialize services', { error });

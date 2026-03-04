@@ -18,6 +18,7 @@
     "helmet": "^7.0.0",
     "joi": "^17.9.2",
     "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.0.0",
     "morgan": "^1.10.0",
     "uuid": "^9.0.1",
     "winston": "^3.10.0"
@@ -35,12 +36,7 @@
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.1.6"
   },
-  "keywords": [
-    "microservice",
-    "payment",
-    "gateway",
-    "transaction"
-  ],
+  "keywords": ["microservice", "payment", "gateway", "transaction"],
   "author": "",
   "license": "ISC"
 }

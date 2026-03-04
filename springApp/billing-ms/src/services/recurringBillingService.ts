@@ -1,36 +1,63 @@
+import mongoose from 'mongoose';
 import { BillingService } from './billingService';
 import { BillingType, RecurringBilling } from '../types/billingTypes';
+import { RecurringBillingModel } from '../models';
+
+function toPlainRecurring(doc: { _id: mongoose.Types.ObjectId; toObject: () => Record<string, unknown> } | null): RecurringBilling | null {
+  if (!doc) return null;
+  const obj = doc.toObject() as Record<string, unknown> & { _id: mongoose.Types.ObjectId };
+  const { _id, ...rest } = obj;
+  return { id: _id.toString(), ...rest } as RecurringBilling;
+}
 
 export class RecurringBillingService {
   /**
    * Create a new recurring billing record
    */
   static async createRecurringBilling(billingData: Partial<RecurringBilling>): Promise<RecurringBilling> {
-    const newBilling: RecurringBilling = {
-      id: 'rb_' + Date.now(),
-      amount: billingData.amount || 0,
+    const nextBillingDate = billingData.nextBillingDate || billingData.startDate || new Date();
+    const doc = await RecurringBillingModel.create({
+      amount: billingData.amount ?? 0,
       billingType: BillingType.RECURRING,
-      billingCycle: billingData.billingCycle || 30, // Default to 30 days
+      billingCycle: billingData.billingCycle ?? 30,
       billingTarget: billingData.billingTarget,
-      billingCount: billingData.billingCount || 0,
+      billingCount: billingData.billingCount ?? 0,
       billTo: billingData.billTo || '',
       billingFor: billingData.billingFor || '',
       billingTitle: billingData.billingTitle || '',
-      billingException: billingData.billingException || {
-        maxAttempts: 3, // Default to 3 attempts
-        currentAttempts: 0
-      },
+      billingException: billingData.billingException ?? { maxAttempts: 3, currentAttempts: 0 },
       status: 'active',
       startDate: billingData.startDate || new Date(),
-      nextBillingDate: billingData.nextBillingDate || new Date(),
-      totalBilled: 0,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+      nextBillingDate,
+      totalBilled: 0
+    });
+    return toPlainRecurring(doc) as RecurringBilling;
+  }
 
-    // In a real implementation, this would be saved to a database
-    console.log('Created new recurring billing:', newBilling);
-    return newBilling;
+  static async getRecurringBilling(id: string): Promise<RecurringBilling | null> {
+    if (!mongoose.Types.ObjectId.isValid(id)) return null;
+    const doc = await RecurringBillingModel.findById(id).lean();
+    if (!doc) return null;
+    return { id: (doc as any)._id.toString(), ...doc } as unknown as RecurringBilling;
+  }
+
+  static async listRecurringBillings(filters?: { billTo?: string; status?: string }): Promise<RecurringBilling[]> {
+    const query: Record<string, unknown> = {};
+    if (filters?.billTo) query.billTo = filters.billTo;
+    if (filters?.status) query.status = filters.status;
+    const docs = await RecurringBillingModel.find(query).sort({ createdAt: -1 }).lean();
+    return docs.map(d => ({ id: (d as any)._id.toString(), ...d } as unknown as RecurringBilling));
+  }
+
+  static async updateRecurringBillingPublic(id: string, updateData: Partial<RecurringBilling>): Promise<RecurringBilling | null> {
+    if (!mongoose.Types.ObjectId.isValid(id)) return null;
+    const doc = await RecurringBillingModel.findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      { new: true }
+    ).lean();
+    if (!doc) return null;
+    return { id: (doc as any)._id.toString(), ...doc } as unknown as RecurringBilling;
   }
 
   /**
@@ -81,19 +108,14 @@ export class RecurringBillingService {
   
   /**
    * Get recurring billings that are due for processing
-   * In a real implementation, this would query the database
    */
   private static async getDueRecurringBillings(): Promise<RecurringBilling[]> {
-    // Mock implementation - in reality, this would query the database
-    // for recurring billings where:
-    // - status = 'active'
-    // - nextBillingDate <= today
-    // - not completed or cancelled
-    
-    // For demonstration, we'll return mock recurring billings
-    return [
-      // Add mock recurring billings that would be due for processing
-    ];
+    const now = new Date();
+    const docs = await RecurringBillingModel.find({
+      status: 'active',
+      nextBillingDate: { $lte: now }
+    }).lean();
+    return docs.map(d => ({ id: (d as any)._id.toString(), ...d } as unknown as RecurringBilling));
   }
   
   /**
@@ -265,28 +287,26 @@ export class RecurringBillingService {
   
   /**
    * Update recurring billing record
-   * In a real implementation, this would update the database record
    */
   private static async updateRecurringBilling(id: string, updates: Partial<RecurringBilling>): Promise<void> {
-    // Mock implementation - in reality, this would update the database
-    console.log(`Updated recurring billing ${id} with:`, updates);
+    if (!mongoose.Types.ObjectId.isValid(id)) return;
+    await RecurringBillingModel.findByIdAndUpdate(id, { $set: updates });
   }
   
   /**
    * Cancel a recurring billing
    */
-  static async cancelRecurringBilling(id: string, reason?: string): Promise<{
+  static async cancelRecurringBilling(id: string, _reason?: string): Promise<{
     success: boolean;
     message: string;
   }> {
     try {
-      // In a real implementation, this would:
-      // 1. Update billing status to 'cancelled'
-      // 2. Set endDate to current date
-      // 3. Cancel any scheduled billing
-      
-      console.log(`Cancelled recurring billing ${id} with reason: ${reason || 'No reason provided'}`);
-      
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return { success: false, message: 'Invalid recurring billing id' };
+      }
+      await RecurringBillingModel.findByIdAndUpdate(id, {
+        $set: { status: 'cancelled', endDate: new Date() }
+      });
       return {
         success: true,
         message: `Recurring billing ${id} cancelled successfully`
@@ -298,7 +318,7 @@ export class RecurringBillingService {
       };
     }
   }
-  
+
   /**
    * Pause a recurring billing
    */
@@ -307,12 +327,10 @@ export class RecurringBillingService {
     message: string;
   }> {
     try {
-      // In a real implementation, this would:
-      // 1. Update billing status to 'paused'
-      // 2. Pause any scheduled billing
-      
-      console.log(`Paused recurring billing ${id}`);
-      
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return { success: false, message: 'Invalid recurring billing id' };
+      }
+      await RecurringBillingModel.findByIdAndUpdate(id, { $set: { status: 'paused' } });
       return {
         success: true,
         message: `Recurring billing ${id} paused successfully`
@@ -324,7 +342,7 @@ export class RecurringBillingService {
       };
     }
   }
-  
+
   /**
    * Resume a recurring billing
    */
@@ -333,13 +351,10 @@ export class RecurringBillingService {
     message: string;
   }> {
     try {
-      // In a real implementation, this would:
-      // 1. Update billing status to 'active'
-      // 2. Calculate next billing date if needed
-      // 3. Resume scheduled billing
-      
-      console.log(`Resumed recurring billing ${id}`);
-      
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return { success: false, message: 'Invalid recurring billing id' };
+      }
+      await RecurringBillingModel.findByIdAndUpdate(id, { $set: { status: 'active' } });
       return {
         success: true,
         message: `Recurring billing ${id} resumed successfully`

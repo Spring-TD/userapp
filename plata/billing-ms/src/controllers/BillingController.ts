@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { BillingService } from '../services/billingService';
-import { BillingScheduler } from '../services/billingScheduler.js';
+import { BillingScheduler } from '../services/billingScheduler';
 import { RecurringBillingService } from '../services/recurringBillingService';
 
 export class BillingController {

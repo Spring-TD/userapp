@@ -6,6 +6,8 @@ import { config } from './config/environment';
 import { connectToDatabase, disconnectFromDatabase } from './config/database';
 import { corsMiddleware } from './middleware';
 import { errorHandler, notFoundHandler } from './middleware';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './config/swagger';
 import notificationRoutes from './routes/notificationRoutes';
 
 const app = express();
@@ -55,6 +57,9 @@ app.get('/health', (_req, res) => {
     }
   });
 });
+
+// OpenAPI / Swagger documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // API routes
 app.use('/api/v1/notifications', notificationRoutes);

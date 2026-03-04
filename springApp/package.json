@@ -1,0 +1,15 @@
+{
+  "name": "springtd-seed",
+  "version": "1.0.0",
+  "description": "Seed script for SpringTD microservice databases",
+  "private": true,
+  "scripts": {
+    "seed": "node scripts/seed.js",
+    "seed:dry": "DRY_RUN=1 node scripts/seed.js"
+  },
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "dotenv": "^16.3.1",
+    "mongodb": "^6.10.0"
+  }
+}

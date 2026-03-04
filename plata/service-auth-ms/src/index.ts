@@ -5,6 +5,8 @@ import rateLimit from 'express-rate-limit';
 import { config } from './config/environment';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './config/swagger';
 import { samsRoutes } from './routes/samsRoutes';
 import { credentialRoutes } from './routes/credentialRoutes';
 import { apiKeyRoutes } from './routes/apiKeyRoutes';
@@ -71,6 +73,9 @@ app.get('/health', (_req, res) => {
     service: 'service-auth-microservice'
   });
 });
+
+// OpenAPI / Swagger documentation (generated from JSDoc in routes)
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // SAMS (Service Authentication Microservice) routes
 app.use('/api/v1/services', samsRoutes);

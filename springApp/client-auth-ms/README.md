@@ -436,6 +436,12 @@ Revokes a specific session, logging out the user on that device. Users can only 
 | `NODE_ENV` | string | `development` | Environment mode (development/production) |
 | `LOG_LEVEL` | string | `info` | Logging level (error, warn, info, debug) |
 
+### Database
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `MONGODB_URI` | string | — | MongoDB connection string (recommended for DigitalOcean) |
+| `DATABASE_URL` | string | `mongodb://localhost:27017/client_auth_db` | Fallback MongoDB URL (e.g. used by docker-compose) |
+
 ### Service Communication
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|

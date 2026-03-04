@@ -5,6 +5,8 @@ dotenv.config();
 interface EnvironmentConfig {
   port: number;
   nodeEnv: string;
+  /** MongoDB connection (MONGODB_URI for Digital Ocean, DATABASE_URL for docker-compose) */
+  mongoUri: string;
   serviceAuthUrl: string;
   billingServiceUrl: string;
   walletServiceUrl: string;
@@ -21,6 +23,7 @@ interface EnvironmentConfig {
 export const config: EnvironmentConfig = {
   port: parseInt(process.env.PORT || '4007', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
+  mongoUri: process.env.MONGODB_URI || process.env.DATABASE_URL || 'mongodb://localhost:27017/payment_db',
   serviceAuthUrl: process.env.SERVICE_AUTH_URL || 'http://localhost:4000',
   billingServiceUrl: process.env.BILLING_SERVICE_URL || 'http://localhost:4006',
   walletServiceUrl: process.env.WALLET_SERVICE_URL || 'http://localhost:4004',

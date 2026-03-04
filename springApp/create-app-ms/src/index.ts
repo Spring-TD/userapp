@@ -1,6 +1,7 @@
 import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import mongoose from 'mongoose';
 import { config } from './config/environment';
 import { corsMiddleware } from './middleware/cors';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
@@ -40,7 +41,8 @@ app.get('/health', (_req, res) => {
     success: true,
     message: 'Create App Microservice is running',
     timestamp: new Date().toISOString(),
-    version: '1.0.0'
+    version: '1.0.0',
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
   });
 });
 
@@ -52,25 +54,32 @@ app.use('/api/v1/special', specialRoutes);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
+// Connect to MongoDB before starting server
+mongoose.connect(config.mongoUri)
+  .then(() => {
+    console.log('Connected to MongoDB');
+  })
+  .catch((err) => {
+    console.error('MongoDB connection error:', err);
+    process.exit(1);
+  });
+
 const server = app.listen(config.port, '0.0.0.0', () => {
   console.log(`Create App Microservice running on port ${config.port}`);
 });
 
 // Graceful shutdown
-process.on('SIGINT', () => {
-  console.log('Shutting down gracefully...');
+function shutdown(signal: string) {
+  console.log(`${signal} received, shutting down gracefully...`);
   server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
+    mongoose.connection.close().then(() => {
+      console.log('Server and database closed');
+      process.exit(0);
+    });
   });
-});
+}
 
-process.on('SIGTERM', () => {
-  console.log('Shutting down gracefully...');
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
-  });
-});
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 export default app;

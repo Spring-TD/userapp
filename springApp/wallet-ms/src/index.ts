@@ -3,12 +3,12 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import mongoose from 'mongoose';
 import { config } from './config/environment';
 import { walletRoutes } from './routes/walletRoutes';
 import { transactionRoutes } from './routes/transactionRoutes';
 import { errorHandler } from './middleware/errorHandler';
 
-// Load environment variables
 dotenv.config();
 
 // Initialize Express app
@@ -55,7 +55,8 @@ app.get('/health', (req, res) => {
     status: 'healthy',
     service: 'wallet-ms',
     timestamp: new Date().toISOString(),
-    version: '1.0.0'
+    version: '1.0.0',
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
   });
 });
 
@@ -75,21 +76,40 @@ app.use('*', (req, res) => {
 // Error handling middleware (must be last)
 app.use(errorHandler);
 
-// Graceful shutdown
+// Connect to MongoDB before starting server
+mongoose.connect(config.mongoUri)
+  .then(() => {
+    console.log('✅ Connected to MongoDB (DigitalOcean)');
+  })
+  .catch((err) => {
+    console.error('❌ MongoDB connection error:', err);
+    process.exit(1);
+  });
+
+// Start server
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Wallet service running on port ${PORT}`);
+  console.log(`Environment: ${config.nodeEnv}`);
+});
+
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully');
-  process.exit(0);
+  server.close(() => {
+    mongoose.connection.close().then(() => {
+      console.log('Process terminated');
+      process.exit(0);
+    });
+  });
 });
 
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down gracefully');
-  process.exit(0);
-});
-
-// Start server
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Wallet service running on port ${PORT}`);
-  console.log(`Environment: ${config.nodeEnv}`);
+  server.close(() => {
+    mongoose.connection.close().then(() => {
+      console.log('Process terminated');
+      process.exit(0);
+    });
+  });
 });
 
 export { app };
