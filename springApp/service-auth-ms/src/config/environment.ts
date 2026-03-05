@@ -49,6 +49,9 @@ const envSchema = Joi.object({
   // CORS
   CORS_ALLOWED_ORIGINS: Joi.string().default('http://localhost:3000'),
 
+  // Body parsing
+  REQUEST_BODY_LIMIT: Joi.string().default('10mb'),
+
   // Security
   ACCOUNT_LOCKOUT_ATTEMPTS: Joi.number().default(5),
   ACCOUNT_LOCKOUT_DURATION: Joi.number().default(1800), // 30 minutes
@@ -143,5 +146,6 @@ export const config = {
   },
   billing: {
     serviceUrl: envVars.BILLING_SERVICE_URL,
-  }
+  },
+  requestBodyLimit: envVars.REQUEST_BODY_LIMIT || '10mb',
 };

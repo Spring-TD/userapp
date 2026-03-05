@@ -2,7 +2,9 @@ import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import mongoose from 'mongoose';
+import swaggerUi from 'swagger-ui-express';
 import { config } from './config/environment';
+import swaggerSpec from './config/swagger';
 import { corsMiddleware } from './middleware';
 import { errorHandler, notFoundHandler } from './middleware';
 import notificationRoutes from './routes/notificationRoutes';
@@ -14,9 +16,16 @@ app.use(helmet());
 app.use(corsMiddleware);
 app.use(morgan('combined'));
 
-// Body parsing middleware
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+// Body parsing middleware (limit from config)
+app.use(express.json({ limit: config.requestBodyLimit }));
+app.use(express.urlencoded({ extended: true, limit: config.requestBodyLimit }));
+
+// Swagger / OpenAPI documentation
+app.get('/api-docs.json', (_req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.json(swaggerSpec);
+});
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Root endpoint
 app.get('/', (_req, res) => {
@@ -27,6 +36,8 @@ app.get('/', (_req, res) => {
     status: 'running',
     endpoints: {
       health: '/health',
+      apiDocs: '/api-docs',
+      openApiSpec: '/api-docs.json',
       send: '/api/v1/notifications/send',
       status: '/api/v1/notifications/:id/status',
       userNotifications: '/api/v1/notifications/user/:recipient',

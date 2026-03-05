@@ -4,6 +4,9 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import swaggerUi from 'swagger-ui-express';
+import { requestBodyLimit } from './config/environment';
+import swaggerSpec from './config/swagger';
 import { kycRoutes } from './routes/kycRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { logger } from './utils/logger';
@@ -18,9 +21,9 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3003;
 
-// Middleware setup
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Middleware setup (body limit from config)
+app.use(express.json({ limit: requestBodyLimit }));
+app.use(express.urlencoded({ extended: true, limit: requestBodyLimit }));
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true
@@ -64,6 +67,13 @@ async function getDbStats(): Promise<{
   };
 }
 
+// Swagger / OpenAPI documentation
+app.get('/api-docs.json', (_req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.json(swaggerSpec);
+});
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({
@@ -73,6 +83,8 @@ app.get('/', (req, res) => {
     status: 'running',
     endpoints: {
       health: '/health',
+      apiDocs: '/api-docs',
+      openApiSpec: '/api-docs.json',
       kyc: '/api/v1/kyc'
     },
     features: [

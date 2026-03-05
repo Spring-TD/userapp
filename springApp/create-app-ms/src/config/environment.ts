@@ -19,6 +19,8 @@ interface Config {
   vercelApiToken?: string;
   vercelTeamId?: string;
   vercelDefaultProjectId?: string;
+  /** Max request body size for JSON (e.g. '10mb') */
+  requestBodyLimit: string;
 }
 
 export const config: Config = {
@@ -36,5 +38,6 @@ export const config: Config = {
   platformDomain: process.env.PLATFORM_DOMAIN || 'domain.useinclude.com',
   vercelApiToken: process.env.VERCEL_API_TOKEN,
   vercelTeamId: process.env.VERCEL_TEAM_ID,
-  vercelDefaultProjectId: process.env.VERCEL_DEFAULT_PROJECT_ID
+  vercelDefaultProjectId: process.env.VERCEL_DEFAULT_PROJECT_ID,
+  requestBodyLimit: process.env.REQUEST_BODY_LIMIT || '10mb',
 };

@@ -1,0 +1,709 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Spring Client Auth Microservice API",
+    "version": "1.0.0",
+    "description": "Spring Client authentication: registration (merchant, user, admin), login, OTP, password reset, user profile, roles, invitations, sessions. Import this spec into Swagger Editor, Postman, or other API tools."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4001",
+      "description": "Development"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "MerchantRegistrationRequest": {
+        "type": "object",
+        "required": ["first_name", "last_name", "email", "phone", "country", "password"],
+        "properties": {
+          "first_name": { "type": "string", "minLength": 2, "maxLength": 50 },
+          "last_name": { "type": "string", "minLength": 2, "maxLength": 50 },
+          "email": { "type": "string", "format": "email" },
+          "phone": { "type": "string", "description": "E.164 format" },
+          "country": { "type": "string", "minLength": 2, "maxLength": 100 },
+          "password": { "type": "string", "minLength": 8, "format": "password" }
+        }
+      },
+      "UserRegistrationRequest": {
+        "type": "object",
+        "required": ["user_merchant_id", "first_name", "last_name", "email", "phone", "country", "password"],
+        "properties": {
+          "user_merchant_id": { "type": "string", "minLength": 5, "maxLength": 50 },
+          "first_name": { "type": "string", "minLength": 2, "maxLength": 50 },
+          "last_name": { "type": "string", "minLength": 2, "maxLength": 50 },
+          "email": { "type": "string", "format": "email" },
+          "phone": { "type": "string" },
+          "country": { "type": "string", "minLength": 2, "maxLength": 100 },
+          "password": { "type": "string", "minLength": 8, "format": "password" }
+        }
+      },
+      "AdminRegistrationRequest": {
+        "type": "object",
+        "required": ["first_name", "last_name", "email", "phone", "country", "password"],
+        "properties": {
+          "first_name": { "type": "string", "minLength": 2, "maxLength": 50 },
+          "last_name": { "type": "string", "minLength": 2, "maxLength": 50 },
+          "email": { "type": "string", "format": "email" },
+          "phone": { "type": "string" },
+          "country": { "type": "string", "minLength": 2, "maxLength": 100 },
+          "password": { "type": "string", "minLength": 8, "format": "password" }
+        }
+      },
+      "VerifyAccountRequest": {
+        "type": "object",
+        "required": ["token"],
+        "properties": { "token": { "type": "string" } }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": ["email", "password"],
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "password": { "type": "string" }
+        }
+      },
+      "RefreshTokenRequest": {
+        "type": "object",
+        "required": ["refreshToken"],
+        "properties": { "refreshToken": { "type": "string" } }
+      },
+      "OTPGenerateRequest": {
+        "type": "object",
+        "required": ["identifier", "channel", "purpose"],
+        "properties": {
+          "identifier": { "type": "string" },
+          "channel": { "type": "string", "enum": ["email", "sms"] },
+          "purpose": { "type": "string", "enum": ["verification", "password-reset", "login"] }
+        }
+      },
+      "OTPVerifyRequest": {
+        "type": "object",
+        "required": ["identifier", "code"],
+        "properties": {
+          "identifier": { "type": "string" },
+          "code": { "type": "string" }
+        }
+      },
+      "OTPResendRequest": {
+        "type": "object",
+        "required": ["identifier", "channel", "purpose"],
+        "properties": {
+          "identifier": { "type": "string" },
+          "channel": { "type": "string", "enum": ["email", "sms"] },
+          "purpose": { "type": "string", "enum": ["verification", "password-reset", "login"] }
+        }
+      },
+      "ForgotPasswordRequest": {
+        "type": "object",
+        "required": ["email"],
+        "properties": { "email": { "type": "string", "format": "email" } }
+      },
+      "ResetPasswordRequest": {
+        "type": "object",
+        "required": ["token", "newPassword"],
+        "properties": {
+          "token": { "type": "string" },
+          "newPassword": { "type": "string", "minLength": 8, "format": "password" }
+        }
+      },
+      "ChangePasswordRequest": {
+        "type": "object",
+        "required": ["currentPassword", "newPassword"],
+        "properties": {
+          "currentPassword": { "type": "string" },
+          "newPassword": { "type": "string", "minLength": 8, "format": "password" }
+        }
+      },
+      "UpdateEmailRequest": {
+        "type": "object",
+        "required": ["newEmail", "confirmEmail", "currentPassword"],
+        "properties": {
+          "newEmail": { "type": "string", "format": "email" },
+          "confirmEmail": { "type": "string", "format": "email" },
+          "currentPassword": { "type": "string" }
+        }
+      },
+      "UpdateStatusRequest": {
+        "type": "object",
+        "properties": { "status": { "type": "string" } }
+      },
+      "CreateRoleRequest": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "permissions": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "CreateInvitationRequest": {
+        "type": "object",
+        "required": ["email", "roleId"],
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "roleId": { "type": "string" }
+        }
+      },
+      "AcceptInvitationRequest": {
+        "type": "object",
+        "required": ["token", "firstName", "lastName", "password"],
+        "properties": {
+          "token": { "type": "string" },
+          "firstName": { "type": "string" },
+          "lastName": { "type": "string" },
+          "password": { "type": "string", "minLength": 8, "format": "password" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/v1/registration/forms": {
+      "get": {
+        "summary": "Get registration form definitions",
+        "tags": ["Registration"],
+        "responses": { "200": { "description": "Form field definitions for merchant, user, admin" } }
+      }
+    },
+    "/api/v1/registration/merchant": {
+      "post": {
+        "summary": "Register merchant",
+        "tags": ["Registration"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/MerchantRegistrationRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Merchant registered" },
+          "400": { "description": "Validation failed" }
+        }
+      }
+    },
+    "/api/v1/registration/user": {
+      "post": {
+        "summary": "Register user",
+        "tags": ["Registration"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UserRegistrationRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "User registered" },
+          "400": { "description": "Validation failed" }
+        }
+      }
+    },
+    "/api/v1/registration/admin": {
+      "post": {
+        "summary": "Register admin",
+        "tags": ["Registration"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AdminRegistrationRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Admin registered" },
+          "400": { "description": "Validation failed" }
+        }
+      }
+    },
+    "/api/v1/auth/verify-account": {
+      "post": {
+        "summary": "Verify account (email verification token)",
+        "tags": ["Auth"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/VerifyAccountRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Account verified" } }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "summary": "Login",
+        "tags": ["Auth"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/LoginRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Login success, returns tokens" },
+          "401": { "description": "Invalid credentials" }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "summary": "Logout",
+        "tags": ["Auth"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Logged out" } }
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "summary": "Refresh access token",
+        "tags": ["Auth"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RefreshTokenRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "New tokens" },
+          "401": { "description": "Invalid refresh token" }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "summary": "Get current user",
+        "tags": ["Auth"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Current user info" } }
+      }
+    },
+    "/api/v1/auth/verify-token": {
+      "post": {
+        "summary": "Verify JWT token",
+        "tags": ["Auth"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Token valid" } }
+      }
+    },
+    "/api/v1/auth/email-exists/{email}": {
+      "get": {
+        "summary": "Check if email exists",
+        "tags": ["Auth"],
+        "parameters": [
+          { "in": "path", "name": "email", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Exists or not" },
+          "404": { "description": "Email not found" }
+        }
+      }
+    },
+    "/api/v1/otp/generate": {
+      "post": {
+        "summary": "Generate OTP",
+        "tags": ["OTP"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/OTPGenerateRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "OTP sent" } }
+      }
+    },
+    "/api/v1/otp/verify": {
+      "post": {
+        "summary": "Verify OTP code",
+        "tags": ["OTP"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/OTPVerifyRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "OTP valid" },
+          "401": { "description": "Invalid OTP" }
+        }
+      }
+    },
+    "/api/v1/otp/resend": {
+      "post": {
+        "summary": "Resend OTP",
+        "tags": ["OTP"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/OTPResendRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "OTP resent" } }
+      }
+    },
+    "/api/v1/password/forgot": {
+      "post": {
+        "summary": "Request password reset",
+        "tags": ["Password"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ForgotPasswordRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Reset email sent" } }
+      }
+    },
+    "/api/v1/password/reset": {
+      "post": {
+        "summary": "Reset password with token",
+        "tags": ["Password"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ResetPasswordRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Password reset" } }
+      }
+    },
+    "/api/v1/password/change": {
+      "put": {
+        "summary": "Change password (authenticated)",
+        "tags": ["Password"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ChangePasswordRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Password changed" } }
+      }
+    },
+    "/api/v1/user/list": {
+      "get": {
+        "summary": "List users",
+        "tags": ["User"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "User list" } }
+      }
+    },
+    "/api/v1/user/profile": {
+      "get": {
+        "summary": "Get profile",
+        "tags": ["User"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "User profile" } }
+      },
+      "put": {
+        "summary": "Update profile",
+        "tags": ["User"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "first_name": { "type": "string" },
+                  "last_name": { "type": "string" },
+                  "phone": { "type": "string" },
+                  "address": {
+                    "type": "object",
+                    "properties": {
+                      "street": { "type": "string" },
+                      "city": { "type": "string" },
+                      "state": { "type": "string" },
+                      "country": { "type": "string" },
+                      "postalCode": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Profile updated" } }
+      }
+    },
+    "/api/v1/user/email": {
+      "put": {
+        "summary": "Update email",
+        "tags": ["User"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateEmailRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Email update initiated" } }
+      }
+    },
+    "/api/v1/user/{userId}/status": {
+      "put": {
+        "summary": "Update user status",
+        "tags": ["User"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "userId", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateStatusRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Status updated" } }
+      }
+    },
+    "/api/v1/user/deactivate": {
+      "post": {
+        "summary": "Deactivate account",
+        "tags": ["User"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Deactivated" } }
+      }
+    },
+    "/api/v1/user/callbacks": {
+      "put": {
+        "summary": "Update callback URLs",
+        "tags": ["User"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "successUrl": { "type": "string" },
+                  "cancelUrl": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Callbacks updated" } }
+      }
+    },
+    "/api/v1/user/info/{userId}": {
+      "get": {
+        "summary": "Get user info (admin)",
+        "tags": ["User"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "userId", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "User info" } }
+      }
+    },
+    "/api/v1/user/verify-info/{userId}": {
+      "post": {
+        "summary": "Verify user info",
+        "tags": ["User"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "userId", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": { "verificationData": {} }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Verified" } }
+      }
+    },
+    "/api/v1/user/suspend/{userId}": {
+      "put": {
+        "summary": "Suspend user",
+        "tags": ["User"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "userId", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": { "reason": { "type": "string" } }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "User suspended" } }
+      }
+    },
+    "/api/v1/user/activate/{userId}": {
+      "put": {
+        "summary": "Activate user",
+        "tags": ["User"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "userId", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "User activated" } }
+      }
+    },
+    "/api/v1/roles": {
+      "post": {
+        "summary": "Create role",
+        "tags": ["Roles"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateRoleRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Role created" },
+          "400": { "description": "Validation error" }
+        }
+      },
+      "get": {
+        "summary": "Get roles",
+        "tags": ["Roles"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Role list" } }
+      }
+    },
+    "/api/v1/roles/permissions": {
+      "get": {
+        "summary": "Get permissions",
+        "tags": ["Roles"],
+        "responses": { "200": { "description": "Permissions list" } }
+      }
+    },
+    "/api/v1/invitations": {
+      "post": {
+        "summary": "Create invitation",
+        "tags": ["Invitations"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateInvitationRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Invitation sent" },
+          "400": { "description": "Validation error" }
+        }
+      },
+      "get": {
+        "summary": "Get invitations",
+        "tags": ["Invitations"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Invitation list" } }
+      }
+    },
+    "/api/v1/invitations/validate/{token}": {
+      "get": {
+        "summary": "Validate invitation token",
+        "tags": ["Invitations"],
+        "parameters": [
+          { "in": "path", "name": "token", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Token valid" },
+          "404": { "description": "Invalid token" }
+        }
+      }
+    },
+    "/api/v1/invitations/accept": {
+      "post": {
+        "summary": "Accept invitation",
+        "tags": ["Invitations"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AcceptInvitationRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Account created" },
+          "400": { "description": "Validation error" }
+        }
+      }
+    },
+    "/api/v1/sessions": {
+      "get": {
+        "summary": "Get active sessions",
+        "tags": ["Sessions"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Session list" } }
+      }
+    },
+    "/api/v1/sessions/{sessionId}": {
+      "delete": {
+        "summary": "Revoke session",
+        "tags": ["Sessions"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "sessionId", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Session revoked" } }
+      }
+    },
+    "/verify-email": {
+      "get": {
+        "summary": "Verify email (query token)",
+        "tags": ["Auth"],
+        "parameters": [
+          { "in": "query", "name": "token", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Email verified" } }
+      }
+    }
+  },
+  "tags": [
+    { "name": "Registration", "description": "Merchant, user, admin registration" },
+    { "name": "Auth", "description": "Login, logout, token, email check" },
+    { "name": "OTP", "description": "OTP generate, verify, resend" },
+    { "name": "Password", "description": "Forgot, reset, change password" },
+    { "name": "User", "description": "Profile, status, admin actions" },
+    { "name": "Roles", "description": "Roles and permissions" },
+    { "name": "Invitations", "description": "Create, list, validate, accept" },
+    { "name": "Sessions", "description": "Active sessions" }
+  ]
+}

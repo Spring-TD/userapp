@@ -8,6 +8,8 @@ interface EnvironmentConfig {
   mongoUri: string;
   corsOrigins: string[];
   logLevel: string;
+  /** Max request body size for JSON (e.g. '10mb') */
+  requestBodyLimit: string;
   // Mailtrap SMTP configuration
   mailtrap: {
     host: string;
@@ -31,6 +33,7 @@ export const config: EnvironmentConfig = {
   mongoUri: process.env.MONGO_URI || process.env.MONGODB_URI || process.env.DATABASE_URL || 'mongodb://localhost:27017/notifications_db',
   corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000'],
   logLevel: process.env.LOG_LEVEL || 'info',
+  requestBodyLimit: process.env.REQUEST_BODY_LIMIT || '10mb',
   mailtrap: {
     host: process.env.MAILTRAP_HOST || 'smtp.mailtrap.io',
     port: parseInt(process.env.MAILTRAP_PORT || '2525', 10),

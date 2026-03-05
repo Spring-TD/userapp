@@ -23,6 +23,8 @@ interface EnvironmentConfig {
   logLevel: string;
   jwt: JwtConfig;
   bcrypt: BcryptConfig;
+  /** Max request body size for JSON (e.g. '10mb') */
+  requestBodyLimit: string;
 }
 
 export const config: EnvironmentConfig = {
@@ -40,5 +42,6 @@ export const config: EnvironmentConfig = {
   },
   bcrypt: {
     rounds: parseInt(process.env.BCRYPT_ROUNDS || '12', 10)
-  }
+  },
+  requestBodyLimit: process.env.REQUEST_BODY_LIMIT || '10mb',
 };

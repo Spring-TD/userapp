@@ -1,0 +1,491 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Wallet Microservice API",
+    "version": "1.0.0",
+    "description": "User and merchant wallets (Treasury, Operation, KYC), balance management, transfers, funding callbacks. Import this spec into Swagger Editor, Postman, or other API tools."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4004",
+      "description": "Development"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "CreateMerchantWalletRequest": {
+        "type": "object",
+        "required": ["name", "currency", "merchantWalletType"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "currency": { "type": "string", "minLength": 3, "maxLength": 3 },
+          "merchantWalletType": { "type": "string", "enum": ["TREASURY", "OPERATION", "KYC"] }
+        }
+      },
+      "UpdateWalletBalanceRequest": {
+        "type": "object",
+        "required": ["amount"],
+        "properties": {
+          "amount": { "type": "number", "minimum": 0, "maximum": 1000000 },
+          "description": { "type": "string", "maxLength": 500 }
+        }
+      },
+      "CreateUserWalletRequest": {
+        "type": "object",
+        "required": ["name", "currency"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "currency": { "type": "string", "minLength": 3, "maxLength": 3 }
+        }
+      },
+      "TransferOutRequest": {
+        "type": "object",
+        "required": ["fromWalletId", "toWalletId", "amount"],
+        "properties": {
+          "fromWalletId": { "type": "string" },
+          "toWalletId": { "type": "string" },
+          "amount": { "type": "number", "minimum": 0 },
+          "description": { "type": "string" }
+        }
+      },
+      "DebitWalletRequest": {
+        "type": "object",
+        "required": ["merchantId", "amount"],
+        "properties": {
+          "merchantId": { "type": "string" },
+          "amount": { "type": "number", "minimum": 0 },
+          "description": { "type": "string" }
+        }
+      },
+      "DebitUserRequest": {
+        "type": "object",
+        "required": ["userId", "amount"],
+        "properties": {
+          "userId": { "type": "string" },
+          "amount": { "type": "number", "minimum": 0 },
+          "description": { "type": "string" }
+        }
+      },
+      "OperationKycTransferRequest": {
+        "type": "object",
+        "required": ["amount"],
+        "properties": {
+          "amount": { "type": "number", "minimum": 0 },
+          "description": { "type": "string" }
+        }
+      },
+      "UserApiCallRequest": {
+        "type": "object",
+        "required": ["endpoint", "amount"],
+        "properties": {
+          "endpoint": { "type": "string", "format": "uri" },
+          "method": { "type": "string", "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"] },
+          "headers": { "type": "object" },
+          "body": { "type": "object" },
+          "amount": { "type": "number", "minimum": 0 },
+          "description": { "type": "string" },
+          "apiKey": { "type": "string" }
+        }
+      },
+      "FundingCallbackRequest": {
+        "type": "object",
+        "required": ["amount", "currency", "transactionId", "paymentMethod", "status"],
+        "properties": {
+          "walletId": { "type": "string" },
+          "userId": { "type": "string" },
+          "amount": { "type": "number" },
+          "currency": { "type": "string", "minLength": 3, "maxLength": 3 },
+          "transactionId": { "type": "string" },
+          "paymentMethod": { "type": "string", "enum": ["CARD", "BANK_TRANSFER", "WALLET", "OTHER"] },
+          "status": { "type": "string", "enum": ["SUCCESS", "COMPLETED", "PENDING", "FAILED", "CANCELLED"] },
+          "description": { "type": "string" },
+          "providerReference": { "type": "string" },
+          "signature": { "type": "string" },
+          "merchantId": { "type": "string" },
+          "merchantWalletType": { "type": "string", "enum": ["TREASURY", "OPERATION", "KYC"] }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/v1/wallets/merchant": {
+      "post": {
+        "summary": "Create merchant wallet",
+        "tags": ["Wallets - Merchant"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateMerchantWalletRequest" }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Merchant wallet created" } }
+      }
+    },
+    "/api/v1/wallets/merchant/all": {
+      "post": {
+        "summary": "Create all merchant wallets (Treasury, Operation, KYC)",
+        "tags": ["Wallets - Merchant"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "201": { "description": "All merchant wallets created" } }
+      }
+    },
+    "/api/v1/wallets/merchant/balance": {
+      "put": {
+        "summary": "Update merchant wallet balance",
+        "tags": ["Wallets - Merchant"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateWalletBalanceRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Balance updated" } }
+      }
+    },
+    "/api/v1/wallets/merchant/{merchantId}/type/{walletType}": {
+      "get": {
+        "summary": "Get merchant wallet by type",
+        "tags": ["Wallets - Merchant"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "merchantId", "required": true, "schema": { "type": "string" } },
+          { "in": "path", "name": "walletType", "required": true, "schema": { "type": "string", "enum": ["TREASURY", "OPERATION", "KYC"] } }
+        ],
+        "responses": { "200": { "description": "Merchant wallet" } }
+      }
+    },
+    "/api/v1/wallets/merchant/{merchantId}/all": {
+      "get": {
+        "summary": "Get all merchant wallets",
+        "tags": ["Wallets - Merchant"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "merchantId", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Merchant wallets list" } }
+      }
+    },
+    "/api/v1/wallets/merchant/{merchantId}/users": {
+      "get": {
+        "summary": "Get user wallets by merchant",
+        "tags": ["Wallets - Merchant"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "merchantId", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "User wallets list" } }
+      }
+    },
+    "/api/v1/wallets/treasury/transfer": {
+      "post": {
+        "summary": "Transfer out from treasury",
+        "tags": ["Wallets - Treasury"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/TransferOutRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Transfer completed" } }
+      }
+    },
+    "/api/v1/wallets/treasury/debit": {
+      "post": {
+        "summary": "Debit user wallet (from treasury flow)",
+        "tags": ["Wallets - Treasury"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/DebitUserRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Debit completed" } }
+      }
+    },
+    "/api/v1/wallets/treasury/debit-merchant": {
+      "post": {
+        "summary": "Debit treasury wallet",
+        "tags": ["Wallets - Treasury"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/DebitWalletRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Debit completed" } }
+      }
+    },
+    "/api/v1/wallets/treasury/{merchantId}/transactions": {
+      "get": {
+        "summary": "Filter treasury transactions",
+        "tags": ["Wallets - Treasury"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "merchantId", "required": true, "schema": { "type": "string" } },
+          { "in": "query", "name": "startDate", "schema": { "type": "string", "format": "date-time" } },
+          { "in": "query", "name": "endDate", "schema": { "type": "string", "format": "date-time" } },
+          { "in": "query", "name": "type", "schema": { "type": "string", "enum": ["CREDIT", "DEBIT"] } }
+        ],
+        "responses": { "200": { "description": "Transaction list" } }
+      }
+    },
+    "/api/v1/wallets/operation-to-kyc": {
+      "post": {
+        "summary": "Transfer from Operation to KYC wallet",
+        "tags": ["Wallets - Operation/KYC"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/OperationKycTransferRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Transfer completed" } }
+      }
+    },
+    "/api/v1/wallets/kyc-to-operation": {
+      "post": {
+        "summary": "Transfer from KYC to Operation wallet",
+        "tags": ["Wallets - Operation/KYC"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/OperationKycTransferRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Transfer completed" } }
+      }
+    },
+    "/api/v1/wallets/operation/debit": {
+      "post": {
+        "summary": "Debit operation wallet",
+        "tags": ["Wallets - Operation/KYC"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/DebitWalletRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Debit completed" } }
+      }
+    },
+    "/api/v1/wallets/operation/{merchantId}/transactions": {
+      "get": {
+        "summary": "Filter operation wallet transactions",
+        "tags": ["Wallets - Operation/KYC"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "merchantId", "required": true, "schema": { "type": "string" } },
+          { "in": "query", "name": "startDate", "schema": { "type": "string", "format": "date-time" } },
+          { "in": "query", "name": "endDate", "schema": { "type": "string", "format": "date-time" } },
+          { "in": "query", "name": "type", "schema": { "type": "string", "enum": ["CREDIT", "DEBIT"] } }
+        ],
+        "responses": { "200": { "description": "Transaction list" } }
+      }
+    },
+    "/api/v1/wallets/kyc/debit": {
+      "post": {
+        "summary": "Debit KYC wallet",
+        "tags": ["Wallets - Operation/KYC"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/DebitWalletRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Debit completed" } }
+      }
+    },
+    "/api/v1/wallets/kyc/fee": {
+      "post": {
+        "summary": "Process KYC fee",
+        "tags": ["Wallets - Operation/KYC"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/DebitWalletRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "KYC fee processed" } }
+      }
+    },
+    "/api/v1/wallets/kyc/{merchantId}/transactions": {
+      "get": {
+        "summary": "Filter KYC wallet transactions",
+        "tags": ["Wallets - Operation/KYC"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "merchantId", "required": true, "schema": { "type": "string" } },
+          { "in": "query", "name": "startDate", "schema": { "type": "string", "format": "date-time" } },
+          { "in": "query", "name": "endDate", "schema": { "type": "string", "format": "date-time" } },
+          { "in": "query", "name": "type", "schema": { "type": "string", "enum": ["CREDIT", "DEBIT"] } }
+        ],
+        "responses": { "200": { "description": "Transaction list" } }
+      }
+    },
+    "/api/v1/wallets/user": {
+      "post": {
+        "summary": "Create user wallet",
+        "tags": ["Wallets - User"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateUserWalletRequest" }
+            }
+          }
+        },
+        "responses": { "201": { "description": "User wallet created" } }
+      }
+    },
+    "/api/v1/wallets/user/{userId}": {
+      "get": {
+        "summary": "Get user wallet",
+        "tags": ["Wallets - User"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "userId", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "User wallet" } }
+      }
+    },
+    "/api/v1/wallets/user/{userId}/balance": {
+      "put": {
+        "summary": "Update user wallet balance",
+        "tags": ["Wallets - User"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "userId", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateWalletBalanceRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Balance updated" } }
+      }
+    },
+    "/api/v1/wallets/user/{userId}/transactions": {
+      "get": {
+        "summary": "Filter user transactions",
+        "tags": ["Wallets - User"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "userId", "required": true, "schema": { "type": "string" } },
+          { "in": "query", "name": "startDate", "schema": { "type": "string", "format": "date-time" } },
+          { "in": "query", "name": "endDate", "schema": { "type": "string", "format": "date-time" } },
+          { "in": "query", "name": "type", "schema": { "type": "string", "enum": ["CREDIT", "DEBIT"] } }
+        ],
+        "responses": { "200": { "description": "Transaction list" } }
+      }
+    },
+    "/api/v1/wallets/user/{userId}/transfer": {
+      "post": {
+        "summary": "Transfer out from user wallet",
+        "tags": ["Wallets - User"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "userId", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/TransferOutRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Transfer completed" } }
+      }
+    },
+    "/api/v1/wallets/user/{userId}/api-call": {
+      "post": {
+        "summary": "Make user API call (debit + external call)",
+        "tags": ["Wallets - User"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "userId", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UserApiCallRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "API call completed" } }
+      }
+    },
+    "/api/v1/wallets/funding/callback": {
+      "post": {
+        "summary": "Funding callback (payment provider webhook)",
+        "tags": ["Funding"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/FundingCallbackRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Callback processed" },
+          "400": { "description": "Validation failed" }
+        }
+      }
+    },
+    "/api/v1/wallets/funding/status/{transactionId}": {
+      "get": {
+        "summary": "Check funding status",
+        "tags": ["Funding"],
+        "parameters": [{ "in": "path", "name": "transactionId", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Funding status" } }
+      }
+    },
+    "/api/v1/transactions/{walletId}": {
+      "get": {
+        "summary": "Get transaction history for wallet",
+        "tags": ["Transactions"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "in": "path", "name": "walletId", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Transaction history" } }
+      }
+    }
+  },
+  "tags": [
+    { "name": "Wallets - Merchant", "description": "Merchant wallet CRUD and balance" },
+    { "name": "Wallets - Treasury", "description": "Treasury wallet transfers and debits" },
+    { "name": "Wallets - Operation/KYC", "description": "Operation and KYC wallet operations" },
+    { "name": "Wallets - User", "description": "User wallet and transfers" },
+    { "name": "Funding", "description": "Funding callbacks and status" },
+    { "name": "Transactions", "description": "Transaction history" }
+  ]
+}

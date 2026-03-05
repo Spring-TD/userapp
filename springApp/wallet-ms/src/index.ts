@@ -4,7 +4,9 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
+import swaggerUi from 'swagger-ui-express';
 import { config } from './config/environment';
+import swaggerSpec from './config/swagger';
 import { walletRoutes } from './routes/walletRoutes';
 import { transactionRoutes } from './routes/transactionRoutes';
 import { errorHandler } from './middleware/errorHandler';
@@ -15,9 +17,9 @@ dotenv.config();
 const app = express();
 const PORT = config.port || 3004;
 
-// Middleware setup
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+// Middleware setup (body limit from config)
+app.use(express.json({ limit: config.requestBodyLimit }));
+app.use(express.urlencoded({ extended: true, limit: config.requestBodyLimit }));
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true
@@ -34,6 +36,8 @@ app.get('/', (req, res) => {
     status: 'running',
     endpoints: {
       health: '/health',
+      apiDocs: '/api-docs',
+      openApiSpec: '/api-docs.json',
       wallets: '/api/v1/wallets',
       transactions: '/api/v1/transactions'
     },
@@ -48,6 +52,10 @@ app.get('/', (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+// Swagger API docs
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get('/api-docs.json', (req, res) => res.json(swaggerSpec));
 
 // Health check endpoint
 app.get('/health', (req, res) => {

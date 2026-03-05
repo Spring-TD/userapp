@@ -1,3 +1,6 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 export interface Config {
   port: number;
   nodeEnv: string;
@@ -7,6 +10,8 @@ export interface Config {
   complianceServiceUrl: string;
   jwtSecret: string;
   jwtExpiresIn: string;
+  /** Max request body size for JSON (e.g. '10mb') */
+  requestBodyLimit: string;
 }
 
 export const config: Config = {
@@ -16,5 +21,6 @@ export const config: Config = {
   authServiceUrl: process.env.AUTH_SERVICE_URL || 'http://localhost:4000',
   complianceServiceUrl: process.env.COMPLIANCE_SERVICE_URL || 'http://localhost:4003',
   jwtSecret: process.env.JWT_SECRET || 'wallet-service-secret-key',
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1h'
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1h',
+  requestBodyLimit: process.env.REQUEST_BODY_LIMIT || '10mb',
 };

@@ -3,7 +3,9 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import mongoose from 'mongoose';
+import swaggerUi from 'swagger-ui-express';
 import { config } from './config/environment';
+import swaggerSpec from './config/swagger';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
 import { samsRoutes } from './routes/samsRoutes';
@@ -54,6 +56,8 @@ app.get('/', (_req, res) => {
     description: 'Service-to-service authentication and management',
     endpoints: {
       health: '/health',
+      apiDocs: '/api-docs',
+      openApiSpec: '/api-docs.json',
       services: '/api/v1/services',
       credentials: '/api/v1/credentials',
       keys: '/api/v1/keys',
@@ -72,6 +76,16 @@ app.get('/health', (_req, res) => {
     database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
   });
 });
+
+// OpenAPI spec (for import in Swagger UI / Postman)
+app.get('/api-docs.json', (_req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpec);
+});
+
+// Swagger UI (mount on both paths to avoid redirect loop with swagger-ui-express)
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use('/api-docs/', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // SAMS (Service Authentication Microservice) routes
 app.use('/api/v1/services', samsRoutes);

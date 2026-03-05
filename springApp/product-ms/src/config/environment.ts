@@ -10,6 +10,8 @@ interface EnvironmentConfig {
   corsOrigins: string[];
   logLevel: string;
   serverProductServiceUrl: string;
+  /** Max request body size for JSON (e.g. '10mb') */
+  requestBodyLimit: string;
 }
 
 export const config: EnvironmentConfig = {
@@ -18,5 +20,6 @@ export const config: EnvironmentConfig = {
   mongoUri: process.env.MONGODB_URI || process.env.DATABASE_URL || 'mongodb://localhost:27017/product_ms',
   corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:4001'],
   logLevel: process.env.LOG_LEVEL || 'info',
-  serverProductServiceUrl: process.env.SERVER_PRODUCT_SERVICE_URL || 'http://localhost:3005'
+  serverProductServiceUrl: process.env.SERVER_PRODUCT_SERVICE_URL || 'http://localhost:3005',
+  requestBodyLimit: process.env.REQUEST_BODY_LIMIT || '10mb',
 };

@@ -13,6 +13,8 @@ interface EnvironmentConfig {
   corsOrigins: string[];
   logLevel: string;
   jwtSecret: string;
+  /** Max request body size for JSON (e.g. '10mb') */
+  requestBodyLimit: string;
   paymentGateway: {
     apiKey: string;
     secret: string;
@@ -30,6 +32,7 @@ export const config: EnvironmentConfig = {
   corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:4001'],
   logLevel: process.env.LOG_LEVEL || 'info',
   jwtSecret: process.env.JWT_SECRET || 'payment-secret-key',
+  requestBodyLimit: process.env.REQUEST_BODY_LIMIT || '10mb',
   paymentGateway: {
     apiKey: process.env.PAYMENT_GATEWAY_API_KEY || '',
     secret: process.env.PAYMENT_GATEWAY_SECRET || '',

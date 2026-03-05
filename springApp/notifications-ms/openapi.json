@@ -1,0 +1,274 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Spring Notifications Microservice API",
+    "version": "1.0.0",
+    "description": "Spring Send and manage notifications via email (Mailtrap) and SMS (Twilio). Import this spec into Swagger Editor, Postman, or other API tools."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4009",
+      "description": "Development"
+    }
+  ],
+  "components": {
+    "schemas": {
+      "SendNotificationRequest": {
+        "type": "object",
+        "required": ["channel", "recipient", "template", "data"],
+        "properties": {
+          "channel": {
+            "type": "string",
+            "enum": ["email", "sms"],
+            "description": "Delivery channel: email or sms"
+          },
+          "recipient": {
+            "type": "string",
+            "description": "Email address or phone number depending on channel"
+          },
+          "template": {
+            "type": "string",
+            "description": "Template identifier for the notification content"
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Key-value data to populate the template"
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["high", "normal", "low"],
+            "description": "Optional priority (default: normal)"
+          }
+        }
+      },
+      "NotificationStatus": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "status": { "type": "string", "enum": ["pending", "sent", "failed"] },
+          "channel": { "type": "string", "enum": ["email", "sms"] },
+          "recipient": { "type": "string" },
+          "template": { "type": "string" },
+          "sentAt": { "type": "string", "format": "date-time" },
+          "error": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "NotificationListItem": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "channel": { "type": "string", "enum": ["email", "sms"] },
+          "template": { "type": "string" },
+          "status": { "type": "string", "enum": ["pending", "sent", "failed"] },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "sentAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/v1/notifications/send": {
+      "post": {
+        "summary": "Send notification",
+        "tags": ["Notifications"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/SendNotificationRequest" },
+              "example": {
+                "channel": "email",
+                "recipient": "user@example.com",
+                "template": "welcome",
+                "data": {
+                  "userName": "John",
+                  "loginUrl": "https://app.example.com/login"
+                },
+                "priority": "normal"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Notification sent (or queued)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "message": { "type": "string" },
+                    "data": {
+                      "type": "object",
+                      "properties": { "id": { "type": "string" } }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error (invalid channel, missing recipient/template/data)"
+          },
+          "500": {
+            "description": "Failed to send notification"
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/{id}/status": {
+      "get": {
+        "summary": "Get notification status",
+        "tags": ["Notifications"],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Notification ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Notification status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": { "$ref": "#/components/schemas/NotificationStatus" }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Notification not found"
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/user/{recipient}": {
+      "get": {
+        "summary": "Get notifications for a user",
+        "tags": ["Notifications"],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "recipient",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Recipient identifier (email or phone)"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": { "type": "integer", "default": 50 },
+            "description": "Max number of notifications to return"
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": { "type": "integer", "default": 0 },
+            "description": "Offset for pagination"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User notifications list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "notifications": {
+                          "type": "array",
+                          "items": { "$ref": "#/components/schemas/NotificationListItem" }
+                        },
+                        "total": { "type": "integer" },
+                        "limit": { "type": "integer" },
+                        "offset": { "type": "integer" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notifications": {
+      "get": {
+        "summary": "Get all notifications (admin)",
+        "tags": ["Notifications"],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": { "type": "integer", "default": 50 },
+            "description": "Max number of notifications to return"
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": { "type": "integer", "default": 0 },
+            "description": "Offset for pagination"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "All notifications with pagination",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "notifications": {
+                          "type": "array",
+                          "items": {
+                            "allOf": [
+                              { "$ref": "#/components/schemas/NotificationListItem" },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "recipient": { "type": "string" }
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        "total": { "type": "integer" },
+                        "limit": { "type": "integer" },
+                        "offset": { "type": "integer" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Notifications",
+      "description": "Send email/SMS and query notification status"
+    }
+  ]
+}

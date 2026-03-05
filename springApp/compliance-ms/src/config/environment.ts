@@ -127,3 +127,6 @@ export const REDIS_PASSWORD = process.env.REDIS_PASSWORD as string | undefined;
 export const PREMBLY_API_KEY = process.env.PREMBLY_API_KEY as string | undefined;
 export const PREMBLY_API_SECRET = process.env.PREMBLY_API_SECRET as string | undefined;
 export const PREMBLY_BASE_URL = process.env.PREMBLY_BASE_URL as string | undefined;
+
+/** Max request body size for JSON (e.g. '10mb') */
+export const requestBodyLimit = process.env.REQUEST_BODY_LIMIT || '10mb';
