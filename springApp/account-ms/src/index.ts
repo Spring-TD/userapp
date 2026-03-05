@@ -2,7 +2,10 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import axios from 'axios';
+import swaggerUi from 'swagger-ui-express';
 import { config } from './config/environment';
+import { swaggerServices, getServiceById } from './config/swagger';
 import accountRoutes from './routes/accountRoutes';
 import applicationRoutes from './routes/applicationRoutes';
 import loanRoutes from './routes/loanRoutes';
@@ -38,6 +41,33 @@ app.use('/api/v1/savings-accounts', savingsRoutes);
 app.use('/api/v1/mortgages', mortgageRoutes);
 app.use('/api/v1/keys', apiKeyRoutes);
 
+// Swagger: proxy each microservice's OpenAPI spec so the hub can load them from same origin
+app.get('/api-docs/spec/:serviceId', async (req, res) => {
+  const service = getServiceById(req.params.serviceId);
+  if (!service) {
+    return res.status(404).json({ error: 'Unknown service', serviceId: req.params.serviceId });
+  }
+  try {
+    const { data } = await axios.get(service.specUrl, { timeout: 5000 });
+    res.setHeader('Content-Type', 'application/json');
+    return res.json(data);
+  } catch (err: any) {
+    return res.status(502).json({
+      error: 'Failed to fetch spec',
+      serviceId: service.id,
+      message: err?.message || 'Backend unreachable',
+    });
+  }
+});
+
+// Swagger UI hub: one page to access all microservices' API docs (dropdown of specs)
+const swaggerOptions = {
+  swaggerOptions: {
+    urls: swaggerServices.map((s) => ({ name: s.name, url: `/api-docs/spec/${s.id}` })),
+  },
+};
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(undefined, swaggerOptions));
+app.use('/api-docs/', swaggerUi.serve, swaggerUi.setup(undefined, swaggerOptions));
 
 // Root route (for verifying service is running)
 app.get('/', (req, res) => {
@@ -47,7 +77,8 @@ app.get('/', (req, res) => {
     timestamp: new Date().toISOString(),
     endpoints: {
       health: '/health',
-      api: '/api/v1'
+      api: '/api/v1',
+      apiDocs: '/api-docs'
     }
   });
 });
