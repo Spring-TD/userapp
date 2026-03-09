@@ -9,9 +9,9 @@ export function WelcomeScreen() {
 
   const handleProceed = () => {
     // Navigate to dashboard or main app
-  
-    // For now, redirect back to login as a placeholder
-    router.push("/login")
+
+    // For now, redirect back to signin as a placeholder
+    router.push("/signin")
   }
 
   return (

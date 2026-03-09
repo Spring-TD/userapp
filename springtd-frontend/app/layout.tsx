@@ -1,18 +1,16 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { GeistSans } from "geist/font/sans"
-import { GeistMono } from "geist/font/mono"
-import { Analytics } from "@vercel/analytics/next"
-import { Suspense } from "react"
 import "./globals.css"
-import { Header } from "@/components/header"
+import { AuthProvider } from "@/contexts/AuthContext"
 import { ToastContainer } from "react-toastify"
 import "react-toastify/dist/ReactToastify.css"
+import { Toaster } from "@/components/ui/toaster"
+import "@/lib/devBypass" // Enable dev bypass mode
 
 export const metadata: Metadata = {
-  title: "SpringTD",
-  description: "SpringTD is a fintech company that provides innovative financial solutions.",
-  generator: "Next.js",
+  title: "Spring TD Dashboard",
+  description: "Spring TD Dashboard Application",
+  generator: "v0.app",
 }
 
 export default function RootLayout({
@@ -22,22 +20,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${GeistSans.variable} ${GeistMono.variable} antialiased`}
-        style={{
-          backgroundImage: "url('/images/clip-path-group.png')",
-          backgroundRepeat: "repeat",
-          backgroundSize: "400px 400px",
-          backgroundAttachment: "fixed",
-          backgroundPosition: "center",
-        }}
-      >
-        <Header />
-        <Suspense fallback={null}>
+      <body className="font-sans antialiased">
+        <AuthProvider>
           {children}
           <ToastContainer position="top-right" autoClose={3000} />
-          </Suspense>
-        <Analytics />
+          <Toaster />
+        </AuthProvider>
       </body>
     </html>
   )

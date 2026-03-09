@@ -1,7 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import FileUpload from '../FileUpload';
+import { toast } from 'react-toastify';
+
+interface BusinessInfoTabProps {
+  onContinue?: () => void;
+}
 
 interface FloatingSelectProps {
   label: string;
@@ -20,7 +25,7 @@ const FloatingSelect: React.FC<FloatingSelectProps> = ({
   value,
   onChange,
   options,
-  accentColor = '#9A813F',
+  accentColor = '#7C3AED',
   onSelected,
 }) => {
   const labelClassBase = 'absolute left-4 transition-all pointer-events-none';
@@ -39,7 +44,7 @@ const FloatingSelect: React.FC<FloatingSelectProps> = ({
           onChange(e.target.value);
           if (onSelected && e.target.value) onSelected();
         }}
-        className="w-full rounded-lg border border-gray-300 bg-white px-4 pt-9 pb-2.5 text-gray-900 appearance-none focus:outline-none focus:ring-1 focus:ring-[#9A813F]"
+        className="w-full rounded-lg border border-gray-300 bg-white px-4 pt-9 pb-2.5 text-gray-900 appearance-none focus:outline-none focus:ring-1 focus:ring-[#7C3AED]"
         style={{ outlineColor: accentColor }}
       >
         <option value="" disabled>
@@ -84,7 +89,7 @@ const SimpleInput: React.FC<SimpleInputProps> = ({
   type = 'text',
   value,
   onChange,
-  accentColor = '#9A813F',
+  accentColor = '#7C3AED',
 }) => {
   return (
     <input
@@ -98,7 +103,7 @@ const SimpleInput: React.FC<SimpleInputProps> = ({
   );
 };
 
-const BusinessInfoTab: React.FC = () => {
+const BusinessInfoTab: React.FC<BusinessInfoTabProps> = ({ onContinue }) => {
   const [formData, setFormData] = useState({
     businessType: '',
     userBase: '',
@@ -111,11 +116,37 @@ const BusinessInfoTab: React.FC = () => {
     companyRegId: '',
   });
 
+  // hydrate from localStorage if present (no UI change)
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const raw = localStorage.getItem('kyc.businessInfo');
+        if (raw) {
+          const saved = JSON.parse(raw);
+          setFormData((prev) => ({ ...prev, ...saved }));
+        }
+      }
+    } catch (_) {
+      // ignore corrupt storage
+    }
+  }, []);
+
   // control collapsing animation for the businessModel select
   const [isBusinessModelVisible, setIsBusinessModelVisible] = useState(true);
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormData((prev) => {
+      const next = { ...prev, [field]: value };
+      // persist to localStorage for cross-tab access
+      try {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('kyc.businessInfo', JSON.stringify(next));
+        }
+      } catch (_) {
+        // ignore storage errors
+      }
+      return next;
+    });
   };
 
   // sample option lists (kept from your original)
@@ -155,10 +186,10 @@ const BusinessInfoTab: React.FC = () => {
             <div
               className="overflow-hidden transition-all duration-300"
               style={{
-                maxHeight: isBusinessModelVisible ? 120 : 0,
-                opacity: isBusinessModelVisible ? 1 : 0,
+                maxHeight: /* keep always visible */ 120,
+                opacity: 1,
               }}
-              aria-hidden={!isBusinessModelVisible}
+              aria-hidden={false}
             >
               <FloatingSelect
                 label="What is your business model?"
@@ -167,8 +198,8 @@ const BusinessInfoTab: React.FC = () => {
                 value={formData.businessModel}
                 onChange={(val) => {
                   handleInputChange('businessModel', val);
-                  // collapse when a value is selected
-                  if (val) setIsBusinessModelVisible(false);
+                  // do not collapse on selection anymore
+                  setIsBusinessModelVisible(true);
                 }}
               />
             </div>
@@ -228,10 +259,29 @@ const BusinessInfoTab: React.FC = () => {
               label="Upload Company Logo"
               description="PDF format • Max. 5MB"
               onFileSelect={(file) => console.log('File selected:', file)}
-              buttonColor="#9A813F"
+              buttonColor="#7C3AED"
             />
           </div>
         </div>
+      </div>
+
+      {/* Save & Continue button aligned to the right */}
+      <div className="mt-6 flex justify-end">
+        <button
+          type="button"
+          className="px-4 py-2 rounded-md text-sm font-medium shadow-sm cursor-pointer disabled:opacity-60"
+          style={{ backgroundColor: "#7C3AED", color: "#fff" }}
+          onClick={() => {
+            console.log('Business Info saved:', formData);
+            toast.success('✅ Business info saved successfully');
+            // Navigate to next tab
+            if (onContinue) {
+              setTimeout(() => onContinue(), 500);
+            }
+          }}
+        >
+          Save & Continue
+        </button>
       </div>
     </div>
   );

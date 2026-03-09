@@ -1,21 +1,36 @@
 "use client"
-
-import { useState } from "react"
 import Image from "next/image"
+import { resendVerification } from "@/lib/session"
 
-export function EmailVerificationInstruction() {
-  const [isResending, setIsResending] = useState(false)
+type Props = {
+  email: string
+  onResend: () => Promise<void>
+  message: string
+  isResending: boolean
+}
 
+export function EmailVerificationInstruction({ email, onResend, message, isResending }: Props) {
   const handleResend = async () => {
-    setIsResending(true)
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    setIsResending(false)
+    if (onResend) {
+      try {
+        await onResend()
+      } catch (err) {
+        console.error("Resend failed (onResend)", err)
+      }
+      return
+    }
+
+    // fallback if no onResend was provided
+    try {
+      await resendVerification()
+    } catch (err) {
+      console.error("Resend failed (fallback)", err)
+    }
   }
 
   return (
-    <div className="flex items-center justify-center px-4 py-38">
+    <div className="flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-md space-y-6 text-center">
-        {/* Icon */}
         <div className="flex justify-center">
           <Image
             src="/images/sms-notification.png"
@@ -26,15 +41,13 @@ export function EmailVerificationInstruction() {
           />
         </div>
 
-        {/* Heading & Description */}
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold">Please check your email</h1>
           <p className="text-[15px] text-muted-foreground leading-relaxed">
-            We sent a verification link to the email address you registered your SpringTD account with.
+            {email ? `We sent an OTP to the ${email}.` : "Loading your email..."}
           </p>
         </div>
 
-        {/* Resend Action */}
         <div className="text-sm">
           <span className="text-muted-foreground">Didn’t receive email? </span>
           <button
@@ -46,6 +59,8 @@ export function EmailVerificationInstruction() {
             {isResending ? "Sending..." : "Click to resend"}
           </button>
         </div>
+
+        {message && <p className="text-sm text-muted-foreground">{message}</p>}
       </div>
     </div>
   )
