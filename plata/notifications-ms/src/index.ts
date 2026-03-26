@@ -6,6 +6,8 @@ import { config } from './config/environment';
 import { connectToDatabase, disconnectFromDatabase } from './config/database';
 import { corsMiddleware } from './middleware';
 import { errorHandler, notFoundHandler } from './middleware';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './config/swagger';
 import notificationRoutes from './routes/notificationRoutes';
 
 const app = express();
@@ -48,13 +50,17 @@ app.get('/health', (_req, res) => {
     timestamp: new Date().toISOString(),
     version: '1.0.0',
     services: {
-      email: config.mailtrap.user ? 'configured' : 'not configured',
+      email: (config.mailtrap.apiToken || config.mailtrap.user) ? 'configured' : 'not configured',
       sms: config.twilio.accountSid ? 'configured' : 'not configured',
       database,
       mongodbConnected: dbState === 1
     }
   });
 });
+
+// OpenAPI / Swagger documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get('/api-docs.json', (_req, res) => res.json(swaggerSpec));
 
 // API routes
 app.use('/api/v1/notifications', notificationRoutes);

@@ -6,7 +6,10 @@ import { config } from './config/environment';
 import { connectToDatabase, disconnectFromDatabase } from './config/database';
 import { corsMiddleware } from './middleware';
 import { errorHandler, notFoundHandler } from './middleware';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './config/swagger';
 import { productRoutes, configurationRoutes } from './routes';
+import './models/UserProductApplicationModel';
 
 const app = express();
 let server: ReturnType<express.Express['listen']> | null = null;
@@ -30,14 +33,14 @@ app.get('/', (_req, res) => {
     endpoints: {
       health: '/health',
       products: '/api/v1/products',
-      configurations: '/api/v1/configurations'
+      userProductApplications: '/api/v1/products/applications',
+      configurationOptionsLegacy: '/api/v1/configurations/options',
+      configurationOptions: '/api/v1/products/options'
     },
     features: [
-      'Loan Products',
-      'Savings Products',
-      'Mortgage Products',
-      'Commodity Products',
-      'Product Configuration Management'
+      'Single products collection with Mongoose discriminators (LOAN, MORTGAGE, SAVINGS, INVESTMENT, COMMODITY)',
+      'LOAN / MORTGAGE: about, structure, requirements, feesAndCharges; MORTGAGE adds properties[]',
+      'SAVINGS / INVESTMENT / COMMODITY: about, structure, feesAndCharges; COMMODITY adds commodityPrices[]'
     ],
     timestamp: new Date().toISOString()
   });
@@ -56,6 +59,10 @@ app.get('/health', (_req, res) => {
     mongodbConnected: dbState === 1
   });
 });
+
+// OpenAPI / Swagger documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get('/api-docs.json', (_req, res) => res.json(swaggerSpec));
 
 // API routes
 app.use('/api/v1/products', productRoutes);

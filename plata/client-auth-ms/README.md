@@ -3,11 +3,14 @@
 ## Overview
 The Client Authentication Microservice (client-auth-ms) supports the complete authentication workflow including registration, login, password management, OTP verification, and user profile management.
 
-Deployment URL: https://client-auth-ms.fly.dev/
+Deployment URL: https://client-auth-ms-plata.fly.dev/
 
 ## Table of Contents
 - [Features](#features)
+- [Authentication: Public vs Protected Endpoints](#authentication-public-vs-protected-endpoints)
+- [Testing with Postman](#testing-with-postman)
 - [API Endpoints](#api-endpoints)
+- [All Endpoints (Reference)](#all-endpoints-reference)
 - [Setup Instructions](#setup-instructions)
 - [Environment Variables](#environment-variables)
 - [Architecture](#architecture)
@@ -29,7 +32,163 @@ Deployment URL: https://client-auth-ms.fly.dev/
 - **✅ CORS Support**: Configured for frontend integration
 - **✅ Health Check**: Service monitoring endpoint
 
+## Authentication: Public vs Protected Endpoints
+
+Most endpoints require a valid JWT access token in the `Authorization` header. Registration and a few bootstrap flows are public.
+
+| Area | Public (no token) | Protected (Bearer token required) |
+|------|-------------------|-----------------------------------|
+| **Registration** | `GET /api/v1/registration/forms`, `POST /api/v1/registration/merchant`, `POST /api/v1/registration/user`, `POST /api/v1/registration/admin` | — |
+| **Auth** | `POST /api/v1/auth/verify-account`, `POST /api/v1/auth/login`, `POST /api/v1/auth/refresh`, `POST /api/v1/auth/verify-token`, `GET /api/v1/auth/email-exists/:email` | `POST /api/v1/auth/logout`, `GET /api/v1/auth/me` |
+| **OTP** | `POST /api/v1/otp/generate`, `POST /api/v1/otp/resend` | `POST /api/v1/otp/verify` |
+| **Password** | `POST /api/v1/password/forgot`, `POST /api/v1/password/reset` | `PUT /api/v1/password/change` |
+| **User** | — | All `/api/v1/user/*` |
+| **Roles** | — | All `/api/v1/roles/*` |
+| **Invitations** | `GET /api/v1/invitations/validate/:token`, `POST /api/v1/invitations/accept` | `POST /api/v1/invitations`, `GET /api/v1/invitations` |
+| **Sessions** | — | `GET /api/v1/sessions`, `DELETE /api/v1/sessions/:sessionId` |
+| **Verify email** | `GET /verify-email/verify-email` | — |
+
+## Testing with Postman
+
+### 1. Get an access token
+
+Send a login request (public, no auth):
+
+- **Method:** `POST`
+- **URL:** `https://client-auth-ms-plata.fly.dev/api/v1/auth/login` (or your gateway URL + `/api/v1/auth/login`)
+- **Headers:** `Content-Type: application/json`
+- **Body (raw JSON):**
+  ```json
+  {
+    "email": "user@example.com",
+    "password": "YourPassword123!"
+  }
+  ```
+
+From the response, copy the **access token** (e.g. `data.accessToken` or `accessToken`).
+
+### 2. Use the token for protected endpoints
+
+For any protected endpoint (e.g. `GET /api/v1/auth/me`, `POST /api/v1/otp/verify`):
+
+1. In Postman, open the request.
+2. Go to the **Authorization** tab.
+3. Set **Type** to **Bearer Token**.
+4. In **Token**, paste the access token (no `Bearer ` prefix; Postman adds it).
+5. Send the request.
+
+**Example: Verify OTP (protected)**
+
+- **Method:** `POST`
+- **URL:** `https://client-auth-ms-plata.fly.dev/api/v1/otp/verify`
+- **Authorization:** Type **Bearer Token**, Token = `<your-access-token>`
+- **Body (raw JSON):**
+  ```json
+  {
+    "identifier": "user@example.com",
+    "code": "123456"
+  }
+  ```
+
+**Example: Get current user**
+
+- **Method:** `GET`
+- **URL:** `https://client-auth-ms-plata.fly.dev/api/v1/auth/me`
+- **Authorization:** Type **Bearer Token**, Token = `<your-access-token>`
+
+If the token is missing or invalid, you will get `401` with `{ "success": false, "error": "Authentication required" }` or `"Invalid or expired token"`.
+
 ## API Endpoints
+
+### All Endpoints (Reference)
+
+All 44 endpoints with short descriptions:
+
+#### Root & docs
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | Service info: name, version, status, and list of endpoint groups. |
+| GET | `/health` | Liveness/readiness check for the client-auth service. |
+| GET | `/api-docs` | Serves the Swagger UI for interactive API docs. |
+| GET | `/api-docs.json` | OpenAPI (Swagger) spec as JSON. |
+
+#### Registration (`/api/v1/registration`) — all public
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/registration/forms` | Returns form schemas (fields, labels, validation) for merchant, user, and admin registration. |
+| POST | `/api/v1/registration/merchant` | Registers a new merchant account; sends verification OTP email. |
+| POST | `/api/v1/registration/user` | Registers a new user account; sends verification OTP email. |
+| POST | `/api/v1/registration/admin` | Registers a new admin account. |
+
+#### Auth (`/api/v1/auth`)
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/v1/auth/verify-account` | Public | Verifies an account using a token (e.g. from an email link). |
+| POST | `/api/v1/auth/login` | Public | Authenticates with email/password; returns access and refresh tokens. |
+| POST | `/api/v1/auth/refresh` | Public | Rotates refresh token and returns new access + refresh pair (stored in MongoDB `refresh_sessions`). |
+| POST | `/api/v1/auth/verify-token` | Public | Validates a JWT (e.g. used by other services to check tokens). |
+| GET | `/api/v1/auth/email-exists/:email` | Public | Checks whether an email is already registered. |
+| POST | `/api/v1/auth/logout` | Public | Revokes session: send `Authorization: Bearer <access>` and/or JSON `{ "refreshToken" }` if access is expired. |
+| GET | `/api/v1/auth/me` | Bearer | Returns the current authenticated user's profile. |
+
+#### OTP (`/api/v1/otp`)
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/v1/otp/generate` | Public | Generates an OTP for an identifier (e.g. email), stores it, and sends it by email or SMS (purpose: verification, password-reset, login). |
+| POST | `/api/v1/otp/resend` | Public | Deletes existing OTP for the identifier and sends a new OTP (e.g. "resend code"). |
+| POST | `/api/v1/otp/verify` | Bearer | Verifies a submitted OTP code; for purpose `verification`, marks the user's email as verified and sets status to ACTIVE. |
+
+#### Password (`/api/v1/password`)
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/v1/password/forgot` | Public | Sends a password-reset link or OTP to the given email. |
+| POST | `/api/v1/password/reset` | Public | Resets password using a valid reset token (from email link or OTP flow). |
+| PUT | `/api/v1/password/change` | Bearer | Changes the authenticated user's password (requires current password). |
+
+#### User (`/api/v1/user`) — all Bearer
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/user/list` | Lists users (e.g. for the authenticated merchant). |
+| GET | `/api/v1/user/profile` | Returns the authenticated user's profile. |
+| PUT | `/api/v1/user/profile` | Updates the authenticated user's profile (e.g. name, phone). |
+| PUT | `/api/v1/user/email` | Updates the user's email (may send a new verification email). |
+| PUT | `/api/v1/user/:userId/status` | Updates a user's status (e.g. active/suspended) by a merchant or admin. |
+| POST | `/api/v1/user/deactivate` | Deactivates the authenticated user's account. |
+| PUT | `/api/v1/user/callbacks` | Updates callback URLs for the authenticated merchant/user. |
+| GET | `/api/v1/user/info/:userId` | Returns detailed info for a user (admin). |
+| POST | `/api/v1/user/verify-info/:userId` | Marks or updates verification info for a user (admin). |
+| PUT | `/api/v1/user/suspend/:userId` | Suspends a user (admin). |
+| PUT | `/api/v1/user/activate/:userId` | Reactivates a suspended user (admin). |
+
+#### Roles (`/api/v1/roles`) — all Bearer
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/roles` | Creates a new role (e.g. for a merchant). |
+| GET | `/api/v1/roles` | Returns roles for the current context (e.g. merchant). |
+| GET | `/api/v1/roles/permissions` | Returns the list of available permissions for roles. |
+
+#### Invitations (`/api/v1/invitations`)
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/v1/invitations` | Bearer | Creates an invitation (e.g. merchant invites user by email and role). |
+| GET | `/api/v1/invitations` | Bearer | Lists invitations for the authenticated merchant. |
+| GET | `/api/v1/invitations/validate/:token` | Public | Validates an invitation token and returns invitation details (for the invitee). |
+| POST | `/api/v1/invitations/accept` | Public | Accepts an invitation: creates user account and optionally sets password (invitee). |
+
+#### Sessions (`/api/v1/sessions`) — all Bearer
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/sessions` | Returns the authenticated user's active sessions (e.g. devices, IPs, last activity). |
+| DELETE | `/api/v1/sessions/:sessionId` | Revokes a specific session (logs out that device). |
+
+#### Verify email (`/verify-email`) — public
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/verify-email/verify-email` | Verifies email using a token from the verification link (e.g. in email). |
+
+**Total: 44 endpoints** (4 root/docs + 4 registration + 7 auth + 3 OTP + 3 password + 10 user + 3 roles + 4 invitations + 2 sessions + 1 verify-email).
+
+---
 
 ### Health Check
 ```
@@ -114,12 +273,21 @@ Content-Type: application/json
 ```
 
 #### User Logout
+Revokes the server-side session row for this device. Prefer Bearer access token; if it is expired, send only the refresh token.
+
 ```
 POST /api/v1/auth/logout
-Authorization: Bearer <jwt-token>
+Authorization: Bearer <access-token>
+Content-Type: application/json
+
+{
+  "refreshToken": "optional-if-access-expired"
+}
 ```
 
 #### Refresh Token
+Returns **new** access and refresh tokens; the previous refresh token is invalidated (rotation).
+
 ```
 POST /api/v1/auth/refresh
 Content-Type: application/json
@@ -128,6 +296,8 @@ Content-Type: application/json
   "refreshToken": "refresh-token-string"
 }
 ```
+
+**Response:** `{ "success": true, "data": { "accessToken", "refreshToken" } }`
 
 #### Get Current User
 ```
@@ -163,6 +333,7 @@ Content-Type: application/json
 #### Verify OTP
 ```
 POST /api/v1/otp/verify
+Authorization: Bearer <jwt-token>
 Content-Type: application/json
 
 {
@@ -330,6 +501,10 @@ Content-Type: application/json
 }
 ```
 
+### Session storage (MongoDB)
+
+Each login creates a document in the **`refresh_sessions`** collection: `user_id`, SHA-256 hash of the current refresh JWT (never the raw token), `user_agent`, `ip`, `expires_at`, `last_active_at`, `revoked_at`. **Password reset** and **password change** revoke **all** sessions for that user.
+
 ### Session Management Endpoints ✅
 
 #### Get Active Sessions
@@ -337,7 +512,7 @@ Content-Type: application/json
 GET /api/v1/sessions
 Authorization: Bearer <jwt-token>
 ```
-Returns a list of all active login sessions for the authenticated user, including device information, IP address, and last activity timestamp.
+Returns non-revoked, non-expired sessions for the user. Each item includes `isCurrent: true` for the session tied to the access token’s `sessionId`.
 
 **Response Example:**
 ```json
@@ -346,18 +521,13 @@ Returns a list of all active login sessions for the authenticated user, includin
   "data": {
     "sessions": [
       {
-        "id": "session-uuid",
-        "deviceInfo": "Chrome on MacBook Pro",
-        "ipAddress": "192.168.1.100",
-        "lastActiveAt": "2023-01-01T12:00:00.000Z",
-        "isCurrent": false
-      },
-      {
-        "id": "session-uuid-2",
-        "deviceInfo": "Safari on iPhone 14",
-        "ipAddress": "10.0.0.50",
-        "lastActiveAt": "2023-01-01T10:30:00.000Z",
-        "isCurrent": false
+        "id": "673abc...",
+        "userId": "userObjectId",
+        "createdAt": "2025-01-01T12:00:00.000Z",
+        "lastActive": "2025-01-01T14:00:00.000Z",
+        "userAgent": "Mozilla/5.0 ...",
+        "ip": "::1",
+        "isCurrent": true
       }
     ]
   }
@@ -405,7 +575,7 @@ Revokes a specific session, logging out the user on that device. Users can only 
 
 1. **Install Dependencies**
    ```bash
-   cd server/client-auth-ms
+   cd client-auth-ms
    npm install
    ```
 
@@ -439,6 +609,7 @@ Revokes a specific session, logging out the user on that device. Users can only 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
 | `SERVICE_AUTH_URL` | string | `http://localhost:3000` | Base URL for service-auth-ms communication |
+| `NOTIFICATIONS_SERVICE_URL` | string | `http://localhost:4009` (dev) | Base URL for notifications-ms (verification emails, OTP) |
 
 ### Security & CORS
 | Variable | Type | Default | Description |

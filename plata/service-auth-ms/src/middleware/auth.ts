@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken, extractTokenFromHeader } from '../utils/crypto';
+import { config } from '../config/environment';
 import { logger } from '../utils/logger';
 import { tokenBlacklistService } from '../services/tokenBlacklistService';
 
@@ -48,6 +49,11 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     // Verify the JWT token
     const decoded = verifyToken(token);
     if (!decoded) {
+      logger.error('Token verification failed', {
+        tokenLength: token?.length,
+        jwtSecret: config.jwt.secret?.substring(0, 8) + '...',
+        hasBearer: authHeader?.startsWith('Bearer ')
+      });
       res.status(401).json({
         success: false,
         error: 'Invalid or expired token',
@@ -106,7 +112,9 @@ export const authorize = (allowedRoles: string[]) => {
         return;
       }
 
-      if (!allowedRoles.includes(req.user.userType)) {
+      const userRole = (req.user.userType || '').toLowerCase();
+      const allowed = allowedRoles.map((r) => r.toLowerCase());
+      if (!allowed.includes(userRole)) {
         logger.warn('Authorization failed - insufficient permissions', {
           userId: req.user.userId,
           userType: req.user.userType,

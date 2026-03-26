@@ -5,9 +5,13 @@ import rateLimit from 'express-rate-limit';
 import { config } from './config/environment';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './config/swagger';
 import { samsRoutes } from './routes/samsRoutes';
 import { credentialRoutes } from './routes/credentialRoutes';
 import { apiKeyRoutes } from './routes/apiKeyRoutes';
+import { internalApiKeyRoutes } from './routes/internalApiKeyRoutes';
+import { internalGatewayRoutes } from './routes/internalGatewayRoutes';
 import { userRoutes } from './routes/userRoutes';
 import { SAMSService } from './services/samsService';
 import { redisCacheService } from './services/redisCacheService';
@@ -25,7 +29,7 @@ app.use(cors({
   origin: config.cors.allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Internal-Token', 'X-Public-Key', 'X-Secret-Key']
 }));
 
 // Rate limiting
@@ -72,10 +76,16 @@ app.get('/health', (_req, res) => {
   });
 });
 
+// OpenAPI / Swagger documentation (generated from JSDoc in routes)
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get('/api-docs.json', (_req, res) => res.json(swaggerSpec));
+
 // SAMS (Service Authentication Microservice) routes
 app.use('/api/v1/services', samsRoutes);
 app.use('/api/v1/credentials', credentialRoutes);
 app.use('/api/v1/keys', apiKeyRoutes);
+app.use('/internal/api/v1/keys', internalApiKeyRoutes);
+app.use('/internal/api/v1/gateway', internalGatewayRoutes);
 app.use('/api/v1/user', userRoutes);
 
 // Error handling middleware (must be last)

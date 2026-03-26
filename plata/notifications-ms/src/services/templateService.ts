@@ -107,6 +107,7 @@ export class TemplateService {
     const defaultSubjects: Record<string, string> = {
       'email-verification': 'Verify Your Email Address',
       'password-reset': 'Password Reset Request',
+      'otp': 'Your SpringTD Verification Code',
       'contract-submission': 'Contract Submitted Successfully',
       'kyc-approved': 'KYC Verification Approved',
       'kyc-rejected': 'KYC Verification Status Update'

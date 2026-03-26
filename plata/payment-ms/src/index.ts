@@ -6,6 +6,8 @@ import { config } from './config/environment';
 import { connectToDatabase, disconnectFromDatabase } from './config/database';
 import corsMiddleware from './middleware/cors';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './config/swagger';
 import { paymentRoutes } from './routes/paymentRoutes';
 import { recordRoutes } from './routes/recordRoutes';
 import logger from './utils/logger';
@@ -59,6 +61,10 @@ app.get('/health', (_req, res) => {
     mongodbConnected: dbState === 1
   });
 });
+
+// OpenAPI / Swagger documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get('/api-docs.json', (_req, res) => res.json(swaggerSpec));
 
 // API routes
 app.use('/api/v1/payments', paymentRoutes);

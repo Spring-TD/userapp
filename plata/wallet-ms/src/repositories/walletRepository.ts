@@ -5,6 +5,7 @@ import type { IWalletDocument } from '../models/WalletModel';
 export async function createWallet(doc: {
   walletType: 'MERCHANT' | 'USER';
   merchantId: string;
+  appId?: string;
   name: string;
   currency: string;
   merchantWalletType?: MerchantWalletType;
@@ -13,6 +14,7 @@ export async function createWallet(doc: {
   const created = await WalletModel.create({
     walletType: doc.walletType,
     merchantId: doc.merchantId,
+    ...(doc.walletType === 'MERCHANT' && doc.appId ? { appId: doc.appId } : {}),
     name: doc.name,
     currency: doc.currency,
     mainBalance: 0,
@@ -31,19 +33,28 @@ export async function getWalletById(walletId: string): Promise<Wallet | null> {
 
 export async function getMerchantWalletByType(
   merchantId: string,
-  walletType: MerchantWalletType
+  walletType: MerchantWalletType,
+  appId?: string
 ): Promise<MerchantWallet | null> {
-  const doc = await WalletModel.findOne({
+  const query: Record<string, unknown> = {
     walletType: 'MERCHANT',
     merchantId,
     merchantWalletType: walletType
-  }).lean();
+  };
+  if (appId) {
+    query.appId = appId;
+  }
+  const doc = await WalletModel.findOne(query).lean();
   if (!doc) return null;
   return toWallet(doc as IWalletDocument) as MerchantWallet;
 }
 
-export async function getAllMerchantWallets(merchantId: string): Promise<MerchantWallet[]> {
-  const docs = await WalletModel.find({ walletType: 'MERCHANT', merchantId }).lean();
+export async function getAllMerchantWallets(merchantId: string, appId?: string): Promise<MerchantWallet[]> {
+  const query: Record<string, unknown> = { walletType: 'MERCHANT', merchantId };
+  if (appId) {
+    query.appId = appId;
+  }
+  const docs = await WalletModel.find(query).lean();
   return docs.map((d) => toWallet(d as IWalletDocument) as MerchantWallet);
 }
 

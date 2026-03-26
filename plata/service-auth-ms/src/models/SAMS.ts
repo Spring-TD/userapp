@@ -143,6 +143,34 @@ export class IPWhitelistModel {
     );
   }
 
+  /** Virtual service id for merchant-scoped gateway IP rules */
+  static merchantGatewayServiceId(merchantId: string): string {
+    return `merchant:${merchantId}`;
+  }
+
+  static async findByMerchantGateway(merchantId: string): Promise<IPWhitelist[]> {
+    const entries = await IPWhitelistModelMongo.find({
+      service_id: this.merchantGatewayServiceId(merchantId),
+      is_active: true
+    });
+    return entries.map(e => e.toObject() as unknown as IPWhitelist);
+  }
+
+  /**
+   * Gateway IP policy for a merchant: if no whitelist rows exist, all IPs allowed.
+   * If rows exist, client IP must match ip_address or ip_range (CIDR).
+   */
+  static async isIPAllowedForMerchantGateway(merchantId: string, ipAddress: string): Promise<boolean> {
+    const entries = await this.findByMerchantGateway(merchantId);
+    if (entries.length === 0) {
+      return true;
+    }
+    return entries.some(entry =>
+      entry.ip_address === ipAddress ||
+      (entry.ip_range && this.isIPInRange(ipAddress, entry.ip_range))
+    );
+  }
+
   /**
    * Helper method to check if IP is in CIDR range
    */

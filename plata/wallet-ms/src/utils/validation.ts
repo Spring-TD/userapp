@@ -89,7 +89,8 @@ const paymentMethodSchema = Joi.string().valid('CARD', 'BANK_TRANSFER', 'WALLET'
 export const createMerchantWalletSchema = Joi.object({
   name: nameSchema,
   currency: currencySchema,
-  merchantWalletType: merchantWalletTypeSchema.required()
+  merchantWalletType: merchantWalletTypeSchema.required(),
+  appId: merchantIdSchema
 });
 
 export const createUserWalletSchema = Joi.object({
@@ -179,6 +180,7 @@ export const fundingCallbackSchema = Joi.object({
   providerReference: Joi.string().optional(),
   signature: Joi.string().optional(),
   merchantId: merchantIdSchema,
+  appId: merchantIdSchema,
   merchantWalletType: merchantWalletTypeSchema
 });
 

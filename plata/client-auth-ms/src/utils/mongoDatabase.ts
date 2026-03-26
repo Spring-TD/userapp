@@ -1,6 +1,8 @@
 import { UserModel } from '../models/UserModel';
 import { RoleModel } from '../models/RoleModel';
 import { InvitationModel } from '../models/InvitationModel';
+import { OtpModel, OtpDocument } from '../models/OtpModel';
+import { SessionModel } from '../models/SessionModel';
 import { UserAccount, Role, Invitation } from '../models/User';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -182,10 +184,59 @@ class MongoDatabase {
         return docs.map((d) => ({ ...d, id: (d._id as any).toString() } as Invitation));
     }
 
+    // ── OTPs ────────────────────────────────────────────────────────────────
+
+    /**
+     * Create a new OTP record.
+     * The `code` field should already be bcrypt-hashed by the caller.
+     */
+    async createOtp(data: {
+        identifier: string;
+        code: string;
+        channel: 'email' | 'sms';
+        purpose: 'verification' | 'password-reset' | 'login';
+        expiresAt: Date;
+    }): Promise<OtpDocument> {
+        return OtpModel.create(data);
+    }
+
+    /**
+     * Find the most recent non-expired, non-verified OTP for an identifier + purpose.
+     */
+    async findActiveOtp(
+        identifier: string,
+        purpose: 'verification' | 'password-reset' | 'login'
+    ): Promise<OtpDocument | null> {
+        return OtpModel.findOne({
+            identifier: identifier.toLowerCase(),
+            purpose,
+            verified: false,
+            expiresAt: { $gt: new Date() },
+        }).sort({ createdAt: -1 });
+    }
+
+    /** Increment the verification-attempt counter on an OTP record. */
+    async incrementOtpAttempts(id: string): Promise<void> {
+        await OtpModel.findByIdAndUpdate(id, { $inc: { attempts: 1 } });
+    }
+
+    /** Mark an OTP record as verified. */
+    async markOtpVerified(id: string): Promise<void> {
+        await OtpModel.findByIdAndUpdate(id, { $set: { verified: true } });
+    }
+
+    /** Delete all OTP records for an identifier + purpose (used before generating a new one). */
+    async deleteOtpsByIdentifier(
+        identifier: string,
+        purpose: 'verification' | 'password-reset' | 'login'
+    ): Promise<void> {
+        await OtpModel.deleteMany({ identifier: identifier.toLowerCase(), purpose });
+    }
+
     // ── Utility ───────────────────────────────────────────────────────────────
 
     /**
-     * Drop all documents from all three collections.
+     * Drop all documents from all collections.
      * Useful for integration tests – do NOT call in production.
      */
     async clearAll(): Promise<void> {
@@ -193,6 +244,8 @@ class MongoDatabase {
             UserModel.deleteMany({}),
             RoleModel.deleteMany({}),
             InvitationModel.deleteMany({}),
+            OtpModel.deleteMany({}),
+            SessionModel.deleteMany({}),
         ]);
     }
 }

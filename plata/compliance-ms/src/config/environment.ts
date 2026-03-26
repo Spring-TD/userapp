@@ -5,7 +5,7 @@ import { logger } from '../utils/logger';
 import dotenv from 'dotenv';
 dotenv.config();
 
-// Add Cloudinary environment variables to the required list
+// Required environment variables (document storage is DigitalOcean Spaces; optional)
 const requiredEnvVars = [
   'NODE_ENV',
   'PORT',
@@ -107,11 +107,6 @@ export const KYC_REVIEW_NOTIFICATIONS_TEMPLATE_DELIMITER_UNESCAPE_ALL_REGEX_GLOB
 export const KYC_REVIEW_NOTIFICATIONS_TEMPLATE_DELIMITER_UNESCAPE_ALL_REGEX_GLOBAL_PROPERTY_ESCAPES_REGEX_HAS_INDICES = process.env.KYC_REVIEW_NOTIFICATIONS_TEMPLATE_DELIMITER_UNESCAPE_ALL_REGEX_GLOBAL_PROPERTY_ESCAPES_REGEX_HAS_INDICES === 'true';
 export const KYC_REVIEW_NOTIFICATIONS_TEMPLATE_DELIMITER_UNESCAPE_ALL_REGEX_GLOBAL_PROPERTY_ESCAPES_REGEX_UNICODE_EXTENDED = process.env.KYC_REVIEW_NOTIFICATIONS_TEMPLATE_DELIMITER_UNESCAPE_ALL_REGEX_GLOBAL_PROPERTY_ESCAPES_REGEX_UNICODE_EXTENDED === 'true';
 
-// Export Cloudinary environment variables
-export const CLOUDINARY_CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME as string;
-export const CLOUDINARY_API_KEY = process.env.CLOUDINARY_API_KEY as string;
-export const CLOUDINARY_API_SECRET = process.env.CLOUDINARY_API_SECRET as string;
-
 // Export CAC API environment variables (optional)
 export const CAC_API_URL = process.env.CAC_API_URL as string | undefined;
 export const CAC_API_KEY = process.env.CAC_API_KEY as string | undefined;
@@ -127,3 +122,11 @@ export const REDIS_PASSWORD = process.env.REDIS_PASSWORD as string | undefined;
 export const PREMBLY_API_KEY = process.env.PREMBLY_API_KEY as string | undefined;
 export const PREMBLY_API_SECRET = process.env.PREMBLY_API_SECRET as string | undefined;
 export const PREMBLY_BASE_URL = process.env.PREMBLY_BASE_URL as string | undefined;
+
+// DigitalOcean Spaces (optional; used for KYC document uploads when configured)
+export const DO_SPACES_REGION = process.env.DO_SPACES_REGION as string | undefined;
+export const DO_SPACES_ENDPOINT = process.env.DO_SPACES_ENDPOINT as string | undefined;
+export const DO_SPACES_BUCKET = process.env.DO_SPACES_BUCKET as string | undefined;
+export const DO_SPACES_ACCESS_KEY_ID = process.env.DO_SPACES_ACCESS_KEY_ID as string | undefined;
+export const DO_SPACES_SECRET_ACCESS_KEY = process.env.DO_SPACES_SECRET_ACCESS_KEY as string | undefined;
+export const DO_SPACES_CDN_URL = process.env.DO_SPACES_CDN_URL as string | undefined;

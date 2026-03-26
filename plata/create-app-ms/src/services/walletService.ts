@@ -31,6 +31,15 @@ interface CreateWalletResponse {
   error?: string;
 }
 
+interface GetMerchantWalletsResponse {
+  success: boolean;
+  message?: string;
+  data?: {
+    wallets?: any[];
+  };
+  error?: string;
+}
+
 export class WalletService {
   private static readonly WALLET_SERVICE_URL = config.walletServiceUrl;
 
@@ -136,18 +145,18 @@ export class WalletService {
    * @param merchantId The merchant ID (used as the app ID)
    * @returns The created wallets or error information
    */
-  static async createAllMerchantWallets(merchantId: string): Promise<CreateWalletResponse> {
+  static async createAllMerchantWallets(appId: string, authHeader?: string): Promise<CreateWalletResponse> {
     try {
-      // In a real implementation, we would need to authenticate with the wallet service
       const response = await axios.post<CreateWalletResponse>(
         `${this.WALLET_SERVICE_URL}/api/v1/wallets/merchant/all`,
         {
-          currency: 'USD'
+          currency: 'USD',
+          appId
         },
         {
           headers: {
-            'Content-Type': 'application/json'
-            // In a real implementation, we would add authentication headers here
+            'Content-Type': 'application/json',
+            ...(authHeader ? { Authorization: authHeader } : {})
           }
         }
       );
@@ -165,6 +174,45 @@ export class WalletService {
       return {
         success: false,
         error: error.message || 'Failed to create wallets'
+      };
+    }
+  }
+
+  /**
+   * Fetch all merchant wallets for a specific app.
+   * @param merchantId Merchant owner ID
+   * @param appId App ID used to scope wallets
+   * @param authHeader Optional bearer token for wallet-ms auth
+   */
+  static async getAllMerchantWallets(
+    merchantId: string,
+    appId: string,
+    authHeader?: string
+  ): Promise<GetMerchantWalletsResponse> {
+    try {
+      const response = await axios.get<GetMerchantWalletsResponse>(
+        `${this.WALLET_SERVICE_URL}/api/v1/wallets/merchant/${merchantId}/all`,
+        {
+          params: { appId },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authHeader ? { Authorization: authHeader } : {})
+          }
+        }
+      );
+
+      return response.data;
+    } catch (error: any) {
+      if (axios.isAxiosError(error) && error.response?.data?.error) {
+        return {
+          success: false,
+          error: error.response.data.error
+        };
+      }
+
+      return {
+        success: false,
+        error: error.message || 'Failed to fetch merchant wallets'
       };
     }
   }

@@ -37,6 +37,24 @@ const countrySchema = Joi.string().min(2).max(100).required().messages({
   'any.required': 'Country is required'
 });
 
+// Optional variants for profile updates (fields may be omitted)
+const optionalNameSchema = Joi.string().min(2).max(50).optional().messages({
+  'string.min': 'Name must be at least 2 characters long',
+  'string.max': 'Name must not exceed 50 characters'
+});
+
+const optionalPhoneSchema = Joi.string()
+  .pattern(/^\+?[1-9]\d{1,14}$/)
+  .optional()
+  .messages({
+    'string.pattern.base': 'Phone number must be in valid international format'
+  });
+
+const optionalCountrySchema = Joi.string().min(2).max(100).optional().messages({
+  'string.min': 'Country must be at least 2 characters long',
+  'string.max': 'Country must not exceed 100 characters'
+});
+
 const userMerchantIdSchema = Joi.string().min(5).max(50).required().messages({
   'string.min': 'User Merchant ID must be at least 5 characters long',
   'string.max': 'User Merchant ID must not exceed 50 characters',
@@ -110,6 +128,14 @@ export const updateEmailSchema = Joi.object({
     'any.required': 'Current password is required to change email'
   })
 });
+
+// Current user's profile update: all fields are optional.
+export const userProfileUpdateSchema = Joi.object({
+  first_name: optionalNameSchema,
+  last_name: optionalNameSchema,
+  phone: optionalPhoneSchema,
+  country: optionalCountrySchema
+}).optional();
 
 export const validateForm = <T>(schema: Joi.ObjectSchema, data: any): { error?: string; value?: T } => {
   const { error, value } = schema.validate(data, { 

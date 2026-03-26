@@ -39,17 +39,6 @@ export class EmailService {
         template,
         url: this.notificationServiceUrl
       });
-
-      // Fallback logging for development if service is unreachable
-      if (process.env['NODE_ENV'] !== 'production') {
-        logger.warn('Mock Email Fallback (Service Unreachable)', {
-          recipient,
-          template,
-          data
-        });
-        return true; // Return true in dev so flow doesn't break
-      }
-
       return false;
     }
   }

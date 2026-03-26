@@ -1,4 +1,4 @@
-import { App, CreateAppRequest, UpdateAppRequest } from '../types/app';
+import { App, AppStatus, CreateAppRequest, UpdateAppRequest } from '../types/app';
 import { AppModel } from '../models/appModel';
 import { ApiError } from '../middleware/errorHandler';
 import { validateCreateAppRequest } from '../utils/validation';
@@ -49,27 +49,6 @@ export class AppService {
       throw new ApiError(400, validationError);
     }
 
-    // Validate status transitions
-    if (updateData.status) {
-      const app = await AppModel.getAppById(id);
-      if (!app) {
-        throw new ApiError(404, 'App not found');
-      }
-
-      // Validate status transitions
-      if (updateData.status === 'submitted' && app.status !== 'draft' && app.status !== 'incomplete') {
-        throw new ApiError(400, 'Only draft or incomplete apps can be submitted');
-      }
-
-      if (updateData.status === 'approved' && app.status !== 'submitted') {
-        throw new ApiError(400, 'Only submitted apps can be approved');
-      }
-
-      if (updateData.status === 'rejected' && app.status !== 'submitted') {
-        throw new ApiError(400, 'Only submitted apps can be rejected');
-      }
-    }
-
     const updatedApp = await AppModel.updateApp(id, updateData);
     return updatedApp;
   }
@@ -88,77 +67,21 @@ export class AppService {
     return apps;
   }
 
-  async submitApp(id: string): Promise<App | null> {
+  /**
+   * Update app status (active | suspended). Merchants can suspend or reactivate their apps.
+   */
+  async updateAppStatus(id: string, status: AppStatus): Promise<App | null> {
     if (!id) {
       throw new ApiError(400, 'App ID is required');
     }
-
+    if (status !== 'active' && status !== 'suspended') {
+      throw new ApiError(400, 'Status must be "active" or "suspended"');
+    }
     const app = await AppModel.getAppById(id);
     if (!app) {
       throw new ApiError(404, 'App not found');
     }
-
-    // Only draft or incomplete apps can be submitted
-    if (app.status !== 'draft' && app.status !== 'incomplete') {
-      throw new ApiError(400, 'Only draft or incomplete apps can be submitted');
-    }
-
-    const updatedApp = await AppModel.updateApp(id, {
-      status: 'submitted',
-      submittedAt: new Date().toISOString()
-    });
-
-    return updatedApp;
-  }
-
-  async approveApp(id: string): Promise<App | null> {
-    if (!id) {
-      throw new ApiError(400, 'App ID is required');
-    }
-
-    const app = await AppModel.getAppById(id);
-    if (!app) {
-      throw new ApiError(404, 'App not found');
-    }
-
-    // Only submitted apps can be approved
-    if (app.status !== 'submitted') {
-      throw new ApiError(400, 'Only submitted apps can be approved');
-    }
-
-    const updatedApp = await AppModel.updateApp(id, {
-      status: 'approved',
-      approvedAt: new Date().toISOString()
-    });
-
-    return updatedApp;
-  }
-
-  async rejectApp(id: string, rejectionReason: string): Promise<App | null> {
-    if (!id) {
-      throw new ApiError(400, 'App ID is required');
-    }
-
-    if (!rejectionReason) {
-      throw new ApiError(400, 'Rejection reason is required');
-    }
-
-    const app = await AppModel.getAppById(id);
-    if (!app) {
-      throw new ApiError(404, 'App not found');
-    }
-
-    // Only submitted apps can be rejected
-    if (app.status !== 'submitted') {
-      throw new ApiError(400, 'Only submitted apps can be rejected');
-    }
-
-    const updatedApp = await AppModel.updateApp(id, {
-      status: 'rejected',
-      rejectedAt: new Date().toISOString(),
-      rejectionReason
-    });
-
+    const updatedApp = await AppModel.updateApp(id, { status });
     return updatedApp;
   }
 

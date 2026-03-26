@@ -9,6 +9,7 @@ interface CreateMerchantWalletData {
   name: string;
   currency: string;
   merchantWalletType: MerchantWalletType;
+  appId?: string;
 }
 
 interface CreateUserData {
@@ -120,10 +121,11 @@ export class WalletController {
       }
 
       const merchantId = req.user.merchantId || req.user.userId;
-      const { name, currency, merchantWalletType } = value!;
+      const { name, currency, merchantWalletType, appId } = value!;
 
       const result = await WalletService.createMerchantWallet({
         merchantId,
+        appId,
         name: name || `${merchantWalletType} Wallet`,
         currency: currency || 'USD',
         merchantWalletType
@@ -139,6 +141,7 @@ export class WalletController {
 
       logger.info('Merchant wallet created successfully', {
         merchantId,
+        appId,
         walletId: result.wallet?.id,
         walletType: merchantWalletType
       });
@@ -171,9 +174,9 @@ export class WalletController {
       }
 
       const merchantId = req.user.merchantId || req.user.userId;
-      const { currency } = req.body;
+      const { currency, appId } = req.body;
 
-      const result = await WalletService.createAllMerchantWallets(merchantId, currency || 'USD');
+      const result = await WalletService.createAllMerchantWallets(merchantId, currency || 'USD', false, appId);
 
       if (!result.success) {
         res.status(400).json({
@@ -185,6 +188,7 @@ export class WalletController {
 
       logger.info('All merchant wallets created successfully', {
         merchantId,
+        appId,
         walletCount: result.wallets?.length
       });
 
@@ -208,6 +212,7 @@ export class WalletController {
   static async getMerchantWalletByType(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { merchantId, walletType } = req.params;
+      const appId = typeof req.query.appId === 'string' ? req.query.appId : undefined;
 
       if (!req.user) {
         res.status(401).json({
@@ -235,7 +240,7 @@ export class WalletController {
         return;
       }
 
-      const result = await WalletService.getMerchantWalletByType(merchantId, walletType as MerchantWalletType);
+      const result = await WalletService.getMerchantWalletByType(merchantId, walletType as MerchantWalletType, appId);
 
       if (!result.success) {
         res.status(404).json({
@@ -264,6 +269,7 @@ export class WalletController {
   static async getAllMerchantWallets(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { merchantId } = req.params;
+      const appId = typeof req.query.appId === 'string' ? req.query.appId : undefined;
 
       if (!req.user) {
         res.status(401).json({
@@ -282,7 +288,7 @@ export class WalletController {
         return;
       }
 
-      const result = await WalletService.getAllMerchantWallets(merchantId);
+      const result = await WalletService.getAllMerchantWallets(merchantId, appId);
 
       if (!result.success) {
         res.status(400).json({

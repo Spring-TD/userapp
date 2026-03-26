@@ -6,6 +6,8 @@ import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import { config } from './config/environment';
 import { connectToDatabase, disconnectFromDatabase } from './config/database';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './config/swagger';
 import { walletRoutes } from './routes/walletRoutes';
 import { transactionRoutes } from './routes/transactionRoutes';
 import { errorHandler } from './middleware/errorHandler';
@@ -65,6 +67,10 @@ app.get('/health', (req, res) => {
     mongodbConnected: dbState === 1
   });
 });
+
+// OpenAPI / Swagger documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get('/api-docs.json', (_req, res) => res.json(swaggerSpec));
 
 // API routes
 app.use('/api/v1/wallets', walletRoutes);

@@ -27,6 +27,25 @@ The service is deployed on Fly.io and is accessible at: https://notifications-ms
 
 Health check endpoint: https://notifications-ms.fly.dev/health
 
+### Fly.io: Email must be configured
+
+For emails to be sent (e.g. verification OTP, password reset), set Mailtrap (or SMTP) secrets on the **notifications-ms** Fly app. Without these, the service will accept send requests but no email is delivered.
+
+1. **Check current status:** Open https://notifications-ms.fly.dev/health — if `services.email` is `"not configured"`, set the secrets below.
+
+2. **Set secrets** (from the `notifications-ms` directory):
+   ```bash
+   fly secrets set MAILTRAP_USER=your_mailtrap_user MAILTRAP_PASSWORD=your_mailtrap_password -a notifications-ms
+   ```
+   Optional: `MAILTRAP_FROM_EMAIL=noreply@yourdomain.com`
+
+3. **Get Mailtrap credentials:** Sign up at [mailtrap.io](https://mailtrap.io), open your inbox, then **SMTP Settings** to get username and password. (Mailtrap is a testing inbox; for real delivery to user inboxes, use Mailtrap Email API, SendGrid, or another SMTP provider and set the same env vars if compatible, or adjust the service config.)
+
+4. **Redeploy** so the new secrets are picked up (or let Fly restart the app):
+   ```bash
+   fly deploy -a notifications-ms
+   ```
+
 ## Getting Started
 
 ### Prerequisites

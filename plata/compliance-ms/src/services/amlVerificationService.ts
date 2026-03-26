@@ -52,28 +52,21 @@ export interface AMLVerificationResult {
   verifiedAt: Date;
 }
 
-// Mock AML provider service
+// AML verification service - Prembly only
 export class AMLVerificationService {
-  private providers: Map<string, any> = new Map();
-
-  constructor() {
-    // Initialize with mock providers
-    this.providers.set('trulioo', { name: 'Trulioo', apiKey: process.env.TRULIOO_API_KEY });
-    this.providers.set('sumsub', { name: 'Sumsub', apiKey: process.env.SUMSUB_API_KEY });
-    this.providers.set('complyadvantage', { name: 'ComplyAdvantage', apiKey: process.env.COMPLYADVANTAGE_API_KEY });
-  }
+  private static readonly PROVIDER = 'prembly';
 
   /**
-   * Verify AML document using a third-party provider
+   * Verify AML document using Prembly
    * @param document The business document to verify
-   * @param providerName The AML provider to use (trulioo, sumsub, complyadvantage)
+   * @param _providerName Ignored; only Prembly is used (kept for API compatibility)
    * @returns AML verification result
    */
-  async verifyDocument(document: BusinessDocumentData, providerName: string = 'trulioo'): Promise<AMLVerificationResult> {
+  async verifyDocument(document: BusinessDocumentData, _providerName: string = 'prembly'): Promise<AMLVerificationResult> {
+    const providerName = AMLVerificationService.PROVIDER;
     try {
-      // Validate provider
-      if (!this.providers.has(providerName)) {
-        throw new Error(`Unsupported AML provider: ${providerName}`);
+      if (!premblyService.isConfigured()) {
+        throw new Error('Prembly API not configured. Set PREMBLY_API_KEY and PREMBLY_API_SECRET for AML verification.');
       }
 
       logger.info('Starting AML document verification', {
@@ -88,8 +81,7 @@ export class AMLVerificationService {
         return this.createSkipResult(document);
       }
 
-      // Call the AML provider API (mock implementation)
-      const providerResponse = await this.callAMLProvider(document, providerName);
+      const providerResponse = await this.callPremblyProvider(document);
       
       // Calculate document hash for audit trail
       const documentHash = this.calculateDocumentHash(document.fileUrl);
@@ -155,111 +147,55 @@ export class AMLVerificationService {
   }
 
   /**
-   * Call the actual AML provider API
-   * Uses Prembly API if configured, otherwise falls back to mock
+   * Call Prembly API for AML verification
    * @param document The document to verify
-   * @param providerName The provider to use
    * @returns Provider response
    */
-  private async callAMLProvider(document: BusinessDocumentData, providerName: string): Promise<AMLProviderResponse> {
-    // Try Prembly API first if configured
-    if (premblyService.isConfigured() && providerName === 'prembly') {
-      logger.info('Using Prembly API for AML verification', {
-        documentId: document.fileName,
-        documentType: document.type
-      });
-
-      try {
-        // Extract company information from document metadata or use defaults
-        const premblyRequest: PremblyBusinessKYCRequest = {
-          companyName: (document as any).companyName || 'Unknown Company',
-          registrationNumber: (document as any).registrationNumber || '',
-          documentImage: document.fileUrl // Assuming fileUrl contains the document
-        };
-
-        const premblyResponse = await premblyService.verifyAML(premblyRequest);
-
-        if (premblyResponse.status && premblyResponse.data) {
-          return {
-            success: true,
-            providerId: 'prembly',
-            verificationId: premblyResponse.data.verificationId,
-            result: {
-              kyb: {
-                verified: premblyResponse.data.kybVerified,
-                companyName: premblyRequest.companyName,
-                registrationNumber: premblyRequest.registrationNumber,
-                status: premblyResponse.data.kybVerified ? 'active' : 'under_review',
-                incorporationDate: undefined
-              },
-              aml: {
-                peps: premblyResponse.data.peps,
-                sanctions: premblyResponse.data.sanctions,
-                adverseMedia: premblyResponse.data.adverseMedia,
-                riskScore: premblyResponse.data.riskScore
-              },
-              overall: {
-                approved: premblyResponse.data.amlClear && premblyResponse.data.kybVerified,
-                suspicious: !premblyResponse.data.amlClear,
-                reason: !premblyResponse.data.amlClear ? 'AML check flagged issues' : undefined
-              }
-            },
-            rawResponse: premblyResponse
-          };
-        }
-      } catch (error: any) {
-        logger.error('Prembly AML verification failed, falling back to mock', {
-          error: error.message,
-          documentId: document.fileName
-        });
-      }
-    }
-
-    // Fallback to mock implementation
-    logger.info(`Using mock implementation for ${providerName} AML verification`, {
-      documentId: document.fileName
+  private async callPremblyProvider(document: BusinessDocumentData): Promise<AMLProviderResponse> {
+    logger.info('Using Prembly API for AML verification', {
+      documentId: document.fileName,
+      documentType: document.type
     });
 
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    // Mock response based on document type and random factors
-    const isSuspicious = Math.random() < 0.1; // 10% chance of being suspicious
-    const riskScore = isSuspicious ? Math.floor(Math.random() * 40) + 60 : Math.floor(Math.random() * 60);
-    
-    const response: AMLProviderResponse = {
-      success: true,
-      providerId: providerName,
-      verificationId: `verification_${Date.now()}`,
-      result: {
-        kyb: {
-          verified: !isSuspicious,
-          companyName: 'Example Corp',
-          registrationNumber: 'REG123456',
-          status: isSuspicious ? 'under_review' : 'active',
-          incorporationDate: '2020-01-01'
-        },
-        aml: {
-          peps: isSuspicious && Math.random() < 0.3,
-          sanctions: isSuspicious && Math.random() < 0.2,
-          adverseMedia: isSuspicious && Math.random() < 0.4,
-          riskScore
-        },
-        overall: {
-          approved: !isSuspicious,
-          suspicious: isSuspicious,
-          reason: isSuspicious ? 'Potential match with sanctions list' : undefined
-        }
-      },
-      rawResponse: {
-        // This would contain the full raw response from the provider
-        mock: true,
-        timestamp: new Date().toISOString(),
-        provider: providerName
-      }
+    const premblyRequest: PremblyBusinessKYCRequest = {
+      companyName: (document as any).companyName || 'Unknown Company',
+      registrationNumber: (document as any).registrationNumber || '',
+      documentImage: document.fileUrl
     };
 
-    return response;
+    const premblyResponse = await premblyService.verifyAML(premblyRequest);
+
+    if (!premblyResponse.status || !premblyResponse.data) {
+      throw new Error(premblyResponse.message || 'Prembly AML verification failed');
+    }
+
+    const { data } = premblyResponse;
+    return {
+      success: true,
+      providerId: 'prembly',
+      verificationId: data.verificationId,
+      result: {
+        kyb: {
+          verified: data.kybVerified,
+          companyName: premblyRequest.companyName,
+          registrationNumber: premblyRequest.registrationNumber,
+          status: data.kybVerified ? 'active' : 'under_review',
+          incorporationDate: undefined
+        },
+        aml: {
+          peps: data.peps,
+          sanctions: data.sanctions,
+          adverseMedia: data.adverseMedia,
+          riskScore: data.riskScore
+        },
+        overall: {
+          approved: data.amlClear && data.kybVerified,
+          suspicious: !data.amlClear,
+          reason: !data.amlClear ? 'AML check flagged issues' : undefined
+        }
+      },
+      rawResponse: premblyResponse
+    };
   }
 
   /**

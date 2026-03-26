@@ -1,7 +1,5 @@
 export enum Permission {
   CREATE_ADMIN = 'create_admin',
-  GENERATE_SECRET_KEYS = 'generate_secret_keys',
-  SEE_SECRET_KEYS = 'see_secret_keys',
   EDIT_PRODUCTS = 'edit_products',
   CREATE_PRODUCTS = 'create_products',
   VIEW_PRODUCTS = 'view_products',

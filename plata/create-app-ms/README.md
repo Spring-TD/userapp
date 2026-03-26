@@ -7,10 +7,10 @@ Deployment URL: https://create-app-ms.fly.dev/
 ## Features
 
 - Create new applications with detailed information (App Name, Website URL, App Alias, App Description)
-- Manage application lifecycle (draft, submitted, approved, rejected)
+- App status is **active** or **suspended**. Merchants can suspend or reactivate an app via `PATCH /api/v1/apps/{id}/status`.
 - Retrieve applications by ID or merchant ID
 - Retrieve all applications
-- Automatically create user wallets for applications using the Wallet Microservice
+- Automatically create merchant wallets (TREASURY, OPERATION, KYC) for each application using the Wallet Microservice
 - Update application information
 - Delete applications
 - Associate applications with products through product keys
@@ -20,6 +20,7 @@ Deployment URL: https://create-app-ms.fly.dev/
 - Manage documents submitted by users through the Drive feature
 - Special endpoints requiring API key authentication for advanced operations
 - **Authentication required for app creation** - Merchant ID is extracted from authenticated user context
+- **Merchant app visibility fully enforced** - merchants can only view apps they own
 
 ## API Endpoints
 
@@ -29,7 +30,7 @@ Deployment URL: https://create-app-ms.fly.dev/
 ```
 POST /api/v1/apps
 ```
-Creates a new application in draft status and automatically creates a user wallet for the application. Requires JWT authentication - merchant ID is extracted from the authenticated user context.
+Creates a new application and automatically creates merchant wallets for it (TREASURY, OPERATION, KYC). Requires JWT authentication - merchant ID is extracted from the authenticated user context.
 
 **Request Headers:**
 - `Authorization`: Bearer token obtained through authentication
@@ -42,25 +43,42 @@ Creates a new application in draft status and automatically creates a user walle
 - `merchantId` (string, optional): ID of the merchant who owns the application (extracted from authenticated user for merchants, required for admins)
 
 **Response:**
-Returns the created application with auto-generated ID and timestamps, along with user wallet creation information.
+Returns the created application with auto-generated ID and timestamps, along with merchant wallet creation information.
 
 ### Get All Apps
 ```
 GET /api/v1/apps
 ```
-Retrieves all applications in the system.
+Requires JWT authentication.  
+For merchant users, returns only applications owned by the authenticated merchant.  
+For admin users, returns all applications.
+
+**Request Headers:**
+- `Authorization`: Bearer token
 
 ### Get App by ID
 ```
 GET /api/v1/apps/{id}
 ```
-Retrieves a specific application by its ID.
+Requires JWT authentication. Retrieves a specific application by its ID.
+
+- Merchant users can only retrieve apps they own.
+- Admin users can retrieve any app.
+
+**Request Headers:**
+- `Authorization`: Bearer token
 
 ### Get Apps by Merchant ID
 ```
 GET /api/v1/apps/merchant/{merchantId}
 ```
-Retrieves all applications associated with a merchant.
+Requires JWT authentication.
+
+- Merchant users can only request their own `merchantId` and will receive only their own apps.
+- Admin users can request any merchant ID.
+
+**Request Headers:**
+- `Authorization`: Bearer token
 
 ### Update App
 ```
@@ -74,23 +92,19 @@ DELETE /api/v1/apps/{id}
 ```
 Deletes an application.
 
-### Submit App
+### Update App Status
 ```
-POST /api/v1/apps/{id}/submit
+PATCH /api/v1/apps/{id}/status
 ```
-Submits an application for review.
+Updates the app status to **active** or **suspended**. Merchants can suspend an app or reactivate it. Requires JWT authentication; only the app owner (merchant) or an admin can update status.
 
-### Approve App
-```
-POST /api/v1/apps/{id}/approve
-```
-Approves a submitted application.
+**Request Headers:**
+- `Authorization`: Bearer token
 
-### Reject App
-```
-POST /api/v1/apps/{id}/reject
-```
-Rejects a submitted application.
+**Request Body:**
+- `status` (string, required): Either `"active"` or `"suspended"`
+
+**Response:** Returns the updated app with the new status.
 
 ### Transaction Endpoints
 
@@ -98,7 +112,10 @@ Rejects a submitted application.
 ```
 GET /api/v1/apps/{id}/transactions
 ```
-Retrieves all transactions for a specific application with optional filtering and pagination.
+Requires JWT authentication. Retrieves all transactions for a specific application with optional filtering and pagination.
+
+- Merchant users can only view transactions for apps they own.
+- Admin users can view transactions for any app.
 
 **Query Parameters:**
 - `page` (number, optional): Page number for pagination
@@ -169,7 +186,10 @@ curl -X GET "http://localhost:3002/api/v1/apps/app-123/transactions?page=1&limit
 ```
 GET /api/v1/apps/{id}/transaction-stats
 ```
-Retrieves transaction statistics for a specific application.
+Requires JWT authentication. Retrieves transaction statistics for a specific application.
+
+- Merchant users can only view stats for apps they own.
+- Admin users can view stats for any app.
 
 **Response:**
 - `totalTransactions`: Total number of transactions
@@ -232,7 +252,7 @@ The Drive feature allows management of documents submitted by users of the creat
 ```
 POST /api/v1/apps/{id}/drive/documents
 ```
-Uploads a document to the app's drive.
+Requires JWT authentication. Uploads a document to the app's drive.
 
 **Request Body:**
 - `userId` (string, required): ID of the user who submitted the document
@@ -290,7 +310,10 @@ curl -X POST "http://localhost:3002/api/v1/apps/app-123/drive/documents" \
 ```
 GET /api/v1/apps/{id}/drive/documents
 ```
-Retrieves all documents for a specific application with optional filtering and pagination.
+Requires JWT authentication. Retrieves all documents for a specific application with optional filtering and pagination.
+
+- Merchant users can only view documents for apps they own.
+- Admin users can view documents for any app.
 
 **Query Parameters:**
 - `page` (number, optional): Page number for pagination
@@ -337,7 +360,10 @@ curl -X GET "http://localhost:3002/api/v1/apps/app-123/drive/documents" \
 ```
 GET /api/v1/apps/{id}/drive/documents/{documentId}
 ```
-Retrieves a specific document by its ID.
+Requires JWT authentication. Retrieves a specific document by its ID.
+
+- Merchant users can only view documents for apps they own.
+- Admin users can view documents for any app.
 
 ##### Example Request
 
@@ -373,7 +399,7 @@ curl -X GET "http://localhost:3002/api/v1/apps/app-123/drive/documents/doc-789" 
 ```
 PUT /api/v1/apps/{id}/drive/documents/{documentId}
 ```
-Updates a document's information.
+Requires JWT authentication. Updates a document's information.
 
 **Request Body:**
 - Any fields from the document object that need to be updated
@@ -416,7 +442,7 @@ curl -X PUT "http://localhost:3002/api/v1/apps/app-123/drive/documents/doc-789" 
 ```
 DELETE /api/v1/apps/{id}/drive/documents/{documentId}
 ```
-Deletes a document.
+Requires JWT authentication. Deletes a document.
 
 ##### Example Request
 
@@ -438,7 +464,10 @@ curl -X DELETE "http://localhost:3002/api/v1/apps/app-123/drive/documents/doc-78
 ```
 GET /api/v1/apps/{id}/drive/document-stats
 ```
-Retrieves document statistics for a specific application.
+Requires JWT authentication. Retrieves document statistics for a specific application.
+
+- Merchant users can only view stats for apps they own.
+- Admin users can view stats for any app.
 
 **Response:**
 - `totalDocuments`: Total number of documents
@@ -486,6 +515,15 @@ Adds a product key to an application.
 GET /api/v1/apps/{id}/product-keys
 ```
 Retrieves all product keys associated with an application.
+
+#### Get App Wallets
+```
+GET /api/v1/apps/{id}/wallets
+```
+Requires JWT authentication. Retrieves merchant wallets for the specified app (`TREASURY`, `OPERATION`, `KYC`).
+
+- Merchant users can only view wallets for apps they own.
+- Admin users can view wallets for any app.
 
 ### Special Endpoints (Require API Key Authentication)
 
@@ -644,13 +682,9 @@ Registers a callback for user application status or wallet events.
 - `alias`: Application alias (2-50 characters)
 - `description`: Application description (10-1000 characters)
 - `merchantId`: ID of the merchant who owns the application
-- `status`: Current status (draft, submitted, approved, rejected, incomplete)
+- `status`: App status (`active` or `suspended`); default `active`. Merchants can suspend an app.
 - `createdAt`: Creation timestamp (auto-generated)
 - `updatedAt`: Last update timestamp (auto-generated)
-- `submittedAt`: Submission timestamp (optional)
-- `approvedAt`: Approval timestamp (optional)
-- `rejectedAt`: Rejection timestamp (optional)
-- `rejectionReason`: Reason for rejection (optional)
 - `productKeys`: Array of product keys associated with this application (optional)
 
 ### Transaction
@@ -688,13 +722,21 @@ Example workflow:
 
 ## Integration with Wallet Microservice
 
-The Create App Microservice automatically creates a user wallet for each application through integration with the Wallet Microservice. When an application is created, a user wallet is automatically created for the merchant (as a user of their own app).
+The Create App Microservice automatically creates merchant wallets for each application through integration with the Wallet Microservice. When an application is created, it provisions app-scoped merchant wallets for:
+- `TREASURY`
+- `OPERATION`
+- `KYC`
 
 This integration ensures that each application has the necessary financial infrastructure from the moment of creation.
 
 ## Authentication
 
-Standard endpoints that modify data (like creating apps) now require JWT authentication. The merchant ID is extracted from the authenticated user context rather than being passed in the request body.
+Standard app endpoints now require JWT authentication (including read endpoints listed above). The merchant ID is extracted from the authenticated user context rather than being passed in the request body.
+
+Merchant visibility enforcement:
+- Merchants can only view apps where `app.merchantId` matches their authenticated merchant identity.
+- Merchants cannot request another merchant's app list via `GET /api/v1/apps/merchant/{merchantId}`.
+- Admins retain cross-merchant visibility.
 
 Special endpoints require two headers for authentication:
 - `X-Special-Key`: The special API key

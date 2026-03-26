@@ -102,8 +102,11 @@ export const generateRefreshToken = (user: UserAccount): string => {
   });
 };
 
+const CLIENT_AUTH_ISSUER = 'client-auth-ms';
+const CLIENT_AUTH_AUDIENCE = 'user';
+
 /**
- * Verify JWT token
+ * Verify JWT token — accepts tokens issued by this service or by client-auth-ms (gateway login).
  */
 export const verifyToken = (token: string): JWTPayload | null => {
   try {
@@ -112,7 +115,38 @@ export const verifyToken = (token: string): JWTPayload | null => {
       audience: 'client-app'
     }) as JWTPayload;
     return decoded;
-  } catch (error) {
+  } catch {
+    // continue
+  }
+
+  // Login flows use client-auth-ms; allow a dedicated secret when services do not share JWT_SECRET.
+  const clientAuthSecret = config.jwt.clientAuthSecret || config.jwt.secret;
+  try {
+    const decoded = jwt.verify(token, clientAuthSecret, {
+      issuer: CLIENT_AUTH_ISSUER,
+      audience: CLIENT_AUTH_AUDIENCE
+    }) as JWTPayload & { type?: string };
+
+    if (decoded.type && decoded.type !== 'access' && decoded.type !== 'refresh') {
+      return null;
+    }
+
+    const out: JWTPayload = {
+      userId: decoded.userId,
+      email: decoded.email,
+      userType: decoded.userType
+    };
+    if (decoded.userMerchantId !== undefined) {
+      out.userMerchantId = decoded.userMerchantId;
+    }
+    if (decoded.iat !== undefined) {
+      out.iat = decoded.iat;
+    }
+    if (decoded.exp !== undefined) {
+      out.exp = decoded.exp;
+    }
+    return out;
+  } catch {
     return null;
   }
 };

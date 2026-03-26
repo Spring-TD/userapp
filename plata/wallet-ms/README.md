@@ -17,11 +17,51 @@ Deployment URL: https://walletms-2026.fly.dev/
 ## API Endpoints
 
 ### Merchant Wallets
-- `POST /api/v1/wallets/merchant` - Create merchant wallet
-- `POST /api/v1/wallets/merchant/all` - Create all merchant wallets (Treasury, Operation, KYC)
-- `GET /api/v1/wallets/merchant/:merchantId/type/:walletType` - Get specific merchant wallet by type
-- `GET /api/v1/wallets/merchant/:merchantId/all` - Get all merchant wallets
+- `POST /api/v1/wallets/merchant` - Create merchant wallet (`appId` optional; use for app-scoped merchant wallets)
+- `POST /api/v1/wallets/merchant/all` - Create all merchant wallets (Treasury, Operation, KYC) for a merchant or a specific app via `appId`
+- `GET /api/v1/wallets/merchant/:merchantId/type/:walletType?appId=<appId>` - Get specific merchant wallet by type (optionally app-scoped)
+- `GET /api/v1/wallets/merchant/:merchantId/all?appId=<appId>` - Get all merchant wallets (optionally app-scoped)
 - `PUT /api/v1/wallets/merchant/balance` - Update merchant wallet balance
+
+#### Merchant Wallet appId usage
+
+When `appId` is provided, merchant wallets are scoped to that app. If `appId` is omitted, endpoints use merchant-level scope.
+
+**Create all merchant wallets for a specific app**
+```bash
+curl -X POST "http://localhost:3004/api/v1/wallets/merchant/all" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "currency": "USD",
+    "appId": "app-123"
+  }'
+```
+
+**Create one merchant wallet for a specific app**
+```bash
+curl -X POST "http://localhost:3004/api/v1/wallets/merchant" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Treasury Wallet",
+    "currency": "USD",
+    "merchantWalletType": "TREASURY",
+    "appId": "app-123"
+  }'
+```
+
+**Fetch a specific merchant wallet for an app**
+```bash
+curl -X GET "http://localhost:3004/api/v1/wallets/merchant/merchant-123/type/TREASURY?appId=app-123" \
+  -H "Authorization: Bearer <token>"
+```
+
+**Fetch all merchant wallets for an app**
+```bash
+curl -X GET "http://localhost:3004/api/v1/wallets/merchant/merchant-123/all?appId=app-123" \
+  -H "Authorization: Bearer <token>"
+```
 
 ### Operation Wallet Operations
 - `GET /api/v1/wallets/operation/:merchantId/transactions` - Get Operation wallet transactions
@@ -52,6 +92,7 @@ Deployment URL: https://walletms-2026.fly.dev/
 ### Funding Callbacks
 - `POST /api/v1/wallets/funding/callback` - Webhook endpoint for funding notifications from payment providers
   - **Supports merchant wallet funding**: Use `merchantId` + `merchantWalletType` (TREASURY, OPERATION, or KYC)
+  - **Optional app-scoped merchant funding**: Include `appId` to resolve merchant wallet by app
   - **Supports user wallet funding (by walletId)**: Use `walletId`
   - **Supports user wallet funding (by user)**: Use `userId` + `merchantId` (NEW!)
   - **Transaction deduplication**: Prevents duplicate processing using `transactionId`
@@ -105,6 +146,23 @@ curl -X POST "https://wallet-ms.fly.dev/api/v1/wallets/funding/callback" \
     "paymentMethod": "CARD",
     "status": "COMPLETED",
     "description": "Card payment for operations"
+  }'
+```
+
+**Example 2b: Fund Merchant Treasury Wallet for a specific app (app-scoped)**
+```bash
+curl -X POST "https://wallet-ms.fly.dev/api/v1/wallets/funding/callback" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "merchantId": "merchant-123",
+    "appId": "app-123",
+    "merchantWalletType": "TREASURY",
+    "amount": 250.00,
+    "currency": "USD",
+    "transactionId": "txn-ext-002b",
+    "paymentMethod": "BANK_TRANSFER",
+    "status": "SUCCESS",
+    "description": "App-scoped treasury funding"
   }'
 ```
 

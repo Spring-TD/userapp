@@ -8,10 +8,12 @@ interface EnvironmentConfig {
   mongoUri: string;
   corsOrigins: string[];
   logLevel: string;
-  // Mailtrap SMTP configuration
+  // Mailtrap: Email API (HTTP) or SMTP
   mailtrap: {
+    apiToken: string;  // Mailtrap Email API token → uses POST send.api.mailtrap.io
     host: string;
     port: number;
+    secure: boolean;
     user: string;
     password: string;
     fromEmail: string;
@@ -31,8 +33,10 @@ export const config: EnvironmentConfig = {
   corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000'],
   logLevel: process.env.LOG_LEVEL || 'info',
   mailtrap: {
+    apiToken: process.env.MAILTRAP_API_TOKEN || process.env.MAILTRAP_PASSWORD || '',
     host: process.env.MAILTRAP_HOST || 'smtp.mailtrap.io',
     port: parseInt(process.env.MAILTRAP_PORT || '2525', 10),
+    secure: process.env.MAILTRAP_SECURE === 'true',
     user: process.env.MAILTRAP_USER || '',
     password: process.env.MAILTRAP_PASSWORD || '',
     fromEmail: process.env.MAILTRAP_FROM_EMAIL || 'noreply@springtd.com'

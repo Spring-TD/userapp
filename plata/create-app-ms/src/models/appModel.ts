@@ -8,11 +8,12 @@ export class AppModel {
       throw new Error('Merchant ID is required');
     }
 
+    const now = new Date().toISOString();
     const newApp = await AppMongoModel.create({
       ...appData,
-      status: 'draft',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
       productKeys: []
     });
 

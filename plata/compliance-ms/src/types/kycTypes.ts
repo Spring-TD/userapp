@@ -157,7 +157,7 @@ export interface IndividualKYCSubmissionRequest {
   };
 }
 
-// Business document types enum for the 8 required documents
+// Business document types enum (matches Business Document Upload UI)
 export enum BusinessDocumentType {
   CERTIFICATE_OF_INCORPORATION = 'certificate_of_incorporation',
   ARTICLES_OF_ASSOCIATION = 'articles_of_association',
@@ -166,16 +166,26 @@ export enum BusinessDocumentType {
   BANK_STATEMENT = 'bank_statement',
   AML_POLICIES = 'aml_policies',
   DATA_PRIVACY_POLICY = 'data_privacy_policy',
-  // LICENSE = 'license'
 }
 
-// Business Document interface for the 8 required documents
+/** Display names for business document types (UI labels) */
+export const BUSINESS_DOCUMENT_DISPLAY_NAMES: Record<BusinessDocumentType, string> = {
+  [BusinessDocumentType.CERTIFICATE_OF_INCORPORATION]: 'COI (Certificate of Incorporation)',
+  [BusinessDocumentType.ARTICLES_OF_ASSOCIATION]: "Article of formation/Association",
+  [BusinessDocumentType.LIST_OF_SHAREHOLDERS]: "Shareholder's list",
+  [BusinessDocumentType.PROOF_OF_ADDRESS]: 'Proof of Address',
+  [BusinessDocumentType.BANK_STATEMENT]: 'Bank Statement',
+  [BusinessDocumentType.AML_POLICIES]: 'AML Policy',
+  [BusinessDocumentType.DATA_PRIVACY_POLICY]: 'Data & Privacy Policy',
+};
+
+// Business Document interface for the required documents
 export interface BusinessDocumentData {
   type: BusinessDocumentType;
   fileName: string;
   fileType: string; // Must be 'application/pdf'
-  fileSize: number; // in bytes, must not exceed 5MB (5242880 bytes)
-  fileUrl: string; // Cloudinary URL
+  fileSize: number; // in bytes, max 5MB (5242880 bytes)
+  fileUrl: string; // DigitalOcean Spaces URL
   uploadedAt: Date;
   status: KYCStatus;
   rejectionReason?: string;
@@ -273,6 +283,45 @@ export interface BusinessSurveyData {
   // 4. Monthly processed volume
   monthlyProcessedVolume: number;
 }
+
+/** Industry/sector options for "Select a Business Type" (sent to frontend for dropdown) */
+export const BUSINESS_TYPE_OPTIONS = [
+  'E-commerce',
+  'SaaS',
+  'Marketplace',
+  'Financial Services',
+  'Healthcare',
+  'Education',
+  'Other'
+] as const;
+
+export type BusinessTypeOption = typeof BUSINESS_TYPE_OPTIONS[number];
+
+/** Industry type options for "Select Industry Type" (sent to frontend for dropdown) */
+export const INDUSTRY_TYPE_OPTIONS = [
+  'Technology',
+  'Finance',
+  'Healthcare',
+  'E-commerce',
+  'Education',
+  'Manufacturing',
+  'Other'
+] as const;
+
+export type IndustryTypeOption = typeof INDUSTRY_TYPE_OPTIONS[number];
+
+/** Business model options for "Select a Business Model" (sent to frontend for dropdown) */
+export const BUSINESS_MODEL_OPTIONS = [
+  'B2B',
+  'B2C',
+  'B2B2C',
+  'Marketplace',
+  'Subscription',
+  'Freemium',
+  'Other'
+] as const;
+
+export type BusinessModelOption = typeof BUSINESS_MODEL_OPTIONS[number];
 
 // Generic KYC submission request (for backward compatibility)
 export interface KYCSubmissionRequest {

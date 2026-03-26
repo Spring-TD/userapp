@@ -13,15 +13,11 @@ const AppSchema = new Schema<IAppDocument>({
     merchantId: { type: String, required: true },
     status: {
         type: String,
-        enum: ['draft', 'submitted', 'approved', 'rejected', 'incomplete'],
-        default: 'draft'
+        enum: ['active', 'suspended'],
+        default: 'active'
     },
     createdAt: { type: String, default: () => new Date().toISOString() },
     updatedAt: { type: String, default: () => new Date().toISOString() },
-    submittedAt: { type: String },
-    approvedAt: { type: String },
-    rejectedAt: { type: String },
-    rejectionReason: { type: String },
     productKeys: { type: [String], default: [] }
 }, {
     timestamps: false, // We use custom createdAt/updatedAt strings to match interface

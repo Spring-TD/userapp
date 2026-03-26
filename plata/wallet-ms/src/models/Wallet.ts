@@ -18,6 +18,7 @@ export enum MerchantWalletType {
 
 export interface MerchantWallet extends BaseWallet {
   merchantId: string;
+  appId?: string;
   walletType: 'MERCHANT';
   merchantWalletType: MerchantWalletType; // Specific type for merchant wallets
   name: string;

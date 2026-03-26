@@ -1,7 +1,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { mockDb } from '../utils/mockDatabase';
-import { ApiKey, ApiKeyStatus, CreateApiKeyRequest } from '../models/ApiKey';
+import { ApiKey, ApiKeyStatus, CreateApiKeyRequest, ApiKeyEnvironment } from '../models/ApiKey';
 import { generateApiKeyPair, hashApiKey } from '../utils/crypto';
 import { logger } from '../utils/logger';
 
@@ -16,27 +16,31 @@ export class ApiKeyService {
         error?: string
     }> {
         try {
-            const { publicKey, secretKey } = generateApiKeyPair(request.environment);
+            // Ensure environment has a valid value (default to LIVE)
+            const environment = request.environment ?? ApiKeyEnvironment.LIVE;
+            const { publicKey, secretKey } = generateApiKeyPair(environment);
             const secretKeyHash = hashApiKey(secretKey);
             const now = new Date();
 
-            let expiresAt: Date | undefined;
-            if (request.expires_in_days) {
-                expiresAt = new Date(now.getTime() + request.expires_in_days * 24 * 60 * 60 * 1000);
-            }
+            // Auto-set expiration: use provided expires_in_days or default to 90 days
+            const expiresInDays = request.expires_in_days ?? 90;
+            const expiresAt = new Date(now.getTime() + expiresInDays * 24 * 60 * 60 * 1000);
+
+            // Ensure name has a valid value (generate default if not provided)
+            const name = request.name ?? `key-${Date.now()}`;
 
             const apiKey: ApiKey = {
                 id: uuidv4(),
                 merchant_id: merchantId,
-                name: request.name,
+                name: name,
                 public_key: publicKey,
                 secret_key_hash: secretKeyHash,
-                environment: request.environment,
+                environment: environment,
                 status: ApiKeyStatus.ACTIVE,
-                permissions: request.permissions || [],
+                permissions: request.permissions ?? ['read'],
                 created_at: now,
                 updated_at: now,
-                ...(expiresAt ? { expires_at: expiresAt } : {})
+                expires_at: expiresAt
             };
 
             await mockDb.createApiKey(apiKey);

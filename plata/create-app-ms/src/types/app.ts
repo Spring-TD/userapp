@@ -1,3 +1,5 @@
+export type AppStatus = 'active' | 'suspended';
+
 export interface App {
   id: string;
   name: string;
@@ -5,13 +7,9 @@ export interface App {
   alias: string;
   description: string;
   merchantId: string;
-  status: 'draft' | 'submitted' | 'approved' | 'rejected' | 'incomplete';
+  status: AppStatus;
   createdAt: string;
   updatedAt: string;
-  submittedAt?: string;
-  approvedAt?: string;
-  rejectedAt?: string;
-  rejectionReason?: string;
   productKeys?: string[]; // Array of product keys associated with this app
 }
 
@@ -28,8 +26,7 @@ export interface UpdateAppRequest {
   websiteUrl?: string;
   alias?: string;
   description?: string;
-  status?: 'draft' | 'submitted' | 'approved' | 'rejected' | 'incomplete';
-  rejectionReason?: string;
+  status?: AppStatus;
   productKeys?: string[];
 }
 

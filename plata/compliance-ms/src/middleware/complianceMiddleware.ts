@@ -1,7 +1,7 @@
 // src/middleware/complianceMiddleware.ts
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
-import { UserType, RiskLevel, BusinessType, KYCStatus } from '../types/kycTypes';
+import { UserType, RiskLevel, BusinessType, KYCStatus, BusinessDocumentType } from '../types/kycTypes';
 import { kycService } from '../services/kycService';
 
 // Enhanced middleware for individual customer compliance
@@ -153,20 +153,19 @@ export const validateBusinessType = (allowedTypes: BusinessType[]) => {
         });
       }
 
-      const result = await kycService.getKYCStatus(req.user.userId, req.user.userId);
-      
-      if (!result.success) {
+      const surveyResult = await kycService.getBusinessSurvey(req.user.userId);
+      if (!surveyResult.success || !surveyResult.data) {
         return res.status(403).json({
           success: false,
-          error: 'Business KYC verification required'
+          error: 'Business survey required for this action'
         });
       }
 
-      const businessInfo = (result.data as any)?.businessInfo;
-      if (!businessInfo || !allowedTypes.includes(businessInfo.businessType)) {
+      const businessType = (surveyResult.data as any)?.businessType;
+      if (!businessType || !allowedTypes.includes(businessType as any)) {
         logger.warn('Business type access denied', {
           userId: req.user.userId,
-          businessType: businessInfo?.businessType,
+          businessType: businessType,
           allowedTypes
         });
         
@@ -193,22 +192,24 @@ export const validateBusinessType = (allowedTypes: BusinessType[]) => {
 // Middleware to validate document submission requirements
 export const validateDocumentRequirements = (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { userType, documents } = req.body;
-    
-    if (!userType || !documents) {
+    const { userType, documents, businessDocuments } = req.body;
+    // Business submit sends businessDocuments; individual/legacy sends documents
+    const documentsToCheck = documents ?? businessDocuments;
+
+    if (!userType || !documentsToCheck || !Array.isArray(documentsToCheck) || documentsToCheck.length === 0) {
       return res.status(400).json({
         success: false,
         error: 'User type and documents are required'
       });
     }
 
-    const documentTypes = documents.map((doc: any) => doc.type);
-    
+    const documentTypes = documentsToCheck.map((doc: any) => doc.type);
+
     if (userType === UserType.INDIVIDUAL) {
       // Check individual required documents
       const requiredDocs = ['identity', 'address'];
       const missingDocs = requiredDocs.filter(doc => !documentTypes.includes(doc));
-      
+
       if (missingDocs.length > 0) {
         return res.status(400).json({
           success: false,
@@ -216,10 +217,10 @@ export const validateDocumentRequirements = (req: Request, res: Response, next: 
         });
       }
     } else if (userType === UserType.MERCHANT) {
-      // Check business required documents
-      const requiredDocs = ['business_registration', 'beneficial_ownership', 'director_identification', 'bank'];
+      // Check business required documents (all 7 BusinessDocumentType values)
+      const requiredDocs = Object.values(BusinessDocumentType);
       const missingDocs = requiredDocs.filter(doc => !documentTypes.includes(doc));
-      
+
       if (missingDocs.length > 0) {
         return res.status(400).json({
           success: false,
@@ -227,13 +228,13 @@ export const validateDocumentRequirements = (req: Request, res: Response, next: 
         });
       }
     }
-    
+
     next();
   } catch (error) {
     logger.error('Error in document requirements validation', {
       error: error instanceof Error ? error.message : 'Unknown error'
     });
-    
+
     return res.status(500).json({
       success: false,
       error: 'Internal server error'
@@ -242,6 +243,7 @@ export const validateDocumentRequirements = (req: Request, res: Response, next: 
 };
 
 // Middleware for compliance officer role verification
+// Compliance officer = admin from client-auth-ms (JWT must have userType === 'admin')
 export const requireComplianceOfficer = (req: Request, res: Response, next: NextFunction) => {
   try {
     if (!req.user) {
@@ -250,16 +252,24 @@ export const requireComplianceOfficer = (req: Request, res: Response, next: Next
         error: 'Authentication required'
       });
     }
-    
-    // Check if user has compliance officer role
-    // For now, we'll assume any authenticated user can be a compliance officer
-    // In a real implementation, this would check user roles from a database
+
+    if (req.user.userType !== UserType.ADMIN) {
+      logger.warn('Compliance officer access denied - admin role required', {
+        userId: req.user.userId,
+        userType: req.user.userType
+      });
+      return res.status(403).json({
+        success: false,
+        error: 'Compliance officer access required (admin role from client-auth-ms)'
+      });
+    }
+
     next();
   } catch (error) {
     logger.error('Error in compliance officer middleware', {
       error: error instanceof Error ? error.message : 'Unknown error'
     });
-    
+
     return res.status(500).json({
       success: false,
       error: 'Internal server error'

@@ -6,6 +6,7 @@ import * as transactionRepo from '../repositories/transactionRepository';
 
 export interface CreateMerchantWalletData {
   merchantId: string;
+  appId?: string;
   name: string;
   currency: string;
   merchantWalletType: MerchantWalletType;
@@ -65,17 +66,18 @@ export class WalletService {
     error?: string 
   }> {
     try {
-      const existing = await walletRepo.getMerchantWalletByType(data.merchantId, data.merchantWalletType);
+      const existing = await walletRepo.getMerchantWalletByType(data.merchantId, data.merchantWalletType, data.appId);
       if (existing) {
         return {
           success: false,
-          error: `${data.merchantWalletType} wallet already exists for this merchant`
+          error: `${data.merchantWalletType} wallet already exists for this merchant${data.appId ? ' app' : ''}`
         };
       }
 
       const newWallet = await walletRepo.createWallet({
         walletType: 'MERCHANT',
         merchantId: data.merchantId,
+        appId: data.appId,
         name: data.name,
         currency: data.currency,
         merchantWalletType: data.merchantWalletType
@@ -83,13 +85,14 @@ export class WalletService {
       logger.info('Merchant wallet created', { 
         walletId: newWallet.id, 
         merchantId: data.merchantId,
+        appId: data.appId,
         walletType: data.merchantWalletType
       });
 
       // Automatically create all three internal wallets when any merchant wallet is created
       // But only if this wasn't called from within the auto-create process (to avoid infinite recursion)
       if (!skipAutoCreate) {
-        const existingWallets = await this.getAllMerchantWallets(data.merchantId);
+        const existingWallets = await this.getAllMerchantWallets(data.merchantId, data.appId);
         if (existingWallets.success && existingWallets.wallets) {
           // Check if all three wallet types exist
           const hasTreasury = existingWallets.wallets.some(w => w.merchantWalletType === MerchantWalletType.TREASURY);
@@ -98,15 +101,17 @@ export class WalletService {
 
           // If not all three exist, create the missing ones
           if (!hasTreasury || !hasOperation || !hasKYC) {
-            const autoCreateResult = await this.createAllMerchantWallets(data.merchantId, data.currency, true);
+            const autoCreateResult = await this.createAllMerchantWallets(data.merchantId, data.currency, true, data.appId);
             if (!autoCreateResult.success) {
               logger.error('Failed to auto-create merchant wallets', { 
                 merchantId: data.merchantId, 
+                appId: data.appId,
                 error: autoCreateResult.error 
               });
             } else {
               logger.info('Auto-created missing merchant wallets', { 
                 merchantId: data.merchantId, 
+                appId: data.appId,
                 createdCount: autoCreateResult.wallets?.length 
               });
             }
@@ -130,7 +135,12 @@ export class WalletService {
   /**
    * Create all required merchant wallets (Treasury, Operation, KYC)
    */
-  static async createAllMerchantWallets(merchantId: string, currency: string = 'USD', skipAutoCreate: boolean = false): Promise<{ 
+  static async createAllMerchantWallets(
+    merchantId: string,
+    currency: string = 'USD',
+    skipAutoCreate: boolean = false,
+    appId?: string
+  ): Promise<{ 
     success: boolean; 
     wallets?: MerchantWallet[]; 
     error?: string 
@@ -145,7 +155,7 @@ export class WalletService {
 
       for (const walletType of walletTypes) {
         // Check if this wallet type already exists
-        const existingWallet = await this.getMerchantWalletByType(merchantId, walletType.type);
+        const existingWallet = await this.getMerchantWalletByType(merchantId, walletType.type, appId);
         if (existingWallet.success && existingWallet.wallet) {
           // Wallet already exists, add it to the list
           wallets.push(existingWallet.wallet);
@@ -155,6 +165,7 @@ export class WalletService {
         // Create the wallet if it doesn't exist
         const result = await this.createMerchantWallet({
           merchantId,
+          appId,
           name: walletType.name,
           currency,
           merchantWalletType: walletType.type
@@ -174,7 +185,7 @@ export class WalletService {
         }
       }
 
-      logger.info('All merchant wallets created successfully', { merchantId, walletCount: wallets.length });
+      logger.info('All merchant wallets created successfully', { merchantId, appId, walletCount: wallets.length });
       return {
         success: true,
         wallets
@@ -191,15 +202,15 @@ export class WalletService {
   /**
    * Get merchant wallet by merchant ID and wallet type
    */
-  static async getMerchantWalletByType(merchantId: string, walletType: MerchantWalletType): Promise<{ 
+  static async getMerchantWalletByType(merchantId: string, walletType: MerchantWalletType, appId?: string): Promise<{ 
     success: boolean; 
     wallet?: MerchantWallet; 
     error?: string 
   }> {
     try {
-      const wallet = await walletRepo.getMerchantWalletByType(merchantId, walletType);
+      const wallet = await walletRepo.getMerchantWalletByType(merchantId, walletType, appId);
       if (wallet) return { success: true, wallet };
-      return { success: false, error: `${walletType} wallet not found for merchant` };
+      return { success: false, error: `${walletType} wallet not found for merchant${appId ? ' app' : ''}` };
     } catch (error) {
       logger.error('Error retrieving merchant wallet', { error });
       return { success: false, error: 'Failed to retrieve merchant wallet' };
@@ -209,13 +220,13 @@ export class WalletService {
   /**
    * Get all merchant wallets by merchant ID
    */
-  static async getAllMerchantWallets(merchantId: string): Promise<{ 
+  static async getAllMerchantWallets(merchantId: string, appId?: string): Promise<{ 
     success: boolean; 
     wallets?: MerchantWallet[]; 
     error?: string 
   }> {
     try {
-      const wallets = await walletRepo.getAllMerchantWallets(merchantId);
+      const wallets = await walletRepo.getAllMerchantWallets(merchantId, appId);
       return { success: true, wallets };
     } catch (error) {
       logger.error('Error retrieving merchant wallets', { error });

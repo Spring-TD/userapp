@@ -9,6 +9,7 @@ const WalletSchema = new Schema<any>(
   {
     walletType: { type: String, enum: ['MERCHANT', 'USER'], required: true },
     merchantId: { type: String, required: true },
+    appId: { type: String, required: false },
     merchantWalletType: { type: String, enum: ['TREASURY', 'OPERATION', 'KYC'], required: false },
     userId: { type: String, required: false },
     name: { type: String, required: true },
@@ -33,6 +34,7 @@ const WalletSchema = new Schema<any>(
 );
 
 WalletSchema.index({ walletType: 1, merchantId: 1, merchantWalletType: 1 }, { sparse: true });
+WalletSchema.index({ walletType: 1, merchantId: 1, appId: 1, merchantWalletType: 1 }, { sparse: true });
 WalletSchema.index({ walletType: 1, userId: 1 }, { sparse: true });
 WalletSchema.index({ merchantId: 1 });
 
@@ -59,6 +61,7 @@ function toWallet(doc: IWalletDocument | Record<string, unknown>): Wallet {
       ...base,
       walletType: 'MERCHANT',
       merchantId: raw.merchantId as string,
+      appId: raw.appId as string | undefined,
       merchantWalletType: raw.merchantWalletType as string,
       name: raw.name as string
     } as MerchantWallet;

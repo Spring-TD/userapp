@@ -2,19 +2,29 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './config/swagger';
 import { config } from './config/environment';
 import { setupProxies } from './middleware/proxyMiddleware';
+import { merchantGatewayAuth } from './middleware/merchantGatewayAuth';
+import { getSpecUrls, handleSpecRequest } from './specHub';
 
 const app = express();
 const PORT = config.port;
 let server: ReturnType<express.Express['listen']> | null = null;
 
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin: config.corsOrigins
+  origin: config.corsOrigins,
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Public-Key', 'X-Secret-Key'],
 }));
 app.use(morgan(config.logLevel));
+
+// Merchant API key + IP policy (service-auth-ms) before upstream proxies
+app.use(merchantGatewayAuth);
 
 // Setup Proxies (must be before body parser)
 setupProxies(app);
@@ -23,7 +33,7 @@ setupProxies(app);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Root endpoint
+// Root endpoint – confirms this is the gateway and which backends are used
 app.get('/', (req, res) => {
   res.json({
     success: true,
@@ -31,12 +41,41 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     status: 'running',
     description: 'Stateless gateway; routes /api/v1/* to backend services.',
+    role: 'gateway',
+    proxied: {
+      registration: 'client-auth-ms',
+      auth: 'client-auth-ms',
+      otp: 'client-auth-ms',
+      password: 'client-auth-ms',
+      user: 'client-auth-ms',
+      products: 'product-ms',
+      wallets: 'wallet-ms',
+      billing: 'billing-ms',
+      payments: 'payment-ms',
+      apps: 'create-app-ms',
+      compliance: 'compliance-ms',
+      keys: 'service-auth-ms',
+    },
     endpoints: {
-      health: '/health'
+      health: '/health',
+      apiDocs: '/api-docs',
     },
     timestamp: new Date().toISOString()
   });
 });
+
+// OpenAPI / Swagger documentation (hub: dropdown of all service specs)
+const specBasePath = '/api-docs/specs';
+const specUrls = getSpecUrls(specBasePath);
+app.get(`${specBasePath}/:serviceId`, (req, res, next) => {
+  handleSpecRequest(req, res).catch(next);
+});
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  swaggerOptions: {
+    urls: specUrls,
+    'urls.primaryName': specUrls[0]?.name ?? 'Gateway (API Overview)',
+  },
+}));
 
 // Health check endpoint (no database)
 app.get('/health', (req, res) => {

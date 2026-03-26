@@ -16,6 +16,7 @@ interface EnvironmentConfig {
   port: number;
   nodeEnv: string;
   serviceAuthUrl: string;
+  serviceAuthInternalToken: string;
   notificationsServiceUrl: string;
   corsOrigins: string[];
   logLevel: string;
@@ -27,13 +28,16 @@ export const config: EnvironmentConfig = {
   port: parseInt(process.env.PORT || '3001', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
   serviceAuthUrl: process.env.SERVICE_AUTH_URL || 'http://localhost:3000',
-  notificationsServiceUrl: process.env.NOTIFICATIONS_SERVICE_URL || 'http://localhost:4009',
+  serviceAuthInternalToken: process.env.SERVICE_AUTH_INTERNAL_TOKEN || 'internal-dev-token',
+  notificationsServiceUrl:
+    process.env.NOTIFICATIONS_SERVICE_URL ||
+    (process.env.NODE_ENV === 'production' ? 'https://notifications-ms.fly.dev' : 'http://localhost:4009'),
   corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:3001'],
   logLevel: process.env.LOG_LEVEL || 'info',
   jwt: {
     secret: process.env.JWT_SECRET || 'fallback-secret-key-for-development-purposes-only',
     expiresIn: process.env.JWT_EXPIRES_IN || '1h',
-    refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d'
+    refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d'
   },
   bcrypt: {
     rounds: parseInt(process.env.BCRYPT_ROUNDS || '12', 10)

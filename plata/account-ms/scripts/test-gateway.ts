@@ -16,6 +16,11 @@ const services = [
 const GATEWAY_URL = `http://localhost:${config.port}`;
 const mockServers: http.Server[] = [];
 
+function gatewayPathRequiresMerchantKey(method: string, gatewayPath: string): boolean {
+    if (method !== 'GET') return false;
+    return gatewayPath === '/api/v1/products' || gatewayPath === '/api/v1/products/';
+}
+
 // Helper to check if a port is in use
 const isPortInUse = (port: number): Promise<boolean> => {
     return new Promise((resolve) => {
@@ -93,7 +98,17 @@ const main = async () => {
             // Note: My mock responds to EVERYTHING with 200.
             // Real services usually have /health.
 
-            const response = await axios.get(url, { validateStatus: () => true });
+            const headers: Record<string, string> = {};
+            if (gatewayPathRequiresMerchantKey('GET', service.gatewayPath)) {
+                const pk = process.env.TEST_MERCHANT_PUBLIC_KEY;
+                const sk = process.env.TEST_MERCHANT_SECRET_KEY;
+                if (pk && sk) {
+                    headers['X-Public-Key'] = pk;
+                    headers['X-Secret-Key'] = sk;
+                }
+            }
+
+            const response = await axios.get(url, { headers, validateStatus: () => true });
 
             if (response.status === 200) {
                 console.log(`✅ [PASS] ${service.name}: ${url} -> ${response.status}`);
@@ -114,6 +129,15 @@ const main = async () => {
                     console.log(`⚠️ [WARN] ${service.name}: Service returned 404 (Gateway worked, but path wrong?)`);
                     passed++; // Counting as pass for Gateway connectivity
                 }
+            } else if (
+                response.status === 401 &&
+                gatewayPathRequiresMerchantKey('GET', service.gatewayPath) &&
+                (!process.env.TEST_MERCHANT_PUBLIC_KEY || !process.env.TEST_MERCHANT_SECRET_KEY)
+            ) {
+                console.log(
+                    `⚠️ [SKIP] ${service.name}: 401 (set TEST_MERCHANT_PUBLIC_KEY + TEST_MERCHANT_SECRET_KEY to exercise product gateway auth)`
+                );
+                passed++;
             } else {
                 console.log(`❌ [FAIL] ${service.name}: Status ${response.status}`);
                 failed++;

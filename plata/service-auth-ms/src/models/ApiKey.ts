@@ -26,8 +26,8 @@ export interface ApiKey {
 }
 
 export interface CreateApiKeyRequest {
-    name: string;
-    environment: ApiKeyEnvironment;
+    name?: string;
+    environment?: ApiKeyEnvironment;
     permissions?: string[];
     expires_in_days?: number;
 }

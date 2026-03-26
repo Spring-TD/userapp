@@ -1,4 +1,10 @@
-import { validateForm, merchantRegistrationSchema, userRegistrationSchema } from '../utils/validation';
+// Jest provides these globals at runtime, but the TypeScript linter may not have Jest types loaded.
+// Declaring them here keeps `tsc`/IDE linting happy without requiring dependency changes.
+declare const describe: any;
+declare const test: any;
+declare const expect: any;
+
+import { validateForm, merchantRegistrationSchema, userRegistrationSchema, userProfileUpdateSchema } from '../utils/validation';
 import { MerchantRegistrationForm, UserRegistrationForm } from '../types/forms';
 
 describe('Validation Tests', () => {
@@ -83,6 +89,30 @@ describe('Validation Tests', () => {
       };
       const result = validateForm(userRegistrationSchema, noPasswordNoRef);
       expect(result.error).toContain('user_ref is required when password is not provided');
+    });
+  });
+
+  describe('User Profile Update Validation', () => {
+    test('should validate partial profile update', () => {
+      const data = {
+        first_name: 'John',
+        last_name: 'Doe',
+        phone: '+1234567890',
+        country: 'United States'
+      };
+
+      const result = validateForm(userProfileUpdateSchema, data);
+      expect(result.error).toBeUndefined();
+      expect(result.value).toEqual(data);
+    });
+
+    test('should reject invalid phone format', () => {
+      const data = {
+        phone: 'abc'
+      };
+
+      const result = validateForm(userProfileUpdateSchema, data);
+      expect(result.error).toContain('Phone number must be in valid international format');
     });
   });
 });

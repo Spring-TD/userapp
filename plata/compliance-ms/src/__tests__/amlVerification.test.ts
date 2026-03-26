@@ -4,7 +4,7 @@ import { amlVerificationService, AMLVerificationResult } from '../services/amlVe
 
 describe('AML Verification Service', () => {
   describe('verifyDocument', () => {
-    it('should verify a business document', async () => {
+    it('should verify a business document with Prembly (or return error if not configured)', async () => {
       const mockDocument: BusinessDocumentData = {
         type: BusinessDocumentType.CERTIFICATE_OF_INCORPORATION,
         fileName: 'certificate.pdf',
@@ -15,11 +15,11 @@ describe('AML Verification Service', () => {
         status: KYCStatus.PENDING
       };
 
-      const result: AMLVerificationResult = await amlVerificationService.verifyDocument(mockDocument, 'trulioo');
+      const result: AMLVerificationResult = await amlVerificationService.verifyDocument(mockDocument);
 
       expect(result).toBeDefined();
       expect(result.documentId).toBe('certificate.pdf');
-      expect(result.providerId).toBe('trulioo');
+      expect(result.providerId).toBe('prembly');
       expect(typeof result.verificationId).toBe('string');
       expect(typeof result.success).toBe('boolean');
       expect(typeof result.documentUrl).toBe('string');
@@ -38,7 +38,7 @@ describe('AML Verification Service', () => {
         status: KYCStatus.PENDING
       };
 
-      const result: AMLVerificationResult = await amlVerificationService.verifyDocument(mockDocument, 'trulioo');
+      const result: AMLVerificationResult = await amlVerificationService.verifyDocument(mockDocument);
 
       expect(result).toBeDefined();
       expect(result.documentId).toBe('aml-policy.pdf');
@@ -52,7 +52,7 @@ describe('AML Verification Service', () => {
       expect(result.riskScore).toBe(0);
     });
 
-    it('should handle unsupported provider', async () => {
+    it('should return error result when Prembly is not configured', async () => {
       const mockDocument: BusinessDocumentData = {
         type: BusinessDocumentType.CERTIFICATE_OF_INCORPORATION,
         fileName: 'certificate.pdf',
@@ -63,11 +63,12 @@ describe('AML Verification Service', () => {
         status: KYCStatus.PENDING
       };
 
-      const result: AMLVerificationResult = await amlVerificationService.verifyDocument(mockDocument, 'unsupported-provider');
+      // Without PREMBLY_API_KEY/PREMBLY_API_SECRET, verification returns error result
+      const result: AMLVerificationResult = await amlVerificationService.verifyDocument(mockDocument);
 
       expect(result).toBeDefined();
       expect(result.documentId).toBe('certificate.pdf');
-      expect(result.providerId).toBe('unsupported-provider');
+      expect(result.providerId).toBe('prembly');
       expect(result.success).toBe(false);
       expect(result.suspicious).toBe(true);
       expect(result.riskScore).toBe(100);
@@ -78,7 +79,7 @@ describe('AML Verification Service', () => {
     it('should update document status to REVIEW when suspicious', async () => {
       const mockVerificationResult: AMLVerificationResult = {
         documentId: 'test-document',
-        providerId: 'trulioo',
+        providerId: 'prembly',
         verificationId: 'verification-123',
         success: true,
         kybVerified: true,
@@ -104,7 +105,7 @@ describe('AML Verification Service', () => {
     it('should update document status to REJECTED when not approved', async () => {
       const mockVerificationResult: AMLVerificationResult = {
         documentId: 'test-document',
-        providerId: 'trulioo',
+        providerId: 'prembly',
         verificationId: 'verification-123',
         success: true,
         kybVerified: false,
@@ -130,7 +131,7 @@ describe('AML Verification Service', () => {
     it('should update document status to APPROVED when verified', async () => {
       const mockVerificationResult: AMLVerificationResult = {
         documentId: 'test-document',
-        providerId: 'trulioo',
+        providerId: 'prembly',
         verificationId: 'verification-123',
         success: true,
         kybVerified: true,

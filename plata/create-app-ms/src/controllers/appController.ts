@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { AppService } from '../services/appService';
-import { CreateAppRequest, UpdateAppRequest, TransactionQueryParams, DriveDocumentQueryParams } from '../types/app';
+import { App, CreateAppRequest, UpdateAppRequest, TransactionQueryParams, DriveDocumentQueryParams } from '../types/app';
 import { ApiError } from '../middleware/errorHandler';
 import { WalletService } from '../services/walletService';
 import { TransactionService } from '../services/transactionService';
@@ -29,6 +29,35 @@ export class AppController {
     this.appService = appService;
   }
 
+  private isMerchantUser(req: Request): boolean {
+    const userType = (req.user?.userType || '').toLowerCase();
+    return userType === 'merchant';
+  }
+
+  private getRequestMerchantId(req: Request): string | undefined {
+    return req.user?.userMerchantId || req.user?.userId;
+  }
+
+  private assertMerchantOwnsApp(req: Request, app: App): void {
+    if (!this.isMerchantUser(req)) {
+      return;
+    }
+    const merchantId = this.getRequestMerchantId(req);
+    if (!merchantId || app.merchantId !== merchantId) {
+      throw new ApiError(403, 'You can only view your own apps');
+    }
+  }
+
+  private assertMerchantOwnsMerchantPath(req: Request, merchantIdFromPath: string): void {
+    if (!this.isMerchantUser(req)) {
+      return;
+    }
+    const merchantId = this.getRequestMerchantId(req);
+    if (!merchantId || merchantId !== merchantIdFromPath) {
+      throw new ApiError(403, 'You can only view your own apps');
+    }
+  }
+
   createApp = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const appData: CreateAppRequest = req.body;
@@ -54,22 +83,13 @@ export class AppController {
       };
 
       const app = await this.appService.createApp(appDataWithMerchantId);
-      
-      // Automatically create user wallets for the app
-      // We'll create a user wallet for the merchant (as a user of their own app)
-      const walletResult = await WalletService.createUserWallet(
-        merchantId, // userId (merchant is also a user of their own app)
-        app.id, // merchantId (the app ID)
-        `User Wallet for App ${app.id}`
-      );
-      
-      // Log wallet creation result (in a real implementation, you might want to store this information)
-      if (walletResult.success) {
-        console.log(`User wallet created successfully for app ${app.id}`);
-      } else {
-        console.error(`Failed to create user wallet for app ${app.id}:`, walletResult.error);
-        // Note: We don't throw an error here because the app creation was successful
-        // The wallet creation failure should be handled separately
+      const authHeader = req.headers.authorization;
+
+      // Create merchant internal wallets for this app (TREASURY, OPERATION, KYC)
+      const merchantWalletsResult = await WalletService.createAllMerchantWallets(app.id, authHeader);
+      // App creation succeeds even if wallet provisioning fails; handle retries separately.
+      if (!merchantWalletsResult.success) {
+        console.error(`Failed to create merchant wallets for app ${app.id}:`, merchantWalletsResult.error);
       }
       
       res.status(201).json({
@@ -77,7 +97,7 @@ export class AppController {
         message: 'App created successfully',
         data: {
           app,
-          wallets: walletResult
+          merchantWallets: merchantWalletsResult
         }
       });
     } catch (error) {
@@ -110,6 +130,7 @@ export class AppController {
       if (!app) {
         throw new ApiError(404, 'App not found');
       }
+      this.assertMerchantOwnsApp(req, app);
 
       res.json({
         success: true,
@@ -139,6 +160,7 @@ export class AppController {
       if (!merchantId) {
         throw new ApiError(400, 'Merchant ID is required');
       }
+      this.assertMerchantOwnsMerchantPath(req, merchantId);
 
       const apps = await this.appService.getAppsByMerchantId(merchantId);
 
@@ -236,24 +258,36 @@ export class AppController {
     }
   };
 
-  submitApp = async (req: Request, res: Response): Promise<void> => {
+  updateAppStatus = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      
+      const { status } = req.body;
+
+      if (!req.user) {
+        throw new ApiError(401, 'Authentication required');
+      }
       if (!id) {
         throw new ApiError(400, 'App ID is required');
       }
+      if (!status || (status !== 'active' && status !== 'suspended')) {
+        throw new ApiError(400, 'Status must be "active" or "suspended"');
+      }
 
-      const app = await this.appService.submitApp(id);
-      
+      const app = await this.appService.getAppById(id);
       if (!app) {
         throw new ApiError(404, 'App not found');
       }
+      const userType = (req.user.userType || '').toLowerCase();
+      const merchantId = req.user.userMerchantId || req.user.userId;
+      if (userType === 'merchant' && app.merchantId !== merchantId) {
+        throw new ApiError(403, 'You can only update status for your own apps');
+      }
 
+      const updatedApp = await this.appService.updateAppStatus(id, status);
       res.json({
         success: true,
-        message: 'App submitted successfully',
-        data: app
+        message: `App ${status} successfully`,
+        data: updatedApp
       });
     } catch (error) {
       if (error instanceof ApiError) {
@@ -263,85 +297,7 @@ export class AppController {
         });
         return;
       }
-      
-      console.error('Error in submitApp controller:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Internal server error'
-      });
-    }
-  };
-
-  approveApp = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { id } = req.params;
-      
-      if (!id) {
-        throw new ApiError(400, 'App ID is required');
-      }
-
-      const app = await this.appService.approveApp(id);
-      
-      if (!app) {
-        throw new ApiError(404, 'App not found');
-      }
-
-      res.json({
-        success: true,
-        message: 'App approved successfully',
-        data: app
-      });
-    } catch (error) {
-      if (error instanceof ApiError) {
-        res.status(error.statusCode).json({
-          success: false,
-          error: error.message
-        });
-        return;
-      }
-      
-      console.error('Error in approveApp controller:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Internal server error'
-      });
-    }
-  };
-
-  rejectApp = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { id } = req.params;
-      const { rejectionReason } = req.body;
-      
-      if (!id) {
-        throw new ApiError(400, 'App ID is required');
-      }
-
-      if (!rejectionReason) {
-        throw new ApiError(400, 'Rejection reason is required');
-      }
-
-      const app = await this.appService.rejectApp(id, rejectionReason);
-      
-      if (!app) {
-        throw new ApiError(404, 'App not found');
-      }
-
-      res.json({
-        success: true,
-        message: 'App rejected successfully',
-        data: app
-      });
-    } catch (error) {
-      if (error instanceof ApiError) {
-        res.status(error.statusCode).json({
-          success: false,
-          error: error.message
-        });
-        return;
-      }
-      
-      console.error('Error in rejectApp controller:', error);
+      console.error('Error in updateAppStatus controller:', error);
       res.status(500).json({
         success: false,
         error: 'Internal server error'
@@ -421,9 +377,58 @@ export class AppController {
     }
   };
 
+  getAppWallets = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const authHeader = req.headers.authorization;
+
+      if (!id) {
+        throw new ApiError(400, 'App ID is required');
+      }
+
+      const app = await this.appService.getAppById(id);
+      if (!app) {
+        throw new ApiError(404, 'App not found');
+      }
+      this.assertMerchantOwnsApp(req, app);
+
+      const merchantWallets = await WalletService.getAllMerchantWallets(app.merchantId, app.id, authHeader);
+      if (!merchantWallets.success) {
+        throw new ApiError(400, merchantWallets.error || 'Failed to fetch app wallets');
+      }
+
+      res.json({
+        success: true,
+        data: {
+          appId: app.id,
+          merchantId: app.merchantId,
+          wallets: merchantWallets.data?.wallets || []
+        }
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+        return;
+      }
+
+      console.error('Error in getAppWallets controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  };
+
   getAllApps = async (req: Request, res: Response): Promise<void> => {
     try {
-      const apps = await this.appService.getAllApps();
+      let apps = await this.appService.getAllApps();
+      if (this.isMerchantUser(req)) {
+        const merchantId = this.getRequestMerchantId(req);
+        apps = apps.filter((app) => app.merchantId === merchantId);
+      }
 
       res.json({
         success: true,
@@ -468,6 +473,7 @@ export class AppController {
       if (!app) {
         throw new ApiError(404, 'App not found');
       }
+      this.assertMerchantOwnsApp(req, app);
 
       // Prepare query parameters
       const queryParams: TransactionQueryParams = {};
@@ -514,6 +520,7 @@ export class AppController {
       if (!app) {
         throw new ApiError(404, 'App not found');
       }
+      this.assertMerchantOwnsApp(req, app);
 
       const stats = await TransactionService.getTransactionStats(id);
 
@@ -606,6 +613,7 @@ export class AppController {
       if (!app) {
         throw new ApiError(404, 'App not found');
       }
+      this.assertMerchantOwnsApp(req, app);
 
       // Prepare query parameters
       const queryParams: DriveDocumentQueryParams = {};
@@ -657,6 +665,7 @@ export class AppController {
       if (!app) {
         throw new ApiError(404, 'App not found');
       }
+      this.assertMerchantOwnsApp(req, app);
 
       const document = await DriveService.getDocumentById(documentId);
       
@@ -811,6 +820,7 @@ export class AppController {
       if (!app) {
         throw new ApiError(404, 'App not found');
       }
+      this.assertMerchantOwnsApp(req, app);
 
       const stats = await DriveService.getDocumentStats(id);
 

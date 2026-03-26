@@ -2,7 +2,22 @@ import { Request, Response } from 'express';
 import { ProductService } from '../services/productService';
 import { CreateProductRequest, UpdateProductRequest, SelectProductTypeRequest, CreateProductAfterTypeRequest } from '../types/product';
 import { ApiError } from '../middleware/errorHandler';
-import { validateInput, createProductSchema, updateProductSchema, selectProductTypeSchema, createProductAfterTypeSchema } from '../utils/validation';
+import {
+  validateInput,
+  createProductSchema,
+  updateProductSchema,
+  selectProductTypeSchema,
+  createProductAfterTypeSchema,
+  PREDEFINED_PRODUCT_TYPES,
+  PRODUCT_SUBTYPE_OPTIONS,
+  PRODUCT_TYPE_LABELS
+} from '../utils/validation';
+import { normalizeProductType } from '../utils/productType';
+import {
+  isSpacesConfigured,
+  uploadToSpaces,
+  validateProductImageUpload,
+} from '../services/spacesService';
 
 interface TypedRequest<T> extends Request {
   body: T;
@@ -14,6 +29,34 @@ export class ProductController {
   constructor(productService: ProductService) {
     this.productService = productService;
   }
+
+  // GET /api/v1/products/types - return list of allowed product types for dropdowns
+  getProductTypes = async (_req: Request, res: Response): Promise<void> => {
+    const types = PREDEFINED_PRODUCT_TYPES.map((value) => ({
+      value,
+      label: PRODUCT_TYPE_LABELS[value]
+    }));
+    res.status(200).json({
+      success: true,
+      data: types
+    });
+  };
+
+  // GET /api/v1/products/types/:type/subtypes - return subtypes for a given main product type
+  getProductSubTypes = async (req: Request, res: Response): Promise<void> => {
+    const { type } = req.params;
+    let resolvedType: string;
+    try {
+      resolvedType = normalizeProductType(type);
+    } catch {
+      resolvedType = type;
+    }
+    const options = PRODUCT_SUBTYPE_OPTIONS[resolvedType] ?? [];
+    res.status(200).json({
+      success: true,
+      data: options.map((value) => ({ value, label: value }))
+    });
+  };
 
   // New endpoint for selecting product type after receiving create-app ID
   selectProductType = async (req: TypedRequest<SelectProductTypeRequest>, res: Response): Promise<void> => {
@@ -402,6 +445,67 @@ export class ProductController {
       res.status(500).json({
         success: false,
         error: 'Internal server error'
+      });
+    }
+  };
+
+  /**
+   * Upload a product image to DigitalOcean Spaces.
+   * Expects multipart/form-data with a single file field named "file".
+   * Returns { success, url, key } where url is the public URL (e.g. LOAN `about.previewAssetUrl`).
+   */
+  // `any` for file to avoid hard dependency on @types/multer in strict Request type
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  uploadProductImage = async (req: Request & { file?: any }, res: Response): Promise<void> => {
+    try {
+      if (!req.file || !req.file.buffer) {
+        res.status(400).json({
+          success: false,
+          error: 'No file uploaded. Send a single file in the "file" field.',
+        });
+        return;
+      }
+
+      if (!isSpacesConfigured()) {
+        res.status(503).json({
+          success: false,
+          error: 'Product image upload is not configured (Spaces).',
+        });
+        return;
+      }
+
+      const mimeType =
+        req.file.mimetype || (req.file as any).mimeType || 'application/octet-stream';
+      const fileSize = req.file.size ?? req.file.buffer.length;
+      const validation = validateProductImageUpload(mimeType, fileSize);
+      if (!validation.valid) {
+        res.status(400).json({
+          success: false,
+          error: validation.error,
+        });
+        return;
+      }
+
+      const extMatch = req.file.originalname?.match(/\.[a-zA-Z0-9]+$/);
+      const ext = extMatch?.[0] || '.bin';
+      const appId = (req.body?.appId as string | undefined) || 'generic';
+      const key = `products/${appId}/${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}${ext}`;
+
+      const result = await uploadToSpaces(req.file.buffer, key, mimeType);
+
+      res.status(200).json({
+        success: true,
+        url: result.url,
+        key: result.key,
+      });
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Error in uploadProductImage controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error',
       });
     }
   };

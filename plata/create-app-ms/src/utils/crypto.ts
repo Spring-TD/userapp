@@ -14,14 +14,12 @@ export interface JWTPayload {
 }
 
 /**
- * Verify JWT token
+ * Verify JWT token (signature + expiry only; same approach as compliance-ms).
+ * JWT_SECRET must match the secret used by client-auth-ms to sign tokens.
  */
 export const verifyToken = (token: string): JWTPayload | null => {
   try {
-    const decoded = jwt.verify(token, config.jwtSecret, {
-      issuer: 'service-auth-ms',
-      audience: 'client-app'
-    }) as JWTPayload;
+    const decoded = jwt.verify(token, config.jwtSecret) as JWTPayload;
     return decoded;
   } catch (error) {
     return null;

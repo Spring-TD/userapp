@@ -4,6 +4,8 @@ import morgan from 'morgan';
 import { config } from './config/environment';
 import corsMiddleware from './middleware/cors';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './config/swagger';
 import { billingRoutes } from './routes/billingRoutes';
 import { PricingScheduler } from './services/pricingScheduler';
 import { BillingScheduler } from './services/billingScheduler';
@@ -52,6 +54,10 @@ app.get('/health', (_req, res) => {
     version: '1.0.0'
   });
 });
+
+// OpenAPI / Swagger documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get('/api-docs.json', (_req, res) => res.json(swaggerSpec));
 
 // API routes
 app.use('/api/v1/billing', billingRoutes);

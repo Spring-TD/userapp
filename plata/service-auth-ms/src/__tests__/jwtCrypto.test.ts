@@ -123,6 +123,23 @@ describe('JWT Crypto Functions', () => {
       // Assert
       expect(decoded).toBeNull();
     });
+
+    it('should verify client-auth-ms access token (issuer/audience used by gateway login)', () => {
+      const token = jwt.sign(
+        {
+          userId: 'm1',
+          email: 'm@example.com',
+          userType: 'merchant',
+          type: 'access'
+        },
+        'test-secret-key',
+        { issuer: 'client-auth-ms', audience: 'user', expiresIn: '1h' }
+      );
+      const decoded = verifyToken(token);
+      expect(decoded).toBeTruthy();
+      expect(decoded!.userId).toBe('m1');
+      expect(decoded!.userType).toBe('merchant');
+    });
   });
   
   describe('extractTokenFromHeader', () => {

@@ -100,8 +100,8 @@ npm start
 
 This service acts as the API Gateway for the SpringTD platform. It proxies requests to the following microservices:
 
-- `/api/v1/products/*` -> Product Service
-- `/api/v1/configurations/*` -> Product Service
+- `/api/v1/products/*` -> Product Service (discriminator-typed fields: LOAN `about`/`structure`/…; `PUT /api/v1/products/:id` merges those paths)
+- `/api/v1/configurations/options/*` -> Product Service (legacy alias for configuration dropdowns; same as `/api/v1/products/options/*`)
 - `/api/v1/compliance/*` -> Compliance Service
 - `/api/v1/wallets/*` -> Wallet Service
 - `/api/v1/billing/*` -> Billing Service

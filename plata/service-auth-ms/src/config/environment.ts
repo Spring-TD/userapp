@@ -18,6 +18,7 @@ const envSchema = Joi.object({
 
   // JWT
   JWT_SECRET: Joi.string().min(32).required(),
+  CLIENT_AUTH_JWT_SECRET: Joi.string().min(32).optional().allow(''),
   JWT_EXPIRES_IN: Joi.string().default('1h'),
   JWT_REFRESH_EXPIRES_IN: Joi.string().default('7d'),
 
@@ -63,7 +64,8 @@ const envSchema = Joi.object({
 
   // Payment Service
   PAYMENT_SERVICE_URL: Joi.string().default('http://localhost:3007'),
-  BILLING_SERVICE_URL: Joi.string().default('http://localhost:3006')
+  BILLING_SERVICE_URL: Joi.string().default('http://localhost:3006'),
+  INTERNAL_SERVICE_TOKEN: Joi.string().default('internal-dev-token')
 }).unknown();
 
 const { error, value: envVars } = envSchema.validate(process.env, {
@@ -89,6 +91,7 @@ export const config = {
   },
   jwt: {
     secret: envVars.JWT_SECRET,
+    clientAuthSecret: envVars.CLIENT_AUTH_JWT_SECRET || undefined,
     expiresIn: envVars.JWT_EXPIRES_IN,
     refreshExpiresIn: envVars.JWT_REFRESH_EXPIRES_IN,
   },
@@ -143,5 +146,8 @@ export const config = {
   },
   billing: {
     serviceUrl: envVars.BILLING_SERVICE_URL,
+  },
+  internal: {
+    serviceToken: envVars.INTERNAL_SERVICE_TOKEN,
   }
 };

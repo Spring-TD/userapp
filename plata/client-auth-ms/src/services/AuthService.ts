@@ -1,11 +1,13 @@
 import { User, Merchant, UserType, AccountStatus, UserAccount, Role, Permission, CreateRoleRequest } from '../models/User';
 import { db as mockDb } from '../utils/mongoDatabase';
-import { hashPassword, comparePassword, generateAccessToken, generateRefreshToken, verifyToken, generatePasswordResetToken } from '../utils/crypto';
+import { hashPassword, comparePassword, verifyToken, generatePasswordResetToken } from '../utils/crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { RoleService } from './RoleService';
 import jwt from 'jsonwebtoken';
+import axios from 'axios';
 import { config } from '../config/environment';
 import notificationService, { SendNotificationResponse } from './NotificationService';
+import { SessionService } from './SessionService';
 
 // Type for user response without password
 export type UserResponse = Omit<UserAccount, 'password'>;
@@ -16,7 +18,9 @@ export interface LoginResponse {
   user?: UserResponse;
   accessToken?: string;
   refreshToken?: string;
+  sessionId?: string;
   error?: string;
+  emailVerified?: boolean;
 }
 
 export interface UserRegistrationData {
@@ -40,6 +44,20 @@ export interface MerchantRegistrationData {
   country: string;
 }
 
+type BootstrapApiKeyResult = {
+  success: boolean;
+  apiKey?: {
+    id: string;
+    merchant_id: string;
+    name: string;
+    public_key: string;
+    environment: 'test' | 'live';
+    status: 'active' | 'revoked' | 'expired';
+  };
+  secretKey?: string | null;
+  error?: string;
+};
+
 export interface AdminRegistrationData {
   email: string;
   password: string;
@@ -50,10 +68,50 @@ export interface AdminRegistrationData {
 }
 
 export class AuthService {
+  private static async bootstrapMerchantApiKey(merchantId: string): Promise<BootstrapApiKeyResult> {
+    try {
+      const response = await axios.post(
+        `${config.serviceAuthUrl}/internal/api/v1/keys/bootstrap`,
+        {
+          merchantId,
+          name: 'Default Live Key',
+          environment: 'live',
+        },
+        {
+          headers: {
+            'X-Internal-Token': config.serviceAuthInternalToken,
+          },
+          timeout: 8000,
+        }
+      );
+
+      const payload = response.data as {
+        success?: boolean;
+        data?: { apiKey?: BootstrapApiKeyResult['apiKey']; secretKey?: string | null };
+        error?: string;
+      };
+
+      if (!payload.success || !payload.data?.apiKey) {
+        return { success: false, error: payload.error || 'Failed to bootstrap merchant API key' };
+      }
+
+      return {
+        success: true,
+        apiKey: payload.data.apiKey,
+        secretKey: payload.data.secretKey ?? null,
+      };
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data?.error || error.message)
+        : 'Failed to bootstrap merchant API key';
+      return { success: false, error: message };
+    }
+  }
+
   /**
    * Register a new user
    */
-  static async registerUser(userData: UserRegistrationData): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
+  static async registerUser(userData: UserRegistrationData): Promise<{ success: boolean; user?: UserResponse; verificationEmailSent?: boolean; error?: string }> {
     try {
       // Optional logic: if password is empty, user_ref is required (enforced by validation)
       const hasPassword = userData.password != null && userData.password.trim() !== '';
@@ -102,11 +160,24 @@ export class AuthService {
 
       const user = await mockDb.createUser(newUser as Omit<UserAccount, 'id' | 'created_at' | 'updated_at' | 'failed_login_attempts'>);
 
+      // Send one-time verification code email via notifications-ms
+      let verificationEmailSent = false;
+      try {
+        await AuthService.sendVerificationOtpEmail(
+          user.email,
+          `${user.first_name} ${user.last_name}`.trim() || 'User'
+        );
+        verificationEmailSent = true;
+      } catch (notifError) {
+        console.error('Failed to send verification OTP to new user:', notifError);
+      }
+
       // Return user without password
       const { password, ...userWithoutPassword } = user;
       return {
         success: true,
-        user: userWithoutPassword
+        user: userWithoutPassword,
+        verificationEmailSent
       };
     } catch (error) {
       console.error('Error registering user:', error);
@@ -120,7 +191,13 @@ export class AuthService {
   /**
    * Register a new merchant
    */
-  static async registerMerchant(merchantData: MerchantRegistrationData): Promise<{ success: boolean; merchant?: UserResponse; error?: string }> {
+  static async registerMerchant(merchantData: MerchantRegistrationData): Promise<{
+    success: boolean;
+    merchant?: UserResponse;
+    verificationEmailSent?: boolean;
+    apiKey?: { publicKey: string; secretKey: string | null; environment: 'test' | 'live' };
+    error?: string;
+  }> {
     try {
       // Check if email already exists
       const existingUser = await mockDb.findUserByEmail(merchantData.email);
@@ -159,11 +236,39 @@ export class AuthService {
 
       const merchant = await mockDb.createUser(newMerchant as Omit<UserAccount, 'id' | 'created_at' | 'updated_at' | 'failed_login_attempts'>);
 
+      // Bootstrap default merchant API key in service-auth-ms
+      const bootstrapResult = await AuthService.bootstrapMerchantApiKey(merchant.id);
+      if (!bootstrapResult.success || !bootstrapResult.apiKey) {
+        await mockDb.deleteUser(merchant.id);
+        return {
+          success: false,
+          error: `Merchant created but API key bootstrap failed and registration was rolled back: ${bootstrapResult.error || 'unknown error'}`
+        };
+      }
+
+      // Send one-time verification code email via notifications-ms
+      let verificationEmailSent = false;
+      try {
+        await AuthService.sendVerificationOtpEmail(
+          merchant.email,
+          `${merchant.first_name} ${merchant.last_name}`.trim() || 'Merchant'
+        );
+        verificationEmailSent = true;
+      } catch (notifError) {
+        console.error('Failed to send verification OTP to new merchant:', notifError);
+      }
+
       // Return merchant without password
       const { password, ...merchantWithoutPassword } = merchant;
       return {
         success: true,
-        merchant: merchantWithoutPassword
+        merchant: merchantWithoutPassword,
+        verificationEmailSent,
+        apiKey: {
+          publicKey: bootstrapResult.apiKey.public_key,
+          secretKey: bootstrapResult.secretKey ?? null,
+          environment: bootstrapResult.apiKey.environment
+        }
       };
     } catch (error) {
       console.error('Error registering merchant:', error);
@@ -256,7 +361,11 @@ export class AuthService {
   /**
    * Login user
    */
-  static async login(email: string, password: string): Promise<LoginResponse> {
+  static async login(
+    email: string,
+    password: string,
+    meta?: { userAgent?: string; ip?: string }
+  ): Promise<LoginResponse> {
     try {
       // Find user by email
       const user = await mockDb.findUserByEmail(email);
@@ -298,19 +407,11 @@ export class AuthService {
         };
       }
 
-      // Check if account is active
-      if (user.status !== AccountStatus.ACTIVE) {
+      // Allow login for ACTIVE or PENDING (unverified email); block SUSPENDED and other states
+      if (user.status !== AccountStatus.ACTIVE && user.status !== AccountStatus.PENDING) {
         return {
           success: false,
           error: 'Account is not active'
-        };
-      }
-
-      // Check if email is verified
-      if (!user.email_verified) {
-        return {
-          success: false,
-          error: 'Email not verified'
         };
       }
 
@@ -329,17 +430,26 @@ export class AuthService {
         userMerchantId: 'user_merchant_id' in user ? user.user_merchant_id : undefined
       };
 
-      const accessToken = generateAccessToken(tokenPayload);
-      const refreshToken = generateRefreshToken(tokenPayload);
+      const { accessToken, refreshToken, sessionId } = await SessionService.issueTokensForNewSession(
+        {
+          userId: user.id,
+          email: user.email,
+          userType: user.user_type,
+          userMerchantId: 'user_merchant_id' in user ? user.user_merchant_id : undefined,
+        },
+        { userAgent: meta?.userAgent, ip: meta?.ip }
+      );
 
-      // Return user without password
+      // Return user without password and include emailVerified flag for frontend UX
       const { password: pwd, ...userWithoutPassword } = user;
 
       return {
         success: true,
         user: userWithoutPassword,
         accessToken,
-        refreshToken
+        refreshToken,
+        sessionId,
+        emailVerified: user.email_verified
       };
     } catch (error) {
       console.error('Error during login:', error);
@@ -483,6 +593,8 @@ export class AuthService {
         failed_login_attempts: 0 // Reset failed login attempts
       });
 
+      await SessionService.revokeAllForUser(user.id);
+
       console.log(`Password reset successful for ${user.email}`);
 
       return {
@@ -544,6 +656,8 @@ export class AuthService {
         password: hashedPassword,
         failed_login_attempts: 0
       });
+
+      await SessionService.revokeAllForUser(user.id);
 
       console.log(`Password change successful for ${user.email}`);
 
@@ -617,43 +731,156 @@ export class AuthService {
   }
 
   /**
-   * Generate OTP
+   * Update current user's profile (first_name, last_name, phone, country).
+   * All fields are optional; account must be ACTIVE.
+   */
+  static async updateUserProfile(
+    userId: string,
+    profileData: {
+      first_name?: string;
+      last_name?: string;
+      phone?: string;
+      country?: string;
+    }
+  ): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
+    try {
+      const user = await mockDb.findUserById(userId);
+      if (!user) {
+        return { success: false, error: 'User not found' };
+      }
+
+      if (user.status !== AccountStatus.ACTIVE) {
+        return { success: false, error: 'Account is not active' };
+      }
+
+      const updateData: Partial<UserAccount> = {
+        ...(profileData.first_name !== undefined ? { first_name: profileData.first_name } : {}),
+        ...(profileData.last_name !== undefined ? { last_name: profileData.last_name } : {}),
+        ...(profileData.phone !== undefined ? { phone: profileData.phone } : {}),
+        ...(profileData.country !== undefined ? { country: profileData.country } : {}),
+      };
+
+      await mockDb.updateUser(userId, updateData);
+
+      const updatedUser = await mockDb.findUserById(userId);
+      if (!updatedUser) {
+        return { success: false, error: 'Failed to retrieve updated user' };
+      }
+
+      const { password: _p, ...userResponse } = updatedUser;
+      return { success: true, user: userResponse };
+    } catch (error) {
+      console.error('Error updating user profile:', error);
+      return { success: false, error: 'Internal server error while updating user profile' };
+    }
+  }
+
+  /**
+   * Deactivate current user's account.
+   */
+  static async deactivateAccount(userId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const user = await mockDb.findUserById(userId);
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not found'
+        };
+      }
+
+      if (user.status === AccountStatus.DEACTIVATED) {
+        return {
+          success: false,
+          error: 'Account is already deactivated'
+        };
+      }
+
+      await mockDb.updateUser(userId, {
+        status: AccountStatus.DEACTIVATED,
+        deactivated_at: new Date()
+      });
+
+      // Invalidate all active sessions once account is deactivated.
+      await SessionService.revokeAllForUser(userId);
+
+      return {
+        success: true
+      };
+    } catch (error) {
+      console.error('Error deactivating account:', error);
+      return {
+        success: false,
+        error: 'Internal server error while deactivating account'
+      };
+    }
+  }
+
+  /**
+   * Send a one-time verification code email (used after signup).
+   * Generates OTP, stores it in DB, and sends via notifications-ms.
+   */
+  static async sendVerificationOtpEmail(email: string, userName: string): Promise<void> {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashedCode = await hashPassword(code);
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    const identifier = email.toLowerCase();
+
+    await mockDb.deleteOtpsByIdentifier(identifier, 'verification');
+    await mockDb.createOtp({
+      identifier,
+      code: hashedCode,
+      channel: 'email',
+      purpose: 'verification',
+      expiresAt
+    });
+
+    const result = await notificationService.sendOTP(email, code, 'verification', 'email');
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to send OTP');
+    }
+  }
+
+  /**
+   * Generate OTP: store in DB and send via notifications-ms.
    */
   static async generateOTP(request: { identifier: string; channel: 'email' | 'sms'; purpose: 'verification' | 'password-reset' | 'login' }): Promise<{ success: boolean; reference?: string; expiresIn?: number; error?: string }> {
     try {
-      // Mock implementation - in production, generate actual OTP and send via email/SMS
       const { identifier, channel, purpose } = request;
-
-      // Generate a 6-digit OTP code
       const code = Math.floor(100000 + Math.random() * 900000).toString();
-
-      // Set expiration (5 minutes)
+      const hashedCode = await hashPassword(code);
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+      const idLower = identifier.toLowerCase();
 
-      // Log the OTP generation for debugging
-      console.log('OTP generated', { identifier, channel, purpose, code });
+      await mockDb.deleteOtpsByIdentifier(idLower, purpose);
+      await mockDb.createOtp({
+        identifier: idLower,
+        code: hashedCode,
+        channel,
+        purpose,
+        expiresAt
+      });
 
-      // Send OTP via notifications service
       if (channel === 'email') {
-        const notificationResult = await notificationService.sendOTP(identifier, code, purpose);
+        const notificationResult = await notificationService.sendOTP(identifier, code, purpose, 'email');
         if (!notificationResult.success) {
           console.error('Failed to send OTP email:', notificationResult.error);
-          return {
-            success: false,
-            error: 'Failed to send OTP'
-          };
+          return { success: false, error: 'Failed to send OTP' };
         }
-      } else if (channel === 'sms') {
-        // For SMS, we would need to implement SMS sending via notifications service
-        console.log(`OTP ${code} sent to phone ${identifier}`);
+      } else {
+        const notificationResult = await notificationService.sendOTP(identifier, code, purpose, 'sms');
+        if (!notificationResult.success) {
+          console.error('Failed to send OTP SMS:', notificationResult.error);
+          return { success: false, error: 'Failed to send OTP' };
+        }
       }
 
       return {
         success: true,
-        reference: `otp_${Date.now()}`, // Mock reference
-        expiresIn: 300 // 5 minutes in seconds
+        reference: `otp_${Date.now()}`,
+        expiresIn: 300
       };
     } catch (error) {
+      console.error('Error in generateOTP:', error);
       return {
         success: false,
         error: 'Failed to generate OTP'
@@ -662,21 +889,39 @@ export class AuthService {
   }
 
   /**
-   * Verify OTP
+   * Verify OTP: check stored OTP; if purpose is 'verification', mark user email_verified and ACTIVE.
    */
   static async verifyOTP(request: { identifier: string; code: string }): Promise<{ success: boolean; valid: boolean; error?: string }> {
     try {
       const { identifier, code } = request;
+      const idLower = identifier.toLowerCase();
+      const purposes: Array<'verification' | 'password-reset' | 'login'> = ['verification', 'password-reset', 'login'];
 
-      // Log OTP verification for debugging
-      console.log('OTP verification requested', { identifier, code });
+      for (const purpose of purposes) {
+        const otp = await mockDb.findActiveOtp(idLower, purpose);
+        if (!otp) continue;
 
-      // Mock response - in a real implementation, you would check against stored OTP
-      return {
-        success: true,
-        valid: true // Mock response - always valid in this mock implementation
-      };
+        const valid = await comparePassword(code, otp.code);
+        if (!valid) {
+          await mockDb.incrementOtpAttempts((otp as any)._id.toString());
+          return { success: true, valid: false };
+        }
+
+        await mockDb.markOtpVerified((otp as any)._id.toString());
+
+        if (purpose === 'verification') {
+          const user = await mockDb.findUserByEmail(idLower);
+          if (user) {
+            await mockDb.updateUser(user.id, { email_verified: true, status: AccountStatus.ACTIVE });
+          }
+        }
+
+        return { success: true, valid: true };
+      }
+
+      return { success: true, valid: false };
     } catch (error) {
+      console.error('Error in verifyOTP:', error);
       return {
         success: false,
         valid: false,
@@ -686,20 +931,32 @@ export class AuthService {
   }
 
   /**
-   * Resend OTP
+   * Resend OTP: generate a new OTP, store it, and send via email/SMS.
+   * For email verification, uses the same path as signup (sendVerificationOtpEmail) so behaviour matches exactly.
    */
-  static async resendOTP(request: { identifier: string }): Promise<{ success: boolean; reference?: string; expiresIn?: number; error?: string }> {
+  static async resendOTP(request: { identifier: string; channel: 'email' | 'sms'; purpose: 'verification' | 'password-reset' | 'login' }): Promise<{ success: boolean; reference?: string; expiresIn?: number; error?: string }> {
     try {
-      const { identifier } = request;
+      const { identifier, channel, purpose } = request;
+      if (!identifier || !channel || !purpose) {
+        return { success: false, error: 'Identifier, channel, and purpose are required' };
+      }
 
-      // Log OTP resend for debugging
-      console.log('OTP resend requested', { identifier });
+      // Email verification resend: use the exact same flow as signup so OTP is stored and sent identically
+      if (channel === 'email' && purpose === 'verification') {
+        try {
+          await AuthService.sendVerificationOtpEmail(identifier, 'User');
+          return {
+            success: true,
+            reference: `otp_${Date.now()}`,
+            expiresIn: 300
+          };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Failed to send OTP';
+          return { success: false, error: message };
+        }
+      }
 
-      return {
-        success: true,
-        reference: `otp_${Date.now()}`, // Mock reference
-        expiresIn: 300 // 5 minutes in seconds
-      };
+      return await AuthService.generateOTP({ identifier, channel, purpose });
     } catch (error) {
       return {
         success: false,

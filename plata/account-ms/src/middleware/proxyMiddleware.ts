@@ -1,66 +1,59 @@
+import type { Request } from 'express';
+import type { ClientRequest } from 'http';
+import type { Options } from 'http-proxy-middleware';
 import { Express } from 'express';
-import { createProxyMiddleware, Options } from 'http-proxy-middleware';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 import { config } from '../config/environment';
 
+function forwardGatewayMerchantHeaders(proxyReq: ClientRequest, req: Request): void {
+  if (req.gatewayMerchantAuth) {
+    proxyReq.setHeader('X-Merchant-Id', req.gatewayMerchantAuth.merchantId);
+    proxyReq.setHeader('X-Api-Key-Id', req.gatewayMerchantAuth.apiKeyId);
+    proxyReq.setHeader('X-Gateway-Verified', '1');
+  }
+}
+
+function proxied(pathFilter: NonNullable<Options['pathFilter']>, target: string) {
+  return createProxyMiddleware({
+    pathFilter,
+    target,
+    changeOrigin: true,
+    on: {
+      proxyReq: (proxyReq, req) => {
+        forwardGatewayMerchantHeaders(proxyReq, req as Request);
+      },
+    },
+  });
+}
+
 export const setupProxies = (app: Express) => {
-    // Helper to create proxy options
-    const createOptions = (target: string): Options => ({
-        target,
-        changeOrigin: true,
-        pathRewrite: {
-            // We keep the path as is
-        },
-        // We don't need on: proxyReq here if we mount this BEFORE body-parser
-    });
+  app.use(proxied(['/api/v1/products', '/api/v1/configurations'], config.productServiceUrl));
 
-    // Product Service Proxy
-    app.use(
-        '/api/v1/products',
-        createProxyMiddleware(createOptions(config.productServiceUrl))
-    );
+  app.use(proxied(['/api/v1/compliance', '/api/v1/kyc'], config.complianceServiceUrl));
 
-    app.use(
-        '/api/v1/configurations',
-        createProxyMiddleware(createOptions(config.productServiceUrl))
-    );
+  app.use(proxied('/api/v1/wallets', config.walletServiceUrl));
 
-    // Compliance Service Proxy
-    app.use(
-        '/api/v1/compliance',
-        createProxyMiddleware(createOptions(config.complianceServiceUrl))
-    );
+  app.use(proxied('/api/v1/billing', config.billingServiceUrl));
 
-    // Wallet Service Proxy
-    app.use(
-        '/api/v1/wallets',
-        createProxyMiddleware(createOptions(config.walletServiceUrl))
-    );
+  app.use(proxied('/api/v1/apps', config.createAppServiceUrl));
 
-    // Billing Service Proxy
-    app.use(
-        '/api/v1/billing',
-        createProxyMiddleware(createOptions(config.billingServiceUrl))
-    );
+  app.use(proxied('/api/v1/payments', config.paymentServiceUrl));
 
-    // Create App Service Proxy
-    app.use(
-        '/api/v1/apps',
-        createProxyMiddleware(createOptions(config.createAppServiceUrl))
-    );
+  /** Merchant API key CRUD (Bearer JWT) — service-auth-ms */
+  app.use(proxied('/api/v1/keys', config.serviceAuthUrl));
 
-    // Payment Service Proxy
-    app.use(
-        '/api/v1/payments',
-        createProxyMiddleware(createOptions(config.paymentServiceUrl))
-    );
-
-    // Client Auth Service Proxy
-    const clientAuthTarget = config.clientAuthServiceUrl;
-
-    app.use('/api/v1/auth', createProxyMiddleware(createOptions(clientAuthTarget)));
-    app.use('/api/v1/registration', createProxyMiddleware(createOptions(clientAuthTarget)));
-    app.use('/api/v1/otp', createProxyMiddleware(createOptions(clientAuthTarget)));
-    app.use('/api/v1/password', createProxyMiddleware(createOptions(clientAuthTarget)));
-    app.use('/api/v1/user', createProxyMiddleware(createOptions(clientAuthTarget)));
-    app.use('/verify-email', createProxyMiddleware(createOptions(clientAuthTarget)));
+  app.use(
+    proxied(
+      [
+        '/api/v1/auth',
+        '/api/v1/registration',
+        '/api/v1/otp',
+        '/api/v1/password',
+        '/api/v1/user',
+        '/api/v1/roles',
+        '/verify-email',
+      ],
+      config.clientAuthServiceUrl
+    )
+  );
 };

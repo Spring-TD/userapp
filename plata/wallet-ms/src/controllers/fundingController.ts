@@ -17,6 +17,7 @@ interface FundingCallbackData {
   providerReference?: string;
   signature?: string; // For webhook authentication
   merchantId?: string; // For merchant wallet funding OR identifying user wallet
+  appId?: string; // Optional app scope for merchant wallet funding
   merchantWalletType?: MerchantWalletType; // For merchant wallet funding
 }
 
@@ -56,7 +57,7 @@ export class FundingController {
         return;
       }
       
-      const { walletId, userId, amount, transactionId, status, description, providerReference, merchantId, merchantWalletType } = value!;
+      const { walletId, userId, amount, transactionId, status, description, providerReference, merchantId, appId, merchantWalletType } = value!;
       
       // Check for duplicate transaction
       if (processedTransactions.has(transactionId)) {
@@ -99,10 +100,11 @@ export class FundingController {
         });
         
         // Get the specific merchant wallet
-        const merchantWalletResult = await WalletService.getMerchantWalletByType(merchantId, merchantWalletType);
+        const merchantWalletResult = await WalletService.getMerchantWalletByType(merchantId, merchantWalletType, appId);
         if (!merchantWalletResult.success || !merchantWalletResult.wallet) {
           logger.error('Failed to find merchant wallet for funding', {
             merchantId,
+            appId,
             merchantWalletType,
             transactionId
           });
@@ -141,6 +143,7 @@ export class FundingController {
         logger.info('Merchant wallet balance updated from funding callback', {
           walletId: merchantWalletResult.wallet.id,
           merchantId,
+          appId,
           merchantWalletType,
           amount,
           newMainBalance: result.wallet?.mainBalance,
@@ -155,6 +158,7 @@ export class FundingController {
           data: {
             walletId: merchantWalletResult.wallet.id,
             merchantId,
+            appId,
             merchantWalletType,
             newMainBalance: result.wallet?.mainBalance,
             newLedgerBalance: result.wallet?.ledgerBalance,
