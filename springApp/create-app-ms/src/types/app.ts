@@ -1,21 +1,4 @@
-export interface DnsConfiguration {
-  aRecord?: {
-    type: 'A';
-    name: string; // Usually "@" or root domain
-    value: string; // IP address
-  };
-  cnameRecords: Array<{
-    type: 'CNAME';
-    name: string; // e.g., "www" or root domain
-    value: string; // Points to platform domain (e.g., "domain.useinclude.com")
-  }>;
-  txtRecords?: Array<{
-    type: 'TXT';
-    name: string;
-    value: string; // Verification or other TXT records
-  }>;
-  baseUrl: string; // The base URL to use (e.g., "https://yourDomain.com/")
-}
+export type AppStatus = 'active' | 'suspended';
 
 export interface App {
   id: string;
@@ -24,21 +7,10 @@ export interface App {
   alias: string;
   description: string;
   merchantId: string;
-  subdomain: string;
-  customDomain?: string; // Custom domain, e.g., "www.customdomain.com"
-  customDomainActive?: boolean; // Toggle to activate/deactivate custom domain
-  customDomainVerified?: boolean; // Whether DNS is verified
-  customDomainVerifiedAt?: string; // Verification timestamp
-  dnsConfiguration?: DnsConfiguration; // DNS records to configure
-  status: 'draft' | 'submitted' | 'approved' | 'rejected' | 'incomplete';
+  status: AppStatus;
   createdAt: string;
   updatedAt: string;
-  submittedAt?: string;
-  approvedAt?: string;
-  rejectedAt?: string;
-  rejectionReason?: string;
   productKeys?: string[]; // Array of product keys associated with this app
-  activeConfigurationId?: string; // ID of the active configuration
 }
 
 export interface CreateAppRequest {
@@ -47,7 +19,6 @@ export interface CreateAppRequest {
   alias: string;
   description: string;
   merchantId?: string; // Made optional since it can be extracted from authenticated user
-  subdomain?: string; // Optional custom subdomain, otherwise auto-generated from name
 }
 
 export interface UpdateAppRequest {
@@ -55,12 +26,8 @@ export interface UpdateAppRequest {
   websiteUrl?: string;
   alias?: string;
   description?: string;
-  status?: 'draft' | 'submitted' | 'approved' | 'rejected' | 'incomplete';
-  rejectionReason?: string;
+  status?: AppStatus;
   productKeys?: string[];
-  subdomain?: string; // Optional subdomain update (requires uniqueness validation)
-  customDomain?: string; // Optional custom domain update
-  customDomainActive?: boolean; // Optional custom domain activation toggle
 }
 
 export interface AppResponse {

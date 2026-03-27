@@ -1,3 +1,417 @@
+/**
+ * Special routes (mounted at /api/v1/special)
+ * Service-to-service endpoints; all require x-api-key header.
+ *
+ * @openapi
+ * /api/v1/special/apps:
+ *   get:
+ *     summary: Get all apps
+ *     tags: [Special]
+ *     security:
+ *       - apiKeyAuth: []
+ *     responses:
+ *       200:
+ *         description: List of apps
+ * /api/v1/special/apps/{id}:
+ *   get:
+ *     summary: Get app by ID
+ *     tags: [Special]
+ *     security:
+ *       - apiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: App details
+ * /api/v1/special/products:
+ *   get:
+ *     summary: Get all products
+ *     tags: [Special]
+ *     security:
+ *       - apiKeyAuth: []
+ *     responses:
+ *       200:
+ *         description: List of products
+ * /api/v1/special/products/{id}:
+ *   get:
+ *     summary: Get product by ID
+ *     tags: [Special]
+ *     security:
+ *       - apiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Product details
+ * /api/v1/special/wallets/merchant/{merchantId}/balance/{walletType}:
+ *   get:
+ *     summary: Get merchant wallet balance
+ *     tags: [Special - Wallets]
+ *     security:
+ *       - apiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: merchantId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: walletType
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Wallet balance
+ * /api/v1/special/wallets/merchant/{merchantId}/history/{walletType}:
+ *   get:
+ *     summary: Get merchant wallet history
+ *     tags: [Special - Wallets]
+ *     security:
+ *       - apiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: merchantId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: walletType
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Wallet history
+ * /api/v1/special/users:
+ *   get:
+ *     summary: Get all users
+ *     tags: [Special - Users]
+ *     security:
+ *       - apiKeyAuth: []
+ *     responses:
+ *       200:
+ *         description: List of users
+ *   post:
+ *     summary: Create user and wallet
+ *     tags: [Special - Users]
+ *     security:
+ *       - apiKeyAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email:
+ *                 type: string
+ *               name:
+ *                 type: string
+ *               merchantId:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: User and wallet created
+ * /api/v1/special/users/{id}:
+ *   get:
+ *     summary: Get user by ID
+ *     tags: [Special - Users]
+ *     security:
+ *       - apiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: User details
+ * /api/v1/special/wallets/user/{userId}:
+ *   get:
+ *     summary: Get user wallet
+ *     tags: [Special - Wallets]
+ *     security:
+ *       - apiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: User wallet
+ * /api/v1/special/wallets/users/{merchantId}:
+ *   get:
+ *     summary: Get all users wallets for merchant
+ *     tags: [Special - Wallets]
+ *     security:
+ *       - apiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: merchantId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of user wallets
+ * /api/v1/special/wallets/user/{userId}/withdraw:
+ *   post:
+ *     summary: Withdraw from user wallet
+ *     tags: [Special - Wallets]
+ *     security:
+ *       - apiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               amount:
+ *                 type: number
+ *               currency:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Withdrawal result
+ * /api/v1/special/products/{productId}/subscribers:
+ *   get:
+ *     summary: Get product subscribers
+ *     tags: [Special]
+ *     security:
+ *       - apiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: productId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of subscribers
+ * /api/v1/special/users/{userId}/documents:
+ *   post:
+ *     summary: Submit docs for user
+ *     tags: [Special - Users]
+ *     security:
+ *       - apiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       201:
+ *         description: Documents submitted
+ * /api/v1/special/drive/users/{userId}:
+ *   get:
+ *     summary: Get drive by user
+ *     tags: [Special - Drive]
+ *     security:
+ *       - apiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: User drive data
+ * /api/v1/special/drive/products/{productId}:
+ *   get:
+ *     summary: Get drive by product
+ *     tags: [Special - Drive]
+ *     security:
+ *       - apiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: productId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Product drive data
+ * /api/v1/special/transactions/user/{userId}:
+ *   get:
+ *     summary: Get transaction history for user
+ *     tags: [Special - Transactions]
+ *     security:
+ *       - apiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: User transaction history
+ * /api/v1/special/transactions/product/{productId}:
+ *   get:
+ *     summary: Get all transaction history by product
+ *     tags: [Special - Transactions]
+ *     security:
+ *       - apiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: productId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Product transaction history
+ * /api/v1/special/transactions/app/{appId}:
+ *   get:
+ *     summary: Get transaction history by app
+ *     tags: [Special - Transactions]
+ *     security:
+ *       - apiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: appId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: App transaction history
+ * /api/v1/special/subscriptions/users/{userId}/products/{productId}:
+ *   post:
+ *     summary: Subscribe user to product
+ *     tags: [Special - Subscriptions]
+ *     security:
+ *       - apiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: productId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       201:
+ *         description: User subscribed
+ *   get:
+ *     summary: Get user product subscription
+ *     tags: [Special - Subscriptions]
+ *     security:
+ *       - apiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: productId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Subscription details
+ * /api/v1/special/applications/users/{userId}/products/{productId}:
+ *   post:
+ *     summary: Apply to product
+ *     tags: [Special - Applications]
+ *     security:
+ *       - apiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: productId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       201:
+ *         description: Application submitted
+ * /api/v1/special/applications/products/{productId}:
+ *   get:
+ *     summary: Get all product applications
+ *     tags: [Special - Applications]
+ *     security:
+ *       - apiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: productId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of applications with status and details
+ * /api/v1/special/callbacks/users/{userId}:
+ *   post:
+ *     summary: Register callback for user (application status, wallet events)
+ *     tags: [Special - Callbacks]
+ *     security:
+ *       - apiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               url:
+ *                 type: string
+ *               events:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: Callback registered
+ */
+
 import { Router } from 'express';
 import { SpecialController } from '../controllers/specialController';
 import { apiKeyAuth } from '../middleware/apiKeyAuth';

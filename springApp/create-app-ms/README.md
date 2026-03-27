@@ -4,24 +4,14 @@ The Create App Microservice handles the creation and management of applications 
 
 Deployment URL: https://create-app-ms.fly.dev/
 
-## Database
-
-This service uses **MongoDB** for persistence (apps, app configurations, and templates). Set `MONGODB_URI` in your environment or `.env` file.
-
-- **DigitalOcean Managed MongoDB:** Use the connection string from your cluster (see `.env.example` for the format).
-- **Local:** Default is `mongodb://localhost:27017/create_app_db` if `MONGODB_URI` is not set.
-
-Copy `.env.example` to `.env` and set `MONGODB_URI` to your DigitalOcean or local MongoDB URL.
-
 ## Features
 
 - Create new applications with detailed information (App Name, Website URL, App Alias, App Description)
-- **Automatic subdomain assignment** - Each app receives a unique subdomain (e.g., `my-app.springtd.com`) similar to Shopify's shop subdomain system
-- Manage application lifecycle (draft, submitted, approved, rejected)
-- Retrieve applications by ID, merchant ID, or subdomain
+- App status is **active** or **suspended**. Merchants can suspend or reactivate an app via `PATCH /api/v1/apps/{id}/status`.
+- Retrieve applications by ID or merchant ID
 - Retrieve all applications
-- Automatically create user wallets for applications using the Wallet Microservice
-- Update application information (including subdomain)
+- Automatically create merchant wallets (TREASURY, OPERATION, KYC) for each application using the Wallet Microservice
+- Update application information
 - Delete applications
 - Associate applications with products through product keys
 - Manage product keys for applications
@@ -30,6 +20,7 @@ Copy `.env.example` to `.env` and set `MONGODB_URI` to your DigitalOcean or loca
 - Manage documents submitted by users through the Drive feature
 - Special endpoints requiring API key authentication for advanced operations
 - **Authentication required for app creation** - Merchant ID is extracted from authenticated user context
+- **Merchant app visibility fully enforced** - merchants can only view apps they own
 
 ## API Endpoints
 
@@ -39,125 +30,61 @@ Copy `.env.example` to `.env` and set `MONGODB_URI` to your DigitalOcean or loca
 ```
 POST /api/v1/apps
 ```
-Creates a new application in draft status, automatically assigns a unique subdomain, and creates a user wallet for the application. Requires JWT authentication - merchant ID is extracted from the authenticated user context.
+Creates a new application and automatically creates merchant wallets for it (TREASURY, OPERATION, KYC). Requires JWT authentication - merchant ID is extracted from the authenticated user context.
 
 **Request Headers:**
 - `Authorization`: Bearer token obtained through authentication
 
 **Request Body:**
-- `name` (string, required): Application name (3-100 characters) - Used to auto-generate subdomain if not provided
+- `name` (string, required): Application name (3-100 characters)
 - `websiteUrl` (string, required): Application website URL
 - `alias` (string, required): Application alias (2-50 characters)
 - `description` (string, required): Application description (10-1000 characters)
 - `merchantId` (string, optional): ID of the merchant who owns the application (extracted from authenticated user for merchants, required for admins)
-- `subdomain` (string, optional): Custom subdomain (3-63 characters, lowercase alphanumeric and hyphens only). If not provided, a subdomain will be auto-generated from the app name.
 
 **Response:**
-Returns the created application with auto-generated ID, assigned subdomain, subdomain URL, and timestamps, along with user wallet creation information.
-
-**Example Response:**
-```json
-{
-  "success": true,
-  "message": "App created successfully",
-  "data": {
-    "app": {
-      "id": "abc123xyz",
-      "name": "My Awesome App",
-      "subdomain": "my-awesome-app",
-      "subdomainUrl": "https://my-awesome-app.springtd.com",
-      "websiteUrl": "https://example.com",
-      "alias": "awesome-app",
-      "description": "This is my awesome application",
-      "merchantId": "merchant-123",
-      "status": "draft",
-      "createdAt": "2023-01-15T10:30:00Z",
-      "updatedAt": "2023-01-15T10:30:00Z",
-      "productKeys": []
-    },
-    "wallets": {
-      "success": true,
-      "data": {...}
-    }
-  }
-}
-```
-
-**Subdomain Generation:**
-- If a custom `subdomain` is provided, it will be validated and used (must be unique)
-- If no `subdomain` is provided, one will be auto-generated from the app `name`:
-  - Converted to lowercase
-  - Special characters removed (only alphanumeric and hyphens allowed)
-  - Spaces replaced with hyphens
-  - If the generated subdomain already exists, a numeric suffix is appended (e.g., `my-app-2`, `my-app-3`)
-- All subdomains must be unique across all apps
+Returns the created application with auto-generated ID and timestamps, along with merchant wallet creation information.
 
 ### Get All Apps
 ```
 GET /api/v1/apps
 ```
-Retrieves all applications in the system.
+Requires JWT authentication.  
+For merchant users, returns only applications owned by the authenticated merchant.  
+For admin users, returns all applications.
+
+**Request Headers:**
+- `Authorization`: Bearer token
 
 ### Get App by ID
 ```
 GET /api/v1/apps/{id}
 ```
-Retrieves a specific application by its ID.
+Requires JWT authentication. Retrieves a specific application by its ID.
+
+- Merchant users can only retrieve apps they own.
+- Admin users can retrieve any app.
+
+**Request Headers:**
+- `Authorization`: Bearer token
 
 ### Get Apps by Merchant ID
 ```
 GET /api/v1/apps/merchant/{merchantId}
 ```
-Retrieves all applications associated with a merchant.
+Requires JWT authentication.
 
-### Get App by Subdomain
-```
-GET /api/v1/apps/subdomain/{subdomain}
-```
-Retrieves a specific application by its subdomain. Useful for routing middleware that needs to resolve apps by subdomain.
+- Merchant users can only request their own `merchantId` and will receive only their own apps.
+- Admin users can request any merchant ID.
 
-**Example Request:**
-```bash
-curl -X GET "http://localhost:4002/api/v1/apps/subdomain/my-awesome-app" \
-  -H "Content-Type: application/json"
-```
-
-**Example Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "abc123xyz",
-    "name": "My Awesome App",
-    "subdomain": "my-awesome-app",
-    "subdomainUrl": "https://my-awesome-app.springtd.com",
-    "websiteUrl": "https://example.com",
-    "alias": "awesome-app",
-    "description": "This is my awesome application",
-    "merchantId": "merchant-123",
-    "status": "approved",
-    "createdAt": "2023-01-15T10:30:00Z",
-    "updatedAt": "2023-01-15T10:30:00Z"
-  }
-}
-```
+**Request Headers:**
+- `Authorization`: Bearer token
 
 ### Update App
 ```
 PUT /api/v1/apps/{id}
 ```
-Updates application information. Can also update the subdomain (must be unique if changed).
-
-**Request Body:**
-- `name` (string, optional): Application name
-- `websiteUrl` (string, optional): Application website URL
-- `alias` (string, optional): Application alias
-- `description` (string, optional): Application description
-- `status` (string, optional): Application status
-- `subdomain` (string, optional): Custom subdomain (must be unique if provided)
-- `productKeys` (array, optional): Array of product keys
-
-**Note:** When updating the subdomain, it must be unique across all apps. The system will validate uniqueness before allowing the update.
+Updates application information.
 
 ### Delete App
 ```
@@ -165,23 +92,19 @@ DELETE /api/v1/apps/{id}
 ```
 Deletes an application.
 
-### Submit App
+### Update App Status
 ```
-POST /api/v1/apps/{id}/submit
+PATCH /api/v1/apps/{id}/status
 ```
-Submits an application for review.
+Updates the app status to **active** or **suspended**. Merchants can suspend an app or reactivate it. Requires JWT authentication; only the app owner (merchant) or an admin can update status.
 
-### Approve App
-```
-POST /api/v1/apps/{id}/approve
-```
-Approves a submitted application.
+**Request Headers:**
+- `Authorization`: Bearer token
 
-### Reject App
-```
-POST /api/v1/apps/{id}/reject
-```
-Rejects a submitted application.
+**Request Body:**
+- `status` (string, required): Either `"active"` or `"suspended"`
+
+**Response:** Returns the updated app with the new status.
 
 ### Transaction Endpoints
 
@@ -189,7 +112,10 @@ Rejects a submitted application.
 ```
 GET /api/v1/apps/{id}/transactions
 ```
-Retrieves all transactions for a specific application with optional filtering and pagination.
+Requires JWT authentication. Retrieves all transactions for a specific application with optional filtering and pagination.
+
+- Merchant users can only view transactions for apps they own.
+- Admin users can view transactions for any app.
 
 **Query Parameters:**
 - `page` (number, optional): Page number for pagination
@@ -202,7 +128,7 @@ Retrieves all transactions for a specific application with optional filtering an
 ##### Example Request
 
 ```bash
-curl -X GET "http://localhost:4002/api/v1/apps/app-123/transactions" \
+curl -X GET "http://localhost:3002/api/v1/apps/app-123/transactions" \
   -H "Content-Type: application/json"
 ```
 
@@ -244,15 +170,15 @@ You can filter transactions using query parameters:
 
 ```bash
 # Get only credit transactions
-curl -X GET "http://localhost:4002/api/v1/apps/app-123/transactions?type=credit" \
+curl -X GET "http://localhost:3002/api/v1/apps/app-123/transactions?type=credit" \
   -H "Content-Type: application/json"
 
 # Get completed transactions within a date range
-curl -X GET "http://localhost:4002/api/v1/apps/app-123/transactions?status=completed&startDate=2023-01-01&endDate=2023-01-31" \
+curl -X GET "http://localhost:3002/api/v1/apps/app-123/transactions?status=completed&startDate=2023-01-01&endDate=2023-01-31" \
   -H "Content-Type: application/json"
 
 # Pagination
-curl -X GET "http://localhost:4002/api/v1/apps/app-123/transactions?page=1&limit=10" \
+curl -X GET "http://localhost:3002/api/v1/apps/app-123/transactions?page=1&limit=10" \
   -H "Content-Type: application/json"
 ```
 
@@ -260,7 +186,10 @@ curl -X GET "http://localhost:4002/api/v1/apps/app-123/transactions?page=1&limit
 ```
 GET /api/v1/apps/{id}/transaction-stats
 ```
-Retrieves transaction statistics for a specific application.
+Requires JWT authentication. Retrieves transaction statistics for a specific application.
+
+- Merchant users can only view stats for apps they own.
+- Admin users can view stats for any app.
 
 **Response:**
 - `totalTransactions`: Total number of transactions
@@ -274,7 +203,7 @@ Retrieves transaction statistics for a specific application.
 ##### Example Request
 
 ```bash
-curl -X GET "http://localhost:4002/api/v1/apps/app-123/transaction-stats" \
+curl -X GET "http://localhost:3002/api/v1/apps/app-123/transaction-stats" \
   -H "Content-Type: application/json"
 ```
 
@@ -323,7 +252,7 @@ The Drive feature allows management of documents submitted by users of the creat
 ```
 POST /api/v1/apps/{id}/drive/documents
 ```
-Uploads a document to the app's drive.
+Requires JWT authentication. Uploads a document to the app's drive.
 
 **Request Body:**
 - `userId` (string, required): ID of the user who submitted the document
@@ -337,7 +266,7 @@ Uploads a document to the app's drive.
 ##### Example Request
 
 ```bash
-curl -X POST "http://localhost:4002/api/v1/apps/app-123/drive/documents" \
+curl -X POST "http://localhost:3002/api/v1/apps/app-123/drive/documents" \
   -H "Content-Type: application/json" \
   -d '{
     "userId": "user-456",
@@ -381,7 +310,10 @@ curl -X POST "http://localhost:4002/api/v1/apps/app-123/drive/documents" \
 ```
 GET /api/v1/apps/{id}/drive/documents
 ```
-Retrieves all documents for a specific application with optional filtering and pagination.
+Requires JWT authentication. Retrieves all documents for a specific application with optional filtering and pagination.
+
+- Merchant users can only view documents for apps they own.
+- Admin users can view documents for any app.
 
 **Query Parameters:**
 - `page` (number, optional): Page number for pagination
@@ -395,7 +327,7 @@ Retrieves all documents for a specific application with optional filtering and p
 ##### Example Request
 
 ```bash
-curl -X GET "http://localhost:4002/api/v1/apps/app-123/drive/documents" \
+curl -X GET "http://localhost:3002/api/v1/apps/app-123/drive/documents" \
   -H "Content-Type: application/json"
 ```
 
@@ -428,12 +360,15 @@ curl -X GET "http://localhost:4002/api/v1/apps/app-123/drive/documents" \
 ```
 GET /api/v1/apps/{id}/drive/documents/{documentId}
 ```
-Retrieves a specific document by its ID.
+Requires JWT authentication. Retrieves a specific document by its ID.
+
+- Merchant users can only view documents for apps they own.
+- Admin users can view documents for any app.
 
 ##### Example Request
 
 ```bash
-curl -X GET "http://localhost:4002/api/v1/apps/app-123/drive/documents/doc-789" \
+curl -X GET "http://localhost:3002/api/v1/apps/app-123/drive/documents/doc-789" \
   -H "Content-Type: application/json"
 ```
 
@@ -464,7 +399,7 @@ curl -X GET "http://localhost:4002/api/v1/apps/app-123/drive/documents/doc-789" 
 ```
 PUT /api/v1/apps/{id}/drive/documents/{documentId}
 ```
-Updates a document's information.
+Requires JWT authentication. Updates a document's information.
 
 **Request Body:**
 - Any fields from the document object that need to be updated
@@ -472,7 +407,7 @@ Updates a document's information.
 ##### Example Request
 
 ```bash
-curl -X PUT "http://localhost:4002/api/v1/apps/app-123/drive/documents/doc-789" \
+curl -X PUT "http://localhost:3002/api/v1/apps/app-123/drive/documents/doc-789" \
   -H "Content-Type: application/json" \
   -d '{
     "status": "verified"
@@ -507,12 +442,12 @@ curl -X PUT "http://localhost:4002/api/v1/apps/app-123/drive/documents/doc-789" 
 ```
 DELETE /api/v1/apps/{id}/drive/documents/{documentId}
 ```
-Deletes a document.
+Requires JWT authentication. Deletes a document.
 
 ##### Example Request
 
 ```bash
-curl -X DELETE "http://localhost:4002/api/v1/apps/app-123/drive/documents/doc-789" \
+curl -X DELETE "http://localhost:3002/api/v1/apps/app-123/drive/documents/doc-789" \
   -H "Content-Type: application/json"
 ```
 
@@ -529,7 +464,10 @@ curl -X DELETE "http://localhost:4002/api/v1/apps/app-123/drive/documents/doc-78
 ```
 GET /api/v1/apps/{id}/drive/document-stats
 ```
-Retrieves document statistics for a specific application.
+Requires JWT authentication. Retrieves document statistics for a specific application.
+
+- Merchant users can only view stats for apps they own.
+- Admin users can view stats for any app.
 
 **Response:**
 - `totalDocuments`: Total number of documents
@@ -541,7 +479,7 @@ Retrieves document statistics for a specific application.
 ##### Example Request
 
 ```bash
-curl -X GET "http://localhost:4002/api/v1/apps/app-123/drive/document-stats" \
+curl -X GET "http://localhost:3002/api/v1/apps/app-123/drive/document-stats" \
   -H "Content-Type: application/json"
 ```
 
@@ -577,6 +515,15 @@ Adds a product key to an application.
 GET /api/v1/apps/{id}/product-keys
 ```
 Retrieves all product keys associated with an application.
+
+#### Get App Wallets
+```
+GET /api/v1/apps/{id}/wallets
+```
+Requires JWT authentication. Retrieves merchant wallets for the specified app (`TREASURY`, `OPERATION`, `KYC`).
+
+- Merchant users can only view wallets for apps they own.
+- Admin users can view wallets for any app.
 
 ### Special Endpoints (Require API Key Authentication)
 
@@ -735,15 +682,9 @@ Registers a callback for user application status or wallet events.
 - `alias`: Application alias (2-50 characters)
 - `description`: Application description (10-1000 characters)
 - `merchantId`: ID of the merchant who owns the application
-- `subdomain`: Unique subdomain assigned to the application (auto-generated from name or custom)
-- `subdomainUrl`: Full URL for accessing the app via subdomain (e.g., `https://my-app.springtd.com`) - included in API responses
-- `status`: Current status (draft, submitted, approved, rejected, incomplete)
+- `status`: App status (`active` or `suspended`); default `active`. Merchants can suspend an app.
 - `createdAt`: Creation timestamp (auto-generated)
 - `updatedAt`: Last update timestamp (auto-generated)
-- `submittedAt`: Submission timestamp (optional)
-- `approvedAt`: Approval timestamp (optional)
-- `rejectedAt`: Rejection timestamp (optional)
-- `rejectionReason`: Reason for rejection (optional)
 - `productKeys`: Array of product keys associated with this application (optional)
 
 ### Transaction
@@ -779,59 +720,23 @@ Example workflow:
 3. Products will be associated with the application through the `appId` field
 4. Product keys can be added to applications to track which products are associated with them
 
-## Subdomain System
-
-Each application created through this service automatically receives a unique subdomain that can be used to access the app, similar to how Shopify assigns subdomains to shops.
-
-### How Subdomains Work
-
-1. **Automatic Generation**: When an app is created without specifying a custom subdomain, one is automatically generated from the app name:
-   - "My Awesome App" → `my-awesome-app.springtd.com`
-   - "E-Commerce Store" → `e-commerce-store.springtd.com`
-
-2. **Custom Subdomains**: You can provide a custom subdomain in the create request:
-   ```json
-   {
-     "name": "My App",
-     "subdomain": "my-custom-name",
-     ...
-   }
-   ```
-   The subdomain will be validated for format and uniqueness.
-
-3. **Uniqueness**: All subdomains must be unique. If a generated subdomain already exists, a numeric suffix is automatically appended:
-   - `my-app` (if taken)
-   - `my-app-2` (if `my-app` is taken)
-   - `my-app-3` (if both are taken)
-
-4. **Subdomain Rules**:
-   - Must be 3-63 characters long
-   - Can only contain lowercase letters, numbers, and hyphens
-   - Must start and end with a letter or number
-   - Cannot contain consecutive hyphens
-
-5. **Accessing Apps**: Apps can be accessed via their subdomain URL:
-   - `https://my-app.springtd.com`
-   - The full URL is included in API responses as `subdomainUrl`
-
-### Subdomain Lookup
-
-You can retrieve an app by its subdomain using:
-```
-GET /api/v1/apps/subdomain/{subdomain}
-```
-
-This is useful for routing middleware that needs to resolve which app a request is for based on the subdomain in the HTTP Host header.
-
 ## Integration with Wallet Microservice
 
-The Create App Microservice automatically creates a user wallet for each application through integration with the Wallet Microservice. When an application is created, a user wallet is automatically created for the merchant (as a user of their own app).
+The Create App Microservice automatically creates merchant wallets for each application through integration with the Wallet Microservice. When an application is created, it provisions app-scoped merchant wallets for:
+- `TREASURY`
+- `OPERATION`
+- `KYC`
 
 This integration ensures that each application has the necessary financial infrastructure from the moment of creation.
 
 ## Authentication
 
-Standard endpoints that modify data (like creating apps) now require JWT authentication. The merchant ID is extracted from the authenticated user context rather than being passed in the request body.
+Standard app endpoints now require JWT authentication (including read endpoints listed above). The merchant ID is extracted from the authenticated user context rather than being passed in the request body.
+
+Merchant visibility enforcement:
+- Merchants can only view apps where `app.merchantId` matches their authenticated merchant identity.
+- Merchants cannot request another merchant's app list via `GET /api/v1/apps/merchant/{merchantId}`.
+- Admins retain cross-merchant visibility.
 
 Special endpoints require two headers for authentication:
 - `X-Special-Key`: The special API key
@@ -839,14 +744,14 @@ Special endpoints require two headers for authentication:
 
 Example:
 ```bash
-curl -X GET "http://localhost:4002/api/v1/special/apps" \
+curl -X GET "http://localhost:3002/api/v1/special/apps" \
   -H "X-Special-Key: your-special-api-key-here" \
   -H "X-Public-Key: your-public-key-here"
 ```
 
 ## Environment Variables
 
-- `PORT`: Port number for the service (default: 4002)
+- `PORT`: Port number for the service (default: 3002)
 - `NODE_ENV`: Environment (development, production, etc.)
 - `SERVICE_AUTH_URL`: URL for the Service Authentication Microservice
 - `PRODUCT_SERVICE_URL`: URL for the Product Microservice
@@ -854,7 +759,6 @@ curl -X GET "http://localhost:4002/api/v1/special/apps" \
 - `SPECIAL_API_KEY`: Special API key for authenticating special endpoints
 - `PUBLIC_KEY`: Public key for authenticating special endpoints
 - `JWT_SECRET`: Secret key for JWT token verification
-- `SUBDOMAIN_BASE_DOMAIN`: Base domain for subdomains (default: `springtd.com`). All app subdomains will be created as `{subdomain}.{SUBDOMAIN_BASE_DOMAIN}`
 
 ## Installation
 
@@ -877,371 +781,3 @@ For development:
 ```bash
 npm run dev
 ```
-
-## App Configuration Management
-
-The Create App Microservice includes comprehensive app configuration management, allowing merchants to customize their app's appearance, branding, onboarding flow, support options, and policies. Each app can have multiple configuration versions with version tracking and publishing capabilities.
-
-### Configuration Features
-
-- **Multiple Configurations**: Each app can have multiple configuration versions (active and inactive)
-- **Version Tracking**: Automatic version reference generation (e.g., "App_update_1aa344")
-- **Update Variance Tracking**: Automatically tracks which sections were modified (Splash, Profile, DNS, Terms, etc.)
-- **Publishing System**: Manage published and unpublished configurations with status tracking
-- **Configuration Templates**: Save and reuse configuration templates
-- **Granular Control**: Configure colors, fonts, images, and content for different app sections
-
-### Configuration Sections
-
-#### 1. Asset Configuration
-- Logo upload
-- Splash image upload
-- Site description
-
-#### 2. Splash Screen Configuration
-- Primary and secondary colors
-- Background colors
-- Logo and image uploads
-
-#### 3. Onboarding Configuration
-- Three splash screens (splash1, splash2, splash3)
-- Font family selection
-- Title and subtitle text
-- Text colors (primary, secondary)
-- Background colors (primary, secondary)
-- Images for each splash screen
-
-#### 4. App Profile Configuration
-- Text colors (primary, secondary, aux)
-- Element colors (primary, secondary)
-- Menu colors (primary, secondary, aux)
-- Auxiliary element colors (primary, secondary)
-- Background colors (primary, secondary)
-
-#### 5. Policy/Terms Configuration
-- Policy section with title and rich text content
-- Terms section with title and rich text content
-- Legacy support for privacy policy, terms and conditions, and indemnity URLs
-
-#### 6. Support Configuration
-- Contact email
-- Contact phone
-- Website URL
-- LinkedIn page URL
-- Social media handles
-- Privacy policy link
-- Terms and conditions link
-- Support components (custom links, buttons, text)
-- Social media links (Instagram, LinkedIn, Twitter, Facebook)
-
-### Configuration Endpoints
-
-#### Get Active Configuration
-```
-GET /api/v1/apps/:id/configuration
-```
-Returns the currently active configuration for the app.
-
-**Example Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "config-123",
-    "appId": "app-456",
-    "versionReference": "App_update_1aa344",
-    "publishing": {
-      "isPublished": true,
-      "publishedAt": "2025-04-12T10:30:00Z"
-    },
-    "appElements": { ... },
-    "appProfile": { ... },
-    "onboarding": { ... },
-    "support": { ... },
-    "policy": { ... },
-    "isActive": true,
-    "updateVariance": ["Splash", "Profile", "DNS", "Terms"],
-    "createdAt": "2025-04-12T10:00:00Z",
-    "updatedAt": "2025-04-12T10:30:00Z"
-  }
-}
-```
-
-#### Get All Configurations
-```
-GET /api/v1/apps/:id/configuration/all
-```
-Returns all configurations (active and inactive) for the app.
-
-#### Get Configurations for Publish UI
-```
-GET /api/v1/apps/:id/configuration/publish
-```
-Returns configurations formatted for the publish UI, separated into unpublished and previous (published) versions.
-
-**Example Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "unpublished": [
-      {
-        "id": "config-123",
-        "versionReference": "App_update_1aa344",
-        "updateVariance": ["Splash", "Profile", "DNS", "Terms"],
-        "publishing": { "isPublished": false },
-        "isActive": false,
-        "updatedAt": "2025-04-12T10:30:00Z"
-      }
-    ],
-    "previous": [
-      {
-        "id": "config-456",
-        "versionReference": "App_update_abc123",
-        "updateVariance": ["Splash", "Profile"],
-        "publishing": {
-          "isPublished": true,
-          "publishedAt": "2025-04-11T15:20:00Z"
-        },
-        "isActive": true,  // "Current" if true, "Archived" if false
-        "updatedAt": "2025-04-11T15:20:00Z"
-      }
-    ]
-  }
-}
-```
-
-#### Update Configuration
-```
-PUT /api/v1/apps/:id/configuration
-```
-Updates the active configuration. Automatically tracks update variance based on which sections are modified.
-
-**Request Body:**
-```json
-{
-  "publishing": { "isPublished": true },
-  "appElements": { ... },
-  "appProfile": { ... },
-  "onboarding": { ... },
-  "support": { ... },
-  "policy": { ... }
-}
-```
-
-#### Create New Configuration
-```
-POST /api/v1/apps/:id/configuration/create
-```
-Creates a new configuration version. Can be created without auto-deactivating the current active configuration.
-
-**Request Body:**
-```json
-{
-  "configuration": {
-    "publishing": { "isPublished": false },
-    "appElements": { ... }
-  },
-  "options": {
-    "skipAutoDeactivate": true,  // Optional: don't deactivate current active config
-    "isActive": false            // Optional: create as inactive
-  }
-}
-```
-
-#### Activate Configuration
-```
-PUT /api/v1/apps/:id/configuration/:configurationId/activate
-```
-Activates a specific configuration and deactivates all others for the app.
-
-#### Update Publishing Status
-```
-PUT /api/v1/apps/:id/configuration/publishing
-```
-Updates the publishing status. Automatically sets `publishedAt` timestamp when publishing.
-
-**Request Body:**
-```json
-{
-  "isPublished": true
-}
-```
-
-### Section-Specific Update Endpoints
-
-#### Update App Elements
-```
-PUT /api/v1/apps/:id/configuration/app-elements
-```
-Updates app elements (logo, splash, buttons, header, body text, form colors).
-
-#### Update App Profile
-```
-PUT /api/v1/apps/:id/configuration/app-profile
-```
-Updates app profile colors (text, element, menu, auxiliary, background).
-
-#### Update Onboarding
-```
-PUT /api/v1/apps/:id/configuration/onboarding
-```
-Updates onboarding configuration (splash screens, fonts, colors, text).
-
-#### Update Support
-```
-PUT /api/v1/apps/:id/configuration/support
-```
-Updates support configuration (contact info, social media, links).
-
-#### Update Policy
-```
-PUT /api/v1/apps/:id/configuration/policy
-```
-Updates policy configuration (policy and terms sections with titles and content).
-
-### Configuration Templates
-
-#### Create Template
-```
-POST /api/v1/apps/:id/configuration/templates
-```
-Creates a configuration template from the current configuration.
-
-**Request Body:**
-```json
-{
-  "name": "My Template",
-  "description": "Template description",
-  "isDefault": false
-}
-```
-
-#### Get All Templates
-```
-GET /api/v1/apps/:id/configuration/templates
-```
-Returns all templates for the app.
-
-#### Get Template
-```
-GET /api/v1/apps/:id/configuration/templates/:templateId
-```
-Returns a specific template.
-
-#### Apply Template
-```
-POST /api/v1/apps/:id/configuration/templates/:templateId/apply
-```
-Applies a template to the app's active configuration.
-
-#### Update Template
-```
-PUT /api/v1/apps/:id/configuration/templates/:templateId
-```
-Updates a template.
-
-#### Delete Template
-```
-DELETE /api/v1/apps/:id/configuration/templates/:templateId
-```
-Deletes a template.
-
-#### Set Default Template
-```
-PUT /api/v1/apps/:id/configuration/templates/:templateId/set-default
-```
-Sets a template as the default for the app.
-
-### Support Component Management
-
-#### Add Support Component
-```
-POST /api/v1/apps/:id/configuration/support/components
-```
-Adds a support component (link, button, or text).
-
-**Request Body:**
-```json
-{
-  "name": "Help Center",
-  "type": "link",
-  "content": "https://help.example.com",
-  "color": "#007bff",
-  "order": 1
-}
-```
-
-#### Update Support Component
-```
-PUT /api/v1/apps/:id/configuration/support/components/:componentId
-```
-Updates a support component.
-
-#### Delete Support Component
-```
-DELETE /api/v1/apps/:id/configuration/support/components/:componentId
-```
-Deletes a support component.
-
-#### Reorder Support Components
-```
-PUT /api/v1/apps/:id/configuration/support/components/reorder
-```
-Reorders support components.
-
-**Request Body:**
-```json
-{
-  "componentIds": ["comp-1", "comp-2", "comp-3"]
-}
-```
-
-### Configuration Data Model
-
-#### AppConfiguration
-- `id`: Unique identifier (auto-generated)
-- `appId`: ID of the app this configuration belongs to
-- `versionReference`: Auto-generated version reference (e.g., "App_update_1aa344")
-- `publishing`: Publishing configuration
-  - `isPublished`: Whether the configuration is published
-  - `publishedAt`: Timestamp when published (auto-set on publish)
-- `appElements`: App elements configuration (logo, splash, buttons, colors)
-- `appProfile`: App profile configuration (text, element, menu, background colors)
-- `onboarding`: Onboarding configuration (splash screens, fonts, colors)
-- `support`: Support configuration (contact info, social media, components)
-- `policy`: Policy configuration (policy and terms sections)
-- `isActive`: Whether this is the active configuration
-- `updateVariance`: Array of sections that were modified (auto-calculated)
-- `createdAt`: Creation timestamp
-- `updatedAt`: Last update timestamp
-
-### Version Management
-
-The configuration system supports version management:
-
-1. **Multiple Versions**: Each app can have multiple configuration versions
-2. **Active Configuration**: Only one configuration can be active at a time
-3. **Version References**: Each configuration gets an auto-generated version reference
-4. **Update Tracking**: System automatically tracks which sections were modified
-5. **Publishing**: Configurations can be published or kept as drafts
-6. **History**: Previous published versions are maintained with status (Current/Archived)
-
-### Publishing Workflow
-
-1. **Create/Update Configuration**: Make changes to configuration sections
-2. **Review**: Configuration is created as unpublished
-3. **Publish**: Set `isPublished: true` to publish the configuration
-4. **Activate**: Activate a published configuration to make it live
-5. **Version History**: Previous versions are archived and can be viewed
-
-### Default Configuration
-
-When an app is created, a default configuration is automatically generated with:
-- Default color schemes (blue primary, gray secondary)
-- Default fonts (Arial)
-- Empty support components
-- Empty policy/terms sections
-- Unpublished status
-
-All sections can be customized through the configuration endpoints.

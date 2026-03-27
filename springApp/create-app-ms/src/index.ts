@@ -1,12 +1,11 @@
 import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import mongoose from 'mongoose';
-import swaggerUi from 'swagger-ui-express';
 import { config } from './config/environment';
-import swaggerSpec from './config/swagger';
 import { corsMiddleware } from './middleware/cors';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './config/swagger';
 import { appRoutes } from './routes/appRoutes';
 import { specialRoutes } from './routes/specialRoutes';
 
@@ -17,16 +16,9 @@ app.use(helmet());
 app.use(corsMiddleware);
 app.use(morgan('combined'));
 
-// Body parsing middleware (limit from config)
-app.use(express.json({ limit: config.requestBodyLimit }));
-app.use(express.urlencoded({ extended: true, limit: config.requestBodyLimit }));
-
-// Swagger / OpenAPI documentation
-app.get('/api-docs.json', (_req, res) => {
-  res.setHeader('Content-Type', 'application/json');
-  res.json(swaggerSpec);
-});
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+// Body parsing middleware
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
 
 // Root endpoint
 app.get('/', (_req, res) => {
@@ -37,8 +29,6 @@ app.get('/', (_req, res) => {
     status: 'running',
     endpoints: {
       health: '/health',
-      apiDocs: '/api-docs',
-      openApiSpec: '/api-docs.json',
       apps: '/api/v1/apps',
       special: '/api/v1/special'
     },
@@ -52,10 +42,13 @@ app.get('/health', (_req, res) => {
     success: true,
     message: 'Create App Microservice is running',
     timestamp: new Date().toISOString(),
-    version: '1.0.0',
-    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+    version: '1.0.0'
   });
 });
+
+// OpenAPI / Swagger documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get('/api-docs.json', (_req, res) => res.json(swaggerSpec));
 
 // API routes
 app.use('/api/v1/apps', appRoutes);
@@ -65,32 +58,33 @@ app.use('/api/v1/special', specialRoutes);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-// Connect to MongoDB before starting server
-mongoose.connect(config.mongoUri)
-  .then(() => {
-    console.log('Connected to MongoDB');
-  })
-  .catch((err) => {
-    console.error('MongoDB connection error:', err);
-    process.exit(1);
-  });
+// Declare server variable in outer scope
+let server: any;
 
-const server = app.listen(config.port, '0.0.0.0', () => {
-  console.log(`Create App Microservice running on port ${config.port}`);
+import { connectToDatabase } from './config/database';
+
+// Connect to database before starting
+connectToDatabase().then(() => {
+  server = app.listen(config.port, '0.0.0.0', () => {
+    console.log(`Create App Microservice running on port ${config.port}`);
+  });
 });
 
 // Graceful shutdown
-function shutdown(signal: string) {
-  console.log(`${signal} received, shutting down gracefully...`);
+process.on('SIGINT', () => {
+  console.log('Shutting down gracefully...');
   server.close(() => {
-    mongoose.connection.close().then(() => {
-      console.log('Server and database closed');
-      process.exit(0);
-    });
+    console.log('Server closed');
+    process.exit(0);
   });
-}
+});
 
-process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGTERM', () => {
+  console.log('Shutting down gracefully...');
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+});
 
 export default app;

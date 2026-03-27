@@ -1,24 +1,20 @@
 import { DriveDocument, DriveDocumentQueryParams } from '../types/app';
 import { ApiError } from '../middleware/errorHandler';
+import { DriveMongoModel } from '../models/drive.mongo';
 
 export class DriveService {
-  // In-memory storage for drive documents (in a real implementation, this would be a database)
-  private static documents: DriveDocument[] = [];
-
   /**
    * Upload a document to the drive
    * @param documentData The document data
    * @returns The created document
    */
   static async uploadDocument(documentData: Omit<DriveDocument, 'id' | 'uploadedAt'>): Promise<DriveDocument> {
-    const newDocument: DriveDocument = {
-      id: this.generateId(),
+    const newDocument = await DriveMongoModel.create({
       ...documentData,
       uploadedAt: new Date().toISOString()
-    };
+    });
 
-    this.documents.push(newDocument);
-    return newDocument;
+    return newDocument.toJSON() as unknown as DriveDocument;
   }
 
   /**
@@ -35,43 +31,44 @@ export class DriveService {
       throw new ApiError(400, 'App ID is required');
     }
 
-    // Filter documents by appId
-    let filteredDocuments = this.documents.filter(d => d.appId === appId);
+    const filter: any = { appId };
 
     // Apply filters
     if (queryParams.userId) {
-      filteredDocuments = filteredDocuments.filter(d => d.userId === queryParams.userId);
+      filter.userId = queryParams.userId;
     }
 
     if (queryParams.fileType) {
-      filteredDocuments = filteredDocuments.filter(d => d.fileType === queryParams.fileType);
+      filter.fileType = queryParams.fileType;
     }
 
     if (queryParams.status) {
-      filteredDocuments = filteredDocuments.filter(d => d.status === queryParams.status);
+      filter.status = queryParams.status;
     }
 
-    if (queryParams.startDate) {
-      const startDate = new Date(queryParams.startDate);
-      filteredDocuments = filteredDocuments.filter(d => new Date(d.uploadedAt) >= startDate);
+    if (queryParams.startDate || queryParams.endDate) {
+      filter.uploadedAt = {};
+      if (queryParams.startDate) {
+        filter.uploadedAt.$gte = new Date(queryParams.startDate).toISOString();
+      }
+      if (queryParams.endDate) {
+        filter.uploadedAt.$lte = new Date(queryParams.endDate).toISOString();
+      }
     }
 
-    if (queryParams.endDate) {
-      const endDate = new Date(queryParams.endDate);
-      filteredDocuments = filteredDocuments.filter(d => new Date(d.uploadedAt) <= endDate);
-    }
+    let query = DriveMongoModel.find(filter);
+
+    // Apply sorting (newest first)
+    query = query.sort({ uploadedAt: -1 });
 
     // Apply pagination
     if (queryParams.page && queryParams.limit) {
-      const startIndex = (queryParams.page - 1) * queryParams.limit;
-      const endIndex = startIndex + queryParams.limit;
-      filteredDocuments = filteredDocuments.slice(startIndex, endIndex);
+      const skip = (queryParams.page - 1) * queryParams.limit;
+      query = query.skip(skip).limit(queryParams.limit);
     }
 
-    // Sort by uploadedAt descending (newest first)
-    filteredDocuments.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
-
-    return filteredDocuments;
+    const documents = await query.exec();
+    return documents.map(d => d.toJSON() as unknown as DriveDocument);
   }
 
   /**
@@ -84,8 +81,8 @@ export class DriveService {
       throw new ApiError(400, 'Document ID is required');
     }
 
-    const document = this.documents.find(d => d.id === documentId);
-    return document || null;
+    const document = await DriveMongoModel.findById(documentId);
+    return document ? (document.toJSON() as unknown as DriveDocument) : null;
   }
 
   /**
@@ -99,20 +96,13 @@ export class DriveService {
       throw new ApiError(400, 'Document ID is required');
     }
 
-    const documentIndex = this.documents.findIndex(d => d.id === documentId);
-    
-    if (documentIndex === -1) {
-      return null;
-    }
+    const updatedDocument = await DriveMongoModel.findByIdAndUpdate(
+      documentId,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    );
 
-    const updatedDocument = {
-      ...this.documents[documentIndex],
-      ...updateData,
-      uploadedAt: this.documents[documentIndex].uploadedAt // Keep original upload time
-    };
-
-    this.documents[documentIndex] = updatedDocument as DriveDocument;
-    return updatedDocument as DriveDocument;
+    return updatedDocument ? (updatedDocument.toJSON() as unknown as DriveDocument) : null;
   }
 
   /**
@@ -125,14 +115,8 @@ export class DriveService {
       throw new ApiError(400, 'Document ID is required');
     }
 
-    const documentIndex = this.documents.findIndex(d => d.id === documentId);
-    
-    if (documentIndex === -1) {
-      return false;
-    }
-
-    this.documents.splice(documentIndex, 1);
-    return true;
+    const result = await DriveMongoModel.findByIdAndDelete(documentId);
+    return !!result;
   }
 
   /**
@@ -145,33 +129,53 @@ export class DriveService {
       throw new ApiError(400, 'App ID is required');
     }
 
-    const appDocuments = this.documents.filter(d => d.appId === appId);
-    
-    const totalDocuments = appDocuments.length;
-    const pendingDocuments = appDocuments.filter(d => d.status === 'pending').length;
-    const verifiedDocuments = appDocuments.filter(d => d.status === 'verified').length;
-    const rejectedDocuments = appDocuments.filter(d => d.status === 'rejected').length;
+    // Use aggregation to mimic the logic in mock service
+    const stats = await DriveMongoModel.aggregate([
+      { $match: { appId } },
+      {
+        $group: {
+          _id: null,
+          totalDocuments: { $sum: 1 },
+          pendingDocuments: {
+            $sum: { $cond: [{ $eq: ["$status", "pending"] }, 1, 0] }
+          },
+          verifiedDocuments: {
+            $sum: { $cond: [{ $eq: ["$status", "verified"] }, 1, 0] }
+          },
+          rejectedDocuments: {
+            $sum: { $cond: [{ $eq: ["$status", "rejected"] }, 1, 0] }
+          },
+          fileTypeCounts: {
+            $push: "$fileType"
+          }
+        }
+      }
+    ]);
 
-    // Group by file type
+    if (stats.length === 0) {
+      return {
+        totalDocuments: 0,
+        pendingDocuments: 0,
+        verifiedDocuments: 0,
+        rejectedDocuments: 0,
+        fileTypeCounts: {}
+      };
+    }
+
+    const result = stats[0];
+
+    // Process fileTypeCounts locally from the array of types
     const fileTypeCounts: Record<string, number> = {};
-    appDocuments.forEach(d => {
-      fileTypeCounts[d.fileType] = (fileTypeCounts[d.fileType] || 0) + 1;
+    (result.fileTypeCounts as string[]).forEach(type => {
+      fileTypeCounts[type] = (fileTypeCounts[type] || 0) + 1;
     });
 
     return {
-      totalDocuments,
-      pendingDocuments,
-      verifiedDocuments,
-      rejectedDocuments,
+      totalDocuments: result.totalDocuments,
+      pendingDocuments: result.pendingDocuments,
+      verifiedDocuments: result.verifiedDocuments,
+      rejectedDocuments: result.rejectedDocuments,
       fileTypeCounts
     };
-  }
-
-  /**
-   * Generate a random ID (for testing purposes)
-   * @returns A random ID string
-   */
-  private static generateId(): string {
-    return Math.random().toString(36).substr(2, 9);
   }
 }

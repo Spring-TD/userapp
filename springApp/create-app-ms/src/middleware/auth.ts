@@ -82,7 +82,9 @@ export const authorize = (allowedRoles: string[]) => {
         return;
       }
 
-      if (!allowedRoles.includes(req.user.userType)) {
+      const userRole = (req.user.userType || '').toLowerCase();
+      const allowed = allowedRoles.map((r) => r.toLowerCase());
+      if (!allowed.includes(userRole)) {
         res.status(403).json({
           success: false,
           error: 'Insufficient permissions',

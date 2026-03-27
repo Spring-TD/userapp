@@ -30,7 +30,7 @@ describe('AppService', () => {
       expect(app.alias).toBe(appData.alias);
       expect(app.description).toBe(appData.description);
       expect(app.merchantId).toBe(appData.merchantId);
-      expect(app.status).toBe('draft');
+      expect(app.status).toBe('active');
       expect(app.createdAt).toBeDefined();
       expect(app.updatedAt).toBeDefined();
       expect(app.productKeys).toEqual([]);

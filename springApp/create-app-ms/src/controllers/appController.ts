@@ -1,11 +1,10 @@
 import { Request, Response } from 'express';
 import { AppService } from '../services/appService';
-import { CreateAppRequest, UpdateAppRequest, TransactionQueryParams, DriveDocumentQueryParams } from '../types/app';
+import { App, CreateAppRequest, UpdateAppRequest, TransactionQueryParams, DriveDocumentQueryParams } from '../types/app';
 import { ApiError } from '../middleware/errorHandler';
 import { WalletService } from '../services/walletService';
 import { TransactionService } from '../services/transactionService';
 import { DriveService } from '../services/driveService';
-import { config } from '../config/environment';
 
 // Extend Request interface to include user data
 interface AuthenticatedRequest extends Request {
@@ -28,6 +27,35 @@ export class AppController {
 
   constructor(appService: AppService) {
     this.appService = appService;
+  }
+
+  private isMerchantUser(req: Request): boolean {
+    const userType = (req.user?.userType || '').toLowerCase();
+    return userType === 'merchant';
+  }
+
+  private getRequestMerchantId(req: Request): string | undefined {
+    return req.user?.userMerchantId || req.user?.userId;
+  }
+
+  private assertMerchantOwnsApp(req: Request, app: App): void {
+    if (!this.isMerchantUser(req)) {
+      return;
+    }
+    const merchantId = this.getRequestMerchantId(req);
+    if (!merchantId || app.merchantId !== merchantId) {
+      throw new ApiError(403, 'You can only view your own apps');
+    }
+  }
+
+  private assertMerchantOwnsMerchantPath(req: Request, merchantIdFromPath: string): void {
+    if (!this.isMerchantUser(req)) {
+      return;
+    }
+    const merchantId = this.getRequestMerchantId(req);
+    if (!merchantId || merchantId !== merchantIdFromPath) {
+      throw new ApiError(403, 'You can only view your own apps');
+    }
   }
 
   createApp = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -55,44 +83,21 @@ export class AppController {
       };
 
       const app = await this.appService.createApp(appDataWithMerchantId);
-      
-      // Automatically create user wallets for the app
-      // We'll create a user wallet for the merchant (as a user of their own app)
-      const walletResult = await WalletService.createUserWallet(
-        merchantId, // userId (merchant is also a user of their own app)
-        app.id, // merchantId (the app ID)
-        `User Wallet for App ${app.id}`
-      );
-      
-      // Log wallet creation result (in a real implementation, you might want to store this information)
-      if (walletResult.success) {
-        console.log(`User wallet created successfully for app ${app.id}`);
-      } else {
-        console.error(`Failed to create user wallet for app ${app.id}:`, walletResult.error);
-        // Note: We don't throw an error here because the app creation was successful
-        // The wallet creation failure should be handled separately
+      const authHeader = req.headers.authorization;
+
+      // Create merchant internal wallets for this app (TREASURY, OPERATION, KYC)
+      const merchantWalletsResult = await WalletService.createAllMerchantWallets(app.id, authHeader);
+      // App creation succeeds even if wallet provisioning fails; handle retries separately.
+      if (!merchantWalletsResult.success) {
+        console.error(`Failed to create merchant wallets for app ${app.id}:`, merchantWalletsResult.error);
       }
-      
-      // Build subdomain URL
-      const subdomainUrl = app.subdomain ? `https://${app.subdomain}.${config.baseDomain}` : undefined;
-      
-      // Build custom domain URL (if active and verified)
-      const customDomainUrl = app.customDomainActive && app.customDomainVerified && app.customDomain
-        ? `https://${app.customDomain}`
-        : undefined;
       
       res.status(201).json({
         success: true,
         message: 'App created successfully',
         data: {
-          app: {
-            ...app,
-            subdomainUrl,
-            customDomainUrl,
-            // Include DNS configuration if custom domain is set but not verified
-            dnsConfiguration: app.customDomain && !app.customDomainVerified ? app.dnsConfiguration : undefined
-          },
-          wallets: walletResult
+          app,
+          merchantWallets: merchantWalletsResult
         }
       });
     } catch (error) {
@@ -125,24 +130,11 @@ export class AppController {
       if (!app) {
         throw new ApiError(404, 'App not found');
       }
-
-      // Build subdomain URL
-      const subdomainUrl = app.subdomain ? `https://${app.subdomain}.${config.baseDomain}` : undefined;
-
-      // Build custom domain URL (if active and verified)
-      const customDomainUrl = app.customDomainActive && app.customDomainVerified && app.customDomain
-        ? `https://${app.customDomain}`
-        : undefined;
+      this.assertMerchantOwnsApp(req, app);
 
       res.json({
         success: true,
-        data: {
-          ...app,
-          subdomainUrl,
-          customDomainUrl,
-          // Include DNS configuration if custom domain is set but not verified
-          dnsConfiguration: app.customDomain && !app.customDomainVerified ? app.dnsConfiguration : undefined
-        }
+        data: app
       });
     } catch (error) {
       if (error instanceof ApiError) {
@@ -168,6 +160,7 @@ export class AppController {
       if (!merchantId) {
         throw new ApiError(400, 'Merchant ID is required');
       }
+      this.assertMerchantOwnsMerchantPath(req, merchantId);
 
       const apps = await this.appService.getAppsByMerchantId(merchantId);
 
@@ -265,24 +258,36 @@ export class AppController {
     }
   };
 
-  submitApp = async (req: Request, res: Response): Promise<void> => {
+  updateAppStatus = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      
+      const { status } = req.body;
+
+      if (!req.user) {
+        throw new ApiError(401, 'Authentication required');
+      }
       if (!id) {
         throw new ApiError(400, 'App ID is required');
       }
+      if (!status || (status !== 'active' && status !== 'suspended')) {
+        throw new ApiError(400, 'Status must be "active" or "suspended"');
+      }
 
-      const app = await this.appService.submitApp(id);
-      
+      const app = await this.appService.getAppById(id);
       if (!app) {
         throw new ApiError(404, 'App not found');
       }
+      const userType = (req.user.userType || '').toLowerCase();
+      const merchantId = req.user.userMerchantId || req.user.userId;
+      if (userType === 'merchant' && app.merchantId !== merchantId) {
+        throw new ApiError(403, 'You can only update status for your own apps');
+      }
 
+      const updatedApp = await this.appService.updateAppStatus(id, status);
       res.json({
         success: true,
-        message: 'App submitted successfully',
-        data: app
+        message: `App ${status} successfully`,
+        data: updatedApp
       });
     } catch (error) {
       if (error instanceof ApiError) {
@@ -292,85 +297,7 @@ export class AppController {
         });
         return;
       }
-      
-      console.error('Error in submitApp controller:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Internal server error'
-      });
-    }
-  };
-
-  approveApp = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { id } = req.params;
-      
-      if (!id) {
-        throw new ApiError(400, 'App ID is required');
-      }
-
-      const app = await this.appService.approveApp(id);
-      
-      if (!app) {
-        throw new ApiError(404, 'App not found');
-      }
-
-      res.json({
-        success: true,
-        message: 'App approved successfully',
-        data: app
-      });
-    } catch (error) {
-      if (error instanceof ApiError) {
-        res.status(error.statusCode).json({
-          success: false,
-          error: error.message
-        });
-        return;
-      }
-      
-      console.error('Error in approveApp controller:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Internal server error'
-      });
-    }
-  };
-
-  rejectApp = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { id } = req.params;
-      const { rejectionReason } = req.body;
-      
-      if (!id) {
-        throw new ApiError(400, 'App ID is required');
-      }
-
-      if (!rejectionReason) {
-        throw new ApiError(400, 'Rejection reason is required');
-      }
-
-      const app = await this.appService.rejectApp(id, rejectionReason);
-      
-      if (!app) {
-        throw new ApiError(404, 'App not found');
-      }
-
-      res.json({
-        success: true,
-        message: 'App rejected successfully',
-        data: app
-      });
-    } catch (error) {
-      if (error instanceof ApiError) {
-        res.status(error.statusCode).json({
-          success: false,
-          error: error.message
-        });
-        return;
-      }
-      
-      console.error('Error in rejectApp controller:', error);
+      console.error('Error in updateAppStatus controller:', error);
       res.status(500).json({
         success: false,
         error: 'Internal server error'
@@ -450,28 +377,32 @@ export class AppController {
     }
   };
 
-  getAppBySubdomain = async (req: Request, res: Response): Promise<void> => {
+  getAppWallets = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { subdomain } = req.params;
-      
-      if (!subdomain) {
-        throw new ApiError(400, 'Subdomain is required');
+      const { id } = req.params;
+      const authHeader = req.headers.authorization;
+
+      if (!id) {
+        throw new ApiError(400, 'App ID is required');
       }
 
-      const app = await this.appService.getAppBySubdomain(subdomain);
-      
+      const app = await this.appService.getAppById(id);
       if (!app) {
         throw new ApiError(404, 'App not found');
       }
+      this.assertMerchantOwnsApp(req, app);
 
-      // Build subdomain URL
-      const subdomainUrl = app.subdomain ? `https://${app.subdomain}.${config.baseDomain}` : undefined;
+      const merchantWallets = await WalletService.getAllMerchantWallets(app.merchantId, app.id, authHeader);
+      if (!merchantWallets.success) {
+        throw new ApiError(400, merchantWallets.error || 'Failed to fetch app wallets');
+      }
 
       res.json({
         success: true,
         data: {
-          ...app,
-          subdomainUrl
+          appId: app.id,
+          merchantId: app.merchantId,
+          wallets: merchantWallets.data?.wallets || []
         }
       });
     } catch (error) {
@@ -482,8 +413,8 @@ export class AppController {
         });
         return;
       }
-      
-      console.error('Error in getAppBySubdomain controller:', error);
+
+      console.error('Error in getAppWallets controller:', error);
       res.status(500).json({
         success: false,
         error: 'Internal server error'
@@ -493,7 +424,11 @@ export class AppController {
 
   getAllApps = async (req: Request, res: Response): Promise<void> => {
     try {
-      const apps = await this.appService.getAllApps();
+      let apps = await this.appService.getAllApps();
+      if (this.isMerchantUser(req)) {
+        const merchantId = this.getRequestMerchantId(req);
+        apps = apps.filter((app) => app.merchantId === merchantId);
+      }
 
       res.json({
         success: true,
@@ -538,6 +473,7 @@ export class AppController {
       if (!app) {
         throw new ApiError(404, 'App not found');
       }
+      this.assertMerchantOwnsApp(req, app);
 
       // Prepare query parameters
       const queryParams: TransactionQueryParams = {};
@@ -584,6 +520,7 @@ export class AppController {
       if (!app) {
         throw new ApiError(404, 'App not found');
       }
+      this.assertMerchantOwnsApp(req, app);
 
       const stats = await TransactionService.getTransactionStats(id);
 
@@ -676,6 +613,7 @@ export class AppController {
       if (!app) {
         throw new ApiError(404, 'App not found');
       }
+      this.assertMerchantOwnsApp(req, app);
 
       // Prepare query parameters
       const queryParams: DriveDocumentQueryParams = {};
@@ -727,6 +665,7 @@ export class AppController {
       if (!app) {
         throw new ApiError(404, 'App not found');
       }
+      this.assertMerchantOwnsApp(req, app);
 
       const document = await DriveService.getDocumentById(documentId);
       
@@ -881,6 +820,7 @@ export class AppController {
       if (!app) {
         throw new ApiError(404, 'App not found');
       }
+      this.assertMerchantOwnsApp(req, app);
 
       const stats = await DriveService.getDocumentStats(id);
 
@@ -967,233 +907,6 @@ export class AppController {
       }
       
       console.error('Error in bulkUpdateApps controller:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Internal server error'
-      });
-    }
-  };
-
-  // Custom Domain Management Methods
-
-  addCustomDomain = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { id } = req.params;
-      const { customDomain } = req.body;
-
-      if (!id) {
-        throw new ApiError(400, 'App ID is required');
-      }
-
-      if (!customDomain) {
-        throw new ApiError(400, 'Custom domain is required');
-      }
-
-      const app = await this.appService.updateCustomDomain(id, customDomain);
-
-      if (!app) {
-        throw new ApiError(404, 'App not found');
-      }
-
-      res.json({
-        success: true,
-        message: 'Custom domain added successfully',
-        data: {
-          app: {
-            ...app,
-            customDomainUrl: undefined, // Not active yet
-            dnsConfiguration: app.dnsConfiguration
-          }
-        }
-      });
-    } catch (error) {
-      if (error instanceof ApiError) {
-        res.status(error.statusCode).json({
-          success: false,
-          error: error.message
-        });
-        return;
-      }
-
-      console.error('Error in addCustomDomain controller:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Internal server error'
-      });
-    }
-  };
-
-  activateCustomDomain = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { id } = req.params;
-      const { active, allowUnverified } = req.body;
-
-      if (!id) {
-        throw new ApiError(400, 'App ID is required');
-      }
-
-      if (typeof active !== 'boolean') {
-        throw new ApiError(400, 'Active status (boolean) is required');
-      }
-
-      const app = await this.appService.activateCustomDomain(id, active, allowUnverified || false);
-
-      if (!app) {
-        throw new ApiError(404, 'App not found');
-      }
-
-      const customDomainUrl = app.customDomainActive && app.customDomainVerified && app.customDomain
-        ? `https://${app.customDomain}`
-        : undefined;
-
-      res.json({
-        success: true,
-        message: `Custom domain ${active ? 'activated' : 'deactivated'} successfully`,
-        data: {
-          app: {
-            ...app,
-            customDomainUrl
-          }
-        }
-      });
-    } catch (error) {
-      if (error instanceof ApiError) {
-        res.status(error.statusCode).json({
-          success: false,
-          error: error.message
-        });
-        return;
-      }
-
-      console.error('Error in activateCustomDomain controller:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Internal server error'
-      });
-    }
-  };
-
-  verifyCustomDomain = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { id } = req.params;
-      const { manualOverride } = req.body;
-
-      if (!id) {
-        throw new ApiError(400, 'App ID is required');
-      }
-
-      const verificationResult = await this.appService.verifyCustomDomain(id, manualOverride || false);
-
-      const app = await this.appService.getAppById(id);
-      if (!app) {
-        throw new ApiError(404, 'App not found');
-      }
-
-      res.json({
-        success: true,
-        message: verificationResult.verified
-          ? 'Custom domain verified successfully'
-          : 'Custom domain verification failed',
-        data: {
-          verified: verificationResult.verified,
-          errors: verificationResult.errors,
-          app: {
-            ...app,
-            customDomainUrl: app.customDomainActive && app.customDomainVerified && app.customDomain
-              ? `https://${app.customDomain}`
-              : undefined,
-            dnsConfiguration: app.customDomain && !app.customDomainVerified ? app.dnsConfiguration : undefined
-          }
-        }
-      });
-    } catch (error) {
-      if (error instanceof ApiError) {
-        res.status(error.statusCode).json({
-          success: false,
-          error: error.message
-        });
-        return;
-      }
-
-      console.error('Error in verifyCustomDomain controller:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Internal server error'
-      });
-    }
-  };
-
-  getDnsConfiguration = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { id } = req.params;
-
-      if (!id) {
-        throw new ApiError(400, 'App ID is required');
-      }
-
-      const dnsConfig = await this.appService.getDnsConfiguration(id);
-
-      if (!dnsConfig) {
-        throw new ApiError(404, 'No DNS configuration found for this app');
-      }
-
-      res.json({
-        success: true,
-        data: dnsConfig
-      });
-    } catch (error) {
-      if (error instanceof ApiError) {
-        res.status(error.statusCode).json({
-          success: false,
-          error: error.message
-        });
-        return;
-      }
-
-      console.error('Error in getDnsConfiguration controller:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Internal server error'
-      });
-    }
-  };
-
-  removeCustomDomain = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { id } = req.params;
-
-      if (!id) {
-        throw new ApiError(400, 'App ID is required');
-      }
-
-      const app = await this.appService.removeCustomDomain(id);
-
-      if (!app) {
-        throw new ApiError(404, 'App not found');
-      }
-
-      const subdomainUrl = app.subdomain ? `https://${app.subdomain}.${config.baseDomain}` : undefined;
-
-      res.json({
-        success: true,
-        message: 'Custom domain removed, using subdomain',
-        data: {
-          app: {
-            ...app,
-            subdomainUrl
-          }
-        }
-      });
-    } catch (error) {
-      if (error instanceof ApiError) {
-        res.status(error.statusCode).json({
-          success: false,
-          error: error.message
-        });
-        return;
-      }
-
-      console.error('Error in removeCustomDomain controller:', error);
       res.status(500).json({
         success: false,
         error: 'Internal server error'

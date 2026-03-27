@@ -6,38 +6,23 @@ dotenv.config();
 interface Config {
   port: number;
   nodeEnv: string;
-  mongoUri: string;
   serviceAuthUrl: string;
   productServiceUrl: string;
   walletServiceUrl: string;
   specialApiKey: string;
   publicKey: string;
   jwtSecret: string;
-  baseDomain: string;
-  serverIp: string;
-  platformDomain: string;
-  vercelApiToken?: string;
-  vercelTeamId?: string;
-  vercelDefaultProjectId?: string;
-  /** Max request body size for JSON (e.g. '10mb') */
-  requestBodyLimit: string;
+  mongoUri: string;
 }
 
 export const config: Config = {
-  port: parseInt(process.env.PORT || '4002', 10),
+  port: parseInt(process.env.PORT || '3002', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
-  mongoUri: process.env.MONGODB_URI || process.env.DATABASE_URL || 'mongodb://localhost:27017/create_app_db',
-  serviceAuthUrl: process.env.SERVICE_AUTH_URL || 'http://localhost:4000',
-  productServiceUrl: process.env.PRODUCT_SERVICE_URL || 'http://localhost:4005',
-  walletServiceUrl: process.env.WALLET_SERVICE_URL || 'http://localhost:4004',
+  serviceAuthUrl: process.env.SERVICE_AUTH_URL || 'http://localhost:3000',
+  productServiceUrl: process.env.PRODUCT_SERVICE_URL || 'http://localhost:3005',
+  walletServiceUrl: process.env.WALLET_SERVICE_URL || 'http://localhost:3004',
   specialApiKey: process.env.SPECIAL_API_KEY || 'default-special-key',
   publicKey: process.env.PUBLIC_KEY || 'default-public-key',
-  jwtSecret: process.env.JWT_SECRET || 'fallback_secret_key',
-  baseDomain: process.env.SUBDOMAIN_BASE_DOMAIN || 'springtd.com',
-  serverIp: process.env.SERVER_IP || '',
-  platformDomain: process.env.PLATFORM_DOMAIN || 'domain.useinclude.com',
-  vercelApiToken: process.env.VERCEL_API_TOKEN,
-  vercelTeamId: process.env.VERCEL_TEAM_ID,
-  vercelDefaultProjectId: process.env.VERCEL_DEFAULT_PROJECT_ID,
-  requestBodyLimit: process.env.REQUEST_BODY_LIMIT || '10mb',
+  jwtSecret: process.env.JWT_SECRET || 'fallback-secret-key-for-development-purposes-only',
+  mongoUri: process.env.MONGODB_URI || 'mongodb://localhost:27017/create-app-ms'
 };

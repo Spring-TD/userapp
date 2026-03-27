@@ -1,13 +1,13 @@
 {
   "openapi": "3.0.0",
   "info": {
-    "title": "Spring Create App Microservice API",
+    "title": "Create App Microservice API",
     "version": "1.0.0",
-    "description": "Spring Application creation and management, app configuration, drive, transactions, and special API (apps, products, wallets, users, subscriptions, callbacks). Import this spec into Swagger Editor, Postman, or other API tools."
+    "description": "Application creation and management APIs"
   },
   "servers": [
     {
-      "url": "http://localhost:4002",
+      "url": "http://localhost:3002",
       "description": "Development"
     }
   ],
@@ -21,740 +21,1426 @@
       "apiKeyAuth": {
         "type": "apiKey",
         "in": "header",
-        "name": "x-special-key",
-        "description": "Special API key (use with x-public-key for special endpoints)"
-      },
-      "publicKeyAuth": {
-        "type": "apiKey",
-        "in": "header",
-        "name": "x-public-key",
-        "description": "Public key (use with x-special-key for special endpoints)"
-      }
-    },
-    "schemas": {
-      "CreateAppRequest": {
-        "type": "object",
-        "required": ["name", "websiteUrl", "alias", "description"],
-        "properties": {
-          "name": { "type": "string", "minLength": 3, "maxLength": 100 },
-          "websiteUrl": { "type": "string", "format": "uri" },
-          "alias": { "type": "string", "minLength": 2, "maxLength": 50 },
-          "description": { "type": "string", "minLength": 10, "maxLength": 1000 },
-          "merchantId": { "type": "string" },
-          "subdomain": { "type": "string" }
-        }
-      },
-      "UpdateAppRequest": {
-        "type": "object",
-        "properties": {
-          "name": { "type": "string" },
-          "websiteUrl": { "type": "string" },
-          "alias": { "type": "string" },
-          "description": { "type": "string" },
-          "status": { "type": "string", "enum": ["draft", "submitted", "approved", "rejected", "incomplete"] },
-          "rejectionReason": { "type": "string" },
-          "productKeys": { "type": "array", "items": { "type": "string" } },
-          "subdomain": { "type": "string" },
-          "customDomain": { "type": "string" },
-          "customDomainActive": { "type": "boolean" }
-        }
-      },
-      "RejectAppRequest": {
-        "type": "object",
-        "properties": {
-          "rejectionReason": { "type": "string" }
-        }
-      },
-      "AddProductKeyRequest": {
-        "type": "object",
-        "required": ["productKey"],
-        "properties": {
-          "productKey": { "type": "string" }
-        }
-      },
-      "AddCustomDomainRequest": {
-        "type": "object",
-        "required": ["customDomain"],
-        "properties": {
-          "customDomain": { "type": "string" }
-        }
-      },
-      "ActivateCustomDomainRequest": {
-        "type": "object",
-        "properties": {
-          "active": { "type": "boolean" },
-          "allowUnverified": { "type": "boolean" }
-        }
-      },
-      "VerifyCustomDomainRequest": {
-        "type": "object",
-        "properties": {
-          "manualOverride": { "type": "boolean" }
-        }
-      },
-      "BulkUpdateAppsRequest": {
-        "type": "object",
-        "properties": {
-          "updates": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "appId": { "type": "string" },
-                "data": { "type": "object" }
-              }
-            }
-          }
-        }
-      },
-      "UploadDocumentRequest": {
-        "type": "object",
-        "properties": {
-          "name": { "type": "string" },
-          "type": { "type": "string" },
-          "url": { "type": "string" },
-          "metadata": { "type": "object" }
-        }
-      },
-      "UpdateDocumentRequest": {
-        "type": "object",
-        "properties": {
-          "name": { "type": "string" },
-          "metadata": { "type": "object" }
-        }
-      },
-      "CreateUserRequest": {
-        "type": "object",
-        "properties": {
-          "email": { "type": "string" },
-          "name": { "type": "string" },
-          "merchantId": { "type": "string" }
-        }
-      },
-      "WithdrawRequest": {
-        "type": "object",
-        "required": ["amount"],
-        "properties": {
-          "amount": { "type": "number" },
-          "description": { "type": "string" }
-        }
-      },
-      "SubmitDocsRequest": {
-        "type": "object",
-        "properties": {
-          "documents": { "type": "array", "items": { "type": "object" } }
-        }
-      },
-      "SubscribeRequest": {
-        "type": "object",
-        "properties": {
-          "subscriptionData": { "type": "object" }
-        }
-      },
-      "ApplyToProductRequest": {
-        "type": "object",
-        "properties": {
-          "applicationData": { "type": "object" }
-        }
-      },
-      "RegisterCallbackRequest": {
-        "type": "object",
-        "required": ["eventType", "callbackUrl"],
-        "properties": {
-          "eventType": { "type": "string" },
-          "callbackUrl": { "type": "string", "format": "uri" }
-        }
-      },
-      "UpdateConfigurationRequest": {
-        "type": "object",
-        "description": "Partial configuration update"
-      },
-      "CreateConfigurationRequest": {
-        "type": "object",
-        "properties": {
-          "configuration": { "type": "object" },
-          "options": { "type": "object" }
-        }
-      },
-      "PublishingRequest": {
-        "type": "object",
-        "properties": {
-          "isPublished": { "type": "boolean" }
-        }
-      },
-      "TemplateRequest": {
-        "type": "object",
-        "properties": {
-          "name": { "type": "string" },
-          "config": { "type": "object" }
-        }
-      },
-      "ApplyTemplateRequest": {
-        "type": "object",
-        "properties": {
-          "options": { "type": "object" }
-        }
+        "name": "x-api-key",
+        "description": "API key for service-to-service or special endpoints"
       }
     }
   },
   "paths": {
     "/api/v1/apps": {
+      "get": {
+        "summary": "Get all apps",
+        "tags": [
+          "Apps"
+        ],
+        "responses": {
+          "200": {
+            "description": "List of apps"
+          }
+        }
+      },
       "post": {
-        "summary": "Create app",
-        "tags": ["Apps"],
-        "security": [{ "bearerAuth": [] }],
+        "summary": "Create a new app",
+        "tags": [
+          "Apps"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/CreateAppRequest" }
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "websiteUrl",
+                  "alias",
+                  "description"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "websiteUrl": {
+                    "type": "string"
+                  },
+                  "alias": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "merchantId": {
+                    "type": "string",
+                    "description": "Optional; for admins. Merchants use their own ID from token."
+                  }
+                }
+              }
             }
           }
         },
         "responses": {
-          "201": { "description": "App created" },
-          "400": { "description": "Validation error" }
-        }
-      },
-      "get": {
-        "summary": "Get all apps",
-        "tags": ["Apps"],
-        "responses": { "200": { "description": "App list" } }
-      }
-    },
-    "/api/v1/apps/subdomain/{subdomain}": {
-      "get": {
-        "summary": "Get app by subdomain",
-        "tags": ["Apps"],
-        "parameters": [{ "in": "path", "name": "subdomain", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "App details" } }
-      }
-    },
-    "/api/v1/apps/{id}": {
-      "get": {
-        "summary": "Get app by ID",
-        "tags": ["Apps"],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "App details" } }
-      },
-      "put": {
-        "summary": "Update app",
-        "tags": ["Apps"],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/UpdateAppRequest" }
-            }
+          "201": {
+            "description": "App created"
+          },
+          "401": {
+            "description": "Authentication required"
           }
-        },
-        "responses": { "200": { "description": "App updated" } }
-      },
-      "delete": {
-        "summary": "Delete app",
-        "tags": ["Apps"],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "App deleted" } }
+        }
       }
     },
     "/api/v1/apps/merchant/{merchantId}": {
       "get": {
         "summary": "Get apps by merchant ID",
-        "tags": ["Apps"],
-        "parameters": [{ "in": "path", "name": "merchantId", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "App list" } }
+        "tags": [
+          "Apps"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "merchantId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of apps for merchant"
+          }
+        }
+      }
+    },
+    "/api/v1/apps/{id}": {
+      "get": {
+        "summary": "Get app by ID",
+        "tags": [
+          "Apps"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "App details"
+          },
+          "404": {
+            "description": "App not found"
+          }
+        }
+      },
+      "put": {
+        "summary": "Update app",
+        "tags": [
+          "Apps"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "websiteUrl": {
+                    "type": "string"
+                  },
+                  "alias": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "draft",
+                      "submitted",
+                      "approved",
+                      "rejected",
+                      "incomplete"
+                    ]
+                  },
+                  "rejectionReason": {
+                    "type": "string"
+                  },
+                  "productKeys": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "App updated"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete app",
+        "tags": [
+          "Apps"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "App deleted"
+          }
+        }
       }
     },
     "/api/v1/apps/{id}/submit": {
       "post": {
         "summary": "Submit app for review",
-        "tags": ["Apps"],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "App submitted" } }
+        "tags": [
+          "Apps"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "App submitted"
+          }
+        }
       }
     },
     "/api/v1/apps/{id}/approve": {
       "post": {
         "summary": "Approve app",
-        "tags": ["Apps"],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "App approved" } }
+        "tags": [
+          "Apps"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "App approved"
+          }
+        }
       }
     },
     "/api/v1/apps/{id}/reject": {
       "post": {
         "summary": "Reject app",
-        "tags": ["Apps"],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "tags": [
+          "Apps"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/RejectAppRequest" }
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "rejectionReason": {
+                    "type": "string"
+                  }
+                }
+              }
             }
           }
         },
-        "responses": { "200": { "description": "App rejected" } }
+        "responses": {
+          "200": {
+            "description": "App rejected"
+          }
+        }
       }
     },
     "/api/v1/apps/{id}/product-key": {
       "post": {
         "summary": "Add product key to app",
-        "tags": ["Apps"],
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "tags": [
+          "Apps"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/AddProductKeyRequest" }
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "productKey": {
+                    "type": "string"
+                  }
+                }
+              }
             }
           }
         },
-        "responses": { "200": { "description": "Product key added" } }
+        "responses": {
+          "200": {
+            "description": "Product key added"
+          }
+        }
       }
     },
     "/api/v1/apps/{id}/product-keys": {
       "get": {
         "summary": "Get product keys for app",
-        "tags": ["Apps"],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "Product keys" } }
-      }
-    },
-    "/api/v1/apps/{id}/custom-domain": {
-      "post": {
-        "summary": "Add custom domain",
-        "tags": ["Apps"],
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/AddCustomDomainRequest" }
+        "tags": [
+          "Apps"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           }
-        },
-        "responses": { "200": { "description": "Custom domain added" } }
-      },
-      "delete": {
-        "summary": "Remove custom domain",
-        "tags": ["Apps"],
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "Custom domain removed" } }
-      }
-    },
-    "/api/v1/apps/{id}/custom-domain/activate": {
-      "put": {
-        "summary": "Activate custom domain",
-        "tags": ["Apps"],
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/ActivateCustomDomainRequest" }
-            }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of product keys"
           }
-        },
-        "responses": { "200": { "description": "Activation updated" } }
-      }
-    },
-    "/api/v1/apps/{id}/custom-domain/verify": {
-      "post": {
-        "summary": "Verify custom domain",
-        "tags": ["Apps"],
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/VerifyCustomDomainRequest" }
-            }
-          }
-        },
-        "responses": { "200": { "description": "Verification result" } }
-      }
-    },
-    "/api/v1/apps/{id}/custom-domain/dns": {
-      "get": {
-        "summary": "Get DNS configuration",
-        "tags": ["Apps"],
-        "security": [{ "bearerAuth": [] }],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "DNS configuration" } }
+        }
       }
     },
     "/api/v1/apps/{id}/transactions": {
       "get": {
-        "summary": "Get app transactions",
-        "tags": ["Apps"],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "Transaction list" } }
+        "summary": "Get transactions for app",
+        "tags": [
+          "Apps"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "credit",
+                "debit"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "completed",
+                "failed",
+                "cancelled"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of transactions"
+          }
+        }
       }
     },
     "/api/v1/apps/{id}/transaction-stats": {
       "get": {
-        "summary": "Get transaction stats",
-        "tags": ["Apps"],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "Transaction stats" } }
+        "summary": "Get transaction stats for app",
+        "tags": [
+          "Apps"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Transaction statistics"
+          }
+        }
       }
     },
     "/api/v1/apps/{id}/drive/documents": {
       "post": {
-        "summary": "Upload document",
-        "tags": ["Apps - Drive"],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
+        "summary": "Upload document to app drive",
+        "tags": [
+          "Apps - Drive"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/UploadDocumentRequest" }
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
             }
           }
         },
-        "responses": { "200": { "description": "Document uploaded" } }
+        "responses": {
+          "201": {
+            "description": "Document uploaded"
+          }
+        }
       },
       "get": {
-        "summary": "Get documents",
-        "tags": ["Apps - Drive"],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "Document list" } }
+        "summary": "Get documents for app drive",
+        "tags": [
+          "Apps - Drive"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of documents"
+          }
+        }
       }
     },
     "/api/v1/apps/{id}/drive/documents/{documentId}": {
       "get": {
         "summary": "Get document by ID",
-        "tags": ["Apps - Drive"],
-        "parameters": [
-          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } },
-          { "in": "path", "name": "documentId", "required": true, "schema": { "type": "string" } }
+        "tags": [
+          "Apps - Drive"
         ],
-        "responses": { "200": { "description": "Document" } }
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "documentId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Document details"
+          }
+        }
       },
       "put": {
         "summary": "Update document",
-        "tags": ["Apps - Drive"],
+        "tags": [
+          "Apps - Drive"
+        ],
         "parameters": [
-          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } },
-          { "in": "path", "name": "documentId", "required": true, "schema": { "type": "string" } }
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "documentId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/UpdateDocumentRequest" }
+              "schema": {
+                "type": "object"
+              }
             }
           }
         },
-        "responses": { "200": { "description": "Document updated" } }
+        "responses": {
+          "200": {
+            "description": "Document updated"
+          }
+        }
       },
       "delete": {
         "summary": "Delete document",
-        "tags": ["Apps - Drive"],
-        "parameters": [
-          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } },
-          { "in": "path", "name": "documentId", "required": true, "schema": { "type": "string" } }
+        "tags": [
+          "Apps - Drive"
         ],
-        "responses": { "200": { "description": "Document deleted" } }
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "documentId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Document deleted"
+          }
+        }
       }
     },
-    "/api/v1/apps/{id}/configuration": {
+    "/api/v1/apps/{id}/drive/document-stats": {
       "get": {
-        "summary": "Get app configuration",
-        "tags": ["Apps - Configuration"],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "Configuration" } }
-      },
-      "put": {
-        "summary": "Update configuration",
-        "tags": ["Apps - Configuration"],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/UpdateConfigurationRequest" }
+        "summary": "Get document stats for app drive",
+        "tags": [
+          "Apps - Drive"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           }
-        },
-        "responses": { "200": { "description": "Configuration updated" } }
-      },
-      "post": {
-        "summary": "Create configuration",
-        "tags": ["Apps - Configuration"],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/CreateConfigurationRequest" }
-            }
+        ],
+        "responses": {
+          "200": {
+            "description": "Document statistics"
           }
-        },
-        "responses": { "201": { "description": "Configuration created" } }
-      }
-    },
-    "/api/v1/apps/{id}/configuration/publishing": {
-      "put": {
-        "summary": "Update publishing",
-        "tags": ["Apps - Configuration"],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/PublishingRequest" }
-            }
-          }
-        },
-        "responses": { "200": { "description": "Publishing updated" } }
+        }
       }
     },
     "/api/v1/apps/special/metadata": {
       "get": {
-        "summary": "Get apps with metadata (API key)",
-        "tags": ["Special API"],
-        "security": [{ "apiKeyAuth": [], "publicKeyAuth": [] }],
-        "responses": { "200": { "description": "Apps with metadata" } }
+        "summary": "Get apps with metadata (API key required)",
+        "tags": [
+          "Apps - Special"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Apps with metadata"
+          }
+        }
       }
     },
     "/api/v1/apps/special/bulk": {
       "put": {
-        "summary": "Bulk update apps (API key)",
-        "tags": ["Special API"],
-        "security": [{ "apiKeyAuth": [], "publicKeyAuth": [] }],
+        "summary": "Bulk update apps (API key required)",
+        "tags": [
+          "Apps - Special"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/BulkUpdateAppsRequest" }
+              "schema": {
+                "type": "object"
+              }
             }
           }
         },
-        "responses": { "200": { "description": "Bulk update result" } }
+        "responses": {
+          "200": {
+            "description": "Bulk update result"
+          }
+        }
       }
     },
     "/api/v1/special/apps": {
       "get": {
-        "summary": "Get all apps (API key)",
-        "tags": ["Special API"],
-        "security": [{ "apiKeyAuth": [], "publicKeyAuth": [] }],
-        "responses": { "200": { "description": "App list" } }
+        "summary": "Get all apps",
+        "tags": [
+          "Special"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of apps"
+          }
+        }
       }
     },
     "/api/v1/special/apps/{id}": {
       "get": {
-        "summary": "Get app by ID (API key)",
-        "tags": ["Special API"],
-        "security": [{ "apiKeyAuth": [], "publicKeyAuth": [] }],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "App details" } }
+        "summary": "Get app by ID",
+        "tags": [
+          "Special"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "App details"
+          }
+        }
       }
     },
     "/api/v1/special/products": {
       "get": {
-        "summary": "Get all products (API key)",
-        "tags": ["Special API"],
-        "security": [{ "apiKeyAuth": [], "publicKeyAuth": [] }],
-        "responses": { "200": { "description": "Product list" } }
+        "summary": "Get all products",
+        "tags": [
+          "Special"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of products"
+          }
+        }
       }
     },
     "/api/v1/special/products/{id}": {
       "get": {
-        "summary": "Get product by ID (API key)",
-        "tags": ["Special API"],
-        "security": [{ "apiKeyAuth": [], "publicKeyAuth": [] }],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "Product details" } }
-      }
-    },
-    "/api/v1/special/users": {
-      "get": {
-        "summary": "Get all users (API key)",
-        "tags": ["Special API"],
-        "security": [{ "apiKeyAuth": [], "publicKeyAuth": [] }],
-        "responses": { "200": { "description": "User list" } }
-      },
-      "post": {
-        "summary": "Create user and wallet (API key)",
-        "tags": ["Special API"],
-        "security": [{ "apiKeyAuth": [], "publicKeyAuth": [] }],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/CreateUserRequest" }
+        "summary": "Get product by ID",
+        "tags": [
+          "Special"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           }
-        },
-        "responses": { "201": { "description": "User and wallet created" } }
-      }
-    },
-    "/api/v1/special/users/{id}": {
-      "get": {
-        "summary": "Get user by ID (API key)",
-        "tags": ["Special API"],
-        "security": [{ "apiKeyAuth": [], "publicKeyAuth": [] }],
-        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "User details" } }
-      }
-    },
-    "/api/v1/special/users/{userId}/documents": {
-      "post": {
-        "summary": "Submit docs for user (API key)",
-        "tags": ["Special API"],
-        "security": [{ "apiKeyAuth": [], "publicKeyAuth": [] }],
-        "parameters": [{ "in": "path", "name": "userId", "required": true, "schema": { "type": "string" } }],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/SubmitDocsRequest" }
-            }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product details"
           }
-        },
-        "responses": { "200": { "description": "Documents submitted" } }
-      }
-    },
-    "/api/v1/special/users/{userId}/callbacks": {
-      "post": {
-        "summary": "Register callback for user (API key)",
-        "tags": ["Special API"],
-        "security": [{ "apiKeyAuth": [], "publicKeyAuth": [] }],
-        "parameters": [{ "in": "path", "name": "userId", "required": true, "schema": { "type": "string" } }],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/RegisterCallbackRequest" }
-            }
-          }
-        },
-        "responses": { "200": { "description": "Callback registered" } }
-      }
-    },
-    "/api/v1/special/wallets/user/{userId}": {
-      "get": {
-        "summary": "Get user wallet (API key)",
-        "tags": ["Special API"],
-        "security": [{ "apiKeyAuth": [], "publicKeyAuth": [] }],
-        "parameters": [{ "in": "path", "name": "userId", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "Wallet" } }
-      }
-    },
-    "/api/v1/special/wallets/user/{userId}/withdraw": {
-      "post": {
-        "summary": "Withdraw from user wallet (API key)",
-        "tags": ["Special API"],
-        "security": [{ "apiKeyAuth": [], "publicKeyAuth": [] }],
-        "parameters": [{ "in": "path", "name": "userId", "required": true, "schema": { "type": "string" } }],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/WithdrawRequest" }
-            }
-          }
-        },
-        "responses": { "200": { "description": "Withdrawal processed" } }
+        }
       }
     },
     "/api/v1/special/wallets/merchant/{merchantId}/balance/{walletType}": {
       "get": {
-        "summary": "Get merchant wallet balance (API key)",
-        "tags": ["Special API"],
-        "security": [{ "apiKeyAuth": [], "publicKeyAuth": [] }],
-        "parameters": [
-          { "in": "path", "name": "merchantId", "required": true, "schema": { "type": "string" } },
-          { "in": "path", "name": "walletType", "required": true, "schema": { "type": "string" } }
+        "summary": "Get merchant wallet balance",
+        "tags": [
+          "Special - Wallets"
         ],
-        "responses": { "200": { "description": "Balance" } }
-      }
-    },
-    "/api/v1/special/subscriptions/users/{userId}/products/{productId}": {
-      "post": {
-        "summary": "Subscribe user to product (API key)",
-        "tags": ["Special API"],
-        "security": [{ "apiKeyAuth": [], "publicKeyAuth": [] }],
-        "parameters": [
-          { "in": "path", "name": "userId", "required": true, "schema": { "type": "string" } },
-          { "in": "path", "name": "productId", "required": true, "schema": { "type": "string" } }
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/SubscribeRequest" }
+        "parameters": [
+          {
+            "in": "path",
+            "name": "merchantId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "walletType",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           }
-        },
-        "responses": { "200": { "description": "Subscribed" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Wallet balance"
+          }
+        }
+      }
+    },
+    "/api/v1/special/wallets/merchant/{merchantId}/history/{walletType}": {
+      "get": {
+        "summary": "Get merchant wallet history",
+        "tags": [
+          "Special - Wallets"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "merchantId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "walletType",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Wallet history"
+          }
+        }
+      }
+    },
+    "/api/v1/special/users": {
+      "get": {
+        "summary": "Get all users",
+        "tags": [
+          "Special - Users"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of users"
+          }
+        }
       },
-      "get": {
-        "summary": "Get user product subscription (API key)",
-        "tags": ["Special API"],
-        "security": [{ "apiKeyAuth": [], "publicKeyAuth": [] }],
-        "parameters": [
-          { "in": "path", "name": "userId", "required": true, "schema": { "type": "string" } },
-          { "in": "path", "name": "productId", "required": true, "schema": { "type": "string" } }
-        ],
-        "responses": { "200": { "description": "Subscription" } }
-      }
-    },
-    "/api/v1/special/applications/users/{userId}/products/{productId}": {
       "post": {
-        "summary": "Apply to product (API key)",
-        "tags": ["Special API"],
-        "security": [{ "apiKeyAuth": [], "publicKeyAuth": [] }],
-        "parameters": [
-          { "in": "path", "name": "userId", "required": true, "schema": { "type": "string" } },
-          { "in": "path", "name": "productId", "required": true, "schema": { "type": "string" } }
+        "summary": "Create user and wallet",
+        "tags": [
+          "Special - Users"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
         ],
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/ApplyToProductRequest" }
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "merchantId": {
+                    "type": "string"
+                  }
+                }
+              }
             }
           }
         },
-        "responses": { "200": { "description": "Application submitted" } }
+        "responses": {
+          "201": {
+            "description": "User and wallet created"
+          }
+        }
       }
     },
-    "/api/v1/special/applications/products/{productId}": {
+    "/api/v1/special/users/{id}": {
       "get": {
-        "summary": "Get all product applications (API key)",
-        "tags": ["Special API"],
-        "security": [{ "apiKeyAuth": [], "publicKeyAuth": [] }],
-        "parameters": [{ "in": "path", "name": "productId", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "Applications" } }
+        "summary": "Get user by ID",
+        "tags": [
+          "Special - Users"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User details"
+          }
+        }
+      }
+    },
+    "/api/v1/special/wallets/user/{userId}": {
+      "get": {
+        "summary": "Get user wallet",
+        "tags": [
+          "Special - Wallets"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User wallet"
+          }
+        }
+      }
+    },
+    "/api/v1/special/wallets/users/{merchantId}": {
+      "get": {
+        "summary": "Get all users wallets for merchant",
+        "tags": [
+          "Special - Wallets"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "merchantId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of user wallets"
+          }
+        }
+      }
+    },
+    "/api/v1/special/wallets/user/{userId}/withdraw": {
+      "post": {
+        "summary": "Withdraw from user wallet",
+        "tags": [
+          "Special - Wallets"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "type": "number"
+                  },
+                  "currency": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Withdrawal result"
+          }
+        }
+      }
+    },
+    "/api/v1/special/products/{productId}/subscribers": {
+      "get": {
+        "summary": "Get product subscribers",
+        "tags": [
+          "Special"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "productId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of subscribers"
+          }
+        }
+      }
+    },
+    "/api/v1/special/users/{userId}/documents": {
+      "post": {
+        "summary": "Submit docs for user",
+        "tags": [
+          "Special - Users"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Documents submitted"
+          }
+        }
+      }
+    },
+    "/api/v1/special/drive/users/{userId}": {
+      "get": {
+        "summary": "Get drive by user",
+        "tags": [
+          "Special - Drive"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User drive data"
+          }
+        }
+      }
+    },
+    "/api/v1/special/drive/products/{productId}": {
+      "get": {
+        "summary": "Get drive by product",
+        "tags": [
+          "Special - Drive"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "productId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product drive data"
+          }
+        }
       }
     },
     "/api/v1/special/transactions/user/{userId}": {
       "get": {
-        "summary": "Get transaction history for user (API key)",
-        "tags": ["Special API"],
-        "security": [{ "apiKeyAuth": [], "publicKeyAuth": [] }],
-        "parameters": [{ "in": "path", "name": "userId", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "Transactions" } }
+        "summary": "Get transaction history for user",
+        "tags": [
+          "Special - Transactions"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User transaction history"
+          }
+        }
       }
     },
     "/api/v1/special/transactions/product/{productId}": {
       "get": {
-        "summary": "Get transaction history by product (API key)",
-        "tags": ["Special API"],
-        "security": [{ "apiKeyAuth": [], "publicKeyAuth": [] }],
-        "parameters": [{ "in": "path", "name": "productId", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "Transactions" } }
+        "summary": "Get all transaction history by product",
+        "tags": [
+          "Special - Transactions"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "productId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product transaction history"
+          }
+        }
       }
     },
     "/api/v1/special/transactions/app/{appId}": {
       "get": {
-        "summary": "Get transaction history by app (API key)",
-        "tags": ["Special API"],
-        "security": [{ "apiKeyAuth": [], "publicKeyAuth": [] }],
-        "parameters": [{ "in": "path", "name": "appId", "required": true, "schema": { "type": "string" } }],
-        "responses": { "200": { "description": "Transactions" } }
+        "summary": "Get transaction history by app",
+        "tags": [
+          "Special - Transactions"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "appId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "App transaction history"
+          }
+        }
+      }
+    },
+    "/api/v1/special/subscriptions/users/{userId}/products/{productId}": {
+      "post": {
+        "summary": "Subscribe user to product",
+        "tags": [
+          "Special - Subscriptions"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "productId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "User subscribed"
+          }
+        }
+      },
+      "get": {
+        "summary": "Get user product subscription",
+        "tags": [
+          "Special - Subscriptions"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "productId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Subscription details"
+          }
+        }
+      }
+    },
+    "/api/v1/special/applications/users/{userId}/products/{productId}": {
+      "post": {
+        "summary": "Apply to product",
+        "tags": [
+          "Special - Applications"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "productId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Application submitted"
+          }
+        }
+      }
+    },
+    "/api/v1/special/applications/products/{productId}": {
+      "get": {
+        "summary": "Get all product applications",
+        "tags": [
+          "Special - Applications"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "productId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of applications with status and details"
+          }
+        }
+      }
+    },
+    "/api/v1/special/callbacks/users/{userId}": {
+      "post": {
+        "summary": "Register callback for user (application status, wallet events)",
+        "tags": [
+          "Special - Callbacks"
+        ],
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string"
+                  },
+                  "events": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Callback registered"
+          }
+        }
       }
     }
   },
-  "tags": [
-    { "name": "Apps", "description": "App CRUD, custom domain, product keys, transactions" },
-    { "name": "Apps - Drive", "description": "Document upload and management" },
-    { "name": "Apps - Configuration", "description": "App configuration and templates" },
-    { "name": "Special API", "description": "API-key protected endpoints (apps, users, wallets, products, subscriptions, callbacks)" }
-  ]
+  "tags": []
 }
