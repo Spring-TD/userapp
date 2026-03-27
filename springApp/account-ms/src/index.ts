@@ -5,7 +5,7 @@ import morgan from 'morgan';
 import axios from 'axios';
 import swaggerUi from 'swagger-ui-express';
 import { config } from './config/environment';
-import { swaggerServices, getServiceById } from './config/swagger';
+import { swaggerServices, getServiceById, gatewaySpec } from './config/swagger';
 import accountRoutes from './routes/accountRoutes';
 import applicationRoutes from './routes/applicationRoutes';
 import loanRoutes from './routes/loanRoutes';
@@ -41,11 +41,16 @@ app.use('/api/v1/savings-accounts', savingsRoutes);
 app.use('/api/v1/mortgages', mortgageRoutes);
 app.use('/api/v1/keys', apiKeyRoutes);
 
-// Swagger: proxy each microservice's OpenAPI spec so the hub can load them from same origin
+// Swagger: serve gateway spec inline; proxy other microservices' OpenAPI specs
 app.get('/api-docs/spec/:serviceId', async (req, res) => {
-  const service = getServiceById(req.params.serviceId);
+  const { serviceId } = req.params;
+  if (serviceId === 'gateway') {
+    res.setHeader('Content-Type', 'application/json');
+    return res.json(gatewaySpec);
+  }
+  const service = getServiceById(serviceId);
   if (!service) {
-    return res.status(404).json({ error: 'Unknown service', serviceId: req.params.serviceId });
+    return res.status(404).json({ error: 'Unknown service', serviceId });
   }
   try {
     const { data } = await axios.get(service.specUrl, { timeout: 5000 });
@@ -60,10 +65,13 @@ app.get('/api-docs/spec/:serviceId', async (req, res) => {
   }
 });
 
-// Swagger UI hub: one page to access all microservices' API docs (dropdown of specs)
+// Swagger UI hub: gateway first (always loads), then all microservices (load when selected)
 const swaggerOptions = {
   swaggerOptions: {
-    urls: swaggerServices.map((s) => ({ name: s.name, url: `/api-docs/spec/${s.id}` })),
+    urls: [
+      { name: 'Gateway (Account MS)', url: '/api-docs/spec/gateway' },
+      ...swaggerServices.map((s) => ({ name: s.name, url: `/api-docs/spec/${s.id}` })),
+    ],
   },
 };
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(undefined, swaggerOptions));

@@ -1,9 +1,9 @@
 {
   "openapi": "3.0.0",
   "info": {
-    "title": "Wallet Microservice API",
+    "title": "Spring Wallet Microservice API",
     "version": "1.0.0",
-    "description": "User and merchant wallets (Treasury, Operation, KYC), balance management, transfers, funding callbacks. Import this spec into Swagger Editor, Postman, or other API tools."
+    "description": "Spring User and merchant wallets (Treasury, Operation, KYC), balance management, transfers, funding callbacks. Import this spec into Swagger Editor, Postman, or other API tools."
   },
   "servers": [
     {

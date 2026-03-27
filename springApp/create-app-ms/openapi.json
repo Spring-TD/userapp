@@ -1,9 +1,9 @@
 {
   "openapi": "3.0.0",
   "info": {
-    "title": "Create App Microservice API",
+    "title": "Spring Create App Microservice API",
     "version": "1.0.0",
-    "description": "Application creation and management, app configuration, drive, transactions, and special API (apps, products, wallets, users, subscriptions, callbacks). Import this spec into Swagger Editor, Postman, or other API tools."
+    "description": "Spring Application creation and management, app configuration, drive, transactions, and special API (apps, products, wallets, users, subscriptions, callbacks). Import this spec into Swagger Editor, Postman, or other API tools."
   },
   "servers": [
     {

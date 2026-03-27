@@ -1,9 +1,9 @@
 {
   "openapi": "3.0.0",
   "info": {
-    "title": "Product Microservice API",
+    "title": "Spring Product Microservice API",
     "version": "1.0.0",
-    "description": "Product management (Loan, Mortgage, Savings, Commodity) and product configuration. Import this spec into Swagger Editor, Postman, or other API tools."
+    "description": "Spring Product management (Loan, Mortgage, Savings, Commodity) and product configuration. Import this spec into Swagger Editor, Postman, or other API tools."
   },
   "servers": [
     {
