@@ -1,11 +1,42 @@
 # fly.toml app configuration file generated for compliance-ms on 2025-11-25T08:54:03+01:00
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+# Set secrets via: fly secrets set MONGODB_URI=... JWT_SECRET=... REDIS_URL=... DO_SPACES_REGION=... DO_SPACES_ENDPOINT=... DO_SPACES_BUCKET=... DO_SPACES_ACCESS_KEY_ID=... DO_SPACES_SECRET_ACCESS_KEY=...
 
-
-app = 'compliance-ms-plata'
+app = 'compliance-ms'
 primary_region = 'lhr'
 
 [build]
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3003"
+  CORS_ALLOWED_ORIGINS = "https://your-frontend.fly.dev"
+  KYC_DOCUMENT_TYPES = "identity,address,income_proof,bank,business_registration,business_license,corporate_structure,beneficial_ownership,articles_of_incorporation,director_identification,financial_statements,tax_certificate"
+  KYC_REQUIRED_DOCUMENTS = "identity,address,business_registration,beneficial_ownership,director_identification,bank"
+  KYC_REVIEW_DURATION = "72"
+  KYC_NOTIFICATIONS_ENABLED = "false"
+  KYC_NOTIFICATIONS_CHANNELS = "email"
+  KYC_MAX_DOCUMENT_SIZE = "10"
+  KYC_MAX_DOCUMENTS = "5"
+  KYC_AUTO_APPROVAL_LIMIT = "5000"
+  KYC_REVIEW_TIMEOUT = "30000"
+  KYC_REVIEW_RETRIES = "3"
+  KYC_REVIEW_RETRY_DELAY = "5000"
+  KYC_REVIEW_NOTIFICATIONS = "false"
+  KYC_REVIEW_NOTIFICATIONS_CHANNELS = "email"
+  KYC_REVIEW_NOTIFICATIONS_TEMPLATES = "verification"
+  KYC_REVIEW_NOTIFICATIONS_RECIPIENTS = "admin"
+  KYC_REVIEW_NOTIFICATIONS_RETRIES = "3"
+  KYC_REVIEW_NOTIFICATIONS_RETRY_DELAY = "5000"
+  KYC_REVIEW_NOTIFICATIONS_TIMEOUT = "30000"
+  KYC_REVIEW_NOTIFICATIONS_TEMPLATE_PATH = "./templates"
+  KYC_REVIEW_NOTIFICATIONS_TEMPLATE_EXTENSION = ".hbs"
+  KYC_REVIEW_NOTIFICATIONS_TEMPLATE_ENCODING = "utf8"
+  KYC_REVIEW_NOTIFICATIONS_TEMPLATE_DELIMITER = "{{}}"
+  KYC_REVIEW_NOTIFICATIONS_TEMPLATE_DELIMITER_START = "{{"
+  KYC_REVIEW_NOTIFICATIONS_TEMPLATE_DELIMITER_END = "}}"
+  KYC_REVIEW_NOTIFICATIONS_TEMPLATE_DELIMITER_ESCAPE = "\\"
 
 [http_service]
   internal_port = 3003

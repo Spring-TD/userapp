@@ -9,7 +9,7 @@ This microservice provides centralized notification functionality for the Spring
 - **SMS Notifications**: Send SMS via Twilio
 - **Template Support**: Reusable email and SMS templates with variable substitution
 - **Delivery Tracking**: Track notification status and delivery
-- **MongoDB Persistence**: Store all notification records in a real database (Digital Ocean, Atlas, or local MongoDB—no mock data)
+- **MongoDB Persistence**: Store all notification records for auditing
 - **Graceful Degradation**: Service continues to work even if email/SMS providers are not configured
 
 ## Tech Stack
@@ -23,11 +23,28 @@ This microservice provides centralized notification functionality for the Spring
 
 ## Deployment
 
-**Docker Compose:** The service is included in the root `docker-compose.yml`. It uses the stack MongoDB by default. To use Digital Ocean MongoDB instead, set `DATABASE_URL` (or `MONGODB_URI`) in your environment before running `docker-compose up`.
-
-**Fly.io:** The service can be deployed on Fly.io and is accessible at: https://notifications-ms.fly.dev
+The service is deployed on Fly.io and is accessible at: https://notifications-ms.fly.dev
 
 Health check endpoint: https://notifications-ms.fly.dev/health
+
+### Fly.io: Email must be configured
+
+For emails to be sent (e.g. verification OTP, password reset), set Mailtrap (or SMTP) secrets on the **notifications-ms** Fly app. Without these, the service will accept send requests but no email is delivered.
+
+1. **Check current status:** Open https://notifications-ms.fly.dev/health — if `services.email` is `"not configured"`, set the secrets below.
+
+2. **Set secrets** (from the `notifications-ms` directory):
+   ```bash
+   fly secrets set MAILTRAP_USER=your_mailtrap_user MAILTRAP_PASSWORD=your_mailtrap_password -a notifications-ms
+   ```
+   Optional: `MAILTRAP_FROM_EMAIL=noreply@yourdomain.com`
+
+3. **Get Mailtrap credentials:** Sign up at [mailtrap.io](https://mailtrap.io), open your inbox, then **SMTP Settings** to get username and password. (Mailtrap is a testing inbox; for real delivery to user inboxes, use Mailtrap Email API, SendGrid, or another SMTP provider and set the same env vars if compatible, or adjust the service config.)
+
+4. **Redeploy** so the new secrets are picked up (or let Fly restart the app):
+   ```bash
+   fly deploy -a notifications-ms
+   ```
 
 ## Getting Started
 
@@ -49,14 +66,7 @@ Health check endpoint: https://notifications-ms.fly.dev/health
 
 ### Configuration
 
-Copy `.env.example` to `.env` and set your variables. The service uses **real MongoDB** (no mock data). For production, use a Digital Ocean Managed MongoDB (or MongoDB Atlas) connection string.
-
-**Digital Ocean MongoDB:** In your `.env`, set one of:
-- `MONGODB_URI="mongodb+srv://doadmin:YOUR_PASSWORD@db-mongodb-YOUR_CLUSTER.mongo.ondigitalocean.com/notifications_db?tls=true&authSource=admin&replicaSet=db-mongodb"`
-- `DATABASE_URL` (same format)
-- `MONGO_URI` (same format)
-
-**Local development:** Use the default in `.env.example` or:
+Create a `.env` file with the following variables:
 
 ```env
 # Server

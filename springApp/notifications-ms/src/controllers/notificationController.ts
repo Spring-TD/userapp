@@ -68,7 +68,7 @@ export class NotificationController {
       res.json({
         success: true,
         data: {
-          id: notification._id.toString(),
+          id: notification.id,
           status: notification.status,
           channel: notification.channel,
           recipient: notification.recipient,
@@ -115,7 +115,7 @@ export class NotificationController {
         success: true,
         data: {
           notifications: result.notifications.map(n => ({
-            id: n._id.toString(),
+            id: n.id,
             channel: n.channel,
             template: n.template,
             status: n.status,
@@ -159,7 +159,7 @@ export class NotificationController {
         success: true,
         data: {
           notifications: result.notifications.map(n => ({
-            id: n._id.toString(),
+            id: n.id,
             channel: n.channel,
             recipient: n.recipient,
             template: n.template,

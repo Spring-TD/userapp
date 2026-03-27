@@ -1,0 +1,426 @@
+version: '3.9'
+
+services:
+  # ==========================================
+  # Shared Infrastructure Services
+  # ==========================================
+  
+  mongodb:
+    image: mongo:7-jammy
+    container_name: springtd-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: adminpassword
+      MONGO_INITDB_DATABASE: springtd
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - springtd-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: springtd-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - springtd-network
+
+  # ==========================================
+  # Microservices
+  # ==========================================
+
+  account-ms:
+    build:
+      context: ./account-ms
+      dockerfile: Dockerfile
+    container_name: springtd-account-ms
+    restart: unless-stopped
+    ports:
+      - "3008:3008"
+    environment:
+      NODE_ENV: production
+      PORT: 3008
+      MONGO_URI: mongodb://admin:adminpassword@mongodb:27017/account_db?authSource=admin
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SERVICE_AUTH_URL: ${SERVICE_AUTH_URL:-http://service-auth-ms:3000}
+      SERVICE_AUTH_INTERNAL_TOKEN: ${SERVICE_AUTH_INTERNAL_TOKEN:-Jb@1zP!k9#tW$xL&5aVn*QyR7gE^cF#Qb43}
+      CLIENT_AUTH_SERVICE_URL: ${CLIENT_AUTH_SERVICE_URL:-http://client-auth-ms:3001}
+      COMPLIANCE_SERVICE_URL: ${COMPLIANCE_SERVICE_URL:-http://compliance-ms:3003}
+      BILLING_SERVICE_URL: ${BILLING_SERVICE_URL:-http://billing-ms:3006}
+      WALLET_SERVICE_URL: ${WALLET_SERVICE_URL:-http://wallet-ms:3004}
+      PRODUCT_SERVICE_URL: ${PRODUCT_SERVICE_URL:-http://product-ms:3005}
+      PAYMENT_SERVICE_URL: ${PAYMENT_SERVICE_URL:-http://payment-ms:3007}
+      CREATE_APP_SERVICE_URL: ${CREATE_APP_SERVICE_URL:-http://create-app-ms:3002}
+      NOTIFICATIONS_SERVICE_URL: ${NOTIFICATIONS_SERVICE_URL:-http://notifications-ms:4009}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - springtd-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3008/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  service-auth-ms:
+    build:
+      context: ./service-auth-ms
+      dockerfile: Dockerfile
+    container_name: springtd-service-auth-ms
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      # Use MongoDB Atlas connection or local MongoDB
+      MONGODB_URI: ${DATABASE_URL:-mongodb://admin:adminpassword@mongodb:27017/service_auth_db?authSource=admin}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-your-jwt-secret-change-in-production}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      SMTP_HOST: ${SMTP_HOST:-smtp.example.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-user@example.com}
+      SMTP_PASS: ${SMTP_PASS:-password}
+      FROM_EMAIL: ${FROM_EMAIL:-noreply@example.com}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      COMPLIANCE_SERVICE_URL: http://compliance-ms:3003
+      PAYMENT_SERVICE_URL: http://payment-ms:3007
+      NOTIFICATIONS_MS_URL: http://notifications-ms:4009
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      notifications-ms:
+        condition: service_healthy
+    networks:
+      - springtd-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  client-auth-ms:
+    build:
+      context: ./client-auth-ms
+      dockerfile: Dockerfile
+    container_name: springtd-client-auth-ms
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      SERVICE_AUTH_URL: http://service-auth-ms:3000
+      NOTIFICATIONS_SERVICE_URL: http://notifications-ms:4009
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001,http://localhost:8080}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      JWT_SECRET: ${JWT_SECRET:-Jb@1zP!k9#tW$xL&5aVn*QyR7gE^cF#Qb23}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      MONGODB_URI: ${CLIENT_AUTH_MONGODB_URI:-mongodb+srv://doadmin:1W4s9j26fw0O3KA7@db-mongodb-plata-edc6b1fe.mongo.ondigitalocean.com/client_auth_db?tls=true&authSource=admin&replicaSet=db-mongodb-plata}
+      SERVICE_AUTH_INTERNAL_TOKEN: ${SERVICE_AUTH_INTERNAL_TOKEN:-Jb@1zP!k9#tW$xL&5aVn*QyR7gE^cF#Qb43}
+    depends_on:
+      service-auth-ms:
+        condition: service_started
+      notifications-ms:
+        condition: service_healthy
+    networks:
+      - springtd-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  create-app-ms:
+    build:
+      context: ./create-app-ms
+      dockerfile: Dockerfile
+    container_name: springtd-create-app-ms
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    environment:
+      NODE_ENV: production
+      PORT: 3002
+      SERVICE_AUTH_URL: http://service-auth-ms:3000
+      PRODUCT_SERVICE_URL: http://product-ms:3005
+      WALLET_SERVICE_URL: http://wallet-ms:3004
+      SPECIAL_API_KEY: ${SPECIAL_API_KEY}
+      PUBLIC_KEY: ${PUBLIC_KEY}
+    depends_on:
+      service-auth-ms:
+        condition: service_started
+    networks:
+      - springtd-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3002/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  compliance-ms:
+    build:
+      context: ./compliance-ms
+      dockerfile: Dockerfile
+    container_name: springtd-compliance-ms
+    restart: unless-stopped
+    ports:
+      - "3003:3003"
+    environment:
+      NODE_ENV: production
+      PORT: 3003
+      MONGODB_URI: mongodb://admin:adminpassword@mongodb:27017/compliance_db?authSource=admin
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-your-jwt-secret-change-in-production}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      DO_SPACES_REGION: ${DO_SPACES_REGION:-}
+      DO_SPACES_ENDPOINT: ${DO_SPACES_ENDPOINT:-}
+      DO_SPACES_BUCKET: ${DO_SPACES_BUCKET:-}
+      DO_SPACES_ACCESS_KEY_ID: ${DO_SPACES_ACCESS_KEY_ID:-}
+      DO_SPACES_SECRET_ACCESS_KEY: ${DO_SPACES_SECRET_ACCESS_KEY:-}
+      DO_SPACES_CDN_URL: ${DO_SPACES_CDN_URL:-}
+      KYC_DOCUMENT_TYPES: identity,address,income_proof,bank,business_registration,business_license,corporate_structure,beneficial_ownership,articles_of_incorporation,director_identification,financial_statements,tax_certificate
+      KYC_REQUIRED_DOCUMENTS: identity,address,business_registration,beneficial_ownership,director_identification,bank
+      KYC_REVIEW_DURATION: 72
+      KYC_NOTIFICATIONS_ENABLED: "false"
+      KYC_NOTIFICATIONS_CHANNELS: email
+      KYC_MAX_DOCUMENT_SIZE: 10
+      KYC_MAX_DOCUMENTS: 5
+      KYC_AUTO_APPROVAL_LIMIT: 5000
+      KYC_REVIEW_TIMEOUT: 30000
+      KYC_REVIEW_RETRIES: 3
+      KYC_REVIEW_RETRY_DELAY: 5000
+      KYC_REVIEW_NOTIFICATIONS: "false"
+      KYC_REVIEW_NOTIFICATIONS_CHANNELS: email
+      KYC_REVIEW_NOTIFICATIONS_TEMPLATES: verification
+      KYC_REVIEW_NOTIFICATIONS_RECIPIENTS: admin
+      KYC_REVIEW_NOTIFICATIONS_RETRIES: 3
+      KYC_REVIEW_NOTIFICATIONS_RETRY_DELAY: 5000
+      KYC_REVIEW_NOTIFICATIONS_TIMEOUT: 30000
+      KYC_REVIEW_NOTIFICATIONS_TEMPLATE_PATH: ./templates
+      KYC_REVIEW_NOTIFICATIONS_TEMPLATE_EXTENSION: .hbs
+      KYC_REVIEW_NOTIFICATIONS_TEMPLATE_ENCODING: utf8
+      KYC_REVIEW_NOTIFICATIONS_TEMPLATE_DELIMITER: "{{}}"
+      KYC_REVIEW_NOTIFICATIONS_TEMPLATE_DELIMITER_START: "{{"
+      KYC_REVIEW_NOTIFICATIONS_TEMPLATE_DELIMITER_END: "}}"
+      KYC_REVIEW_NOTIFICATIONS_TEMPLATE_DELIMITER_ESCAPE: "\\"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - springtd-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3003/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  wallet-ms:
+    build:
+      context: ./wallet-ms
+      dockerfile: Dockerfile
+    container_name: springtd-wallet-ms
+    restart: unless-stopped
+    ports:
+      - "3004:3004"
+    environment:
+      NODE_ENV: production
+      PORT: 3004
+      MONGODB_URI: mongodb://admin:adminpassword@mongodb:27017/wallet_ms?authSource=admin
+      AUTH_SERVICE_URL: http://service-auth-ms:3000
+      COMPLIANCE_SERVICE_URL: http://compliance-ms:3003
+      JWT_SECRET: ${JWT_SECRET:-wallet-service-secret-key}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      service-auth-ms:
+        condition: service_started
+      compliance-ms:
+        condition: service_started
+    networks:
+      - springtd-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3004/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  product-ms:
+    build:
+      context: ./product-ms
+      dockerfile: Dockerfile
+    container_name: springtd-product-ms
+    restart: unless-stopped
+    ports:
+      - "3005:3005"
+    environment:
+      NODE_ENV: production
+      PORT: 3005
+      MONGODB_URI: mongodb://admin:adminpassword@mongodb:27017/product_ms?authSource=admin
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - springtd-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3005/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  billing-ms:
+    build:
+      context: ./billing-ms
+      dockerfile: Dockerfile
+    container_name: springtd-billing-ms
+    restart: unless-stopped
+    ports:
+      - "3006:3006"
+    environment:
+      NODE_ENV: production
+      PORT: 3006
+      SERVICE_AUTH_URL: http://service-auth-ms:3000
+      WALLET_SERVICE_URL: http://wallet-ms:3004
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: mongodb://admin:adminpassword@mongodb:27017/billing_db?authSource=admin
+      JWT_SECRET: ${JWT_SECRET:-billing-secret-key}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      service-auth-ms:
+        condition: service_started
+      wallet-ms:
+        condition: service_started
+    networks:
+      - springtd-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3006/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  payment-ms:
+    build:
+      context: ./payment-ms
+      dockerfile: Dockerfile
+    container_name: springtd-payment-ms
+    restart: unless-stopped
+    ports:
+      - "3007:3007"
+    environment:
+      NODE_ENV: production
+      PORT: 3007
+      MONGODB_URI: mongodb://admin:adminpassword@mongodb:27017/payment_ms?authSource=admin
+      SERVICE_AUTH_URL: http://service-auth-ms:3000
+      BILLING_SERVICE_URL: http://billing-ms:3006
+      WALLET_SERVICE_URL: http://wallet-ms:3004
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      JWT_SECRET: ${JWT_SECRET:-payment-secret-key}
+      PAYMENT_GATEWAY_API_KEY: ${PAYMENT_GATEWAY_API_KEY}
+      PAYMENT_GATEWAY_SECRET: ${PAYMENT_GATEWAY_SECRET}
+      PAYMENT_GATEWAY_WEBHOOK_SECRET: ${PAYMENT_GATEWAY_WEBHOOK_SECRET}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      service-auth-ms:
+        condition: service_started
+      billing-ms:
+        condition: service_started
+      wallet-ms:
+        condition: service_started
+    networks:
+      - springtd-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3007/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  notifications-ms:
+    build:
+      context: ./notifications-ms
+      dockerfile: Dockerfile
+    container_name: springtd-notifications-ms
+    restart: unless-stopped
+    ports:
+      - "4009:4009"
+    environment:
+      NODE_ENV: production
+      PORT: 4009
+      MONGO_URI: mongodb://admin:adminpassword@mongodb:27017/notifications_db?authSource=admin
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      MAILTRAP_API_TOKEN: ${MAILTRAP_API_TOKEN:-}
+      MAILTRAP_PASSWORD: ${MAILTRAP_PASSWORD:-}
+      MAILTRAP_HOST: ${MAILTRAP_HOST:-smtp.mailtrap.io}
+      MAILTRAP_PORT: ${MAILTRAP_PORT:-2525}
+      MAILTRAP_USER: ${MAILTRAP_USER:-}
+      MAILTRAP_FROM_EMAIL: ${MAILTRAP_FROM_EMAIL:-noreply@springtd.com}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - springtd-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:4009/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+# ==========================================
+# Networks
+# ==========================================
+networks:
+  springtd-network:
+    driver: bridge
+    name: springtd-network
+
+# ==========================================
+# Volumes
+# ==========================================
+volumes:
+  mongodb_data:
+    name: springtd-mongodb-data
+  mongodb_config:
+    name: springtd-mongodb-config
+  redis_data:
+    name: springtd-redis-data

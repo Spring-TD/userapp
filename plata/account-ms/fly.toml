@@ -1,0 +1,51 @@
+# fly.toml app configuration file generated for account-ms
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'account-ms-plata'
+primary_region = 'lhr'
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3008"
+  MONGO_URI = "mongodb+srv://doadmin:1W4s9j26fw0O3KA7@db-mongodb-plata-edc6b1fe.mongo.ondigitalocean.com/account-ms?tls=true&authSource=admin&replicaSet=db-mongodb-plata"
+  CORS_ORIGINS = "http://localhost:3000,http://localhost:3001"
+  LOG_LEVEL = "info"
+  SERVICE_AUTH_URL = "https://service-auth-ms-plata.fly.dev"
+  SERVICE_AUTH_INTERNAL_TOKEN = "Jb@1zP!k9#tW$xL&5aVn*QyR7gE^cF#Qb43"
+  CLIENT_AUTH_SERVICE_URL = "https://client-auth-ms-plata.fly.dev"
+  COMPLIANCE_SERVICE_URL = "https://compliance-ms.fly.dev"
+  WALLET_SERVICE_URL = "https://wallet-ms-plata.fly.dev"
+  BILLING_SERVICE_URL = "https://billing-ms-plata.fly.dev"
+  PRODUCT_SERVICE_URL = "https://product-ms-plata.fly.dev"
+  PAYMENT_SERVICE_URL = "https://payment-ms-plata.fly.dev"
+  CREATE_APP_SERVICE_URL = "https://create-app-ms-plata.fly.dev"
+  NOTIFICATIONS_SERVICE_URL = "https://notifications-ms-plata.fly.dev"
+
+[build]
+
+[http_service]
+  internal_port = 3008
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ['app']
+
+[checks]
+  [checks.health]
+    port = 3008
+    type = "http"
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/health"
+    protocol = "http"
+    tls_skip_verify = false
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1

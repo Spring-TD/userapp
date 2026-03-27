@@ -1,0 +1,659 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "API Gateway (Account MS)",
+    "version": "1.0.0",
+    "description": "Stateless gateway; routes /api/v1/* to backend microservices. All requests are proxied with body and headers preserved."
+  },
+  "servers": [
+    { "url": "http://localhost:3008", "description": "Development" }
+  ],
+  "tags": [
+    { "name": "Gateway", "description": "Local gateway endpoints" },
+    { "name": "Auth", "description": "Proxied to Client Auth – login, logout, refresh, verify" },
+    { "name": "Registration", "description": "Proxied to Client Auth – merchant, user, admin signup" },
+    { "name": "OTP", "description": "Proxied to Client Auth – OTP generate, verify, resend" },
+    { "name": "Password", "description": "Proxied to Client Auth – forgot, reset, change" },
+    { "name": "User", "description": "Proxied to Client Auth – profile, email, status" },
+    { "name": "Products", "description": "Proxied to Product microservice" },
+    { "name": "Configurations", "description": "Proxied to Product microservice" },
+    { "name": "Compliance", "description": "Proxied to Compliance (KYC) microservice" },
+    { "name": "Wallets", "description": "Proxied to Wallet microservice" },
+    { "name": "Billing", "description": "Proxied to Billing microservice" },
+    { "name": "Apps", "description": "Proxied to Create App microservice" },
+    { "name": "Payments", "description": "Proxied to Payment microservice" }
+  ],
+  "paths": {
+    "/": {
+      "get": {
+        "summary": "Gateway root",
+        "description": "Returns API Gateway info and available endpoints.",
+        "tags": ["Gateway"],
+        "responses": {
+          "200": { "description": "Gateway info" }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "description": "Returns gateway health status.",
+        "tags": ["Gateway"],
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "summary": "Login",
+        "description": "Proxied to Client Auth. Returns access and refresh tokens.",
+        "tags": ["Auth"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string" }
+                }
+              },
+              "example": {
+                "email": "merchant@example.com",
+                "password": "Password123!"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Login success" },
+          "401": { "description": "Invalid credentials" }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "summary": "Logout",
+        "tags": ["Auth"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "type": "object", "properties": { "token": { "type": "string" } } },
+              "example": { "token": "refresh_token_here" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Logged out" } }
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "summary": "Refresh token",
+        "tags": ["Auth"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["refreshToken"],
+                "properties": { "refreshToken": { "type": "string" } }
+              },
+              "example": { "refreshToken": "your_refresh_token_here" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "New tokens" } }
+      }
+    },
+    "/api/v1/auth/verify-token": {
+      "post": {
+        "summary": "Verify token",
+        "tags": ["Auth"],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": { "token": { "type": "string" } }
+              },
+              "example": { "token": "Bearer jwt_access_token_here" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Token valid" } }
+      }
+    },
+    "/api/v1/auth/verify-account": {
+      "post": {
+        "summary": "Verify account",
+        "tags": ["Auth"],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "type": "object" },
+              "example": {}
+            }
+          }
+        },
+        "responses": { "200": { "description": "Account verified" } }
+      }
+    },
+    "/api/v1/registration/merchant": {
+      "post": {
+        "summary": "Register merchant",
+        "tags": ["Registration"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["first_name", "last_name", "email", "phone", "country", "password"],
+                "properties": {
+                  "first_name": { "type": "string", "minLength": 2, "maxLength": 50 },
+                  "last_name": { "type": "string", "minLength": 2, "maxLength": 50 },
+                  "email": { "type": "string", "format": "email" },
+                  "phone": { "type": "string", "pattern": "^\\+?[1-9]\\d{1,14}$" },
+                  "country": { "type": "string", "minLength": 2, "maxLength": 100 },
+                  "password": { "type": "string", "minLength": 8 }
+                }
+              },
+              "example": {
+                "first_name": "Jane",
+                "last_name": "Merchant",
+                "email": "merchant@example.com",
+                "phone": "+1234567890",
+                "country": "United States",
+                "password": "Password123!"
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Merchant registered" } }
+      }
+    },
+    "/api/v1/registration/user": {
+      "post": {
+        "summary": "Register user",
+        "tags": ["Registration"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["user_merchant_id", "first_name", "last_name", "email", "phone", "country"],
+                "properties": {
+                  "user_merchant_id": { "type": "string", "minLength": 5, "maxLength": 50 },
+                  "first_name": { "type": "string", "minLength": 2, "maxLength": 50 },
+                  "last_name": { "type": "string", "minLength": 2, "maxLength": 50 },
+                  "email": { "type": "string", "format": "email" },
+                  "phone": { "type": "string" },
+                  "country": { "type": "string" },
+                  "password": { "type": "string", "minLength": 8 },
+                  "user_ref": { "type": "string" }
+                }
+              },
+              "example": {
+                "user_merchant_id": "merchant-app-001",
+                "first_name": "John",
+                "last_name": "User",
+                "email": "user@example.com",
+                "phone": "+1234567890",
+                "country": "United States",
+                "password": "Password123!",
+                "user_ref": "external-ref-optional"
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "User registered" } }
+      }
+    },
+    "/api/v1/registration/admin": {
+      "post": {
+        "summary": "Register admin",
+        "tags": ["Registration"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["first_name", "last_name", "email", "phone", "country", "password"],
+                "properties": {
+                  "first_name": { "type": "string" },
+                  "last_name": { "type": "string" },
+                  "email": { "type": "string", "format": "email" },
+                  "phone": { "type": "string" },
+                  "country": { "type": "string" },
+                  "password": { "type": "string" }
+                }
+              },
+              "example": {
+                "first_name": "Admin",
+                "last_name": "User",
+                "email": "admin@example.com",
+                "phone": "+1234567890",
+                "country": "United States",
+                "password": "Password123!"
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Admin registered" } }
+      }
+    },
+    "/api/v1/otp/generate": {
+      "post": {
+        "summary": "Generate OTP",
+        "tags": ["OTP"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["identifier", "channel", "purpose"],
+                "properties": {
+                  "identifier": { "type": "string", "description": "Email or phone" },
+                  "channel": { "type": "string", "enum": ["email", "sms"] },
+                  "purpose": { "type": "string" }
+                }
+              },
+              "example": {
+                "identifier": "user@example.com",
+                "channel": "email",
+                "purpose": "login"
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "OTP sent" } }
+      }
+    },
+    "/api/v1/otp/verify": {
+      "post": {
+        "summary": "Verify OTP",
+        "tags": ["OTP"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["identifier", "code"],
+                "properties": {
+                  "identifier": { "type": "string" },
+                  "code": { "type": "string" }
+                }
+              },
+              "example": {
+                "identifier": "user@example.com",
+                "code": "123456"
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "OTP verified" } }
+      }
+    },
+    "/api/v1/otp/resend": {
+      "post": {
+        "summary": "Resend OTP",
+        "tags": ["OTP"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["identifier", "channel", "purpose"],
+                "properties": {
+                  "identifier": { "type": "string" },
+                  "channel": { "type": "string", "enum": ["email", "sms"] },
+                  "purpose": { "type": "string" }
+                }
+              },
+              "example": {
+                "identifier": "user@example.com",
+                "channel": "email",
+                "purpose": "login"
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "OTP resent" } }
+      }
+    },
+    "/api/v1/password/forgot": {
+      "post": {
+        "summary": "Forgot password",
+        "tags": ["Password"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email"],
+                "properties": { "email": { "type": "string", "format": "email" } }
+              },
+              "example": { "email": "user@example.com" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Reset email sent" } }
+      }
+    },
+    "/api/v1/password/reset": {
+      "post": {
+        "summary": "Reset password",
+        "tags": ["Password"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["token", "newPassword"],
+                "properties": {
+                  "token": { "type": "string" },
+                  "newPassword": { "type": "string", "minLength": 8 }
+                }
+              },
+              "example": {
+                "token": "reset_token_from_email",
+                "newPassword": "NewPassword123!"
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Password reset" } }
+      }
+    },
+    "/api/v1/password/change": {
+      "put": {
+        "summary": "Change password",
+        "tags": ["Password"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["currentPassword", "newPassword"],
+                "properties": {
+                  "currentPassword": { "type": "string" },
+                  "newPassword": { "type": "string", "minLength": 8 }
+                }
+              },
+              "example": {
+                "currentPassword": "OldPassword123!",
+                "newPassword": "NewPassword123!"
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Password changed" } }
+      }
+    },
+    "/api/v1/user/profile": {
+      "put": {
+        "summary": "Update user profile",
+        "tags": ["User"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "first_name": { "type": "string" },
+                  "last_name": { "type": "string" },
+                  "phone": { "type": "string" },
+                  "country": { "type": "string" }
+                }
+              },
+              "example": {
+                "first_name": "John",
+                "last_name": "Doe",
+                "phone": "+1234567890",
+                "country": "United States"
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Profile updated" } }
+      }
+    },
+    "/api/v1/products": {
+      "get": {
+        "summary": "List products (proxied)",
+        "tags": ["Products"],
+        "responses": { "200": { "description": "List of products" } }
+      },
+      "post": {
+        "summary": "Create product (proxied)",
+        "tags": ["Products"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "description", "type", "appId"],
+                "properties": {
+                  "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+                  "description": { "type": "string", "minLength": 1, "maxLength": 1000 },
+                  "type": { "type": "string", "enum": ["Loan", "Mortgage", "Savings", "Commodity", "Investment"] },
+                  "appId": { "type": "string" }
+                }
+              },
+              "example": {
+                "name": "Personal Loan",
+                "description": "Unsecured personal loan product",
+                "type": "Loan",
+                "appId": "app-id-here"
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Product created" } }
+      }
+    },
+    "/api/v1/configurations": {
+      "get": {
+        "summary": "Configurations (proxied)",
+        "tags": ["Configurations"],
+        "responses": { "200": { "description": "Configurations" } }
+      },
+      "post": {
+        "summary": "Create/update configuration (proxied)",
+        "tags": ["Configurations"],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "type": "object" },
+              "example": { "key": "config_key", "value": "config_value" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Configuration saved" } }
+      }
+    },
+    "/api/v1/compliance/submit": {
+      "post": {
+        "summary": "Submit KYC (proxied)",
+        "tags": ["Compliance"],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userId": { "type": "string" },
+                  "documentType": { "type": "string" },
+                  "documentUrl": { "type": "string" }
+                }
+              },
+              "example": {
+                "userId": "user-id",
+                "documentType": "id_card",
+                "documentUrl": "https://example.com/doc.pdf"
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "KYC submitted" } }
+      }
+    },
+    "/api/v1/wallets/merchant": {
+      "post": {
+        "summary": "Create merchant wallet (proxied)",
+        "tags": ["Wallets"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "currency", "merchantWalletType"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "currency": { "type": "string", "minLength": 3, "maxLength": 3 },
+                  "merchantWalletType": { "type": "string", "enum": ["TREASURY", "OPERATION", "KYC"] }
+                }
+              },
+              "example": {
+                "name": "Main Treasury",
+                "currency": "USD",
+                "merchantWalletType": "TREASURY"
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Merchant wallet created" } }
+      }
+    },
+    "/api/v1/billing": {
+      "get": {
+        "summary": "Billing API (proxied)",
+        "tags": ["Billing"],
+        "responses": { "200": { "description": "Billing data" } }
+      },
+      "post": {
+        "summary": "Billing operations (proxied)",
+        "tags": ["Billing"],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "type": "object" },
+              "example": { "subscriptionId": "sub_123", "planId": "plan_456" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Billing response" } }
+      }
+    },
+    "/api/v1/apps": {
+      "get": {
+        "summary": "List apps (proxied)",
+        "tags": ["Apps"],
+        "responses": { "200": { "description": "List of apps" } }
+      },
+      "post": {
+        "summary": "Create app (proxied)",
+        "tags": ["Apps"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "websiteUrl", "alias", "description"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "websiteUrl": { "type": "string" },
+                  "alias": { "type": "string" },
+                  "description": { "type": "string" },
+                  "merchantId": { "type": "string" }
+                }
+              },
+              "example": {
+                "name": "My App",
+                "websiteUrl": "https://myapp.com",
+                "alias": "my-app",
+                "description": "Merchant application"
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "App created" } }
+      }
+    },
+    "/api/v1/payments/process": {
+      "post": {
+        "summary": "Process payment (proxied)",
+        "tags": ["Payments"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["amount", "method"],
+                "properties": {
+                  "userId": { "type": "string" },
+                  "amount": { "type": "number" },
+                  "currency": { "type": "string", "default": "USD" },
+                  "method": { "type": "string", "enum": ["card", "bank_transfer", "paypal", "crypto"] },
+                  "metadata": { "type": "object" }
+                }
+              },
+              "example": {
+                "amount": 99.99,
+                "currency": "USD",
+                "method": "card",
+                "metadata": { "orderId": "ord_123" }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Payment processed" },
+          "401": { "description": "Authentication required" }
+        }
+      }
+    },
+    "/verify-email": {
+      "get": {
+        "summary": "Verify email (proxied)",
+        "tags": ["Auth"],
+        "parameters": [
+          { "in": "query", "name": "token", "schema": { "type": "string" }, "description": "Email verification token" }
+        ],
+        "responses": { "200": { "description": "Email verified" } }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT from login or refresh. Pass as: Authorization: Bearer <token>"
+      }
+    }
+  }
+}
