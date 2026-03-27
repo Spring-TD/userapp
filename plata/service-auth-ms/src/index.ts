@@ -12,7 +12,10 @@ import { credentialRoutes } from './routes/credentialRoutes';
 import { apiKeyRoutes } from './routes/apiKeyRoutes';
 import { internalApiKeyRoutes } from './routes/internalApiKeyRoutes';
 import { internalGatewayRoutes } from './routes/internalGatewayRoutes';
+<<<<<<< HEAD
 import { internalUserRoutes } from './routes/internalUserRoutes';
+=======
+>>>>>>> 2cce30eb1fb2f3fe3d777aee3fbca61844c4c49d
 import { userRoutes } from './routes/userRoutes';
 import { SAMSService } from './services/samsService';
 import { redisCacheService } from './services/redisCacheService';
@@ -87,7 +90,10 @@ app.use('/api/v1/credentials', credentialRoutes);
 app.use('/api/v1/keys', apiKeyRoutes);
 app.use('/internal/api/v1/keys', internalApiKeyRoutes);
 app.use('/internal/api/v1/gateway', internalGatewayRoutes);
+<<<<<<< HEAD
 app.use('/internal/api/v1', internalUserRoutes);
+=======
+>>>>>>> 2cce30eb1fb2f3fe3d777aee3fbca61844c4c49d
 app.use('/api/v1/user', userRoutes);
 
 // Error handling middleware (must be last)

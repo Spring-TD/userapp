@@ -1,0 +1,23 @@
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+interface EnvironmentConfig {
+  port: number;
+  nodeEnv: string;
+  serviceAuthUrl: string;
+  corsOrigins: string[];
+  logLevel: string;
+  databaseUrl: string;
+  jwtSecret: string;
+}
+
+export const config: EnvironmentConfig = {
+  port: parseInt(process.env.PORT || '4006', 10),
+  nodeEnv: process.env.NODE_ENV || 'development',
+  serviceAuthUrl: process.env.SERVICE_AUTH_URL || 'http://localhost:4000',
+  corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:4001'],
+  logLevel: process.env.LOG_LEVEL || 'info',
+  databaseUrl: process.env.DATABASE_URL || 'postgresql://user:password@localhost:5432/billing_db',
+  jwtSecret: process.env.JWT_SECRET || 'billing-secret-key'
+};

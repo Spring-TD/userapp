@@ -1,30 +1,52 @@
 "use client"
 
 import type React from "react"
+
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Eye, EyeOff } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Progress } from "@/components/ui/progress"
+import { Eye, EyeOff, Check, X } from "lucide-react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { toast } from "react-toastify"
-import api from "@/lib/api"
 
+type RegistrationFormProps = {
+  onSubmit: (formData: {
+    firstName: string
+    lastName: string
+    country: string
+    email: string
+    phoneNumber: string
+    password: string
+    confirmPassword: string
+    agreeToTerms: boolean
+  }) => Promise<void>
+  isSubmitting: boolean
+}
 
-export function RegistrationForm() {
+export function RegistrationForm({ onSubmit, isSubmitting }: RegistrationFormProps) {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const router = useRouter()
+
+  // Password validation helper
+  const validatePassword = (password: string) => {
+    const hasLowercase = /[a-z]/.test(password)
+    const hasUppercase = /[A-Z]/.test(password)
+    const hasNumber = /\d/.test(password)
+    const hasSpecial = /[@$!%*?&]/.test(password)
+    const isLongEnough = password.length >= 8
+
+    const requirements = [hasLowercase, hasUppercase, hasNumber, hasSpecial, isLongEnough]
+    const strength = requirements.filter(Boolean).length
+    const score = (strength / 5) * 100
+
+    return {
+      isValid: requirements.every(Boolean),
+      score,
+      strength
+    }
+  }
 
   const [formData, setFormData] = useState({
     firstName: "",
@@ -37,62 +59,25 @@ export function RegistrationForm() {
     agreeToTerms: false,
   })
 
-  // Country mapping
-const countryMap: Record<string, string> = {
-  us: "United States",
-  ca: "Canada",
-  uk: "United Kingdom",
-  au: "Australia",
-  de: "Germany",
-  fr: "France",
-}
-
-const getCountryName = (code: string): string => {
-  return countryMap[code] || code // fallback if not found
-}
-
-
- const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault()
-
-  if (formData.password !== formData.confirmPassword) {
-    toast.error("Passwords do not match")
-    return
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await onSubmit(formData)
   }
 
-  if (!formData.agreeToTerms) {
-    toast.error("You must accept the terms to continue")
-    return
+  const passwordValidation = validatePassword(formData.password)
+
+  const getProgressColor = (score: number) => {
+    if (score <= 40) return "bg-red-500"
+    if (score <= 80) return "bg-yellow-500"
+    return "bg-green-500"
   }
 
-  setIsSubmitting(true)
-
-  try {
-    // map camelCase → snake_case for backend
-    const payload = {
-      first_name: formData.firstName,
-      last_name: formData.lastName,
-      country: getCountryName(formData.country), // convert code to full name
-      email: formData.email,
-      phone: formData.phoneNumber,
-      password: formData.password,
-    }
-
-    const response = await api.post("/auth/register", payload)
-
-    toast.success("Registration successful! Please verify your email.")
-    router.push("/verify-email")
-  } catch (error: any) {
-    console.error("Registration error:", error.response?.data || error.message)
-    toast.error(
-      error.response?.data?.error || 
-      error.response?.data?.message || 
-      "Registration failed. Try again."
-    )
-  } finally {
-    setIsSubmitting(false)
+  const getStrengthText = (score: number) => {
+    if (score === 0) return ""
+    if (score <= 40) return "Weak"
+    if (score <= 80) return "Medium"
+    return "Strong"
   }
-}
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
@@ -102,7 +87,6 @@ const getCountryName = (code: string): string => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* First Name */}
           <Input
             id="firstName"
             placeholder="First name"
@@ -111,7 +95,6 @@ const getCountryName = (code: string): string => {
             className="w-full h-[60px] text-base"
           />
 
-          {/* Last Name */}
           <Input
             id="lastName"
             placeholder="Last name"
@@ -120,12 +103,11 @@ const getCountryName = (code: string): string => {
             className="w-full h-[60px] text-base"
           />
 
-          {/* Country */}
           <Select
             value={formData.country}
             onValueChange={(value) => setFormData((prev) => ({ ...prev, country: value }))}
           >
-            <SelectTrigger className="w-full h-[60px] text-base">
+            <SelectTrigger className="w-full !h-[60px] text-base flex items-center">
               <SelectValue placeholder="Select Country" />
             </SelectTrigger>
             <SelectContent className="w-full">
@@ -138,7 +120,6 @@ const getCountryName = (code: string): string => {
             </SelectContent>
           </Select>
 
-          {/* Email */}
           <Input
             id="email"
             type="email"
@@ -148,7 +129,6 @@ const getCountryName = (code: string): string => {
             className="w-full h-[60px] text-base"
           />
 
-          {/* Phone Number */}
           <Input
             id="phoneNumber"
             type="tel"
@@ -159,53 +139,84 @@ const getCountryName = (code: string): string => {
           />
 
           {/* Password */}
-          <div className="relative">
-            <Input
-              id="password"
-              type={showPassword ? "text" : "password"}
-              placeholder="Create a password"
-              value={formData.password}
-              onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
-              className="w-full h-[60px] pr-12 text-base"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-            </button>
+          <div className="space-y-2">
+            <div className="relative">
+              <Input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                placeholder="Create a password"
+                value={formData.password}
+                onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
+                className="w-full h-[60px] pr-12 text-base"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              </button>
+            </div>
+            {formData.password && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs">
+                  <span className={
+                    passwordValidation.score <= 40 ? "text-red-500" :
+                      passwordValidation.score <= 80 ? "text-yellow-500" : "text-green-500"
+                  }>
+                    {getStrengthText(passwordValidation.score)}
+                  </span>
+                  <span className="text-muted-foreground">{passwordValidation.score}%</span>
+                </div>
+                <Progress
+                  value={passwordValidation.score}
+                  className="h-2"
+                  // Override the indicator color using child selector
+                  indicatorClassName={getProgressColor(passwordValidation.score)}
+                />
+              </div>
+            )}
           </div>
 
           {/* Confirm Password */}
-          <div className="relative">
-            <Input
-              id="confirmPassword"
-              type={showConfirmPassword ? "text" : "password"}
-              placeholder="Confirm password"
-              value={formData.confirmPassword}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, confirmPassword: e.target.value }))
-              }
-              className="w-full h-[60px] pr-12 text-base"
-            />
-            <button
-              type="button"
-              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-            </button>
+          <div className="space-y-2">
+            <div className="relative">
+              <Input
+                id="confirmPassword"
+                type={showConfirmPassword ? "text" : "password"}
+                placeholder="Confirm password"
+                value={formData.confirmPassword}
+                onChange={(e) => setFormData((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                className="w-full h-[60px] pr-12 text-base"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              </button>
+            </div>
+            {formData.confirmPassword && (
+              <div className="flex items-center gap-2 text-sm">
+                {formData.password === formData.confirmPassword ? (
+                  <span className="text-green-600 flex items-center gap-1">
+                    <Check className="h-4 w-4" /> Passwords match
+                  </span>
+                ) : (
+                  <span className="text-red-500 flex items-center gap-1">
+                    <X className="h-4 w-4" /> Passwords do not match
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Terms */}
           <div className="flex items-start gap-3 text-sm">
             <Checkbox
               id="terms"
               checked={formData.agreeToTerms}
-              onCheckedChange={(checked) =>
-                setFormData((prev) => ({ ...prev, agreeToTerms: checked as boolean }))
-              }
+              onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, agreeToTerms: checked as boolean }))}
               className="mt-1 rounded-full"
             />
             <p className="text-[13px] font-medium leading-relaxed text-muted-foreground">
@@ -221,7 +232,13 @@ const getCountryName = (code: string): string => {
             </p>
           </div>
 
-          {/* Submit */}
+          <div className="text-center text-sm">
+            <span className="text-muted-foreground">Already have an account? </span>
+            <Link href="/signin" className="hover:underline font-medium" style={{ color: "#74612F" }}>
+              Sign in
+            </Link>
+          </div>
+
           <Button
             type="submit"
             disabled={isSubmitting}

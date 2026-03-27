@@ -2,7 +2,11 @@
 import { v4 as uuidv4 } from 'uuid';
 import { mockDb } from '../utils/mockDatabase';
 import { ApiKey, ApiKeyStatus, CreateApiKeyRequest, ApiKeyEnvironment } from '../models/ApiKey';
+<<<<<<< HEAD
 import { generateApiKeyPair } from '../utils/crypto';
+=======
+import { generateApiKeyPair, hashApiKey } from '../utils/crypto';
+>>>>>>> 2cce30eb1fb2f3fe3d777aee3fbca61844c4c49d
 import { logger } from '../utils/logger';
 
 export class ApiKeyService {
@@ -19,6 +23,10 @@ export class ApiKeyService {
             // Ensure environment has a valid value (default to LIVE)
             const environment = request.environment ?? ApiKeyEnvironment.LIVE;
             const { publicKey, secretKey } = generateApiKeyPair(environment);
+<<<<<<< HEAD
+=======
+            const secretKeyHash = hashApiKey(secretKey);
+>>>>>>> 2cce30eb1fb2f3fe3d777aee3fbca61844c4c49d
             const now = new Date();
 
             // Auto-set expiration: use provided expires_in_days or default to 90 days
@@ -33,7 +41,11 @@ export class ApiKeyService {
                 merchant_id: merchantId,
                 name: name,
                 public_key: publicKey,
+<<<<<<< HEAD
                 secret_key: secretKey,
+=======
+                secret_key_hash: secretKeyHash,
+>>>>>>> 2cce30eb1fb2f3fe3d777aee3fbca61844c4c49d
                 environment: environment,
                 status: ApiKeyStatus.ACTIVE,
                 permissions: request.permissions ?? ['read'],

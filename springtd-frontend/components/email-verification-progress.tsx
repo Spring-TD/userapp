@@ -1,35 +1,14 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+type EmailVerificationProgressProps = {
+  progress: number
+}
 
-export function EmailVerificationProgress() {
-  const [progress, setProgress] = useState(0)
-  const router = useRouter()
-
-  useEffect(() => {
-    // Simulate verification progress
-    const interval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval)
-          // Redirect to success page after completion
-          setTimeout(() => {
-            router.push("/verify-success")
-          }, 500)
-          return 100
-        }
-        return prev + 20
-      })
-    }, 800)
-
-    return () => clearInterval(interval)
-  }, [router])
-
+export function EmailVerificationProgress({ progress }: EmailVerificationProgressProps) {
   return (
     <div className="mx-auto max-w-md space-y-6 text-center">
       <div className="space-y-4">
-        <h1 className="text-xl font-medium">Verifying your email</h1>
+        <h1 className="text-xl font-medium">{progress < 100 ? "Verifying your email..." : "Email verified!"}</h1>
 
         <div className="space-y-2">
           <div className="h-2 w-full rounded-full bg-gray-200">

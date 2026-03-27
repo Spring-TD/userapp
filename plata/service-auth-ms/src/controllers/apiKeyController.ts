@@ -109,9 +109,14 @@ export class ApiKeyController {
                 return;
             }
 
+<<<<<<< HEAD
             const apiKeys = result.apiKeys?.map(k => {
                 const safe: Partial<ApiKey> = { ...k };
                 // Never expose the legacy hash field to the frontend.
+=======
+            const safeKeys = result.apiKeys?.map(k => {
+                const safe: Partial<ApiKey> = { ...k };
+>>>>>>> 2cce30eb1fb2f3fe3d777aee3fbca61844c4c49d
                 delete safe.secret_key_hash;
                 return safe;
             });
@@ -211,7 +216,11 @@ export class ApiKeyController {
                         message: 'Bootstrap API key already exists for this merchant/environment',
                         data: {
                             apiKey: safeApiKey,
+<<<<<<< HEAD
                             secretKey: safeApiKey.secret_key
+=======
+                            secretKey: null
+>>>>>>> 2cce30eb1fb2f3fe3d777aee3fbca61844c4c49d
                         }
                     });
                     return;
@@ -242,7 +251,11 @@ export class ApiKeyController {
             delete safeApiKey.secret_key_hash;
             res.status(201).json({
                 success: true,
+<<<<<<< HEAD
                 message: 'Bootstrap API key created successfully.',
+=======
+                message: 'Bootstrap API key created successfully. Store the secret key safely; it will not be shown again.',
+>>>>>>> 2cce30eb1fb2f3fe3d777aee3fbca61844c4c49d
                 data: {
                     apiKey: safeApiKey,
                     secretKey: result.secretKey || null

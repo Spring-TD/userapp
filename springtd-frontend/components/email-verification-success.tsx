@@ -1,16 +1,13 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { useRouter } from "next/navigation"
 import Image from "next/image"
 
-export function EmailVerificationSuccess() {
-  const router = useRouter()
+interface Props {
+  onContinue: () => void
+}
 
-  const handleContinue = () => {
-    router.push("/welcome")
-  }
-
+export function EmailVerificationSuccess({ onContinue }: Props) {
   return (
     <div className="mx-auto max-w-md space-y-6 text-center">
       <div className="flex justify-center">
@@ -29,7 +26,7 @@ export function EmailVerificationSuccess() {
       </div>
 
       <Button
-        onClick={handleContinue}
+        onClick={onContinue}
         className="w-full h-12 text-white hover:opacity-90"
         style={{ backgroundColor: "#74612F" }}
       >

@@ -1,16 +1,17 @@
-"use client";
-
-import React, { useRef, useState } from "react";
-import { UploadCloud, Check } from "lucide-react";
+"use client"
+import type React from "react"
+import { useRef, useState, useEffect } from "react"
+import { UploadCloud, Check } from "lucide-react"
 
 export interface UploadCardProps {
-  id: string;
-  title: string;
-  hint?: string;
-  accept?: string;
-  buttonColor?: string;
-  onFileSelected?: (file: File | null) => void;
-  error?: boolean;
+  id: string
+  title: string
+  hint?: string
+  accept?: string
+  buttonColor?: string
+  onFileSelected?: (file: File | null) => void
+  error?: boolean
+  initialFile?: File | null
 }
 
 const UploadCard: React.FC<UploadCardProps> = ({
@@ -18,92 +19,76 @@ const UploadCard: React.FC<UploadCardProps> = ({
   title,
   hint = "PDF format • Max. 5MB",
   accept = ".pdf,.png,.jpg,.jpeg",
-  buttonColor = "#9A813F",
+  buttonColor = "#7C3AED",
   onFileSelected,
   error = false,
+  initialFile = null,
 }) => {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [isUploaded, setIsUploaded] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [fileName, setFileName] = useState<string | null>(initialFile?.name ?? null)
+  const [isUploaded, setIsUploaded] = useState(Boolean(initialFile))
 
-  const handleClick = () => inputRef.current?.click();
+  // Update state when initialFile changes (e.g., when context updates)
+  useEffect(() => {
+    setFileName(initialFile?.name ?? null)
+    setIsUploaded(Boolean(initialFile))
+  }, [initialFile])
+
+  const handleClick = () => inputRef.current?.click()
 
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] ?? null;
-    setFileName(file?.name ?? null);
-    setIsUploaded(Boolean(file));
-    onFileSelected?.(file);
-  };
+    const file = e.target.files?.[0] ?? null
+    setFileName(file?.name ?? null)
+    setIsUploaded(Boolean(file))
+    onFileSelected?.(file)
+  }
 
   return (
-    <div className="w-full px-8">
-      <div
-        className={`flex items-center justify-between gap-4 bg-white rounded-lg p-5 border ${
-          error
-            ? "border-red-400"
-            : "border-gray-100"
-        }`}
-      >
-        {/* Left: icon */}
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-12 h-12 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center">
-            <UploadCloud
-              className={error ? "text-gray-600" : "text-gray-600"}
-              size={20}
-            />
-          </div>
-
-          {/* Title + hint */}
-          <div className="min-w-0">
-            <div
-              className={`text-sm font-medium truncate ${
-                error ? "text-gray-900" : "text-gray-900"
-              }`}
-            >
-              {title}
-            </div>
-            <div className="text-xs text-gray-500 truncate mt-0.5">{hint}</div>
-
-            {fileName && (
-              <div className="text-xs text-gray-400 mt-1 flex items-center gap-1">
-                {isUploaded && !error ? (
-                  <>
-                    <Check className="h-3 w-3 text-green-600" />
-                    <span className="truncate">{fileName}</span>
-                  </>
-                ) : (
-                  <span className="truncate">{fileName}</span>
-                )}
-              </div>
-            )}
-          </div>
+    <div
+      className={`flex items-center justify-between p-4 rounded-lg border-2 ${
+        error ? "border-red-500 bg-red-50" : "border-gray-200 bg-white"
+      }`}
+    >
+      {/* Left: icon */}
+      <div className="flex items-center gap-4 flex-1">
+        <div
+          className={`w-12 h-12 rounded-lg flex items-center justify-center ${error ? "bg-red-100" : "bg-gray-100"}`}
+        >
+          <UploadCloud className={`w-6 h-6 ${error ? "text-red-600" : "text-gray-600"}`} />
         </div>
 
-        {/* Right: button */}
-        <div className="flex items-center gap-3">
-          <input
-            ref={inputRef}
-            id={id}
-            type="file"
-            accept={accept}
-            className="hidden"
-            onChange={onChange}
-          />
-          <button
-            type="button"
-            onClick={handleClick}
-            aria-label={`${isUploaded ? "Replace" : "Upload"} ${title}`}
-            className={`text-sm text-white font-medium px-4 py-2 rounded-md shadow-sm transition-colors cursor-pointer ${
-              error ? "bg-[#9A813F] hover:bg-[#9A813F]" : ""
-            }`}
-            style={!error ? { backgroundColor: buttonColor, color: "#fff" } : {}}
-          >
-            {isUploaded ? "Replace" : "Upload"}
-          </button>
+        {/* Title + hint */}
+        <div className="flex-1">
+          <div className={`font-medium ${error ? "text-red-900" : "text-gray-900"}`}>{title}</div>
+          <div className="text-sm text-gray-500">{hint}</div>
+          {fileName && (
+            <div className="text-sm mt-1">
+              {isUploaded && !error ? (
+                <>
+                  <Check className="w-4 h-4 inline text-green-600 mr-1" />
+                  <span className="text-green-600">{fileName}</span>
+                </>
+              ) : (
+                <span className="text-gray-600">{fileName}</span>
+              )}
+            </div>
+          )}
         </div>
       </div>
-    </div>
-  );
-};
 
-export default UploadCard;
+      {/* Right: button */}
+      <button
+        type="button"
+        onClick={handleClick}
+        className="px-6 py-2 rounded-lg text-white font-medium hover:opacity-90 transition"
+        style={{ backgroundColor: buttonColor }}
+      >
+        {isUploaded ? "Replace" : "Upload"}
+      </button>
+
+      <input ref={inputRef} type="file" accept={accept} onChange={onChange} className="hidden" />
+    </div>
+  )
+}
+
+export default UploadCard

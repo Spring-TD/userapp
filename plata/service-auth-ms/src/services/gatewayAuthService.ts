@@ -42,12 +42,18 @@ export class GatewayAuthService {
         return { success: false, error: 'API key has expired' };
       }
 
+<<<<<<< HEAD
       // Prefer raw secret verification (new keys). Fall back to hash (legacy keys).
       const secretOk = record.secret_key
         ? trimmedSecret === record.secret_key
         : (record.secret_key_hash ? verifyApiKey(trimmedSecret, record.secret_key_hash) : false);
 
       if (!secretOk) return { success: false, error: 'Invalid secret key' };
+=======
+      if (!verifyApiKey(trimmedSecret, record.secret_key_hash)) {
+        return { success: false, error: 'Invalid secret key' };
+      }
+>>>>>>> 2cce30eb1fb2f3fe3d777aee3fbca61844c4c49d
 
       const ipOk = await IPWhitelistModel.isIPAllowedForMerchantGateway(record.merchant_id, clientIp);
       if (!ipOk) {

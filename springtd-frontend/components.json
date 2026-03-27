@@ -10,13 +10,12 @@
     "cssVariables": true,
     "prefix": ""
   },
-  "iconLibrary": "lucide",
   "aliases": {
-    "components": "@/components/components",
-    "utils": "@/components/lib/utils",
-    "ui": "@/components/components/ui",
-    "lib": "@/components/lib",
-    "hooks": "@/components/hooks"
+    "components": "@/components",
+    "utils": "@/lib/utils",
+    "ui": "@/components/ui",
+    "lib": "@/lib",
+    "hooks": "@/hooks"
   },
-  "registries": {}
+  "iconLibrary": "lucide"
 }

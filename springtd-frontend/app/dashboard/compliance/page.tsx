@@ -1,60 +1,124 @@
-'use client';
+"use client"
 
-import { DashboardHeader } from '@/components/DashboardHeader';
-import BusinessDocument from '@/components/forms/BusinessDocument';
-import BusinessDocumentWrapper from '@/components/forms/BusinessDocumentWrapper';
-import BusinessInfoTab from '@/components/forms/BusinessInfoTab';
-import ComplianceChat from '@/components/forms/ComplianceChat';
-import ShareholderInfo from '@/components/forms/ShareholderInfo';
-import Sidebar from '@/components/Sidebar';
-import Tabs from '@/components/Tabs';
-import React, { useState } from 'react';
+import Tabs from "@/components/Tabs"
+import { useState, useEffect } from "react"
+import { ComplianceFormProvider } from "@/providers/ComplianceFormProvider"
+
+import BusinessInfoTab from "@/components/compliance-forms/BusinessInfoTab"
+import BusinessDocumentWrapper from "@/components/compliance-forms/BusinessDocumentWrapper"
+import ShareholderInfo from "@/components/compliance-forms/ShareholderInfo"
+
+const COMPLETION_KEY = "kyc.tabCompletion"
+
+interface TabCompletion {
+    "business-info": boolean
+    "business-document": boolean
+    "shareholder-info": boolean
+}
 
 export default function ComplianceDashboard() {
-  const [activeTab, setActiveTab] = useState('business-info');
+    const [activeTab, setActiveTab] = useState("business-info")
+    const [completion, setCompletion] = useState<TabCompletion>({
+        "business-info": false,
+        "business-document": false,
+        "shareholder-info": false,
+    })
 
-  const tabs = [
-    { id: 'business-info', label: 'Business Info' },
-    { id: 'business-document', label: 'Business Document' },
-    { id: 'shareholder-info', label: "Shareholder's Info" },
-    { id: 'compliance-chat', label: 'Compliance Chat' },
-  ];
+    // Hydrate completion state from localStorage
+    useEffect(() => {
+        try {
+            if (typeof window !== "undefined") {
+                const saved = localStorage.getItem(COMPLETION_KEY)
+                if (saved) {
+                    setCompletion(JSON.parse(saved))
+                }
+                // Also check if business info exists (for users who already filled it)
+                const businessInfo = localStorage.getItem("kyc.businessInfo")
+                if (businessInfo) {
+                    const info = JSON.parse(businessInfo)
+                    // Check if essential fields are filled
+                    if (info.businessName && info.country && info.industry) {
+                        setCompletion((prev) => {
+                            const next = { ...prev, "business-info": true }
+                            localStorage.setItem(COMPLETION_KEY, JSON.stringify(next))
+                            return next
+                        })
+                    }
+                }
+            }
+        } catch (_) {
+            // ignore
+        }
+    }, [])
 
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case 'business-info':
-        return <BusinessInfoTab />;
-      case 'business-document':
-        return <BusinessDocumentWrapper />;
-      case 'shareholder-info':
-        return <ShareholderInfo />;
-      case 'compliance-chat':
-        return <ComplianceChat />;
-      default:
-        return <BusinessInfoTab />;
+    const markComplete = (tabId: keyof TabCompletion) => {
+        setCompletion((prev) => {
+            const next = { ...prev, [tabId]: true }
+            try {
+                localStorage.setItem(COMPLETION_KEY, JSON.stringify(next))
+            } catch (_) { }
+            return next
+        })
     }
-  };
 
-  return (
-    <div className="flex h-screen">
-      {/* Sidebar on the left */}
-      <Sidebar className="w-64 shrink-0 border-r" />
+    const handleBusinessInfoContinue = () => {
+        markComplete("business-info")
+        setActiveTab("business-document")
+    }
 
-      {/* Main content area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <DashboardHeader />
+    const handleBusinessDocumentContinue = () => {
+        markComplete("business-document")
+        setActiveTab("shareholder-info")
+    }
 
-        {/* Tabs */}
-        <div className="px-8 py-4">
-          <Tabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
-        </div>
+    const tabs = [
+        {
+            id: "business-info",
+            label: "Business Info",
+            locked: false,
+            completed: completion["business-info"]
+        },
+        {
+            id: "business-document",
+            label: "Business Document",
+            locked: !completion["business-info"],
+            completed: completion["business-document"]
+        },
+        {
+            id: "shareholder-info",
+            label: "Shareholder Info",
+            locked: !completion["business-document"],
+            completed: completion["shareholder-info"]
+        },
+    ]
 
-        {/* Tab Content */}
-        <div className="flex-1 overflow-y-auto px-8 py-6">
-          {renderTabContent()}
-        </div>
-      </div>
-    </div>
-  );
+    const renderTabContent = () => {
+        switch (activeTab) {
+            case "business-info":
+                return <BusinessInfoTab onContinue={handleBusinessInfoContinue} />
+            case "business-document":
+                return <BusinessDocumentWrapper onContinue={handleBusinessDocumentContinue} />
+            case "shareholder-info":
+                return <ShareholderInfo />
+            default:
+                return <BusinessInfoTab onContinue={handleBusinessInfoContinue} />
+        }
+    }
+
+    return (
+        <ComplianceFormProvider>
+            <div className="flex flex-col h-full">
+                <div className="px-8 py-4">
+                    <Tabs
+                        tabs={tabs}
+                        activeTab={activeTab}
+                        onTabChange={setActiveTab}
+                        activeTabClassName="border-[#9A813F] text-[#9A813F]"
+                    />
+                </div>
+
+                <div className="flex-1 overflow-y-auto px-8 py-6">{renderTabContent()}</div>
+            </div>
+        </ComplianceFormProvider>
+    )
 }
