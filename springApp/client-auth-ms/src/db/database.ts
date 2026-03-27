@@ -3,6 +3,7 @@ import { UserAccount, Role, Invitation } from '../models/User';
 import UserAccountModel from './UserModel';
 import RoleModel from './RoleModel';
 import InvitationModel from './InvitationModel';
+import { OtpModel, OtpDocument } from './OtpModel';
 
 function userDocToAccount(doc: mongoose.Document | null): UserAccount | null {
   if (!doc) return null;
@@ -135,9 +136,47 @@ export const db = {
     return docs.map(d => invitationDocToInvitation(d)!).filter(Boolean);
   },
 
+  async createOtp(data: {
+    identifier: string;
+    code: string;
+    channel: 'email' | 'sms';
+    purpose: 'verification' | 'password-reset' | 'login';
+    expiresAt: Date;
+  }): Promise<OtpDocument> {
+    return OtpModel.create(data);
+  },
+
+  async findActiveOtp(
+    identifier: string,
+    purpose: 'verification' | 'password-reset' | 'login'
+  ): Promise<OtpDocument | null> {
+    return OtpModel.findOne({
+      identifier: identifier.toLowerCase(),
+      purpose,
+      verified: false,
+      expiresAt: { $gt: new Date() }
+    }).sort({ createdAt: -1 });
+  },
+
+  async incrementOtpAttempts(id: string): Promise<void> {
+    await OtpModel.findByIdAndUpdate(id, { $inc: { attempts: 1 } });
+  },
+
+  async markOtpVerified(id: string): Promise<void> {
+    await OtpModel.findByIdAndUpdate(id, { $set: { verified: true } });
+  },
+
+  async deleteOtpsByIdentifier(
+    identifier: string,
+    purpose: 'verification' | 'password-reset' | 'login'
+  ): Promise<void> {
+    await OtpModel.deleteMany({ identifier: identifier.toLowerCase(), purpose });
+  },
+
   async clearAll(): Promise<void> {
     await UserAccountModel.deleteMany({});
     await RoleModel.deleteMany({});
     await InvitationModel.deleteMany({});
+    await OtpModel.deleteMany({});
   }
 };

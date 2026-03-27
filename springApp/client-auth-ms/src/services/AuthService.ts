@@ -52,7 +52,7 @@ export class AuthService {
   /**
    * Register a new user
    */
-  static async registerUser(userData: UserRegistrationData): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
+  static async registerUser(userData: UserRegistrationData): Promise<{ success: boolean; user?: UserResponse; verificationEmailSent?: boolean; error?: string }> {
     try {
       // Check if email already exists
       const existingUser = await db.findUserByEmail(userData.email);
@@ -89,11 +89,23 @@ export class AuthService {
 
       const user = await db.createUser(newUser as Omit<UserAccount, 'id' | 'created_at' | 'updated_at' | 'failed_login_attempts'>);
 
+      let verificationEmailSent = false;
+      try {
+        await AuthService.sendVerificationOtpEmail(
+          user.email,
+          `${user.first_name} ${user.last_name}`.trim() || 'User'
+        );
+        verificationEmailSent = true;
+      } catch (notifError) {
+        console.error('Failed to send verification OTP to new user:', notifError);
+      }
+
       // Return user without password
       const { password, ...userWithoutPassword } = user;
       return {
         success: true,
-        user: userWithoutPassword
+        user: userWithoutPassword,
+        verificationEmailSent
       };
     } catch (error) {
       console.error('Error registering user:', error);
@@ -107,7 +119,7 @@ export class AuthService {
   /**
    * Register a new merchant
    */
-  static async registerMerchant(merchantData: MerchantRegistrationData): Promise<{ success: boolean; merchant?: UserResponse; error?: string }> {
+  static async registerMerchant(merchantData: MerchantRegistrationData): Promise<{ success: boolean; merchant?: UserResponse; verificationEmailSent?: boolean; error?: string }> {
     try {
       // Check if email already exists
       const existingUser = await db.findUserByEmail(merchantData.email);
@@ -146,11 +158,23 @@ export class AuthService {
 
       const merchant = await db.createUser(newMerchant as Omit<UserAccount, 'id' | 'created_at' | 'updated_at' | 'failed_login_attempts'>);
 
+      let verificationEmailSent = false;
+      try {
+        await AuthService.sendVerificationOtpEmail(
+          merchant.email,
+          `${merchant.first_name} ${merchant.last_name}`.trim() || 'Merchant'
+        );
+        verificationEmailSent = true;
+      } catch (notifError) {
+        console.error('Failed to send verification OTP to new merchant:', notifError);
+      }
+
       // Return merchant without password
       const { password, ...merchantWithoutPassword } = merchant;
       return {
         success: true,
-        merchant: merchantWithoutPassword
+        merchant: merchantWithoutPassword,
+        verificationEmailSent
       };
     } catch (error) {
       console.error('Error registering merchant:', error);
@@ -608,19 +632,21 @@ export class AuthService {
    */
   static async generateOTP(request: { identifier: string; channel: 'email' | 'sms'; purpose: 'verification' | 'password-reset' | 'login' }): Promise<{ success: boolean; reference?: string; expiresIn?: number; error?: string }> {
     try {
-      // Mock implementation - in production, generate actual OTP and send via email/SMS
       const { identifier, channel, purpose } = request;
-
-      // Generate a 6-digit OTP code
       const code = Math.floor(100000 + Math.random() * 900000).toString();
-
-      // Set expiration (5 minutes)
+      const hashedCode = await hashPassword(code);
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+      const idLower = identifier.toLowerCase();
 
-      // Log the OTP generation for debugging
-      console.log('OTP generated', { identifier, channel, purpose, code });
+      await db.deleteOtpsByIdentifier(idLower, purpose);
+      await db.createOtp({
+        identifier: idLower,
+        code: hashedCode,
+        channel,
+        purpose,
+        expiresAt
+      });
 
-      // Send OTP via notifications service
       if (channel === 'email') {
         const notificationResult = await notificationService.sendOTP(identifier, code, purpose);
         if (!notificationResult.success) {
@@ -631,7 +657,7 @@ export class AuthService {
           };
         }
       } else if (channel === 'sms') {
-        // For SMS, we would need to implement SMS sending via notifications service
+        // SMS dispatch is not implemented in this notifications client yet.
         console.log(`OTP ${code} sent to phone ${identifier}`);
       }
 
@@ -649,20 +675,62 @@ export class AuthService {
   }
 
   /**
+   * Send a one-time verification code email (used after signup).
+   * Generates OTP, stores it in DB, and sends via notifications service.
+   */
+  static async sendVerificationOtpEmail(email: string, _userName: string): Promise<void> {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashedCode = await hashPassword(code);
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    const identifier = email.toLowerCase();
+
+    await db.deleteOtpsByIdentifier(identifier, 'verification');
+    await db.createOtp({
+      identifier,
+      code: hashedCode,
+      channel: 'email',
+      purpose: 'verification',
+      expiresAt
+    });
+
+    const result = await notificationService.sendOTP(email, code, 'verification');
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to send OTP');
+    }
+  }
+
+  /**
    * Verify OTP
    */
   static async verifyOTP(request: { identifier: string; code: string }): Promise<{ success: boolean; valid: boolean; error?: string }> {
     try {
       const { identifier, code } = request;
+      const idLower = identifier.toLowerCase();
+      const purposes: Array<'verification' | 'password-reset' | 'login'> = ['verification', 'password-reset', 'login'];
 
-      // Log OTP verification for debugging
-      console.log('OTP verification requested', { identifier, code });
+      for (const purpose of purposes) {
+        const otp = await db.findActiveOtp(idLower, purpose);
+        if (!otp) continue;
 
-      // Mock response - in a real implementation, you would check against stored OTP
-      return {
-        success: true,
-        valid: true // Mock response - always valid in this mock implementation
-      };
+        const valid = await comparePassword(code, otp.code);
+        if (!valid) {
+          await db.incrementOtpAttempts(otp.id);
+          return { success: true, valid: false };
+        }
+
+        await db.markOtpVerified(otp.id);
+
+        if (purpose === 'verification') {
+          const user = await db.findUserByEmail(idLower);
+          if (user) {
+            await db.updateUser(user.id, { email_verified: true, status: AccountStatus.ACTIVE });
+          }
+        }
+
+        return { success: true, valid: true };
+      }
+
+      return { success: true, valid: false };
     } catch (error) {
       return {
         success: false,
@@ -675,18 +743,13 @@ export class AuthService {
   /**
    * Resend OTP
    */
-  static async resendOTP(request: { identifier: string }): Promise<{ success: boolean; reference?: string; expiresIn?: number; error?: string }> {
+  static async resendOTP(request: { identifier: string; channel: 'email' | 'sms'; purpose: 'verification' | 'password-reset' | 'login' }): Promise<{ success: boolean; reference?: string; expiresIn?: number; error?: string }> {
     try {
-      const { identifier } = request;
-
-      // Log OTP resend for debugging
-      console.log('OTP resend requested', { identifier });
-
-      return {
-        success: true,
-        reference: `otp_${Date.now()}`, // Mock reference
-        expiresIn: 300 // 5 minutes in seconds
-      };
+      const { identifier, channel, purpose } = request;
+      if (!identifier || !channel || !purpose) {
+        return { success: false, error: 'Identifier, channel, and purpose are required' };
+      }
+      return await AuthService.generateOTP({ identifier, channel, purpose });
     } catch (error) {
       return {
         success: false,

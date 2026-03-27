@@ -60,7 +60,7 @@ export class OTPController {
         return;
       }
 
-      const result = await AuthService.resendOTP({ identifier });
+      const result = await AuthService.resendOTP({ identifier, channel, purpose });
       res.status(result.success ? 200 : 400).json(result);
     } catch (error) {
       console.error('Error in resendOTP:', error);
