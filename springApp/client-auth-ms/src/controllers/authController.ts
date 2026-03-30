@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import { AuthService } from '../services/AuthService';
+import { SessionService } from '../services/SessionService';
+import { verifyToken } from '../utils/crypto';
 
 export class AuthController {
   // ===== ACCOUNT VERIFICATION =====
@@ -44,7 +46,10 @@ export class AuthController {
         return;
       }
 
-      const result = await AuthService.login(email, password);
+      const result = await AuthService.login(email, password, {
+        userAgent: req.get('User-Agent') || undefined,
+        ip: req.ip || req.socket.remoteAddress || undefined,
+      });
       res.status(result.success ? 200 : 401).json(result);
     } catch (error) {
       console.error('Error in login:', error);
@@ -57,27 +62,51 @@ export class AuthController {
 
   static async logout(req: Request, res: Response): Promise<void> {
     try {
-      const token = req.headers.authorization?.replace('Bearer ', '');
+      const accessToken = req.headers.authorization?.replace('Bearer ', '');
+      const refreshToken = typeof req.body?.refreshToken === 'string' ? req.body.refreshToken : undefined;
 
-      if (!token) {
-        res.status(401).json({
-          success: false,
-          error: 'Authorization token is required'
+      if (accessToken) {
+        const v = verifyToken(accessToken, 'access');
+        if (v.valid && v.payload?.userId) {
+          if (v.payload.sessionId) {
+            await SessionService.revokeBySessionId(
+              v.payload.userId,
+              v.payload.sessionId as string
+            );
+          }
+          res.status(200).json({
+            success: true,
+            message: 'Logged out successfully',
+          });
+          return;
+        }
+      }
+
+      if (refreshToken) {
+        const out = await SessionService.revokeWithRefreshToken(refreshToken);
+        if (!out.success) {
+          res.status(401).json({
+            success: false,
+            error: out.error || 'Invalid refresh token',
+          });
+          return;
+        }
+        res.status(200).json({
+          success: true,
+          message: 'Logged out successfully',
         });
         return;
       }
 
-      // In a real implementation, you would invalidate the refresh token
-      // For now, just return success
-      res.status(200).json({
-        success: true,
-        message: 'Logged out successfully'
+      res.status(400).json({
+        success: false,
+        error: 'Provide Authorization Bearer access token or refreshToken in body',
       });
     } catch (error) {
       console.error('Error in logout:', error);
       res.status(500).json({
         success: false,
-        error: 'Internal server error'
+        error: 'Internal server error',
       });
     }
   }
@@ -94,11 +123,20 @@ export class AuthController {
         return;
       }
 
-      // In a real implementation, you would verify the refresh token and generate new tokens
-      // For now, just return an error indicating it's not implemented
-      res.status(401).json({
-        success: false,
-        error: 'Refresh token functionality not fully implemented in this simplified version'
+      const result = await SessionService.refreshTokens(refreshToken);
+      if (!result.success) {
+        res.status(401).json({
+          success: false,
+          error: result.error,
+        });
+        return;
+      }
+      res.status(200).json({
+        success: true,
+        data: {
+          accessToken: result.accessToken,
+          refreshToken: result.refreshToken,
+        },
       });
     } catch (error) {
       console.error('Error in refreshToken:', error);

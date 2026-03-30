@@ -10,6 +10,7 @@ declare global {
         email: string;
         userType: string;
         userMerchantId?: string;
+        sessionId?: string;
       };
     }
   }
@@ -49,7 +50,8 @@ export const authenticate = async (
       userId: verification.payload.userId,
       email: verification.payload.email,
       userType: verification.payload.userType,
-      userMerchantId: verification.payload.userMerchantId
+      userMerchantId: verification.payload.userMerchantId,
+      sessionId: verification.payload.sessionId as string | undefined,
     };
     
     next();

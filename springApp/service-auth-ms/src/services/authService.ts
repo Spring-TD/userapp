@@ -1,8 +1,8 @@
 import { User, Merchant, UserType, AccountStatus, UserAccount } from '../models/User';
 import { Session } from '../models/Session';
 import { v4 as uuidv4 } from 'uuid';
-import { db } from '../db/database';
-import { hashPassword, comparePassword, generatePasswordResetToken, verifyPasswordResetToken, verifyEmailVerificationToken, generateAccessToken, generateRefreshToken, verifyToken } from '../utils/crypto';
+import { mockDb } from '../utils/mockDatabase';
+import { hashPassword, comparePassword, generatePasswordResetToken, verifyPasswordResetToken, generateEmailVerificationToken, verifyEmailVerificationToken, generateAccessToken, generateRefreshToken, verifyToken } from '../utils/crypto';
 import { logger } from '../utils/logger';
 import { config } from '../config/environment';
 import { emailService } from './emailService';
@@ -85,7 +85,7 @@ export class AuthService {
   static async registerUser(userData: UserRegistrationData): Promise<{ success: boolean; user?: User; error?: string }> {
     try {
       // Check if email already exists
-      const existingUser = await db.findUserByEmail(userData.email);
+      const existingUser = await mockDb.findUserByEmail(userData.email);
       if (existingUser) {
         return {
           success: false,
@@ -111,15 +111,15 @@ export class AuthService {
         ...(userData.phone && { phone: userData.phone })
       };
 
-      const createdUser = await db.createUser(userToCreate) as User;
+      const createdUser = await mockDb.createUser(userToCreate) as User;
 
       // Email verification link disabled - using OTP verification only
-      // const verificationToken = generateEmailVerificationToken(createdUser.id, createdUser.email);
-      // await emailService.sendEmailVerificationEmail(
-      //   createdUser.email,
-      //   verificationToken,
-      //   `${createdUser.first_name} ${createdUser.last_name}`
-      // );
+      const verificationToken = generateEmailVerificationToken(createdUser.id, createdUser.email);
+      await emailService.sendEmailVerificationEmail(
+        createdUser.email,
+        verificationToken,
+        `${createdUser.first_name} ${createdUser.last_name}`
+      );
 
       logger.info('User registered successfully', {
         userId: createdUser.id,
@@ -150,7 +150,7 @@ export class AuthService {
   static async registerMerchant(merchantData: MerchantRegistrationData): Promise<{ success: boolean; merchant?: Merchant; error?: string }> {
     try {
       // Check if email already exists
-      const existingUser = await db.findUserByEmail(merchantData.email);
+      const existingUser = await mockDb.findUserByEmail(merchantData.email);
       if (existingUser) {
         return {
           success: false,
@@ -176,15 +176,15 @@ export class AuthService {
         ...(merchantData.phone && { phone: merchantData.phone })
       };
 
-      const createdMerchant = await db.createUser(merchantToCreate) as Merchant;
+      const createdMerchant = await mockDb.createUser(merchantToCreate) as Merchant;
 
       // Email verification link disabled - using OTP verification only
-      // const verificationToken = generateEmailVerificationToken(createdMerchant.id, createdMerchant.email);
-      // await emailService.sendEmailVerificationEmail(
-      //   createdMerchant.email,
-      //   verificationToken,
-      //   `${createdMerchant.first_name} ${createdMerchant.last_name}`
-      // );
+      const verificationToken = generateEmailVerificationToken(createdMerchant.id, createdMerchant.email);
+      await emailService.sendEmailVerificationEmail(
+        createdMerchant.email,
+        verificationToken,
+        `${createdMerchant.first_name} ${createdMerchant.last_name}`
+      );
 
       logger.info('Merchant registered successfully', {
         userId: createdMerchant.id,
@@ -216,7 +216,7 @@ export class AuthService {
   static async registerAdmin(adminData: AdminRegistrationData): Promise<{ success: boolean; user?: User; error?: string }> {
     try {
       // Check if email already exists
-      const existingUser = await db.findUserByEmail(adminData.email);
+      const existingUser = await mockDb.findUserByEmail(adminData.email);
       if (existingUser) {
         return {
           success: false,
@@ -242,7 +242,7 @@ export class AuthService {
         ...(adminData.phone && { phone: adminData.phone })
       };
 
-      const createdAdmin = await db.createUser(adminToCreate) as User;
+      const createdAdmin = await mockDb.createUser(adminToCreate) as User;
 
       logger.info('Admin registered successfully', {
         userId: createdAdmin.id,
@@ -292,7 +292,7 @@ export class AuthService {
       }
 
       // Find user by ID
-      const user = await db.findUserById(tokenData.userId);
+      const user = await mockDb.findUserById(tokenData.userId);
       if (!user) {
         return {
           success: false,
@@ -317,13 +317,13 @@ export class AuthService {
       }
 
       // Update user to mark email as verified and activate account
-      await db.updateUser(user.id, {
+      await mockDb.updateUser(user.id, {
         email_verified: true,
         status: AccountStatus.ACTIVE
       });
 
       // Get updated user
-      const updatedUser = await db.findUserById(user.id);
+      const updatedUser = await mockDb.findUserById(user.id);
       if (!updatedUser) {
         return {
           success: false,
@@ -378,7 +378,7 @@ export class AuthService {
       }
 
       // Find user by ID
-      const user = await db.findUserById(tokenData.userId);
+      const user = await mockDb.findUserById(tokenData.userId);
       if (!user) {
         return {
           success: false,
@@ -403,13 +403,13 @@ export class AuthService {
       }
 
       // Update user to mark email as verified and activate account
-      await db.updateUser(user.id, {
+      await mockDb.updateUser(user.id, {
         email_verified: true,
         status: AccountStatus.ACTIVE
       });
 
       // Get updated user
-      const updatedUser = await db.findUserById(user.id);
+      const updatedUser = await mockDb.findUserById(user.id);
       if (!updatedUser) {
         return {
           success: false,
@@ -450,7 +450,7 @@ export class AuthService {
       }
 
       // If not in cache, get from database
-      const user = await db.findUserById(userId);
+      const user = await mockDb.findUserById(userId);
       if (!user) {
         return {
           success: false,
@@ -488,7 +488,7 @@ export class AuthService {
     country?: string;
   }): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
     try {
-      const user = await db.findUserById(userId);
+      const user = await mockDb.findUserById(userId);
       if (!user) {
         return {
           success: false,
@@ -510,10 +510,10 @@ export class AuthService {
         updated_at: new Date()
       };
 
-      await db.updateUser(userId, updateData);
+      await mockDb.updateUser(userId, updateData);
 
       // Get updated user
-      const updatedUser = await db.findUserById(userId);
+      const updatedUser = await mockDb.findUserById(userId);
       if (!updatedUser) {
         return {
           success: false,
@@ -561,7 +561,7 @@ export class AuthService {
       }
 
       // If not in cache, get from database
-      const user = await db.findUserById(userId);
+      const user = await mockDb.findUserById(userId);
       if (!user) {
         return {
           success: false,
@@ -604,7 +604,7 @@ export class AuthService {
     notes?: string;
   }): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
     try {
-      const user = await db.findUserById(userId);
+      const user = await mockDb.findUserById(userId);
       if (!user) {
         return {
           success: false,
@@ -618,10 +618,10 @@ export class AuthService {
         updated_at: new Date()
       };
 
-      await db.updateUser(userId, updateData);
+      await mockDb.updateUser(userId, updateData);
 
       // Get updated user
-      const updatedUser = await db.findUserById(userId);
+      const updatedUser = await mockDb.findUserById(userId);
       if (!updatedUser) {
         return {
           success: false,
@@ -657,7 +657,7 @@ export class AuthService {
    */
   static async suspendUser(userId: string, reason?: string): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
     try {
-      const user = await db.findUserById(userId);
+      const user = await mockDb.findUserById(userId);
       if (!user) {
         return {
           success: false,
@@ -681,13 +681,13 @@ export class AuthService {
       }
 
       // Suspend user account
-      await db.updateUser(userId, {
+      await mockDb.updateUser(userId, {
         status: AccountStatus.SUSPENDED,
         updated_at: new Date()
       });
 
       // Get updated user
-      const updatedUser = await db.findUserById(userId);
+      const updatedUser = await mockDb.findUserById(userId);
       if (!updatedUser) {
         return {
           success: false,
@@ -723,7 +723,7 @@ export class AuthService {
    */
   static async activateUser(userId: string): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
     try {
-      const user = await db.findUserById(userId);
+      const user = await mockDb.findUserById(userId);
       if (!user) {
         return {
           success: false,
@@ -740,7 +740,7 @@ export class AuthService {
       }
 
       // Activate user account
-      await db.updateUser(userId, {
+      await mockDb.updateUser(userId, {
         status: AccountStatus.ACTIVE,
         updated_at: new Date(),
         failed_login_attempts: 0 // Reset failed attempts on activation
@@ -749,7 +749,7 @@ export class AuthService {
       // Remove lockout separately if it exists
       if (user.locked_until) {
         const { locked_until, ...updateData } = user;
-        await db.updateUser(userId, {
+        await mockDb.updateUser(userId, {
           ...updateData,
           status: AccountStatus.ACTIVE,
           updated_at: new Date(),
@@ -758,7 +758,7 @@ export class AuthService {
       }
 
       // Get updated user
-      const updatedUser = await db.findUserById(userId);
+      const updatedUser = await mockDb.findUserById(userId);
       if (!updatedUser) {
         return {
           success: false,
@@ -793,7 +793,7 @@ export class AuthService {
    */
   static async updateUserStatus(userId: string, status: AccountStatus): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
     try {
-      const user = await db.findUserById(userId);
+      const user = await mockDb.findUserById(userId);
       if (!user) {
         return {
           success: false,
@@ -802,14 +802,14 @@ export class AuthService {
       }
 
       // Update user status
-      await db.updateUser(userId, {
+      await mockDb.updateUser(userId, {
         status,
         updated_at: new Date(),
         ...(status === AccountStatus.ACTIVE ? { failed_login_attempts: 0 } : {}) // Reset failed attempts if activating
       });
 
       // Get updated user
-      const updatedUser = await db.findUserById(userId);
+      const updatedUser = await mockDb.findUserById(userId);
       if (!updatedUser) {
         return {
           success: false,
@@ -848,7 +848,7 @@ export class AuthService {
    */
   static async deactivateAccount(userId: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const user = await db.findUserById(userId);
+      const user = await mockDb.findUserById(userId);
       if (!user) {
         return {
           success: false,
@@ -871,7 +871,7 @@ export class AuthService {
       }
 
       // Deactivate account
-      await db.updateUser(userId, {
+      await mockDb.updateUser(userId, {
         status: AccountStatus.DEACTIVATED,
         deactivated_at: new Date(),
         updated_at: new Date()
@@ -899,7 +899,7 @@ export class AuthService {
    */
   static async reactivateAccount(userId: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const user = await db.findUserById(userId);
+      const user = await mockDb.findUserById(userId);
       if (!user) {
         return {
           success: false,
@@ -928,7 +928,7 @@ export class AuthService {
       }
 
       // Reactivate account
-      await db.updateUser(userId, {
+      await mockDb.updateUser(userId, {
         status: AccountStatus.ACTIVE,
         deactivated_at: null, // Clear deactivation date
         updated_at: new Date(),
@@ -959,12 +959,12 @@ export class AuthService {
    */
   static async getMerchantUsers(merchantId: string): Promise<{ success: boolean; users?: (UserResponse & { roleName?: string })[]; error?: string }> {
     try {
-      const users = await db.findUsersByMerchantId(merchantId);
+      const users = await mockDb.findUsersByMerchantId(merchantId);
       const activeUsers = users.filter((u: any) => u.status !== AccountStatus.DEACTIVATED);
 
       // Fetch all roles to lookup names efficiently
       // In a real DB we would use a join, but here we can just fetch all roles for this merchant
-      // However db.findRolesByMerchantId might be needed or we just iterate.
+      // However mockDb.findRolesByMerchantId might be needed or we just iterate.
       // Let's assume we can resolve individual roles or improved the mock DB later.
       // For now, let's look up each role if role_id exists.
 
@@ -974,7 +974,7 @@ export class AuthService {
 
         let roleName = undefined;
         if ('role_id' in user && user.role_id) {
-          const role = await db.findRoleById(user.role_id);
+          const role = await mockDb.findRoleById(user.role_id);
           if (role) {
             roleName = role.name;
           }
@@ -1003,7 +1003,7 @@ export class AuthService {
    * Check if email exists
    */
   static async emailExists(email: string): Promise<boolean> {
-    const user = await db.findUserByEmail(email);
+    const user = await mockDb.findUserByEmail(email);
     return user !== null;
   }
 
@@ -1018,7 +1018,7 @@ export class AuthService {
     }
 
     // If not in cache, get from database
-    const user = await db.findUserByEmail(email);
+    const user = await mockDb.findUserByEmail(email);
     if (user) {
       // Cache user by email
       await redisCacheService.set(`email:${email}`, user);
@@ -1038,7 +1038,7 @@ export class AuthService {
     }
 
     // If not in cache, get from database
-    const user = await db.findUserById(id);
+    const user = await mockDb.findUserById(id);
     if (user) {
       // Cache user by ID
       await redisCacheService.set(`user:${id}`, user);
@@ -1088,7 +1088,7 @@ export class AuthService {
         }
 
         // Update user record
-        await db.updateUser(user.id, updateData);
+        await mockDb.updateUser(user.id, updateData);
 
         logger.warn('Failed login attempt', {
           email: user.email,
@@ -1119,7 +1119,7 @@ export class AuthService {
             }
 
             // Auto-reactivate
-            await db.updateUser(user.id, {
+            await mockDb.updateUser(user.id, {
               status: AccountStatus.ACTIVE,
               deactivated_at: null,
               failed_login_attempts: 0,
@@ -1145,13 +1145,13 @@ export class AuthService {
 
       // Reset failed login attempts on successful login
       if (user.failed_login_attempts && user.failed_login_attempts > 0) {
-        await db.updateUser(user.id, {
+        await mockDb.updateUser(user.id, {
           failed_login_attempts: 0
         });
       }
 
       // Update last login time
-      await db.updateUser(user.id, {
+      await mockDb.updateUser(user.id, {
         last_login_at: new Date()
       });
 
@@ -1207,7 +1207,7 @@ export class AuthService {
         isValid: true
       };
 
-      await db.createSession(session);
+      await mockDb.createSession(session);
 
       return {
         success: true,
@@ -1246,9 +1246,9 @@ export class AuthService {
 
       // Invalidate session associated with refresh token
       if (refreshToken) {
-        const session = await db.findSessionByRefreshToken(refreshToken);
+        const session = await mockDb.findSessionByRefreshToken(refreshToken);
         if (session) {
-          await db.invalidateSession(session.id);
+          await mockDb.invalidateSession(session.id);
         }
 
         const refreshDecoded = verifyToken(refreshToken);
@@ -1299,7 +1299,7 @@ export class AuthService {
       }
 
       // Get user from database
-      const user = await db.findUserById(decoded.userId);
+      const user = await mockDb.findUserById(decoded.userId);
       if (!user) {
         return {
           success: false,
@@ -1348,7 +1348,7 @@ export class AuthService {
   static async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
     try {
       // Find user by ID
-      const user = await db.findUserById(userId);
+      const user = await mockDb.findUserById(userId);
       if (!user) {
         return {
           success: false,
@@ -1386,7 +1386,7 @@ export class AuthService {
       const hashedPassword = await hashPassword(newPassword);
 
       // Update user password
-      await db.updateUser(user.id, {
+      await mockDb.updateUser(user.id, {
         password: hashedPassword,
         failed_login_attempts: 0
       });
@@ -1420,7 +1420,7 @@ export class AuthService {
   static async initiatePasswordReset(email: string): Promise<{ success: boolean; error?: string }> {
     try {
       // Find user by email
-      const user = await db.findUserByEmail(email.toLowerCase());
+      const user = await mockDb.findUserByEmail(email.toLowerCase());
       if (!user) {
         // Don't reveal if email exists for security
         return {
@@ -1485,7 +1485,7 @@ export class AuthService {
       }
 
       // Find user by ID
-      const user = await db.findUserById(tokenData.userId);
+      const user = await mockDb.findUserById(tokenData.userId);
       if (!user) {
         return {
           success: false,
@@ -1522,7 +1522,7 @@ export class AuthService {
       const hashedPassword = await hashPassword(newPassword);
 
       // Update user password
-      await db.updateUser(user.id, {
+      await mockDb.updateUser(user.id, {
         password: hashedPassword,
         failed_login_attempts: 0 // Reset failed login attempts
       });
@@ -1711,7 +1711,7 @@ export class AuthService {
    */
   static async updateUserCallbackUrls(userId: string, urls: { callback_url?: string; error_logs_url?: string }): Promise<{ success: boolean; user?: UserAccount; error?: string }> {
     try {
-      const user = await db.findUserById(userId);
+      const user = await mockDb.findUserById(userId);
       if (!user) {
         return {
           success: false,
@@ -1719,7 +1719,7 @@ export class AuthService {
         };
       }
 
-      const updatedUser = await db.updateUser(userId, {
+      const updatedUser = await mockDb.updateUser(userId, {
         callback_url: urls.callback_url,
         error_logs_url: urls.error_logs_url,
         updated_at: new Date()
@@ -1751,7 +1751,7 @@ export class AuthService {
    */
   static async getUserSessions(userId: string): Promise<{ success: boolean; sessions?: Session[]; error?: string }> {
     try {
-      const sessions = await db.findSessionsByUserId(userId);
+      const sessions = await mockDb.findSessionsByUserId(userId);
       return {
         success: true,
         sessions
@@ -1770,7 +1770,7 @@ export class AuthService {
    */
   static async revokeSession(userId: string, sessionId: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const session = await db.findSessionById(sessionId);
+      const session = await mockDb.findSessionById(sessionId);
 
       if (!session) {
         return {
@@ -1786,7 +1786,7 @@ export class AuthService {
         };
       }
 
-      await db.invalidateSession(sessionId);
+      await mockDb.invalidateSession(sessionId);
 
       // Also blacklist the associated refresh token if possible
       // We don't have the expiration available easily without parsing, so standard blacklist default applies

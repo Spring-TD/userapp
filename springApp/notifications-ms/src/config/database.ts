@@ -7,7 +7,7 @@ const RETRY_DELAY_MS = 2000;
 export const connectToDatabase = async (): Promise<void> => {
   if (!config.mongoUri) {
     console.error(
-      'MONGO_URI environment variable is not defined. Set it in .env or use mongodb://localhost:27017/notifications_db if MongoDB runs locally.'
+      'MONGODB_URI or MONGO_URI is not defined. Set one in .env, or run MongoDB locally at mongodb://localhost:27017/notifications_db.'
     );
     process.exit(1);
   }

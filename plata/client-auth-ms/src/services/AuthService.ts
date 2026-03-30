@@ -81,7 +81,7 @@ export class AuthService {
           headers: {
             'X-Internal-Token': config.serviceAuthInternalToken,
           },
-          timeout: 8000,
+          timeout: config.serviceAuthHttpTimeoutMs,
         }
       );
 
@@ -196,6 +196,7 @@ export class AuthService {
     merchant?: UserResponse;
     verificationEmailSent?: boolean;
     apiKey?: { publicKey: string; secretKey: string | null; environment: 'test' | 'live' };
+    apiKeyBootstrapError?: string;
     error?: string;
   }> {
     try {
@@ -236,14 +237,21 @@ export class AuthService {
 
       const merchant = await mockDb.createUser(newMerchant as Omit<UserAccount, 'id' | 'created_at' | 'updated_at' | 'failed_login_attempts'>);
 
-      // Bootstrap default merchant API key in service-auth-ms
       const bootstrapResult = await AuthService.bootstrapMerchantApiKey(merchant.id);
-      if (!bootstrapResult.success || !bootstrapResult.apiKey) {
-        await mockDb.deleteUser(merchant.id);
-        return {
-          success: false,
-          error: `Merchant created but API key bootstrap failed and registration was rolled back: ${bootstrapResult.error || 'unknown error'}`
+      let apiKey:
+        | { publicKey: string; secretKey: string | null; environment: 'test' | 'live' }
+        | undefined;
+      let apiKeyBootstrapError: string | undefined;
+      if (bootstrapResult.success && bootstrapResult.apiKey) {
+        apiKey = {
+          publicKey: bootstrapResult.apiKey.public_key,
+          secretKey: bootstrapResult.secretKey ?? null,
+          environment: bootstrapResult.apiKey.environment
         };
+      } else {
+        const msg = bootstrapResult.error || 'unknown error';
+        console.error('Merchant API key bootstrap failed; merchant account kept:', msg);
+        apiKeyBootstrapError = msg;
       }
 
       // Send one-time verification code email via notifications-ms
@@ -264,11 +272,8 @@ export class AuthService {
         success: true,
         merchant: merchantWithoutPassword,
         verificationEmailSent,
-        apiKey: {
-          publicKey: bootstrapResult.apiKey.public_key,
-          secretKey: bootstrapResult.secretKey ?? null,
-          environment: bootstrapResult.apiKey.environment
-        }
+        ...(apiKey ? { apiKey } : {}),
+        ...(apiKeyBootstrapError ? { apiKeyBootstrapError } : {})
       };
     } catch (error) {
       console.error('Error registering merchant:', error);

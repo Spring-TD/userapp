@@ -6,6 +6,15 @@
 app = 'client-auth-ms-plata'
 primary_region = 'lhr'
 
+# Must match service-auth deployment; merchant bootstrap calls SERVICE_AUTH_URL from this app.
+# Do not use *.fly.internal hostnames unless you use Fly private networking (e.g. http://service-auth-ms-plata.internal:port).
+[env]
+  NODE_ENV = 'production'
+  PORT = '3001'
+  SERVICE_AUTH_URL = 'http://service-auth-ms-plata.internal:3000'
+  NOTIFICATIONS_SERVICE_URL = 'https://notifications-ms-plata.fly.dev'
+  SERVICE_AUTH_HTTP_TIMEOUT_MS = '90000'
+
 [build]
 
 [http_service]
@@ -13,7 +22,7 @@ primary_region = 'lhr'
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
   processes = ['app']
 
 [[vm]]

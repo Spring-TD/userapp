@@ -1,6 +1,6 @@
 
 import { v4 as uuidv4 } from 'uuid';
-import { db } from '../db/database';
+import { mockDb } from '../utils/mockDatabase';
 import { ApiKey, ApiKeyStatus, CreateApiKeyRequest } from '../models/ApiKey';
 import { generateApiKeyPair, hashApiKey } from '../utils/crypto';
 import { logger } from '../utils/logger';
@@ -39,7 +39,7 @@ export class ApiKeyService {
                 ...(expiresAt ? { expires_at: expiresAt } : {})
             };
 
-            await db.createApiKey(apiKey);
+            await mockDb.createApiKey(apiKey);
 
             logger.info('API Key created successfully', {
                 apiKeyId: apiKey.id,
@@ -67,7 +67,7 @@ export class ApiKeyService {
      */
     static async getApiKeys(merchantId: string): Promise<{ success: boolean; apiKeys?: ApiKey[]; error?: string }> {
         try {
-            const apiKeys = await db.findApiKeysByMerchantId(merchantId);
+            const apiKeys = await mockDb.findApiKeysByMerchantId(merchantId);
 
             // Don't return secret hash in list view if not needed, but model implies it's there. 
             // It's safe to return the hash, but useless to the user.
@@ -90,7 +90,7 @@ export class ApiKeyService {
      */
     static async revokeApiKey(merchantId: string, apiKeyId: string): Promise<{ success: boolean; error?: string }> {
         try {
-            const apiKey = await db.findApiKeyById(apiKeyId);
+            const apiKey = await mockDb.findApiKeyById(apiKeyId);
 
             if (!apiKey) {
                 return { success: false, error: 'API key not found' };
@@ -100,7 +100,7 @@ export class ApiKeyService {
                 return { success: false, error: 'Unauthorized to revoke this API key' };
             }
 
-            await db.updateApiKey(apiKeyId, {
+            await mockDb.updateApiKey(apiKeyId, {
                 status: ApiKeyStatus.REVOKED
             });
 

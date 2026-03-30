@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { AuthService } from '../services/AuthService';
-import { validateForm, updateEmailSchema } from '../utils/validation';
+import { userProfileUpdateSchema, validateForm, updateEmailSchema } from '../utils/validation';
 
 export class UserController {
   // Get user profile
@@ -47,9 +47,37 @@ export class UserController {
         return;
       }
 
-      res.status(500).json({
-        success: false,
-        error: 'Update profile functionality not fully implemented in this simplified version'
+      const validation = validateForm<{
+        first_name?: string;
+        last_name?: string;
+        phone?: string;
+        country?: string;
+      }>(userProfileUpdateSchema, req.body);
+
+      if (validation.error) {
+        res.status(400).json({
+          success: false,
+          error: validation.error
+        });
+        return;
+      }
+
+      const result = await AuthService.updateUserProfile(req.user.userId, validation.value || {});
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: result.error
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Profile updated successfully',
+        data: {
+          user: result.user
+        }
       });
     } catch (error) {
       console.error('Error updating user profile:', error);
@@ -170,9 +198,19 @@ export class UserController {
         return;
       }
 
-      res.status(500).json({
-        success: false,
-        error: 'Deactivate user functionality not fully implemented in this simplified version'
+      const result = await AuthService.deactivateAccount(req.user.userId);
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: result.error
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Account deactivated successfully'
       });
     } catch (error) {
       console.error('Error deactivating user:', error);

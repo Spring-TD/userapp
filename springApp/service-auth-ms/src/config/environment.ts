@@ -49,9 +49,6 @@ const envSchema = Joi.object({
   // CORS
   CORS_ALLOWED_ORIGINS: Joi.string().default('http://localhost:3000'),
 
-  // Body parsing
-  REQUEST_BODY_LIMIT: Joi.string().default('10mb'),
-
   // Security
   ACCOUNT_LOCKOUT_ATTEMPTS: Joi.number().default(5),
   ACCOUNT_LOCKOUT_DURATION: Joi.number().default(1800), // 30 minutes
@@ -66,7 +63,8 @@ const envSchema = Joi.object({
 
   // Payment Service
   PAYMENT_SERVICE_URL: Joi.string().default('http://localhost:3007'),
-  BILLING_SERVICE_URL: Joi.string().default('http://localhost:3006')
+  BILLING_SERVICE_URL: Joi.string().default('http://localhost:3006'),
+  INTERNAL_SERVICE_TOKEN: Joi.string().default('internal-dev-token')
 }).unknown();
 
 const { error, value: envVars } = envSchema.validate(process.env, {
@@ -147,5 +145,7 @@ export const config = {
   billing: {
     serviceUrl: envVars.BILLING_SERVICE_URL,
   },
-  requestBodyLimit: envVars.REQUEST_BODY_LIMIT || '10mb',
+  internal: {
+    serviceToken: envVars.INTERNAL_SERVICE_TOKEN,
+  }
 };

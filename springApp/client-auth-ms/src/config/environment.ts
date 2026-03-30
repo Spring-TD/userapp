@@ -15,33 +15,34 @@ interface BcryptConfig {
 interface EnvironmentConfig {
   port: number;
   nodeEnv: string;
-  /** MongoDB connection (MONGODB_URI for DigitalOcean, DATABASE_URL for docker-compose) */
-  mongoUri: string;
   serviceAuthUrl: string;
+  serviceAuthInternalToken: string;
+  /** Axios timeout (ms) for calls to service-auth-ms (bootstrap, etc.). */
+  serviceAuthHttpTimeoutMs: number;
   notificationsServiceUrl: string;
   corsOrigins: string[];
   logLevel: string;
   jwt: JwtConfig;
   bcrypt: BcryptConfig;
-  /** Max request body size for JSON (e.g. '10mb') */
-  requestBodyLimit: string;
 }
 
 export const config: EnvironmentConfig = {
   port: parseInt(process.env.PORT || '3001', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
-  mongoUri: process.env.MONGODB_URI || process.env.DATABASE_URL || 'mongodb://localhost:27017/client_auth_db',
-  serviceAuthUrl: process.env.SERVICE_AUTH_URL || 'http://localhost:3000',
-  notificationsServiceUrl: process.env.NOTIFICATIONS_SERVICE_URL || 'http://localhost:4009',
+  serviceAuthUrl: process.env.SERVICE_AUTH_URL || 'http://localhost:4000',
+  serviceAuthInternalToken: process.env.SERVICE_AUTH_INTERNAL_TOKEN || 'internal-dev-token',
+  serviceAuthHttpTimeoutMs: parseInt(process.env.SERVICE_AUTH_HTTP_TIMEOUT_MS || '90000', 10),
+  notificationsServiceUrl:
+    process.env.NOTIFICATIONS_SERVICE_URL ||
+    (process.env.NODE_ENV === 'production' ? 'https://notifications-ms.fly.dev' : 'http://localhost:4009'),
   corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:3001'],
   logLevel: process.env.LOG_LEVEL || 'info',
   jwt: {
     secret: process.env.JWT_SECRET || 'fallback-secret-key-for-development-purposes-only',
     expiresIn: process.env.JWT_EXPIRES_IN || '1h',
-    refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d'
+    refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d'
   },
   bcrypt: {
     rounds: parseInt(process.env.BCRYPT_ROUNDS || '12', 10)
-  },
-  requestBodyLimit: process.env.REQUEST_BODY_LIMIT || '10mb',
+  }
 };

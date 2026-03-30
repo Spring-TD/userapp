@@ -29,7 +29,10 @@ interface EnvironmentConfig {
 export const config: EnvironmentConfig = {
   port: parseInt(process.env.PORT || '4009', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
-  mongoUri: process.env.MONGO_URI || 'mongodb://localhost:27017/notifications_db',
+  mongoUri:
+    process.env.MONGODB_URI?.trim() ||
+    process.env.MONGO_URI?.trim() ||
+    'mongodb://localhost:27017/notifications_db',
   corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000'],
   logLevel: process.env.LOG_LEVEL || 'info',
   mailtrap: {
