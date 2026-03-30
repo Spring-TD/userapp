@@ -10,6 +10,9 @@ interface EnvironmentConfig {
   corsOrigins: string[];
   logLevel: string;
   serverProductServiceUrl: string;
+  /** Merchant API keys used by account-ms gateway for GET /api/v1/products */
+  plataPublicKey: string;
+  plataSecretKey: string;
   /** Max request body size for JSON (e.g. '10mb') */
   requestBodyLimit: string;
 }
@@ -21,5 +24,7 @@ export const config: EnvironmentConfig = {
   corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:4001'],
   logLevel: process.env.LOG_LEVEL || 'info',
   serverProductServiceUrl: process.env.SERVER_PRODUCT_SERVICE_URL || 'http://localhost:3005',
+  plataPublicKey: process.env.PLATA_PUBLIC_KEY || '',
+  plataSecretKey: process.env.PLATA_SECRET_KEY || '',
   requestBodyLimit: process.env.REQUEST_BODY_LIMIT || '10mb',
 };

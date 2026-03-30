@@ -9,7 +9,10 @@ import {
   KYCStatus,
   INDIVIDUAL_REQUIRED_DOCUMENTS,
   INDIVIDUAL_OPTIONAL_DOCUMENTS,
-  BUSINESS_OPTIONAL_DOCUMENTS
+  BUSINESS_OPTIONAL_DOCUMENTS,
+  BUSINESS_TYPE_OPTIONS,
+  INDUSTRY_TYPE_OPTIONS,
+  BUSINESS_MODEL_OPTIONS
 } from '../types/kycTypes';
 import { logger } from './logger';
 
@@ -45,7 +48,7 @@ export const individualKYCSubmissionSchema = Joi.object({
   }).optional()
 });
 
-// Business Document validation schema for the 8 required documents
+// Business Document validation schema for the 7 required documents
 export const businessDocumentSchema = Joi.object({
   type: Joi.string().valid(...Object.values(BusinessDocumentType)).required(),
   fileName: Joi.string().required(),
@@ -53,7 +56,7 @@ export const businessDocumentSchema = Joi.object({
   fileSize: Joi.number().positive().max(5 * 1024 * 1024).required(), // Max 5MB
   fileUrl: Joi.string().uri().required(),
   uploadedAt: Joi.date().required(),
-  status: Joi.string().valid(...Object.values(RiskLevel)).required()
+  status: Joi.string().valid(...Object.values(KYCStatus)).required()
 });
 
 // Business KYC submission validation schema with dedicated business documents
@@ -62,7 +65,7 @@ export const businessKYCSubmissionSchema = Joi.object({
   userType: Joi.string().valid(UserType.MERCHANT).required(),
   businessInfo: Joi.object({
     companyName: Joi.string().min(2).max(100).required(),
-    industry: Joi.string().min(2).max(50).required(),
+    industry: Joi.string().valid(...INDUSTRY_TYPE_OPTIONS).required(),
     businessDescription: Joi.string().min(10).max(500).required(),
     countryOfIncorporation: Joi.string().min(2).max(50).required(),
     website: Joi.string().uri().required(),
@@ -70,14 +73,14 @@ export const businessKYCSubmissionSchema = Joi.object({
     companyLogoUrl: Joi.string().uri().required()
   }).required(),
   businessSurvey: Joi.object({
-    // 1. business type i.e  loan product, investment product, savings products
-    businessType: Joi.string().min(2).max(100).required(),
+    // 1. business type (industry/sector) — must be one of backend-supplied options
+    businessType: Joi.string().valid(...BUSINESS_TYPE_OPTIONS).required(),
     
     // 2. country
     country: Joi.string().min(2).max(50).required(),
     
-    // 3. business model i.e B2B, B2C, B2B2C, etc
-    businessModel: Joi.string().min(2).max(20).required(),
+    // 3. business model — must be one of backend-supplied options
+    businessModel: Joi.string().valid(...BUSINESS_MODEL_OPTIONS).required(),
     
     // 4. Monthly processed volume
     monthlyProcessedVolume: Joi.number().min(0).required()
@@ -121,7 +124,7 @@ export const businessKYCSubmissionSchema = Joi.object({
       }).required() // Make the kyc field required
     }).required()
   ).min(1).required(),
-  businessDocuments: Joi.array().items(businessDocumentSchema).min(8).required(), // Must have all 8 documents
+  businessDocuments: Joi.array().items(businessDocumentSchema).min(7).required(), // Must have all 7 business document types
   riskAssessment: Joi.object({
     annualTurnover: Joi.number().min(0).required(),
     expectedTransactionVolume: Joi.number().min(0).required(),
@@ -156,6 +159,25 @@ export const kycStatusUpdateSchema = Joi.object({
     otherwise: Joi.optional()
   })
 });
+
+/** Business survey update (partial). When businessType is present it must be one of backend options. */
+export const businessSurveyUpdateSchema = Joi.object({
+  businessType: Joi.string().valid(...BUSINESS_TYPE_OPTIONS).optional(),
+  country: Joi.string().min(2).max(50).optional(),
+  businessModel: Joi.string().valid(...BUSINESS_MODEL_OPTIONS).optional(),
+  monthlyProcessedVolume: Joi.number().min(0).optional()
+}).min(1);
+
+/** Business info update (partial). When industry is present it must be one of backend options. */
+export const businessInfoUpdateSchema = Joi.object({
+  companyName: Joi.string().min(2).max(100).optional(),
+  industry: Joi.string().valid(...INDUSTRY_TYPE_OPTIONS).optional(),
+  businessDescription: Joi.string().min(10).max(500).optional(),
+  countryOfIncorporation: Joi.string().min(2).max(50).optional(),
+  website: Joi.string().uri().optional(),
+  companyRegId: Joi.string().min(5).max(50).optional(),
+  companyLogoUrl: Joi.string().uri().optional()
+}).min(1);
 
 // Document upload validation schema
 export const documentUploadSchema = Joi.object({

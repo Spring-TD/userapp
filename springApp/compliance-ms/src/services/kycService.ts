@@ -15,7 +15,68 @@ import {
 } from '../types/kycTypes';
 import { logger } from '../utils/logger';
 import { auditLogger } from '../utils/audit';
-import { KYCProfileDb } from '../db/kycProfileDb';
+import { KYCProfileModelMongo as MockKYCProfileModel, KYCDocumentModelMongo as MockKYCDocumentModel } from '../utils/kycProfileMongo';
+import { BusinessInfoModel } from '../models/BusinessInfoModel';
+import { BusinessSurveyModel } from '../models/BusinessSurveyModel';
+import { BusinessDocumentModel } from '../models/BusinessDocumentModel';
+import { ShareholderModel } from '../models/ShareholderModel';
+import { BusinessDocumentType, BUSINESS_DOCUMENT_DISPLAY_NAMES } from '../types/kycTypes';
+
+/** Map API shareholder shape to ShareholderModel document (document URLs stored in DO Spaces) */
+function shareholderToDoc(userId: string, s: any): Record<string, unknown> {
+  return {
+    userId,
+    fullName: s.fullName,
+    email: s.email,
+    phoneNumber: s.phoneNumber,
+    bvn: s.bvn,
+    bankAccount: s.bankAccount,
+    ownershipPercentage: s.ownershipPercentage,
+    uboDocumentUrl: s.uboDocument?.fileUrl,
+    uboDocumentFileName: s.uboDocument?.fileName,
+    uboDocumentFileSize: s.uboDocument?.fileSize,
+    uboDocumentUploadedAt: s.uboDocument?.uploadDate,
+    bankStatementDocumentUrl: s.bankStatement?.fileUrl,
+    bankStatementDocumentFileName: s.bankStatement?.fileName,
+    bankStatementDocumentFileSize: s.bankStatement?.fileSize,
+    bankStatementDocumentUploadedAt: s.bankStatement?.uploadDate,
+    status: s.status ?? KYCStatus.PENDING,
+    submittedAt: s.submittedAt,
+    kyc: s.kyc,
+  };
+}
+
+/** Map ShareholderModel document to API Shareholder shape */
+function docToShareholder(d: any): any {
+  return {
+    _id: d._id?.toString?.(),
+    fullName: d.fullName,
+    email: d.email,
+    phoneNumber: d.phoneNumber,
+    bvn: d.bvn,
+    bankAccount: d.bankAccount,
+    ownershipPercentage: d.ownershipPercentage,
+    uboDocument: d.uboDocumentUrl
+      ? {
+          fileName: d.uboDocumentFileName ?? '',
+          fileType: 'application/pdf',
+          fileSize: d.uboDocumentFileSize ?? 0,
+          fileUrl: d.uboDocumentUrl,
+          uploadDate: d.uboDocumentUploadedAt ?? d.createdAt,
+        }
+      : undefined,
+    bankStatement: {
+      fileName: d.bankStatementDocumentFileName ?? '',
+      fileType: 'application/pdf',
+      fileSize: d.bankStatementDocumentFileSize ?? 0,
+      fileUrl: d.bankStatementDocumentUrl ?? '',
+      uploadDate: d.bankStatementDocumentUploadedAt ?? d.createdAt,
+    },
+    status: d.status,
+    submittedAt: d.submittedAt,
+    kyc: d.kyc,
+  };
+}
 import { 
   validateKYCSubmission, 
   validateIndividualKYCSubmission,
@@ -71,7 +132,7 @@ export class KYCService {
         workflowStatus: ComplianceWorkflowStatus.INITIAL_SCREENING
       };
       
-      const result = await KYCProfileDb.save(kycProfileData);
+      const result = await MockKYCProfileModel.save(kycProfileData);
       
       logger.info('Individual KYC submitted successfully', {
         userId: data.userId,
@@ -132,6 +193,29 @@ export class KYCService {
         };
       }
 
+      // Guard: ensure required arrays exist so we return a clear error instead of throwing
+      if (!Array.isArray(data.businessDocuments) || data.businessDocuments.length < 7) {
+        return {
+          success: false,
+          error: 'businessDocuments is required and must contain all 7 document types (COI, Articles of Association, Shareholder list, Proof of Address, Bank Statement, AML Policy, Data & Privacy Policy).'
+        };
+      }
+      if (!Array.isArray(data.shareholders) || data.shareholders.length === 0) {
+        return {
+          success: false,
+          error: 'At least one shareholder is required.'
+        };
+      }
+      if (!data.businessInfo) {
+        return { success: false, error: 'businessInfo is required.' };
+      }
+      if (!data.businessSurvey) {
+        return { success: false, error: 'businessSurvey is required (businessType, country, businessModel, monthlyProcessedVolume).' };
+      }
+      if (!data.riskAssessment) {
+        return { success: false, error: 'riskAssessment is required.' };
+      }
+
       // Calculate risk level based on business factors
       const riskLevel = this.calculateBusinessRiskLevel(data);
       
@@ -142,31 +226,72 @@ export class KYCService {
         documentCount: data.businessDocuments.length
       });
       
+      for (const doc of data.businessDocuments) {
+        const documentType = doc.type as BusinessDocumentType;
+        await BusinessDocumentModel.findOneAndUpdate(
+          { userId: data.userId, documentType },
+          {
+            userId: data.userId,
+            documentType,
+            displayName: BUSINESS_DOCUMENT_DISPLAY_NAMES[documentType] ?? documentType,
+            fileUrl: doc.fileUrl,
+            fileName: doc.fileName,
+            fileType: doc.fileType,
+            fileSize: doc.fileSize,
+            uploadedAt: doc.uploadedAt ?? new Date(),
+            status: KYCStatus.PENDING,
+          },
+          { upsert: true, new: true }
+        );
+      }
+
+      for (const s of data.shareholders) {
+        await ShareholderModel.create(shareholderToDoc(data.userId, s));
+      }
+
       const kycProfileData: any = {
         userId: data.userId,
         userType: data.userType,
-        documents: data.businessDocuments.map(doc => ({
-          type: doc.type as unknown as DocumentType,
-          fileName: doc.fileName,
-          fileType: doc.fileType,
-          fileSize: doc.fileSize,
-          uploadDate: new Date(),
-          status: KYCStatus.PENDING // All documents start as PENDING, require admin approval
-        })),
-        status: KYCStatus.PENDING, // Profile status is PENDING until admin approves documents
+        documents: [],
+        status: KYCStatus.PENDING,
         submittedAt: new Date(),
-        businessInfo: data.businessInfo,
-        businessSurvey: data.businessSurvey,
-        // Changed from beneficialOwners to shareholders
-        shareholders: data.shareholders,
+        shareholders: [], // Shareholders are stored in shareholders collection
         riskAssessment: data.riskAssessment,
         riskLevel,
         workflowStatus: ComplianceWorkflowStatus.INITIAL_SCREENING
-        // premblyVerificationId will be set after admin approval and Prembly verification
       };
-      
-      const result = await KYCProfileDb.save(kycProfileData);
-      
+
+      await BusinessInfoModel.findOneAndUpdate(
+        { userId: data.userId },
+        { userId: data.userId, ...data.businessInfo },
+        { upsert: true, new: true }
+      );
+      await BusinessSurveyModel.findOneAndUpdate(
+        { userId: data.userId },
+        { userId: data.userId, ...data.businessSurvey },
+        { upsert: true, new: true }
+      );
+
+      // Upsert KYC profile: update if one exists for this userId (unique index), otherwise create
+      const existingProfile = await MockKYCProfileModel.findOne({ userId: data.userId });
+      const result = existingProfile
+        ? await MockKYCProfileModel.findByIdAndUpdate(existingProfile._id, kycProfileData, { new: true })
+        : await MockKYCProfileModel.save(kycProfileData);
+      if (!result) {
+        return { success: false, error: 'Failed to save or update KYC profile.' };
+      }
+      const savedBusinessDocs = await BusinessDocumentModel.find({ userId: data.userId }).lean();
+      const documentsResponse = savedBusinessDocs.map((d: any) => ({
+        _id: d._id?.toString?.(),
+        type: d.documentType,
+        fileName: d.fileName,
+        fileType: d.fileType,
+        fileSize: d.fileSize,
+        uploadDate: d.uploadedAt,
+        status: d.status,
+        fileUrl: d.fileUrl
+      }));
+
       logger.info('Business KYC submitted successfully', {
         userId: data.userId,
         industry: data.businessInfo?.industry,
@@ -193,18 +318,17 @@ export class KYCService {
           status: result.status,
           riskLevel,
           submittedAt: result.submittedAt,
-          documents: result.documents,
+          documents: documentsResponse,
           shareholderCount: data.shareholders?.length
         }
       };
     } catch (error) {
-      logger.error('Error submitting business KYC', {
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('Error submitting business KYC', { error: message });
       
       return {
         success: false,
-        error: 'Error submitting business KYC'
+        error: `Error submitting business KYC: ${message}`
       };
     }
   }
@@ -342,7 +466,7 @@ export class KYCService {
           submittedAt: new Date()
         };
         
-        const result = await KYCProfileDb.save(kycProfileData);
+        const result = await MockKYCProfileModel.save(kycProfileData);
         
         // Get document count safely
         let documentCount = 0;
@@ -401,7 +525,7 @@ export class KYCService {
     error?: string;
   }> {
     try {
-      const kycProfile: any = await KYCProfileDb.findOne({ userId });
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
       
       if (!kycProfile) {
         return {
@@ -430,108 +554,171 @@ export class KYCService {
     }
   }
 
-  // Get business information for a user
+  // Get full profile (for admin views; includes messages, businessInfo and businessSurvey from their collections)
+  async getFullProfile(userId: string): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+  }> {
+    try {
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      if (!kycProfile) {
+        return { success: false, error: 'No KYC profile found for this user' };
+      }
+      const [businessInfoDoc, businessSurveyDoc, businessDocs, shareholderDocs] = await Promise.all([
+        BusinessInfoModel.findOne({ userId }).lean(),
+        BusinessSurveyModel.findOne({ userId }).lean(),
+        (kycProfile as any).userType === UserType.MERCHANT
+          ? BusinessDocumentModel.find({ userId }).lean()
+          : Promise.resolve([]),
+        (kycProfile as any).userType === UserType.MERCHANT
+          ? ShareholderModel.find({ userId }).lean()
+          : Promise.resolve([])
+      ]);
+      const businessInfo = businessInfoDoc
+        ? (({ _id, userId: _u, createdAt, updatedAt, ...rest }) => rest)(businessInfoDoc as any)
+        : (kycProfile as any).businessInfo;
+      const businessSurvey = businessSurveyDoc
+        ? (({ _id, userId: _u, createdAt, updatedAt, ...rest }) => rest)(businessSurveyDoc as any)
+        : (kycProfile as any).businessSurvey;
+      let documents = (kycProfile as any).documents ?? [];
+      if ((kycProfile as any).userType === UserType.MERCHANT && Array.isArray(businessDocs) && businessDocs.length > 0) {
+        documents = (businessDocs as any[]).map((d: any) => ({
+          _id: d._id?.toString?.(),
+          type: d.documentType,
+          fileName: d.fileName,
+          fileType: d.fileType,
+          fileSize: d.fileSize,
+          uploadDate: d.uploadedAt,
+          status: d.status,
+          rejectionReason: d.rejectionReason,
+          fileUrl: d.fileUrl
+        }));
+      }
+      let shareholders = (kycProfile as any).shareholders ?? [];
+      if ((kycProfile as any).userType === UserType.MERCHANT && Array.isArray(shareholderDocs) && shareholderDocs.length > 0) {
+        shareholders = (shareholderDocs as any[]).map((d: any) => docToShareholder(d));
+      }
+      return {
+        success: true,
+        data: { ...kycProfile, businessInfo, businessSurvey, documents, shareholders }
+      };
+    } catch (error) {
+      return { success: false, error: 'Error retrieving profile' };
+    }
+  }
+
+  // Get messages for a user (compliance thread between admin and merchant/individual)
+  async getMessages(userId: string): Promise<{
+    success: boolean;
+    data?: Array<{ id: string; message: string; sentBy?: string; sentAt: Date; read: boolean }>;
+    error?: string;
+  }> {
+    try {
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
+      if (!kycProfile) {
+        return { success: false, error: 'No KYC profile found for this user' };
+      }
+      const messages = kycProfile.messages || [];
+      return { success: true, data: messages };
+    } catch (error) {
+      return {
+        success: false,
+        error: 'Error retrieving messages'
+      };
+    }
+  }
+
+  // Get business information for a user (from business_infos collection)
   async getBusinessInfo(userId: string): Promise<{
     success: boolean;
     data?: any;
     error?: string;
   }> {
     try {
-      const kycProfile: any = await KYCProfileDb.findOne({ userId });
-      
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
       if (!kycProfile) {
-        return {
-          success: false,
-          error: 'No KYC profile found for this user'
-        };
+        return { success: false, error: 'No KYC profile found for this user' };
       }
-      
       if (kycProfile.userType !== UserType.MERCHANT) {
-        return {
-          success: false,
-          error: 'User is not a business customer'
-        };
+        return { success: false, error: 'User is not a business customer' };
       }
-      
-      return {
-        success: true,
-        data: kycProfile.businessInfo
-      };
+      let businessInfo = await BusinessInfoModel.findOne({ userId }).lean();
+      if (!businessInfo && (kycProfile as any).businessInfo) {
+        const legacy = (kycProfile as any).businessInfo;
+        await BusinessInfoModel.findOneAndUpdate(
+          { userId },
+          { userId, ...legacy },
+          { upsert: true, new: true }
+        );
+        businessInfo = await BusinessInfoModel.findOne({ userId }).lean();
+      }
+      if (!businessInfo) {
+        return { success: false, error: 'No business information found for this user' };
+      }
+      const { _id, userId: _uid, createdAt, updatedAt, ...data } = businessInfo as any;
+      return { success: true, data };
     } catch (error) {
-      return {
-        success: false,
-        error: 'Error retrieving business information'
-      };
+      return { success: false, error: 'Error retrieving business information' };
     }
   }
 
-  // Get business survey data for a user
+  // Get business survey data for a user (from business_surveys collection)
   async getBusinessSurvey(userId: string): Promise<{
     success: boolean;
     data?: any;
     error?: string;
   }> {
     try {
-      const kycProfile: any = await KYCProfileDb.findOne({ userId });
-      
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
       if (!kycProfile) {
-        return {
-          success: false,
-          error: 'No KYC profile found for this user'
-        };
+        return { success: false, error: 'No KYC profile found for this user' };
       }
-      
       if (kycProfile.userType !== UserType.MERCHANT) {
-        return {
-          success: false,
-          error: 'User is not a business customer'
-        };
+        return { success: false, error: 'User is not a business customer' };
       }
-      
-      return {
-        success: true,
-        data: kycProfile.businessSurvey
-      };
+      let businessSurvey = await BusinessSurveyModel.findOne({ userId }).lean();
+      if (!businessSurvey && (kycProfile as any).businessSurvey) {
+        const legacy = (kycProfile as any).businessSurvey;
+        await BusinessSurveyModel.findOneAndUpdate(
+          { userId },
+          { userId, ...legacy },
+          { upsert: true, new: true }
+        );
+        businessSurvey = await BusinessSurveyModel.findOne({ userId }).lean();
+      }
+      if (!businessSurvey) {
+        return { success: false, error: 'No business survey found for this user' };
+      }
+      const { _id, userId: _uid, createdAt, updatedAt, ...data } = businessSurvey as any;
+      return { success: true, data };
     } catch (error) {
-      return {
-        success: false,
-        error: 'Error retrieving business survey data'
-      };
+      return { success: false, error: 'Error retrieving business survey data' };
     }
   }
 
-  // Get shareholders (beneficial owners) for a user
+  // Get shareholders (beneficial owners) for a user (from shareholders collection)
   async getShareholders(userId: string): Promise<{
     success: boolean;
     data?: any[];
     error?: string;
   }> {
     try {
-      const kycProfile: any = await KYCProfileDb.findOne({ userId });
-      
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
       if (!kycProfile) {
-        return {
-          success: false,
-          error: 'No KYC profile found for this user'
-        };
+        return { success: false, error: 'No KYC profile found for this user' };
       }
-      
       if (kycProfile.userType !== UserType.MERCHANT) {
-        return {
-          success: false,
-          error: 'User is not a business customer'
-        };
+        return { success: false, error: 'User is not a business customer' };
       }
-      
-      return {
-        success: true,
-        data: kycProfile.shareholders || []
-      };
+      const docs = await ShareholderModel.find({ userId }).lean();
+      const data = (docs as any[]).map((d) => docToShareholder(d));
+      if (data.length === 0 && Array.isArray(kycProfile.shareholders) && kycProfile.shareholders.length > 0) {
+        return { success: true, data: kycProfile.shareholders };
+      }
+      return { success: true, data };
     } catch (error) {
-      return {
-        success: false,
-        error: 'Error retrieving shareholders'
-      };
+      return { success: false, error: 'Error retrieving shareholders' };
     }
   }
 
@@ -542,7 +729,7 @@ export class KYCService {
     error?: string;
   }> {
     try {
-      const kycProfile: any = await KYCProfileDb.findOne({ userId });
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
       
       if (!kycProfile) {
         return {
@@ -577,7 +764,7 @@ export class KYCService {
     error?: string;
   }> {
     try {
-      const kycProfile: any = await KYCProfileDb.findOne({ userId });
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
       
       if (!kycProfile) {
         return {
@@ -594,7 +781,7 @@ export class KYCService {
       }
       
       // Update the personal info
-      const updatedProfile = await KYCProfileDb.findByIdAndUpdate(
+      const updatedProfile = await MockKYCProfileModel.findByIdAndUpdate(
         kycProfile._id,
         { personalInfo },
         { new: true }
@@ -619,150 +806,77 @@ export class KYCService {
     }
   }
 
-  // Update business information for a user
+  // Update business information for a user (upsert in business_infos collection)
   async updateBusinessInfo(userId: string, businessInfo: any): Promise<{
     success: boolean;
     message?: string;
     error?: string;
   }> {
     try {
-      const kycProfile: any = await KYCProfileDb.findOne({ userId });
-      
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
       if (!kycProfile) {
-        return {
-          success: false,
-          error: 'No KYC profile found for this user'
-        };
+        return { success: false, error: 'No KYC profile found for this user' };
       }
-      
       if (kycProfile.userType !== UserType.MERCHANT) {
-        return {
-          success: false,
-          error: 'User is not a business customer'
-        };
+        return { success: false, error: 'User is not a business customer' };
       }
-      
-      // Update the business info
-      const updatedProfile = await KYCProfileDb.findByIdAndUpdate(
-        kycProfile._id,
-        { businessInfo },
-        { new: true }
+      await BusinessInfoModel.findOneAndUpdate(
+        { userId },
+        { userId, ...businessInfo },
+        { upsert: true, new: true }
       );
-      
-      if (!updatedProfile) {
-        return {
-          success: false,
-          error: 'Failed to update business information'
-        };
-      }
-      
-      return {
-        success: true,
-        message: 'Business information updated successfully'
-      };
+      return { success: true, message: 'Business information updated successfully' };
     } catch (error) {
-      return {
-        success: false,
-        error: 'Error updating business information'
-      };
+      return { success: false, error: 'Error updating business information' };
     }
   }
 
-  // Update business survey data for a user
+  // Update business survey data for a user (upsert in business_surveys collection)
   async updateBusinessSurvey(userId: string, businessSurvey: any): Promise<{
     success: boolean;
     message?: string;
     error?: string;
   }> {
     try {
-      const kycProfile: any = await KYCProfileDb.findOne({ userId });
-      
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
       if (!kycProfile) {
-        return {
-          success: false,
-          error: 'No KYC profile found for this user'
-        };
+        return { success: false, error: 'No KYC profile found for this user' };
       }
-      
       if (kycProfile.userType !== UserType.MERCHANT) {
-        return {
-          success: false,
-          error: 'User is not a business customer'
-        };
+        return { success: false, error: 'User is not a business customer' };
       }
-      
-      // Update the business survey
-      const updatedProfile = await KYCProfileDb.findByIdAndUpdate(
-        kycProfile._id,
-        { businessSurvey },
-        { new: true }
+      await BusinessSurveyModel.findOneAndUpdate(
+        { userId },
+        { userId, ...businessSurvey },
+        { upsert: true, new: true }
       );
-      
-      if (!updatedProfile) {
-        return {
-          success: false,
-          error: 'Failed to update business survey'
-        };
-      }
-      
-      return {
-        success: true,
-        message: 'Business survey updated successfully'
-      };
+      return { success: true, message: 'Business survey updated successfully' };
     } catch (error) {
-      return {
-        success: false,
-        error: 'Error updating business survey'
-      };
+      return { success: false, error: 'Error updating business survey' };
     }
   }
 
-  // Update shareholders (beneficial owners) for a user
+  // Update shareholders (beneficial owners) for a user (replace in shareholders collection)
   async updateShareholders(userId: string, shareholders: any[]): Promise<{
     success: boolean;
     message?: string;
     error?: string;
   }> {
     try {
-      const kycProfile: any = await KYCProfileDb.findOne({ userId });
-      
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
       if (!kycProfile) {
-        return {
-          success: false,
-          error: 'No KYC profile found for this user'
-        };
+        return { success: false, error: 'No KYC profile found for this user' };
       }
-      
       if (kycProfile.userType !== UserType.MERCHANT) {
-        return {
-          success: false,
-          error: 'User is not a business customer'
-        };
+        return { success: false, error: 'User is not a business customer' };
       }
-      
-      // Update the shareholders
-      const updatedProfile = await KYCProfileDb.findByIdAndUpdate(
-        kycProfile._id,
-        { shareholders },
-        { new: true }
-      );
-      
-      if (!updatedProfile) {
-        return {
-          success: false,
-          error: 'Failed to update shareholders'
-        };
+      await ShareholderModel.deleteMany({ userId });
+      if (shareholders.length > 0) {
+        await ShareholderModel.insertMany(shareholders.map((s) => shareholderToDoc(userId, s)));
       }
-      
-      return {
-        success: true,
-        message: 'Shareholders updated successfully'
-      };
+      return { success: true, message: 'Shareholders updated successfully' };
     } catch (error) {
-      return {
-        success: false,
-        error: 'Error updating shareholders'
-      };
+      return { success: false, error: 'Error updating shareholders' };
     }
   }
 
@@ -773,7 +887,7 @@ export class KYCService {
     error?: string;
   }> {
     try {
-      const kycProfile: any = await KYCProfileDb.findOne({ userId });
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
       
       if (!kycProfile) {
         return {
@@ -789,16 +903,38 @@ export class KYCService {
         };
       }
       
-      // For enhanced due diligence, we might return additional information
-      // This is a simplified implementation
+      const [businessInfoDoc, businessSurveyDoc, businessDocs, shareholderDocs] = await Promise.all([
+        BusinessInfoModel.findOne({ userId }).lean(),
+        BusinessSurveyModel.findOne({ userId }).lean(),
+        BusinessDocumentModel.find({ userId }).lean(),
+        ShareholderModel.find({ userId }).lean()
+      ]);
+      const businessInfo = businessInfoDoc
+        ? (({ _id, userId: _u, createdAt, updatedAt, ...rest }) => rest)(businessInfoDoc as any)
+        : undefined;
+      const businessSurvey = businessSurveyDoc
+        ? (({ _id, userId: _u, createdAt, updatedAt, ...rest }) => rest)(businessSurveyDoc as any)
+        : undefined;
+      const documents = (businessDocs as any[]).map((d: any) => ({
+        _id: d._id?.toString?.(),
+        type: d.documentType,
+        fileName: d.fileName,
+        fileType: d.fileType,
+        fileSize: d.fileSize,
+        uploadDate: d.uploadedAt,
+        status: d.status,
+        rejectionReason: d.rejectionReason,
+        fileUrl: d.fileUrl
+      }));
+      const shareholders = (shareholderDocs as any[]).map((d: any) => docToShareholder(d));
       return {
         success: true,
         data: {
-          businessInfo: kycProfile.businessInfo,
-          businessSurvey: kycProfile.businessSurvey,
-          shareholders: kycProfile.shareholders,
+          businessInfo,
+          businessSurvey,
+          shareholders: shareholders.length > 0 ? shareholders : (kycProfile.shareholders ?? []),
           riskAssessment: kycProfile.riskAssessment,
-          documents: kycProfile.documents
+          documents
         }
       };
     } catch (error) {
@@ -816,7 +952,7 @@ export class KYCService {
     error?: string;
   }> {
     try {
-      const kycProfile: any = await KYCProfileDb.findOne({ userId });
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
       
       if (!kycProfile) {
         return {
@@ -832,15 +968,35 @@ export class KYCService {
         };
       }
       
-      // Return corporate structure information
+      const [businessInfoDoc, businessDocs, shareholderDocs] = await Promise.all([
+        BusinessInfoModel.findOne({ userId }).lean(),
+        BusinessDocumentModel.find({ userId }).lean(),
+        ShareholderModel.find({ userId }).lean()
+      ]);
+      const businessInfo = businessInfoDoc
+        ? (({ _id, userId: _u, createdAt, updatedAt, ...rest }) => rest)(businessInfoDoc as any)
+        : undefined;
+      const allDocs = (businessDocs as any[]).map((d: any) => ({
+        _id: d._id?.toString?.(),
+        type: d.documentType,
+        fileName: d.fileName,
+        fileUrl: d.fileUrl,
+        status: d.status
+      }));
+      const corporateDocuments = allDocs.filter(
+        (doc: any) =>
+          doc.type === 'corporate_structure' ||
+          doc.type === 'articles_of_incorporation' ||
+          doc.type === BusinessDocumentType.ARTICLES_OF_ASSOCIATION ||
+          doc.type === BusinessDocumentType.CERTIFICATE_OF_INCORPORATION
+      );
+      const shareholders = (shareholderDocs as any[]).map((d: any) => docToShareholder(d));
       return {
         success: true,
         data: {
-          businessInfo: kycProfile.businessInfo,
-          shareholders: kycProfile.shareholders,
-          documents: kycProfile.documents.filter((doc: any) => 
-            doc.type === 'corporate_structure' || doc.type === 'articles_of_incorporation'
-          )
+          businessInfo,
+          shareholders: shareholders.length > 0 ? shareholders : (kycProfile.shareholders ?? []),
+          documents: corporateDocuments.length > 0 ? corporateDocuments : allDocs
         }
       };
     } catch (error) {
@@ -858,7 +1014,7 @@ export class KYCService {
     error?: string;
   }> {
     try {
-      const kycProfile: any = await KYCProfileDb.findOne({ userId });
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
       
       if (!kycProfile) {
         return {
@@ -874,16 +1030,30 @@ export class KYCService {
         };
       }
       
-      // Return non-profit verification information
+      const [businessInfoDoc, businessSurveyDoc, businessDocs] = await Promise.all([
+        BusinessInfoModel.findOne({ userId }).lean(),
+        BusinessSurveyModel.findOne({ userId }).lean(),
+        BusinessDocumentModel.find({ userId }).lean()
+      ]);
+      const businessInfo = businessInfoDoc
+        ? (({ _id, userId: _u, createdAt, updatedAt, ...rest }) => rest)(businessInfoDoc as any)
+        : undefined;
+      const businessSurvey = businessSurveyDoc
+        ? (({ _id, userId: _u, createdAt, updatedAt, ...rest }) => rest)(businessSurveyDoc as any)
+        : undefined;
+      const documents = (businessDocs as any[]).map((d: any) => ({
+        _id: d._id?.toString?.(),
+        type: d.documentType,
+        fileName: d.fileName,
+        fileUrl: d.fileUrl,
+        status: d.status
+      })).filter(
+        (doc: any) =>
+          doc.type === BusinessDocumentType.CERTIFICATE_OF_INCORPORATION || doc.type === 'tax_certificate'
+      );
       return {
         success: true,
-        data: {
-          businessInfo: kycProfile.businessInfo,
-          businessSurvey: kycProfile.businessSurvey,
-          documents: kycProfile.documents.filter((doc: any) => 
-            doc.type === 'business_registration' || doc.type === 'tax_certificate'
-          )
-        }
+        data: { businessInfo, businessSurvey, documents }
       };
     } catch (error) {
       return {
@@ -900,7 +1070,7 @@ export class KYCService {
     error?: string;
   }> {
     try {
-      const kycProfile: any = await KYCProfileDb.findOne({ userId });
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
       
       if (!kycProfile) {
         return {
@@ -916,16 +1086,29 @@ export class KYCService {
         };
       }
       
-      // Return government verification information
+      const [businessInfoDoc, businessSurveyDoc, businessDocs] = await Promise.all([
+        BusinessInfoModel.findOne({ userId }).lean(),
+        BusinessSurveyModel.findOne({ userId }).lean(),
+        BusinessDocumentModel.find({ userId }).lean()
+      ]);
+      const businessInfo = businessInfoDoc
+        ? (({ _id, userId: _u, createdAt, updatedAt, ...rest }) => rest)(businessInfoDoc as any)
+        : undefined;
+      const businessSurvey = businessSurveyDoc
+        ? (({ _id, userId: _u, createdAt, updatedAt, ...rest }) => rest)(businessSurveyDoc as any)
+        : undefined;
+      const documents = (businessDocs as any[])
+        .map((d: any) => ({
+          _id: d._id?.toString?.(),
+          type: d.documentType,
+          fileName: d.fileName,
+          fileUrl: d.fileUrl,
+          status: d.status
+        }))
+        .filter((doc: any) => doc.type === BusinessDocumentType.CERTIFICATE_OF_INCORPORATION);
       return {
         success: true,
-        data: {
-          businessInfo: kycProfile.businessInfo,
-          businessSurvey: kycProfile.businessSurvey,
-          documents: kycProfile.documents.filter((doc: any) => 
-            doc.type === 'business_registration'
-          )
-        }
+        data: { businessInfo, businessSurvey, documents }
       };
     } catch (error) {
       return {
@@ -949,7 +1132,7 @@ export class KYCService {
   }> {
     try {
       // Check if profile already exists
-      const existingProfile: any = await KYCProfileDb.findOne({ userId });
+      const existingProfile: any = await MockKYCProfileModel.findOne({ userId });
       
       if (existingProfile) {
         return {
@@ -967,7 +1150,7 @@ export class KYCService {
         submittedAt: new Date()
       };
       
-      const result = await KYCProfileDb.save(profileData);
+      const result = await MockKYCProfileModel.save(profileData);
       
       return {
         success: true,
@@ -1012,7 +1195,7 @@ export class KYCService {
   async updateWorkflowStatus(kycId: string, workflowStatus: ComplianceWorkflowStatus, updatedBy?: string) {
     try {
       // Update the workflow status in the database
-      const updatedProfile: any = await KYCProfileDb.findByIdAndUpdate(
+      const updatedProfile: any = await MockKYCProfileModel.findByIdAndUpdate(
         kycId,
         {
           workflowStatus,
@@ -1065,7 +1248,7 @@ export class KYCService {
   async getPendingWorkflows() {
     try {
       // Query the database for pending workflows
-      const pendingWorkflows: any = await KYCProfileDb.find({
+      const pendingWorkflows: any = await MockKYCProfileModel.find({
         workflowStatus: {
           $in: [
             ComplianceWorkflowStatus.INITIAL_SCREENING,
@@ -1107,7 +1290,7 @@ export class KYCService {
   async getPendingReviews() {
     try {
       // Query the database for profiles pending review
-      const pendingReviews: any = await KYCProfileDb.find({
+      const pendingReviews: any = await MockKYCProfileModel.find({
         status: KYCStatus.REVIEW
       });
 
@@ -1138,19 +1321,20 @@ export class KYCService {
     }
   }
 
-  // Get high risk profiles
+  // Get high risk profiles (businessType from business_surveys collection)
   async getHighRiskProfiles() {
     try {
-      // Query the database for high-risk profiles
-      const highRiskProfiles: any = await KYCProfileDb.find({
-        riskLevel: {
-          $in: [RiskLevel.HIGH, RiskLevel.VERY_HIGH]
-        }
+      const highRiskProfiles: any = await MockKYCProfileModel.find({
+        riskLevel: { $in: [RiskLevel.HIGH, RiskLevel.VERY_HIGH] }
       });
+      const userIds = highRiskProfiles.map((p: any) => p.userId).filter(Boolean);
+      const surveys = await BusinessSurveyModel.find({ userId: { $in: userIds } }).lean();
+      const businessTypeByUserId: Record<string, string> = {};
+      for (const s of surveys as any[]) {
+        if (s.userId) businessTypeByUserId[s.userId] = s.businessType;
+      }
 
-      logger.info('Retrieved high risk profiles', {
-        count: highRiskProfiles.length
-      });
+      logger.info('Retrieved high risk profiles', { count: highRiskProfiles.length });
 
       return {
         success: true,
@@ -1159,7 +1343,7 @@ export class KYCService {
           userId: profile.userId,
           userType: profile.userType,
           riskLevel: profile.riskLevel,
-          businessType: profile.businessInfo?.businessType,
+          businessType: businessTypeByUserId[profile.userId],
           submittedAt: profile.submittedAt,
           lastReviewDate: profile.lastReviewDate
         }))
@@ -1180,7 +1364,7 @@ export class KYCService {
   async getRiskSummaryReport() {
     try {
       // Query the database for all profiles to generate risk summary
-      const allProfiles: any = await KYCProfileDb.find({});
+      const allProfiles: any = await MockKYCProfileModel.find({});
       
       // Calculate risk distribution
       const riskDistribution: Record<string, number> = {};
@@ -1229,26 +1413,25 @@ export class KYCService {
   // Get compliance metrics
   async getComplianceMetrics() {
     try {
-      // Query the database for all profiles and documents
-      const allProfiles: any = await KYCProfileDb.find({});
-      
-      // Calculate metrics
+      const allProfiles: any = await MockKYCProfileModel.find({});
       const statusDistribution: Record<string, number> = {};
       const userTypeDistribution: Record<string, number> = {};
       let totalDocuments = 0;
       let approvedDocuments = 0;
-      
-      allProfiles.forEach((profile: any) => {
-        // Count statuses
+
+      for (const profile of allProfiles) {
         statusDistribution[profile.status] = (statusDistribution[profile.status] || 0) + 1;
-        
-        // Count user types
         userTypeDistribution[profile.userType] = (userTypeDistribution[profile.userType] || 0) + 1;
-        
-        // Count documents
-        totalDocuments += profile.documents.length;
-        approvedDocuments += profile.documents.filter((doc: any) => doc.status === KYCStatus.APPROVED).length;
-      });
+        if (profile.userType === UserType.MERCHANT) {
+          const businessDocs = await BusinessDocumentModel.find({ userId: profile.userId }).lean();
+          totalDocuments += businessDocs.length;
+          approvedDocuments += (businessDocs as any[]).filter((d: any) => d.status === KYCStatus.APPROVED).length;
+        } else {
+          const docs = profile.documents || [];
+          totalDocuments += docs.length;
+          approvedDocuments += docs.filter((doc: any) => doc.status === KYCStatus.APPROVED).length;
+        }
+      }
       
       const documentApprovalRate = totalDocuments > 0 
         ? `${((approvedDocuments / totalDocuments) * 100).toFixed(2)}%` 
@@ -1281,28 +1464,30 @@ export class KYCService {
     }
   }
 
-  // Get document status report
+  // Get document status report (includes business docs from business_documents collection)
   async getDocumentStatusReport() {
     try {
-      // Query the database for all profiles to analyze documents
-      const allProfiles: any = await KYCProfileDb.find({});
-      
-      // Calculate document metrics
+      const allProfiles: any = await MockKYCProfileModel.find({});
       let totalDocuments = 0;
       const documentStatusDistribution: Record<string, number> = {};
       const documentTypeDistribution: Record<string, number> = {};
-      
-      allProfiles.forEach((profile: any) => {
-        profile.documents.forEach((doc: any) => {
-          totalDocuments++;
-          
-          // Count document statuses
-          documentStatusDistribution[doc.status] = (documentStatusDistribution[doc.status] || 0) + 1;
-          
-          // Count document types
-          documentTypeDistribution[doc.type] = (documentTypeDistribution[doc.type] || 0) + 1;
-        });
-      });
+
+      for (const profile of allProfiles) {
+        if (profile.userType === UserType.MERCHANT) {
+          const businessDocs = await BusinessDocumentModel.find({ userId: profile.userId }).lean();
+          for (const doc of businessDocs as any[]) {
+            totalDocuments++;
+            documentStatusDistribution[doc.status] = (documentStatusDistribution[doc.status] || 0) + 1;
+            documentTypeDistribution[doc.documentType] = (documentTypeDistribution[doc.documentType] || 0) + 1;
+          }
+        } else {
+          for (const doc of profile.documents || []) {
+            totalDocuments++;
+            documentStatusDistribution[doc.status] = (documentStatusDistribution[doc.status] || 0) + 1;
+            documentTypeDistribution[doc.type] = (documentTypeDistribution[doc.type] || 0) + 1;
+          }
+        }
+      }
 
       const report = {
         totalDocuments,
@@ -1332,7 +1517,7 @@ export class KYCService {
   async getAllUsers() {
     try {
       // Query the database for all profiles
-      const allProfiles: any = await KYCProfileDb.find({});
+      const allProfiles: any = await MockKYCProfileModel.find({});
       
       const users = allProfiles.map((profile: any) => ({
         userId: profile.userId,
@@ -1365,46 +1550,56 @@ export class KYCService {
     }
   }
 
-  // Get all compliance documents (new admin function)
+  // Get all compliance documents (business docs from business_documents collection)
   async getAllComplianceDocuments() {
     try {
-      // Query the database for all profiles to get all documents
-      const allProfiles: any = await KYCProfileDb.find({});
-      
+      const allProfiles: any = await MockKYCProfileModel.find({});
       const allDocuments: any[] = [];
-      
-      allProfiles.forEach((profile: any) => {
-        profile.documents.forEach((doc: any) => {
-          allDocuments.push({
-            documentId: doc._id,
-            userId: profile.userId,
-            userType: profile.userType,
-            type: doc.type,
-            fileName: doc.fileName,
-            fileType: doc.fileType,
-            fileSize: doc.fileSize,
-            uploadDate: doc.uploadDate,
-            status: doc.status,
-            rejectionReason: doc.rejectionReason
-          });
-        });
-      });
+
+      for (const profile of allProfiles) {
+        if (profile.userType === UserType.MERCHANT) {
+          const businessDocs = await BusinessDocumentModel.find({ userId: profile.userId }).lean();
+          for (const doc of businessDocs as any[]) {
+            allDocuments.push({
+              documentId: doc._id?.toString?.(),
+              userId: profile.userId,
+              userType: profile.userType,
+              type: doc.documentType,
+              displayName: doc.displayName,
+              fileName: doc.fileName,
+              fileType: doc.fileType,
+              fileSize: doc.fileSize,
+              fileUrl: doc.fileUrl,
+              uploadDate: doc.uploadedAt,
+              status: doc.status,
+              rejectionReason: doc.rejectionReason
+            });
+          }
+        } else {
+          for (const doc of profile.documents || []) {
+            allDocuments.push({
+              documentId: doc._id?.toString?.() ?? doc._id,
+              userId: profile.userId,
+              userType: profile.userType,
+              type: doc.type,
+              fileName: doc.fileName,
+              fileType: doc.fileType,
+              fileSize: doc.fileSize,
+              uploadDate: doc.uploadDate,
+              status: doc.status,
+              rejectionReason: doc.rejectionReason
+            });
+          }
+        }
+      }
 
       logger.info('Retrieved all compliance documents', { count: allDocuments.length });
-
-      return {
-        success: true,
-        data: allDocuments
-      };
+      return { success: true, data: allDocuments };
     } catch (error) {
       logger.error('Error retrieving all compliance documents', {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
-      
-      return {
-        success: false,
-        error: 'Error retrieving all compliance documents'
-      };
+      return { success: false, error: 'Error retrieving all compliance documents' };
     }
   }
 
@@ -1412,7 +1607,7 @@ export class KYCService {
   async approveDisapproveUser(userId: string, status: 'approved' | 'rejected', note?: string, updatedBy?: string) {
     try {
       // Find the user's KYC profile
-      const userProfile: any = await KYCProfileDb.findOne({ userId });
+      const userProfile: any = await MockKYCProfileModel.findOne({ userId });
       
       if (!userProfile) {
         return {
@@ -1422,7 +1617,7 @@ export class KYCService {
       }
 
       // Update the profile status
-      const updatedProfile = await KYCProfileDb.findByIdAndUpdate(
+      const updatedProfile = await MockKYCProfileModel.findByIdAndUpdate(
         userProfile._id,
         {
           status: status === 'approved' ? KYCStatus.APPROVED : KYCStatus.REJECTED,
@@ -1482,7 +1677,7 @@ export class KYCService {
   async sendMessageToUser(userId: string, message: string, sentBy?: string) {
     try {
       // Find the user's KYC profile
-      const userProfile: any = await KYCProfileDb.findOne({ userId });
+      const userProfile: any = await MockKYCProfileModel.findOne({ userId });
       
       if (!userProfile) {
         return {
@@ -1502,7 +1697,7 @@ export class KYCService {
       };
 
       // Update the profile with the new message
-      const updatedProfile = await KYCProfileDb.findByIdAndUpdate(
+      const updatedProfile = await MockKYCProfileModel.findByIdAndUpdate(
         userProfile._id,
         {
           $push: {
@@ -1552,7 +1747,7 @@ export class KYCService {
   async blockUser(userId: string, reason?: string, blockedBy?: string) {
     try {
       // Find the user's KYC profile
-      const userProfile: any = await KYCProfileDb.findOne({ userId });
+      const userProfile: any = await MockKYCProfileModel.findOne({ userId });
       
       if (!userProfile) {
         return {
@@ -1562,7 +1757,7 @@ export class KYCService {
       }
 
       // Update the profile to mark user as blocked
-      const updatedProfile = await KYCProfileDb.findByIdAndUpdate(
+      const updatedProfile = await MockKYCProfileModel.findByIdAndUpdate(
         userProfile._id,
         {
           isBlocked: true,
@@ -1619,7 +1814,7 @@ export class KYCService {
   async unblockUser(userId: string, unblockedBy?: string) {
     try {
       // Find the user's KYC profile
-      const userProfile: any = await KYCProfileDb.findOne({ userId });
+      const userProfile: any = await MockKYCProfileModel.findOne({ userId });
       
       if (!userProfile) {
         return {
@@ -1629,7 +1824,7 @@ export class KYCService {
       }
 
       // Update the profile to mark user as unblocked
-      const updatedProfile = await KYCProfileDb.findByIdAndUpdate(
+      const updatedProfile = await MockKYCProfileModel.findByIdAndUpdate(
         userProfile._id,
         {
           isBlocked: false,
@@ -1693,7 +1888,7 @@ export class KYCService {
   }> {
     try {
       // Find the user's KYC profile
-      const userProfile: any = await KYCProfileDb.findOne({ userId });
+      const userProfile: any = await MockKYCProfileModel.findOne({ userId });
       
       if (!userProfile) {
         return {
@@ -1709,12 +1904,13 @@ export class KYCService {
         };
       }
 
-      // Check if business documents have been approved by admin before Prembly verification
-      const businessDocuments = userProfile.documents || [];
-      const certificateDocument = businessDocuments.find((doc: any) => 
-        doc.type === 'certificate_of_incorporation' || doc.type === 'business_registration'
+      const businessDocuments = await BusinessDocumentModel.find({ userId }).lean();
+      const certificateDocument = (businessDocuments as any[]).find(
+        (doc: any) =>
+          doc.documentType === BusinessDocumentType.CERTIFICATE_OF_INCORPORATION ||
+          doc.documentType === 'business_registration'
       );
-      
+
       if (certificateDocument && certificateDocument.status !== KYCStatus.ADMIN_APPROVED) {
         return {
           success: false,
@@ -1722,9 +1918,10 @@ export class KYCService {
         };
       }
 
-      // If no specific certificate document found, check if any business document is admin-approved
       if (!certificateDocument && businessDocuments.length > 0) {
-        const hasAdminApproved = businessDocuments.some((doc: any) => doc.status === KYCStatus.ADMIN_APPROVED);
+        const hasAdminApproved = (businessDocuments as any[]).some(
+          (doc: any) => doc.status === KYCStatus.ADMIN_APPROVED
+        );
         if (!hasAdminApproved) {
           return {
             success: false,
@@ -1796,7 +1993,7 @@ export class KYCService {
     error?: string;
   }> {
     try {
-      const updatedProfile = await KYCProfileDb.findByIdAndUpdate(
+      const updatedProfile = await MockKYCProfileModel.findByIdAndUpdate(
         kycId,
         {
           status,
@@ -1860,51 +2057,65 @@ export class KYCService {
     error?: string;
   }> {
     try {
-      // Find the document by ID
-      const document = await KYCProfileDb.findDocumentById(documentId);
-      
-      if (!document) {
+      const updateData: any = {
+        status,
+        ...(rejectionReason !== undefined && { rejectionReason }),
+      };
+      let updatedDocument: any = await BusinessDocumentModel.findByIdAndUpdate(
+        documentId,
+        updateData,
+        { new: true }
+      ).lean();
+      if (updatedDocument) {
+        auditLogger('DOCUMENT_STATUS_UPDATE', updatedBy || 'system', {
+          documentId,
+          newStatus: status,
+          rejectionReason,
+          notes
+        });
         return {
-          success: false,
-          error: 'Document not found'
+          success: true,
+          message: 'Document status updated successfully',
+          data: {
+            documentId: updatedDocument._id?.toString?.(),
+            status: updatedDocument.status,
+            rejectionReason: updatedDocument.rejectionReason,
+            ...(updatedBy && { updatedBy }),
+            ...(notes && { notes })
+          }
         };
       }
-      
-      // Update the document status
-      const updateData: any = {
+      const document = await MockKYCDocumentModel.findById(documentId);
+      if (!document) {
+        return { success: false, error: 'Document not found' };
+      }
+      const updateDataLegacy: any = {
         status,
         ...(rejectionReason && { rejectionReason }),
         ...(updatedBy && { updatedBy }),
         ...(notes && { notes })
       };
-      
-      const updatedDocument = await KYCProfileDb.findDocumentByIdAndUpdate(
+      updatedDocument = await MockKYCDocumentModel.findByIdAndUpdate(
         documentId,
-        updateData,
+        updateDataLegacy,
         { new: true }
       );
-      
       if (!updatedDocument) {
-        return {
-          success: false,
-          error: 'Failed to update document status'
-        };
+        return { success: false, error: 'Failed to update document status' };
       }
-      
       auditLogger('DOCUMENT_STATUS_UPDATE', updatedBy || 'system', {
         documentId,
         newStatus: status,
         rejectionReason,
         notes
       });
-      
       return {
         success: true,
         message: 'Document status updated successfully',
         data: {
           documentId: updatedDocument._id,
-          status: updatedDocument.status as KYCStatus,
-          rejectionReason: updatedDocument.rejectionReason as string | undefined,
+          status: updatedDocument.status,
+          rejectionReason: updatedDocument.rejectionReason,
           ...(updatedBy && { updatedBy }),
           ...(notes && { notes })
         }
@@ -1922,26 +2133,38 @@ export class KYCService {
     }
   }
 
-  // Get KYC document by ID
+  // Get KYC document by ID (business docs from business_documents collection first)
   async getKYCDocument(documentId: string): Promise<{
     success: boolean;
     data?: any;
     error?: string;
   }> {
     try {
-      const document = await KYCProfileDb.findDocumentById(documentId);
-      
-      if (!document) {
+      const businessDoc = await BusinessDocumentModel.findById(documentId).lean();
+      if (businessDoc) {
+        const d = businessDoc as any;
         return {
-          success: false,
-          error: 'Document not found'
+          success: true,
+          data: {
+            _id: d._id?.toString?.(),
+            type: d.documentType,
+            fileName: d.fileName,
+            fileType: d.fileType,
+            fileSize: d.fileSize,
+            uploadDate: d.uploadedAt,
+            status: d.status,
+            rejectionReason: d.rejectionReason,
+            fileUrl: d.fileUrl,
+            displayName: d.displayName,
+            userId: d.userId
+          }
         };
       }
-      
-      return {
-        success: true,
-        data: document
-      };
+      const document = await MockKYCDocumentModel.findById(documentId);
+      if (!document) {
+        return { success: false, error: 'Document not found' };
+      }
+      return { success: true, data: document };
     } catch (error) {
       logger.error('Error retrieving KYC document', {
         documentId,
@@ -1955,37 +2178,40 @@ export class KYCService {
     }
   }
 
-  // Get all KYC documents for a user
+  // Get all KYC documents for a user (business docs from business_documents collection)
   async getAllKYCDocuments(userId: string): Promise<{
     success: boolean;
     data?: any[];
     error?: string;
   }> {
     try {
-      // Find the KYC profile for the user
-      const profile: any = await KYCProfileDb.findOne({ userId });
-      
+      const profile: any = await MockKYCProfileModel.findOne({ userId });
       if (!profile) {
-        return {
-          success: false,
-          error: 'No KYC profile found for this user'
-        };
+        return { success: false, error: 'No KYC profile found for this user' };
       }
-      
-      return {
-        success: true,
-        data: profile.documents
-      };
+      if (profile.userType === UserType.MERCHANT) {
+        const docs = await BusinessDocumentModel.find({ userId }).lean();
+        const data = docs.map((d: any) => ({
+          _id: d._id?.toString?.(),
+          type: d.documentType,
+          fileName: d.fileName,
+          fileType: d.fileType,
+          fileSize: d.fileSize,
+          uploadDate: d.uploadedAt,
+          status: d.status,
+          rejectionReason: d.rejectionReason,
+          fileUrl: d.fileUrl,
+          displayName: d.displayName
+        }));
+        return { success: true, data };
+      }
+      return { success: true, data: profile.documents ?? [] };
     } catch (error) {
       logger.error('Error retrieving KYC documents', {
         userId,
         error: error instanceof Error ? error.message : 'Unknown error'
       });
-      
-      return {
-        success: false,
-        error: 'Error retrieving documents'
-      };
+      return { success: false, error: 'Error retrieving documents' };
     }
   }
 
@@ -2009,7 +2235,7 @@ export class KYCService {
         if (filters.endDate) query.submittedAt.$lte = new Date(filters.endDate);
       }
 
-      const profiles = await KYCProfileDb.find(query);
+      const profiles = await MockKYCProfileModel.find(query);
 
       return {
         success: true,

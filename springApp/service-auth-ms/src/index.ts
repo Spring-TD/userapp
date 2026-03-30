@@ -62,7 +62,7 @@ app.get('/', (_req, res) => {
       services: '/api/v1/services',
       credentials: '/api/v1/credentials',
       keys: '/api/v1/keys',
-      user: '/api/v1/user'
+      user: '/api/v1/user',
     },
     timestamp: new Date().toISOString()
   });

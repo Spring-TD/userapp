@@ -5,6 +5,22 @@ This microservice provides read-only access to products created in the server pr
 
 Deployment URL: https://product-ms.fly.dev/
 
+## Plata Gateway Authentication (Implemented)
+
+`GET /api/v1/products` in this service fetches the full catalog from Plata gateway (`account-ms`) and now sends merchant API credentials in headers:
+
+- `X-Public-Key`
+- `X-Secret-Key`
+
+These values are read from environment variables and used server-to-server only.
+
+### Required Environment Variables
+
+- `PLATA_PUBLIC_KEY` (example: `pk_live_...`)
+- `PLATA_SECRET_KEY` (example: `sk_live_...`)
+
+The calling server IP must also be whitelisted in Plata for the merchant.
+
 ## New Workflow
 The product configuration workflow allows merchants to manage products that were created in the server product service:
 1. Fetch products from server product service
@@ -17,6 +33,8 @@ The product configuration workflow allows merchants to manage products that were
 Retrieves all products from the server product service.
 
 **Endpoint:** `GET /api/v1/products`
+
+**Note:** This endpoint requires configured `PLATA_PUBLIC_KEY` and `PLATA_SECRET_KEY` in this service environment to authenticate with Plata gateway.
 
 ### Get Product by ID
 Retrieves a product by its ID from the server product service.
@@ -216,6 +234,12 @@ All requests are validated to ensure data integrity:
 To fetch all products from the server product service:
 ```bash
 curl -X GET http://localhost:4005/api/v1/products
+```
+
+Example `.env` additions:
+```bash
+PLATA_PUBLIC_KEY=pk_live_xxxxxxxxxxxxxxxxxxxxxxxx
+PLATA_SECRET_KEY=sk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 To fetch a specific product by ID:

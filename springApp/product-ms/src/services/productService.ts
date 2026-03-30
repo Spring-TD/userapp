@@ -18,7 +18,13 @@ export class ProductService {
   // Fetch all products from server product-ms
   async getAllProducts(): Promise<Product[]> {
     try {
-      const response = await axios.get(`${config.serverProductServiceUrl}/api/v1/products`);
+      const headers: Record<string, string> = {};
+      if (config.plataPublicKey) headers['X-Public-Key'] = config.plataPublicKey;
+      if (config.plataSecretKey) headers['X-Secret-Key'] = config.plataSecretKey;
+
+      const response = await axios.get(`${config.serverProductServiceUrl}/api/v1/products`, {
+        headers
+      });
       const products = response.data.data || [];
       
       // Return products with default merchant configuration

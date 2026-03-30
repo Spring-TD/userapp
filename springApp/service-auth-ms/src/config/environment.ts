@@ -147,5 +147,5 @@ export const config = {
   },
   internal: {
     serviceToken: envVars.INTERNAL_SERVICE_TOKEN,
-  }
+  },
 };
