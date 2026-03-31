@@ -12,6 +12,7 @@ import { samsRoutes } from './routes/samsRoutes';
 import { credentialRoutes } from './routes/credentialRoutes';
 import { apiKeyRoutes } from './routes/apiKeyRoutes';
 import { userRoutes } from './routes/userRoutes';
+import { authRoutes } from './routes/authRoutes';
 import { SAMSService } from './services/samsService';
 import { redisCacheService } from './services/redisCacheService';
 import { logger } from './utils/logger';
@@ -61,7 +62,8 @@ app.get('/', (_req, res) => {
       services: '/api/v1/services',
       credentials: '/api/v1/credentials',
       keys: '/api/v1/keys',
-      user: '/api/v1/user'
+      user: '/api/v1/user',
+      auth: '/api/v1/auth'
     },
     timestamp: new Date().toISOString()
   });
@@ -92,6 +94,7 @@ app.use('/api/v1/services', samsRoutes);
 app.use('/api/v1/credentials', credentialRoutes);
 app.use('/api/v1/keys', apiKeyRoutes);
 app.use('/api/v1/user', userRoutes);
+app.use('/api/v1/auth', authRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);

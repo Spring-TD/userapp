@@ -178,8 +178,8 @@ export const db = {
       environment: apiKey.environment,
       status: apiKey.status,
       permissions: apiKey.permissions ?? [],
-      last_used_at: apiKey.last_used_at,
-      expires_at: apiKey.expires_at
+      ...(apiKey.last_used_at !== undefined && { last_used_at: apiKey.last_used_at }),
+      ...(apiKey.expires_at !== undefined && { expires_at: apiKey.expires_at })
     });
     return apiKeyDocToApiKey(doc)!;
   },
@@ -228,11 +228,11 @@ export const db = {
       session_id: session.id,
       userId: session.userId,
       refreshToken: session.refreshToken,
-      deviceInfo: session.deviceInfo,
-      ipAddress: session.ipAddress,
       lastActiveAt: session.lastActiveAt,
       expiresAt: session.expiresAt,
-      isValid: session.isValid
+      isValid: session.isValid,
+      ...(session.deviceInfo !== undefined && { deviceInfo: session.deviceInfo }),
+      ...(session.ipAddress !== undefined && { ipAddress: session.ipAddress })
     });
     return sessionDocToSession(doc)!;
   },

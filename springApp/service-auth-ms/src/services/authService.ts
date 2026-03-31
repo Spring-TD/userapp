@@ -2,7 +2,7 @@ import { User, Merchant, UserType, AccountStatus, UserAccount } from '../models/
 import { Session } from '../models/Session';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/database';
-import { hashPassword, comparePassword, generatePasswordResetToken, verifyPasswordResetToken, verifyEmailVerificationToken, generateAccessToken, generateRefreshToken, verifyToken } from '../utils/crypto';
+import { hashPassword, comparePassword, generatePasswordResetToken, verifyPasswordResetToken, generateEmailVerificationToken, verifyEmailVerificationToken, generateAccessToken, generateRefreshToken, verifyToken } from '../utils/crypto';
 import { logger } from '../utils/logger';
 import { config } from '../config/environment';
 import { emailService } from './emailService';
@@ -113,13 +113,12 @@ export class AuthService {
 
       const createdUser = await db.createUser(userToCreate) as User;
 
-      // Email verification link disabled - using OTP verification only
-      // const verificationToken = generateEmailVerificationToken(createdUser.id, createdUser.email);
-      // await emailService.sendEmailVerificationEmail(
-      //   createdUser.email,
-      //   verificationToken,
-      //   `${createdUser.first_name} ${createdUser.last_name}`
-      // );
+      const verificationToken = generateEmailVerificationToken(createdUser.id, createdUser.email);
+      await emailService.sendEmailVerificationEmail(
+        createdUser.email,
+        verificationToken,
+        `${createdUser.first_name} ${createdUser.last_name}`
+      );
 
       logger.info('User registered successfully', {
         userId: createdUser.id,
@@ -178,13 +177,12 @@ export class AuthService {
 
       const createdMerchant = await db.createUser(merchantToCreate) as Merchant;
 
-      // Email verification link disabled - using OTP verification only
-      // const verificationToken = generateEmailVerificationToken(createdMerchant.id, createdMerchant.email);
-      // await emailService.sendEmailVerificationEmail(
-      //   createdMerchant.email,
-      //   verificationToken,
-      //   `${createdMerchant.first_name} ${createdMerchant.last_name}`
-      // );
+      const verificationToken = generateEmailVerificationToken(createdMerchant.id, createdMerchant.email);
+      await emailService.sendEmailVerificationEmail(
+        createdMerchant.email,
+        verificationToken,
+        `${createdMerchant.first_name} ${createdMerchant.last_name}`
+      );
 
       logger.info('Merchant registered successfully', {
         userId: createdMerchant.id,

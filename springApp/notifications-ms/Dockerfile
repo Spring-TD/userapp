@@ -5,8 +5,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci
+# Install dependencies (npm ci requires package-lock.json)
+RUN npm install
 
 # Copy source code
 COPY tsconfig*.json ./
@@ -27,7 +27,7 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 # Copy package files and install production dependencies only
 COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm install --omit=dev && npm cache clean --force
 
 # Copy built application from builder
 COPY --from=builder /app/dist ./dist

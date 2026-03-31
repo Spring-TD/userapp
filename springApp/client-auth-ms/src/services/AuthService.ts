@@ -52,7 +52,13 @@ export class AuthService {
   /**
    * Register a new user
    */
-  static async registerUser(userData: UserRegistrationData): Promise<{ success: boolean; user?: UserResponse; verificationEmailSent?: boolean; error?: string }> {
+  static async registerUser(userData: UserRegistrationData): Promise<{
+    success: boolean;
+    user?: UserResponse;
+    verificationEmailSent?: boolean;
+    verificationEmailError?: string;
+    error?: string;
+  }> {
     try {
       // Check if email already exists
       const existingUser = await db.findUserByEmail(userData.email);
@@ -90,6 +96,7 @@ export class AuthService {
       const user = await db.createUser(newUser as Omit<UserAccount, 'id' | 'created_at' | 'updated_at' | 'failed_login_attempts'>);
 
       let verificationEmailSent = false;
+      let verificationEmailError: string | undefined;
       try {
         await AuthService.sendVerificationOtpEmail(
           user.email,
@@ -98,6 +105,8 @@ export class AuthService {
         verificationEmailSent = true;
       } catch (notifError) {
         console.error('Failed to send verification OTP to new user:', notifError);
+        verificationEmailError =
+          notifError instanceof Error ? notifError.message : 'Failed to send verification email';
       }
 
       // Return user without password
@@ -105,7 +114,8 @@ export class AuthService {
       return {
         success: true,
         user: userWithoutPassword,
-        verificationEmailSent
+        verificationEmailSent,
+        ...(verificationEmailError && { verificationEmailError })
       };
     } catch (error) {
       console.error('Error registering user:', error);
@@ -119,7 +129,13 @@ export class AuthService {
   /**
    * Register a new merchant
    */
-  static async registerMerchant(merchantData: MerchantRegistrationData): Promise<{ success: boolean; merchant?: UserResponse; verificationEmailSent?: boolean; error?: string }> {
+  static async registerMerchant(merchantData: MerchantRegistrationData): Promise<{
+    success: boolean;
+    merchant?: UserResponse;
+    verificationEmailSent?: boolean;
+    verificationEmailError?: string;
+    error?: string;
+  }> {
     try {
       // Check if email already exists
       const existingUser = await db.findUserByEmail(merchantData.email);
@@ -159,6 +175,7 @@ export class AuthService {
       const merchant = await db.createUser(newMerchant as Omit<UserAccount, 'id' | 'created_at' | 'updated_at' | 'failed_login_attempts'>);
 
       let verificationEmailSent = false;
+      let verificationEmailError: string | undefined;
       try {
         await AuthService.sendVerificationOtpEmail(
           merchant.email,
@@ -167,6 +184,8 @@ export class AuthService {
         verificationEmailSent = true;
       } catch (notifError) {
         console.error('Failed to send verification OTP to new merchant:', notifError);
+        verificationEmailError =
+          notifError instanceof Error ? notifError.message : 'Failed to send verification email';
       }
 
       // Return merchant without password
@@ -174,7 +193,8 @@ export class AuthService {
       return {
         success: true,
         merchant: merchantWithoutPassword,
-        verificationEmailSent
+        verificationEmailSent,
+        ...(verificationEmailError && { verificationEmailError })
       };
     } catch (error) {
       console.error('Error registering merchant:', error);
