@@ -1,6 +1,134 @@
 /**
  * SAMS Routes
  * Service Authentication Microservice routing configuration
+ *
+ * @openapi
+ * /api/v1/services:
+ *   get:
+ *     summary: Get all services
+ *     tags: [Services]
+ *     responses:
+ *       200:
+ *         description: List of services
+ * /api/v1/services/create:
+ *   post:
+ *     summary: Create new service
+ *     tags: [Services]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Service created
+ * /api/v1/services/health:
+ *   get:
+ *     summary: Get system health
+ *     tags: [Services]
+ *     responses:
+ *       200:
+ *         description: System health status
+ * /api/v1/services/{serviceId}:
+ *   get:
+ *     summary: Get service by ID
+ *     tags: [Services]
+ *     parameters:
+ *       - in: path
+ *         name: serviceId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Service details
+ * /api/v1/services/{serviceId}/whitelist-ip:
+ *   post:
+ *     summary: Whitelist IPs for service
+ *     tags: [Services]
+ *     parameters:
+ *       - in: path
+ *         name: serviceId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               ips:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: IPs whitelisted
+ *   get:
+ *     summary: Get whitelisted IPs
+ *     tags: [Services]
+ *     parameters:
+ *       - in: path
+ *         name: serviceId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of whitelisted IPs
+ * /api/v1/services/{serviceId}/check-ip:
+ *   post:
+ *     summary: Check IP access
+ *     tags: [Services]
+ *     parameters:
+ *       - in: path
+ *         name: serviceId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               ip:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Access check result
+ * /api/v1/services/{serviceId}/credentials:
+ *   post:
+ *     summary: Create credentials for service
+ *     tags: [Credentials]
+ *     parameters:
+ *       - in: path
+ *         name: serviceId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       201:
+ *         description: Credentials created
+ *   get:
+ *     summary: Get service credentials
+ *     tags: [Credentials]
+ *     parameters:
+ *       - in: path
+ *         name: serviceId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Service credentials
  */
 
 import { Router } from 'express';

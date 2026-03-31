@@ -145,6 +145,16 @@ npm test
 | Get product details by ID | GET    | `https://account-ms.fly.dev/api/v1/products/:id`           |
 | Get commodity details     | GET    | `https://account-ms.fly.dev/api/v1/commodities/:productId` |
 
+### Merchant API Key Requirement for Full Product List
+
+For `GET /api/v1/products` (unscoped full catalog), gateway authentication is enforced using merchant API keys:
+
+- `X-Public-Key: pk_live_...` (or `pk_test_...`)
+- `X-Secret-Key: sk_live_...` (or `sk_test_...`)
+
+The key pair is validated by `service-auth-ms`, and caller IP allowlist checks are applied.  
+Without valid headers (or when IP is not whitelisted), the gateway returns `401`.
+
 ---
 
 ## **🏦 Application & Account APIs**

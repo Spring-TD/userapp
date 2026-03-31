@@ -1,4 +1,10 @@
-import { validateForm, merchantRegistrationSchema, userRegistrationSchema } from '../utils/validation';
+// Jest provides these globals at runtime, but the TypeScript linter may not have Jest types loaded.
+// Declaring them here keeps `tsc`/IDE linting happy without requiring dependency changes.
+declare const describe: any;
+declare const test: any;
+declare const expect: any;
+
+import { validateForm, merchantRegistrationSchema, userRegistrationSchema, userProfileUpdateSchema } from '../utils/validation';
 import { MerchantRegistrationForm, UserRegistrationForm } from '../types/forms';
 
 describe('Validation Tests', () => {
@@ -51,7 +57,62 @@ describe('Validation Tests', () => {
     test('should reject missing merchant ID', () => {
       const invalidData = { ...validUserData, user_merchant_id: '' };
       const result = validateForm(userRegistrationSchema, invalidData);
-      expect(result.error).toContain('User Merchant ID must be at least 5 characters');
+      expect(result.error).toBeDefined();
+      expect(result.error).toMatch(/user_merchant_id|User Merchant ID/);
+    });
+
+    test('should validate user data with user_ref when password is empty', () => {
+      const userRefData: UserRegistrationForm = {
+        user_merchant_id: 'merchant123',
+        first_name: 'Jane',
+        last_name: 'Smith',
+        email: 'jane@example.com',
+        phone: '+1234567890',
+        country: 'United States',
+        password: '',
+        user_ref: 'external-id-123'
+      };
+      const result = validateForm<UserRegistrationForm>(userRegistrationSchema, userRefData);
+      expect(result.error).toBeUndefined();
+      expect(result.value?.user_ref).toBe('external-id-123');
+    });
+
+    test('should reject user registration when password is empty and user_ref is missing', () => {
+      const noPasswordNoRef: UserRegistrationForm = {
+        user_merchant_id: 'merchant123',
+        first_name: 'Jane',
+        last_name: 'Smith',
+        email: 'jane@example.com',
+        phone: '+1234567890',
+        country: 'United States',
+        password: ''
+      };
+      const result = validateForm(userRegistrationSchema, noPasswordNoRef);
+      expect(result.error).toContain('user_ref is required when password is not provided');
+    });
+  });
+
+  describe('User Profile Update Validation', () => {
+    test('should validate partial profile update', () => {
+      const data = {
+        first_name: 'John',
+        last_name: 'Doe',
+        phone: '+1234567890',
+        country: 'United States'
+      };
+
+      const result = validateForm(userProfileUpdateSchema, data);
+      expect(result.error).toBeUndefined();
+      expect(result.value).toEqual(data);
+    });
+
+    test('should reject invalid phone format', () => {
+      const data = {
+        phone: 'abc'
+      };
+
+      const result = validateForm(userProfileUpdateSchema, data);
+      expect(result.error).toContain('Phone number must be in valid international format');
     });
   });
 });

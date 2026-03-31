@@ -17,6 +17,7 @@ interface EnvironmentConfig {
   nodeEnv: string;
   serviceAuthUrl: string;
   serviceAuthInternalToken: string;
+  serviceAuthHttpTimeoutMs: number;
   notificationsServiceUrl: string;
   corsOrigins: string[];
   logLevel: string;
@@ -29,6 +30,7 @@ export const config: EnvironmentConfig = {
   nodeEnv: process.env.NODE_ENV || 'development',
   serviceAuthUrl: process.env.SERVICE_AUTH_URL || 'http://localhost:3000',
   serviceAuthInternalToken: process.env.SERVICE_AUTH_INTERNAL_TOKEN || 'internal-dev-token',
+  serviceAuthHttpTimeoutMs: parseInt(process.env.SERVICE_AUTH_HTTP_TIMEOUT_MS || '90000', 10),
   notificationsServiceUrl:
     process.env.NOTIFICATIONS_SERVICE_URL ||
     (process.env.NODE_ENV === 'production' ? 'https://notifications-ms.fly.dev' : 'http://localhost:4009'),

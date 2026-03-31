@@ -3,10 +3,13 @@ import { Request, Response, NextFunction } from 'express';
 import { kycService } from '../services/kycService';
 import { logger } from '../utils/logger';
 import { auditLogger } from '../utils/audit';
-import { KYCStatus, UserType, RiskLevel, BusinessType, ComplianceWorkflowStatus } from '../types/kycTypes';
+import { KYCStatus, UserType, RiskLevel, BusinessType, ComplianceWorkflowStatus, BUSINESS_TYPE_OPTIONS, INDUSTRY_TYPE_OPTIONS, BUSINESS_MODEL_OPTIONS } from '../types/kycTypes';
 import { livenessService } from '../services/livenessService';
 import { amlVerificationService, AMLVerificationResult } from '../services/amlVerificationService';
 import { sanctionsService, SanctionsCheckRequest } from '../services/sanctionsService';
+import * as spacesService from '../services/spacesService';
+import { v4 as uuidv4 } from 'uuid';
+import { businessSurveyUpdateSchema, businessInfoUpdateSchema } from '../utils/validation';
 
 // Enhanced KYC controller with separated individual and business methods
 export class KYCController {
@@ -125,6 +128,44 @@ export class KYCController {
       });
       
       return res.status(201).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Upload KYC document to Spaces (backend upload)
+  static async uploadKycDocument(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.file || !req.file.buffer) {
+        return res.status(400).json({
+          success: false,
+          error: 'No file uploaded. Send a single file in the "file" field.'
+        });
+      }
+      if (!spacesService.isSpacesConfigured()) {
+        return res.status(503).json({
+          success: false,
+          error: 'Document upload is not configured (Spaces).'
+        });
+      }
+      const mimeType = req.file.mimetype || (req.file as any).mimeType || 'application/octet-stream';
+      const fileSize = req.file.size ?? req.file.buffer.length;
+      const validation = spacesService.validateKycUpload(mimeType, fileSize);
+      if (!validation.valid) {
+        return res.status(400).json({
+          success: false,
+          error: validation.error
+        });
+      }
+      const userId = req.user?.userId ?? req.service?.serviceId ?? 'anonymous';
+      const ext = req.file.originalname?.match(/\.[a-zA-Z0-9]+$/)?.[0] || (mimeType === 'application/pdf' ? '.pdf' : '.bin');
+      const key = `kyc/${userId}/${uuidv4()}${ext}`;
+      const result = await spacesService.uploadToSpaces(req.file.buffer, key, mimeType);
+      return res.status(200).json({
+        success: true,
+        url: result.url,
+        key: result.key
+      });
     } catch (error) {
       next(error);
     }
@@ -566,34 +607,86 @@ export class KYCController {
     }
   }
 
-  // Get shareholders (beneficial owners) for a user
+  /** Get business type options for the "Select a Business Type" dropdown (industry/sector list). */
+  static async getBusinessTypeOptions(_req: Request, res: Response, next: NextFunction) {
+    try {
+      return res.status(200).json({
+        success: true,
+        data: BUSINESS_TYPE_OPTIONS.map((value) => ({ value, label: value }))
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** Get industry type options for the "Select Industry Type" dropdown. */
+  static async getIndustryTypeOptions(_req: Request, res: Response, next: NextFunction) {
+    try {
+      return res.status(200).json({
+        success: true,
+        data: INDUSTRY_TYPE_OPTIONS.map((value) => ({ value, label: value }))
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** Get business model options for the "Select a Business Model" dropdown. */
+  static async getBusinessModelOptions(_req: Request, res: Response, next: NextFunction) {
+    try {
+      return res.status(200).json({
+        success: true,
+        data: BUSINESS_MODEL_OPTIONS.map((value) => ({ value, label: value }))
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Get shareholders (beneficial owners) for a merchant (by merchantId)
   static async getBeneficialOwners(req: Request, res: Response, next: NextFunction) {
     try {
+      const { merchantId } = req.params;
       const userId = req.user?.userId;
-      
+
+      if (!merchantId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Merchant ID is required'
+        });
+      }
+
       if (!userId) {
         return res.status(400).json({
           success: false,
           error: 'User ID is required'
         });
       }
-      
-      const result = await kycService.getShareholders(userId);
-      
+
+      // Authenticated merchant can only fetch their own shareholders
+      if (userId !== merchantId) {
+        return res.status(403).json({
+          success: false,
+          error: 'You can only fetch shareholders for your own account'
+        });
+      }
+
+      const result = await kycService.getShareholders(merchantId);
+
       if (!result.success) {
         logger.warn('Shareholders retrieval failed', {
-          userId,
+          merchantId,
           error: result.error
         });
-        
+
         return res.status(404).json(result);
       }
-      
+
       logger.info('Shareholders retrieved successfully', {
-        userId,
+        merchantId,
         shareholderCount: result.data?.length
       });
-      
+
       return res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -644,6 +737,15 @@ export class KYCController {
           error: 'User ID is required'
         });
       }
+
+      const { error: validationError } = businessInfoUpdateSchema.validate(req.body, { abortEarly: false });
+      if (validationError) {
+        return res.status(400).json({
+          success: false,
+          error: 'Validation failed',
+          details: validationError.details.map((d) => d.message)
+        });
+      }
       
       const result = await kycService.updateBusinessInfo(userId, req.body);
       
@@ -675,6 +777,15 @@ export class KYCController {
         return res.status(400).json({
           success: false,
           error: 'User ID is required'
+        });
+      }
+
+      const { error: validationError } = businessSurveyUpdateSchema.validate(req.body, { abortEarly: false });
+      if (validationError) {
+        return res.status(400).json({
+          success: false,
+          error: 'Validation failed',
+          details: validationError.details.map((d) => d.message)
         });
       }
       
@@ -875,32 +986,31 @@ export class KYCController {
         });
       }
 
-      // Get current KYC profile
-      const result = await kycService.getKYCStatus(userId, req.user?.userId);
-      
-      if (!result.success) {
+      const result = await kycService.getFullProfile(userId);
+      if (!result.success || !result.data) {
         return res.status(404).json(result);
       }
 
-      if (result.data?.userType !== UserType.INDIVIDUAL) {
+      const profile = result.data;
+      if (profile.userType !== UserType.INDIVIDUAL) {
         return res.status(400).json({
           success: false,
           error: 'User is not an individual customer'
         });
       }
 
-      // Return individual profile information
       return res.status(200).json({
         success: true,
         data: {
           userId,
-          personalInfo: (result.data as any).personalInfo,
-          riskLevel: result.data?.riskLevel,
-          riskAssessment: (result.data as any).riskAssessment,
-          documents: (result.data as any).documents,
-          status: result.data?.status,
-          submittedAt: result.data?.submittedAt,
-          completedAt: result.data?.completedAt
+          personalInfo: profile.personalInfo,
+          riskLevel: profile.riskLevel,
+          riskAssessment: profile.riskAssessment,
+          documents: profile.documents,
+          status: profile.status,
+          submittedAt: profile.submittedAt,
+          completedAt: profile.completedAt,
+          messages: profile.messages || []
         }
       });
     } catch (error) {
@@ -919,35 +1029,89 @@ export class KYCController {
         });
       }
 
-      // Get current KYC profile
-      const result = await kycService.getKYCStatus(userId, req.user?.userId);
-      
-      if (!result.success) {
+      const result = await kycService.getFullProfile(userId);
+      if (!result.success || !result.data) {
         return res.status(404).json(result);
       }
 
-      if (result.data?.userType !== UserType.MERCHANT) {
+      const profile = result.data;
+      if (profile.userType !== UserType.MERCHANT) {
         return res.status(400).json({
           success: false,
           error: 'User is not a business customer'
         });
       }
 
-      // Return business profile information
       return res.status(200).json({
         success: true,
         data: {
           userId,
-          businessInfo: (result.data as any).businessInfo,
-          beneficialOwners: (result.data as any).beneficialOwners,
-          directors: (result.data as any).directors,
-          riskLevel: result.data?.riskLevel,
-          riskAssessment: (result.data as any).riskAssessment,
-          documents: (result.data as any).documents,
-          status: result.data?.status,
-          submittedAt: result.data?.submittedAt,
-          completedAt: result.data?.completedAt
+          businessInfo: profile.businessInfo,
+          beneficialOwners: profile.beneficialOwners ?? profile.shareholders,
+          directors: profile.directors,
+          riskLevel: profile.riskLevel,
+          riskAssessment: profile.riskAssessment,
+          documents: profile.documents,
+          status: profile.status,
+          submittedAt: profile.submittedAt,
+          completedAt: profile.completedAt,
+          messages: profile.messages || []
         }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Merchant (or individual) sends a message to compliance admin
+  static async sendMessageToCompliance(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user?.userId;
+      const { message } = req.body;
+
+      if (!userId) {
+        return res.status(400).json({
+          success: false,
+          error: 'User ID is required'
+        });
+      }
+      if (!message || typeof message !== 'string' || !message.trim()) {
+        return res.status(400).json({
+          success: false,
+          error: 'Message is required and must be a non-empty string'
+        });
+      }
+
+      const result = await kycService.sendMessageToUser(userId, message.trim(), userId);
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+
+      return res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Get compliance messages for the authenticated user (merchant or individual)
+  static async getComplianceMessages(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        return res.status(400).json({
+          success: false,
+          error: 'User ID is required'
+        });
+      }
+
+      const result = await kycService.getMessages(userId);
+      if (!result.success) {
+        return res.status(404).json(result);
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: result.data || []
       });
     } catch (error) {
       next(error);
@@ -1389,7 +1553,8 @@ export class KYCController {
       const result = await kycService.approveDisapproveUser(userId, status as 'approved' | 'rejected', note, req.user?.userId);
       
       if (!result.success) {
-        return res.status(500).json(result);
+        const statusCode = result.error === 'User profile not found' ? 404 : 500;
+        return res.status(statusCode).json(result);
       }
 
       return res.status(200).json(result);

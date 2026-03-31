@@ -1,7 +1,21 @@
 import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
+import jwt, { type Secret, type SignOptions } from 'jsonwebtoken';
+import { createHash } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { config } from '../config/environment';
+
+export type JwtUserPayload = {
+  userId: string;
+  email: string;
+  userType: string;
+  userMerchantId?: string;
+  sessionId: string;
+};
+
+/** Store only a hash of refresh tokens in the database */
+export function hashTokenForStorage(token: string): string {
+  return createHash('sha256').update(token, 'utf8').digest('hex');
+}
 
 /**
  * Hash a password
@@ -22,22 +36,19 @@ export async function comparePassword(password: string, hash: string): Promise<b
  * Generate a password reset token
  */
 export function generatePasswordResetToken(payload: { userId: string; email: string; userType: string; userMerchantId?: string }): string {
-  return jwt.sign(
-    {
-      userId: payload.userId,
-      email: payload.email,
-      userType: payload.userType,
-      userMerchantId: payload.userMerchantId,
-      type: 'password_reset',
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 3600, // 1 hour
-    },
-    config.jwt.secret,
-    {
-      issuer: 'client-auth-ms',
-      audience: 'user',
-    }
-  );
+  const jwtPayload = {
+    userId: payload.userId,
+    email: payload.email,
+    userType: payload.userType,
+    userMerchantId: payload.userMerchantId,
+    type: 'password_reset',
+  };
+  const options: SignOptions = {
+    issuer: 'client-auth-ms',
+    audience: 'user',
+    expiresIn: 3600, // 1 hour in seconds
+  };
+  return jwt.sign(jwtPayload, config.jwt.secret as Secret, options);
 }
 
 /**
@@ -77,45 +88,43 @@ export function verifyEmailVerificationToken(token: string): { valid: boolean; e
 /**
  * Generate an access token
  */
-export function generateAccessToken(payload: { userId: string; email: string; userType: string; userMerchantId?: string }): string {
-  return jwt.sign(
-    {
-      userId: payload.userId,
-      email: payload.email,
-      userType: payload.userType,
-      userMerchantId: payload.userMerchantId,
-      type: 'access',
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + (60 * 60), // 1 hour
-    },
-    config.jwt.secret,
-    {
-      issuer: 'client-auth-ms',
-      audience: 'user',
-    }
-  );
+export function generateAccessToken(payload: JwtUserPayload): string {
+  const jwtPayload = {
+    userId: payload.userId,
+    email: payload.email,
+    userType: payload.userType,
+    userMerchantId: payload.userMerchantId,
+    sessionId: payload.sessionId,
+    type: 'access',
+  };
+  const options: SignOptions = {
+    issuer: 'client-auth-ms',
+    audience: 'user',
+    // Cast because jsonwebtoken's StringValue template type is narrower than general string
+    expiresIn: (config.jwt.expiresIn || '1h') as any,
+  };
+  return jwt.sign(jwtPayload, config.jwt.secret as Secret, options);
 }
 
 /**
  * Generate a refresh token
  */
-export function generateRefreshToken(payload: { userId: string; email: string; userType: string; userMerchantId?: string }): string {
-  return jwt.sign(
-    {
-      userId: payload.userId,
-      email: payload.email,
-      userType: payload.userType,
-      userMerchantId: payload.userMerchantId,
-      type: 'refresh',
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60), // 7 days
-    },
-    config.jwt.secret,
-    {
-      issuer: 'client-auth-ms',
-      audience: 'user',
-    }
-  );
+export function generateRefreshToken(payload: JwtUserPayload): string {
+  const jwtPayload = {
+    userId: payload.userId,
+    email: payload.email,
+    userType: payload.userType,
+    userMerchantId: payload.userMerchantId,
+    sessionId: payload.sessionId,
+    type: 'refresh',
+  };
+  const options: SignOptions = {
+    issuer: 'client-auth-ms',
+    audience: 'user',
+    // Cast because jsonwebtoken's StringValue template type is narrower than general string
+    expiresIn: (config.jwt.refreshExpiresIn || '30d') as any,
+  };
+  return jwt.sign(jwtPayload, config.jwt.secret as Secret, options);
 }
 
 /**

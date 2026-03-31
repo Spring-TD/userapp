@@ -106,7 +106,9 @@ export const authorize = (allowedRoles: string[]) => {
         return;
       }
 
-      if (!allowedRoles.includes(req.user.userType)) {
+      const userRole = (req.user.userType || '').toLowerCase();
+      const allowed = allowedRoles.map((r) => r.toLowerCase());
+      if (!allowed.includes(userRole)) {
         logger.warn('Authorization failed - insufficient permissions', {
           userId: req.user.userId,
           userType: req.user.userType,

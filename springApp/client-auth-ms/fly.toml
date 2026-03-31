@@ -6,6 +6,14 @@
 app = 'client-auth-ms'
 primary_region = 'lhr'
 
+# Bootstrap: Fly private network http://<service-auth-app>.internal:<listen-port> (same Fly org).
+[env]
+  NODE_ENV = 'production'
+  PORT = '4001'
+  SERVICE_AUTH_URL = 'http://service-auth-ms.internal:3000'
+  NOTIFICATIONS_SERVICE_URL = 'https://notifications-ms.fly.dev'
+  SERVICE_AUTH_HTTP_TIMEOUT_MS = '90000'
+
 [build]
 
 [http_service]
@@ -13,7 +21,8 @@ primary_region = 'lhr'
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true
-  min_machines_running = 0
+  # Avoid cold-start: proxy + 8s bootstrap window was timing out before this app finished starting.
+  min_machines_running = 1
   processes = ['app']
 
 [[vm]]

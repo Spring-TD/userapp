@@ -1,11 +1,13 @@
 import { User, Merchant, UserType, AccountStatus, UserAccount, Role, Permission, CreateRoleRequest } from '../models/User';
-import { db } from '../db/database';
-import { hashPassword, comparePassword, generateAccessToken, generateRefreshToken, verifyToken, generatePasswordResetToken } from '../utils/crypto';
+import { db as mockDb } from '../utils/mongoDatabase';
+import { hashPassword, comparePassword, verifyToken, generatePasswordResetToken } from '../utils/crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { RoleService } from './RoleService';
 import jwt from 'jsonwebtoken';
+import axios from 'axios';
 import { config } from '../config/environment';
 import notificationService, { SendNotificationResponse } from './NotificationService';
+import { SessionService } from './SessionService';
 
 // Type for user response without password
 export type UserResponse = Omit<UserAccount, 'password'>;
@@ -16,17 +18,20 @@ export interface LoginResponse {
   user?: UserResponse;
   accessToken?: string;
   refreshToken?: string;
+  sessionId?: string;
   error?: string;
+  emailVerified?: boolean;
 }
 
 export interface UserRegistrationData {
   email: string;
-  password: string;
+  password?: string;
   first_name: string;
   last_name: string;
   phone?: string;
   user_merchant_id?: string;
   country: string;
+  user_ref?: string;
 }
 
 export interface MerchantRegistrationData {
@@ -39,6 +44,20 @@ export interface MerchantRegistrationData {
   country: string;
 }
 
+type BootstrapApiKeyResult = {
+  success: boolean;
+  apiKey?: {
+    id: string;
+    merchant_id: string;
+    name: string;
+    public_key: string;
+    environment: 'test' | 'live';
+    status: 'active' | 'revoked' | 'expired';
+  };
+  secretKey?: string | null;
+  error?: string;
+};
+
 export interface AdminRegistrationData {
   email: string;
   password: string;
@@ -49,6 +68,46 @@ export interface AdminRegistrationData {
 }
 
 export class AuthService {
+  private static async bootstrapMerchantApiKey(merchantId: string): Promise<BootstrapApiKeyResult> {
+    try {
+      const response = await axios.post(
+        `${config.serviceAuthUrl}/internal/api/v1/keys/bootstrap`,
+        {
+          merchantId,
+          name: 'Default Live Key',
+          environment: 'live',
+        },
+        {
+          headers: {
+            'X-Internal-Token': config.serviceAuthInternalToken,
+          },
+          timeout: config.serviceAuthHttpTimeoutMs,
+        }
+      );
+
+      const payload = response.data as {
+        success?: boolean;
+        data?: { apiKey?: BootstrapApiKeyResult['apiKey']; secretKey?: string | null };
+        error?: string;
+      };
+
+      if (!payload.success || !payload.data?.apiKey) {
+        return { success: false, error: payload.error || 'Failed to bootstrap merchant API key' };
+      }
+
+      return {
+        success: true,
+        apiKey: payload.data.apiKey,
+        secretKey: payload.data.secretKey ?? null,
+      };
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data?.error || error.message)
+        : 'Failed to bootstrap merchant API key';
+      return { success: false, error: message };
+    }
+  }
+
   /**
    * Register a new user
    */
@@ -60,8 +119,17 @@ export class AuthService {
     error?: string;
   }> {
     try {
+      // Optional logic: if password is empty, user_ref is required (enforced by validation)
+      const hasPassword = userData.password != null && userData.password.trim() !== '';
+      if (!hasPassword && !userData.user_ref) {
+        return {
+          success: false,
+          error: 'user_ref is required when password is not provided'
+        };
+      }
+
       // Check if email already exists
-      const existingUser = await db.findUserByEmail(userData.email);
+      const existingUser = await mockDb.findUserByEmail(userData.email);
       if (existingUser) {
         return {
           success: false,
@@ -69,8 +137,10 @@ export class AuthService {
         };
       }
 
-      // Hash the password
-      const hashedPassword = await hashPassword(userData.password);
+      // Hash the password when provided; otherwise use a non-login placeholder for user_ref-only accounts
+      const hashedPassword = hasPassword
+        ? await hashPassword(userData.password!)
+        : await hashPassword(`__no_password_${userData.user_ref}_${Date.now()}__`);
 
       // Create the user
       const newUser: Omit<User, 'id'> & { created_at: Date; updated_at: Date; failed_login_attempts: number } = {
@@ -85,6 +155,7 @@ export class AuthService {
         phone_verified: false,
         user_merchant_id: userData.user_merchant_id || '',
         country: userData.country,
+        ...(userData.user_ref && { user_ref: userData.user_ref }),
         created_at: new Date(),
         updated_at: new Date(),
         last_login_at: undefined,
@@ -93,8 +164,9 @@ export class AuthService {
         locked_until: undefined
       };
 
-      const user = await db.createUser(newUser as Omit<UserAccount, 'id' | 'created_at' | 'updated_at' | 'failed_login_attempts'>);
+      const user = await mockDb.createUser(newUser as Omit<UserAccount, 'id' | 'created_at' | 'updated_at' | 'failed_login_attempts'>);
 
+      // Send one-time verification code email via notifications-ms
       let verificationEmailSent = false;
       let verificationEmailError: string | undefined;
       try {
@@ -115,7 +187,6 @@ export class AuthService {
         success: true,
         user: userWithoutPassword,
         verificationEmailSent,
-        ...(verificationEmailError && { verificationEmailError })
       };
     } catch (error) {
       console.error('Error registering user:', error);
@@ -133,12 +204,14 @@ export class AuthService {
     success: boolean;
     merchant?: UserResponse;
     verificationEmailSent?: boolean;
-    verificationEmailError?: string;
+    apiKey?: { publicKey: string; secretKey: string | null; environment: 'test' | 'live' };
+    /** Present when merchant was created but service-auth bootstrap failed (e.g. timeout). */
+    apiKeyBootstrapError?: string;
     error?: string;
   }> {
     try {
       // Check if email already exists
-      const existingUser = await db.findUserByEmail(merchantData.email);
+      const existingUser = await mockDb.findUserByEmail(merchantData.email);
       if (existingUser) {
         return {
           success: false,
@@ -172,8 +245,27 @@ export class AuthService {
         locked_until: undefined
       };
 
-      const merchant = await db.createUser(newMerchant as Omit<UserAccount, 'id' | 'created_at' | 'updated_at' | 'failed_login_attempts'>);
+      const merchant = await mockDb.createUser(newMerchant as Omit<UserAccount, 'id' | 'created_at' | 'updated_at' | 'failed_login_attempts'>);
 
+      // Bootstrap default merchant API key in service-auth-ms (non-fatal: merchant stays if this fails)
+      const bootstrapResult = await AuthService.bootstrapMerchantApiKey(merchant.id);
+      let apiKey:
+        | { publicKey: string; secretKey: string | null; environment: 'test' | 'live' }
+        | undefined;
+      let apiKeyBootstrapError: string | undefined;
+      if (bootstrapResult.success && bootstrapResult.apiKey) {
+        apiKey = {
+          publicKey: bootstrapResult.apiKey.public_key,
+          secretKey: bootstrapResult.secretKey ?? null,
+          environment: bootstrapResult.apiKey.environment
+        };
+      } else {
+        const msg = bootstrapResult.error || 'unknown error';
+        console.error('Merchant API key bootstrap failed; merchant account kept:', msg);
+        apiKeyBootstrapError = msg;
+      }
+
+      // Send one-time verification code email via notifications-ms
       let verificationEmailSent = false;
       let verificationEmailError: string | undefined;
       try {
@@ -194,7 +286,8 @@ export class AuthService {
         success: true,
         merchant: merchantWithoutPassword,
         verificationEmailSent,
-        ...(verificationEmailError && { verificationEmailError })
+        ...(apiKey ? { apiKey } : {}),
+        ...(apiKeyBootstrapError ? { apiKeyBootstrapError } : {})
       };
     } catch (error) {
       console.error('Error registering merchant:', error);
@@ -211,7 +304,7 @@ export class AuthService {
   static async registerAdmin(adminData: AdminRegistrationData): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
     try {
       // Check if email already exists
-      const existingUser = await db.findUserByEmail(adminData.email);
+      const existingUser = await mockDb.findUserByEmail(adminData.email);
       if (existingUser) {
         return {
           success: false,
@@ -243,7 +336,7 @@ export class AuthService {
         locked_until: undefined
       };
 
-      const admin = await db.createUser(newAdmin as Omit<UserAccount, 'id' | 'created_at' | 'updated_at' | 'failed_login_attempts'>);
+      const admin = await mockDb.createUser(newAdmin as Omit<UserAccount, 'id' | 'created_at' | 'updated_at' | 'failed_login_attempts'>);
 
       // Return admin without password
       const { password, ...adminWithoutPassword } = admin;
@@ -264,7 +357,7 @@ export class AuthService {
    * Get user by email
    */
   static async getUserByEmail(email: string): Promise<UserResponse | null> {
-    const user = await db.findUserByEmail(email);
+    const user = await mockDb.findUserByEmail(email);
     if (!user) return null;
 
     // Return user without password
@@ -276,7 +369,7 @@ export class AuthService {
    * Get user by ID
    */
   static async getUserById(id: string): Promise<UserResponse | null> {
-    const user = await db.findUserById(id);
+    const user = await mockDb.findUserById(id);
     if (!user) return null;
 
     // Return user without password
@@ -287,10 +380,14 @@ export class AuthService {
   /**
    * Login user
    */
-  static async login(email: string, password: string): Promise<LoginResponse> {
+  static async login(
+    email: string,
+    password: string,
+    meta?: { userAgent?: string; ip?: string }
+  ): Promise<LoginResponse> {
     try {
       // Find user by email
-      const user = await db.findUserByEmail(email);
+      const user = await mockDb.findUserByEmail(email);
       if (!user) {
         return {
           success: false,
@@ -312,13 +409,13 @@ export class AuthService {
         // Update failed login attempts
         const newFailedAttempts = user.failed_login_attempts + 1;
         let lockedUntil: Date | undefined;
-        
+
         if (newFailedAttempts >= 5) { // Assuming 5 attempts is the threshold
           lockedUntil = new Date();
           lockedUntil.setTime(lockedUntil.getTime() + 30 * 60 * 1000); // Lock for 30 minutes
         }
 
-        await db.updateUser(user.id, {
+        await mockDb.updateUser(user.id, {
           failed_login_attempts: newFailedAttempts,
           locked_until: lockedUntil
         });
@@ -329,24 +426,16 @@ export class AuthService {
         };
       }
 
-      // Check if account is active
-      if (user.status !== AccountStatus.ACTIVE) {
+      // Allow login for ACTIVE or PENDING (unverified email); block SUSPENDED and other states
+      if (user.status !== AccountStatus.ACTIVE && user.status !== AccountStatus.PENDING) {
         return {
           success: false,
           error: 'Account is not active'
         };
       }
 
-      // Check if email is verified
-      if (!user.email_verified) {
-        return {
-          success: false,
-          error: 'Email not verified'
-        };
-      }
-
       // Reset failed login attempts on successful login
-      await db.updateUser(user.id, {
+      await mockDb.updateUser(user.id, {
         failed_login_attempts: 0,
         locked_until: undefined,
         last_login_at: new Date()
@@ -360,17 +449,26 @@ export class AuthService {
         userMerchantId: 'user_merchant_id' in user ? user.user_merchant_id : undefined
       };
 
-      const accessToken = generateAccessToken(tokenPayload);
-      const refreshToken = generateRefreshToken(tokenPayload);
+      const { accessToken, refreshToken, sessionId } = await SessionService.issueTokensForNewSession(
+        {
+          userId: user.id,
+          email: user.email,
+          userType: user.user_type,
+          userMerchantId: 'user_merchant_id' in user ? user.user_merchant_id : undefined,
+        },
+        { userAgent: meta?.userAgent, ip: meta?.ip }
+      );
 
-      // Return user without password
+      // Return user without password and include emailVerified flag for frontend UX
       const { password: pwd, ...userWithoutPassword } = user;
-      
+
       return {
         success: true,
         user: userWithoutPassword,
         accessToken,
-        refreshToken
+        refreshToken,
+        sessionId,
+        emailVerified: user.email_verified
       };
     } catch (error) {
       console.error('Error during login:', error);
@@ -400,7 +498,7 @@ export class AuthService {
   static async initiatePasswordReset(email: string): Promise<{ success: boolean; error?: string }> {
     try {
       // Find user by email
-      const user = await db.findUserByEmail(email.toLowerCase());
+      const user = await mockDb.findUserByEmail(email.toLowerCase());
       if (!user) {
         // Don't reveal if email exists for security
         return {
@@ -454,14 +552,14 @@ export class AuthService {
       let tokenData;
       try {
         const decoded = jwt.verify(token, config.jwt.secret) as any;
-        
+
         if (decoded.type !== 'password_reset') {
           return {
             success: false,
             error: 'Invalid password reset token'
           };
         }
-        
+
         // We'll use the decoded payload as tokenData
         tokenData = { valid: true, payload: decoded };
       } catch (error) {
@@ -472,7 +570,7 @@ export class AuthService {
       }
 
       // Find user by ID
-      const user = await db.findUserById(tokenData.payload.userId);
+      const user = await mockDb.findUserById(tokenData.payload.userId);
       if (!user) {
         return {
           success: false,
@@ -509,10 +607,12 @@ export class AuthService {
       const hashedPassword = await hashPassword(newPassword);
 
       // Update user password
-      await db.updateUser(user.id, {
+      await mockDb.updateUser(user.id, {
         password: hashedPassword,
         failed_login_attempts: 0 // Reset failed login attempts
       });
+
+      await SessionService.revokeAllForUser(user.id);
 
       console.log(`Password reset successful for ${user.email}`);
 
@@ -533,7 +633,7 @@ export class AuthService {
   static async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
     try {
       // Find user by ID
-      const user = await db.findUserById(userId);
+      const user = await mockDb.findUserById(userId);
       if (!user) {
         return {
           success: false,
@@ -571,10 +671,12 @@ export class AuthService {
       const hashedPassword = await hashPassword(newPassword);
 
       // Update user password
-      await db.updateUser(user.id, {
+      await mockDb.updateUser(user.id, {
         password: hashedPassword,
         failed_login_attempts: 0
       });
+
+      await SessionService.revokeAllForUser(user.id);
 
       console.log(`Password change successful for ${user.email}`);
 
@@ -595,7 +697,7 @@ export class AuthService {
    */
   static async updateEmail(userId: string, currentPassword: string, newEmail: string): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
     try {
-      const user = await db.findUserById(userId);
+      const user = await mockDb.findUserById(userId);
       if (!user) {
         return { success: false, error: 'User not found' };
       }
@@ -614,12 +716,12 @@ export class AuthService {
         return { success: false, error: 'New email is the same as your current email' };
       }
 
-      const existingUser = await db.findUserByEmail(newEmail);
+      const existingUser = await mockDb.findUserByEmail(newEmail);
       if (existingUser) {
         return { success: false, error: 'Email address is already in use' };
       }
 
-      const updatedUser = await db.updateUser(userId, {
+      const updatedUser = await mockDb.updateUser(userId, {
         email: newEmail.trim(),
         email_verified: false
       });
@@ -648,7 +750,117 @@ export class AuthService {
   }
 
   /**
-   * Generate OTP
+   * Update current user's profile (first_name, last_name, phone, country).
+   * All fields are optional; account must be ACTIVE.
+   */
+  static async updateUserProfile(
+    userId: string,
+    profileData: {
+      first_name?: string;
+      last_name?: string;
+      phone?: string;
+      country?: string;
+    }
+  ): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
+    try {
+      const user = await mockDb.findUserById(userId);
+      if (!user) {
+        return { success: false, error: 'User not found' };
+      }
+
+      if (user.status !== AccountStatus.ACTIVE) {
+        return { success: false, error: 'Account is not active' };
+      }
+
+      const updateData: Partial<UserAccount> = {
+        ...(profileData.first_name !== undefined ? { first_name: profileData.first_name } : {}),
+        ...(profileData.last_name !== undefined ? { last_name: profileData.last_name } : {}),
+        ...(profileData.phone !== undefined ? { phone: profileData.phone } : {}),
+        ...(profileData.country !== undefined ? { country: profileData.country } : {}),
+      };
+
+      await mockDb.updateUser(userId, updateData);
+
+      const updatedUser = await mockDb.findUserById(userId);
+      if (!updatedUser) {
+        return { success: false, error: 'Failed to retrieve updated user' };
+      }
+
+      const { password: _p, ...userResponse } = updatedUser;
+      return { success: true, user: userResponse };
+    } catch (error) {
+      console.error('Error updating user profile:', error);
+      return { success: false, error: 'Internal server error while updating user profile' };
+    }
+  }
+
+  /**
+   * Deactivate current user's account.
+   */
+  static async deactivateAccount(userId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const user = await mockDb.findUserById(userId);
+      if (!user) {
+        return {
+          success: false,
+          error: 'User not found'
+        };
+      }
+
+      if (user.status === AccountStatus.DEACTIVATED) {
+        return {
+          success: false,
+          error: 'Account is already deactivated'
+        };
+      }
+
+      await mockDb.updateUser(userId, {
+        status: AccountStatus.DEACTIVATED,
+        deactivated_at: new Date()
+      });
+
+      // Invalidate all active sessions once account is deactivated.
+      await SessionService.revokeAllForUser(userId);
+
+      return {
+        success: true
+      };
+    } catch (error) {
+      console.error('Error deactivating account:', error);
+      return {
+        success: false,
+        error: 'Internal server error while deactivating account'
+      };
+    }
+  }
+
+  /**
+   * Send a one-time verification code email (used after signup).
+   * Generates OTP, stores it in DB, and sends via notifications-ms.
+   */
+  static async sendVerificationOtpEmail(email: string, userName: string): Promise<void> {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashedCode = await hashPassword(code);
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    const identifier = email.toLowerCase();
+
+    await mockDb.deleteOtpsByIdentifier(identifier, 'verification');
+    await mockDb.createOtp({
+      identifier,
+      code: hashedCode,
+      channel: 'email',
+      purpose: 'verification',
+      expiresAt
+    });
+
+    const result = await notificationService.sendOTP(email, code, 'verification', 'email');
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to send OTP');
+    }
+  }
+
+  /**
+   * Generate OTP: store in DB and send via notifications-ms.
    */
   static async generateOTP(request: { identifier: string; channel: 'email' | 'sms'; purpose: 'verification' | 'password-reset' | 'login' }): Promise<{ success: boolean; reference?: string; expiresIn?: number; error?: string }> {
     try {
@@ -658,8 +870,8 @@ export class AuthService {
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
       const idLower = identifier.toLowerCase();
 
-      await db.deleteOtpsByIdentifier(idLower, purpose);
-      await db.createOtp({
+      await mockDb.deleteOtpsByIdentifier(idLower, purpose);
+      await mockDb.createOtp({
         identifier: idLower,
         code: hashedCode,
         channel,
@@ -668,25 +880,26 @@ export class AuthService {
       });
 
       if (channel === 'email') {
-        const notificationResult = await notificationService.sendOTP(identifier, code, purpose);
+        const notificationResult = await notificationService.sendOTP(identifier, code, purpose, 'email');
         if (!notificationResult.success) {
           console.error('Failed to send OTP email:', notificationResult.error);
-          return {
-            success: false,
-            error: 'Failed to send OTP'
-          };
+          return { success: false, error: 'Failed to send OTP' };
         }
-      } else if (channel === 'sms') {
-        // SMS dispatch is not implemented in this notifications client yet.
-        console.log(`OTP ${code} sent to phone ${identifier}`);
+      } else {
+        const notificationResult = await notificationService.sendOTP(identifier, code, purpose, 'sms');
+        if (!notificationResult.success) {
+          console.error('Failed to send OTP SMS:', notificationResult.error);
+          return { success: false, error: 'Failed to send OTP' };
+        }
       }
 
       return {
         success: true,
-        reference: `otp_${Date.now()}`, // Mock reference
-        expiresIn: 300 // 5 minutes in seconds
+        reference: `otp_${Date.now()}`,
+        expiresIn: 300
       };
     } catch (error) {
+      console.error('Error in generateOTP:', error);
       return {
         success: false,
         error: 'Failed to generate OTP'
@@ -695,32 +908,7 @@ export class AuthService {
   }
 
   /**
-   * Send a one-time verification code email (used after signup).
-   * Generates OTP, stores it in DB, and sends via notifications service.
-   */
-  static async sendVerificationOtpEmail(email: string, _userName: string): Promise<void> {
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const hashedCode = await hashPassword(code);
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-    const identifier = email.toLowerCase();
-
-    await db.deleteOtpsByIdentifier(identifier, 'verification');
-    await db.createOtp({
-      identifier,
-      code: hashedCode,
-      channel: 'email',
-      purpose: 'verification',
-      expiresAt
-    });
-
-    const result = await notificationService.sendOTP(email, code, 'verification');
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to send OTP');
-    }
-  }
-
-  /**
-   * Verify OTP
+   * Verify OTP: check stored OTP; if purpose is 'verification', mark user email_verified and ACTIVE.
    */
   static async verifyOTP(request: { identifier: string; code: string }): Promise<{ success: boolean; valid: boolean; error?: string }> {
     try {
@@ -729,21 +917,21 @@ export class AuthService {
       const purposes: Array<'verification' | 'password-reset' | 'login'> = ['verification', 'password-reset', 'login'];
 
       for (const purpose of purposes) {
-        const otp = await db.findActiveOtp(idLower, purpose);
+        const otp = await mockDb.findActiveOtp(idLower, purpose);
         if (!otp) continue;
 
         const valid = await comparePassword(code, otp.code);
         if (!valid) {
-          await db.incrementOtpAttempts(otp.id);
+          await mockDb.incrementOtpAttempts((otp as any)._id.toString());
           return { success: true, valid: false };
         }
 
-        await db.markOtpVerified(otp.id);
+        await mockDb.markOtpVerified((otp as any)._id.toString());
 
         if (purpose === 'verification') {
-          const user = await db.findUserByEmail(idLower);
+          const user = await mockDb.findUserByEmail(idLower);
           if (user) {
-            await db.updateUser(user.id, { email_verified: true, status: AccountStatus.ACTIVE });
+            await mockDb.updateUser(user.id, { email_verified: true, status: AccountStatus.ACTIVE });
           }
         }
 
@@ -752,6 +940,7 @@ export class AuthService {
 
       return { success: true, valid: false };
     } catch (error) {
+      console.error('Error in verifyOTP:', error);
       return {
         success: false,
         valid: false,
@@ -761,7 +950,8 @@ export class AuthService {
   }
 
   /**
-   * Resend OTP
+   * Resend OTP: generate a new OTP, store it, and send via email/SMS.
+   * For email verification, uses the same path as signup (sendVerificationOtpEmail) so behaviour matches exactly.
    */
   static async resendOTP(request: { identifier: string; channel: 'email' | 'sms'; purpose: 'verification' | 'password-reset' | 'login' }): Promise<{ success: boolean; reference?: string; expiresIn?: number; error?: string }> {
     try {
@@ -769,6 +959,22 @@ export class AuthService {
       if (!identifier || !channel || !purpose) {
         return { success: false, error: 'Identifier, channel, and purpose are required' };
       }
+
+      // Email verification resend: use the exact same flow as signup so OTP is stored and sent identically
+      if (channel === 'email' && purpose === 'verification') {
+        try {
+          await AuthService.sendVerificationOtpEmail(identifier, 'User');
+          return {
+            success: true,
+            reference: `otp_${Date.now()}`,
+            expiresIn: 300
+          };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Failed to send OTP';
+          return { success: false, error: message };
+        }
+      }
+
       return await AuthService.generateOTP({ identifier, channel, purpose });
     } catch (error) {
       return {
@@ -784,7 +990,7 @@ export class AuthService {
   static async createInvitation(merchantId: string, request: { email: string; roleId: string }): Promise<{ success: boolean; invitation?: any; error?: string }> {
     try {
       // Validate role exists and belongs to merchant
-      const role = await db.findRoleById(request.roleId);
+      const role = await mockDb.findRoleById(request.roleId);
       if (!role) {
         return {
           success: false,
@@ -801,7 +1007,7 @@ export class AuthService {
       }
 
       // Check if user already exists
-      const existingUser = await db.findUserByEmail(request.email);
+      const existingUser = await mockDb.findUserByEmail(request.email);
       if (existingUser) {
         return {
           success: false,
@@ -825,10 +1031,10 @@ export class AuthService {
         updatedAt: now
       };
 
-      await db.createInvitation(invitation);
+      await mockDb.createInvitation(invitation);
 
       // Get merchant details to include in invitation email
-      const merchant = await db.findUserById(merchantId);
+      const merchant = await mockDb.findUserById(merchantId);
 
       // Send invitation email via notifications service
       const invitationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/accept-invitation?token=${token}`;
@@ -862,8 +1068,8 @@ export class AuthService {
    */
   static async getInvitations(merchantId: string): Promise<{ success: boolean; invitations?: any[]; error?: string }> {
     try {
-      const invitations = await db.findInvitationsByMerchantId(merchantId);
-      
+      const invitations = await mockDb.findInvitationsByMerchantId(merchantId);
+
       return {
         success: true,
         invitations
@@ -881,7 +1087,7 @@ export class AuthService {
    */
   static async validateInvitationToken(token: string): Promise<{ success: boolean; data?: any; error?: string }> {
     try {
-      const invitation = await db.findInvitationByToken(token);
+      const invitation = await mockDb.findInvitationByToken(token);
       if (!invitation || invitation.status !== 'pending' || new Date() > invitation.expiresAt) {
         return {
           success: false,
@@ -889,8 +1095,8 @@ export class AuthService {
         };
       }
 
-      const role = await db.findRoleById(invitation.roleId);
-      const merchant = await db.findUserById(invitation.merchantId);
+      const role = await mockDb.findRoleById(invitation.roleId);
+      const merchant = await mockDb.findUserById(invitation.merchantId);
 
       return {
         success: true,
@@ -913,7 +1119,7 @@ export class AuthService {
    */
   static async acceptInvitation(request: { token: string; password: string; firstName: string; lastName: string; phone?: string }): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
     try {
-      const invitation = await db.findInvitationByToken(request.token);
+      const invitation = await mockDb.findInvitationByToken(request.token);
 
       if (!invitation) {
         return {
@@ -930,7 +1136,7 @@ export class AuthService {
       }
 
       if (new Date() > invitation.expiresAt) {
-        await db.updateInvitation(invitation.id, { status: 'expired' });
+        await mockDb.updateInvitation(invitation.id, { status: 'expired' });
         return {
           success: false,
           error: 'Invitation expired'
@@ -955,10 +1161,10 @@ export class AuthService {
         role_id: invitation.roleId
       };
 
-      const createdUser = await db.createUser(newUser) as User;
+      const createdUser = await mockDb.createUser(newUser) as User;
 
       // Update invitation status
-      await db.updateInvitation(invitation.id, { status: 'accepted' });
+      await mockDb.updateInvitation(invitation.id, { status: 'accepted' });
 
       // Remove password from response
       const { password, ...userResponse } = createdUser;

@@ -4,6 +4,18 @@ A comprehensive compliance microservice providing Know Your Customer (KYC) verif
 
 Deployment URL: https://compliance-ms.fly.dev/
 
+## Architecture Update
+
+This service has been aligned with `plata/compliance-ms`.
+
+- Business KYC data is normalized into separate collections:
+  - `BusinessInfo`
+  - `BusinessSurvey`
+  - `BusinessDocument`
+  - `Shareholder`
+- `KYCProfile` remains the core workflow/status document and no longer stores merchant business documents inline.
+- Merchant document status and admin review flows operate on business-document records from the dedicated collection.
+
 ## Features
 
 ### ✅ Implemented

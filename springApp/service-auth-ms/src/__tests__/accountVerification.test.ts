@@ -3,13 +3,13 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthController } from '../controllers/authController';
 import { AuthService } from '../services/authService';
 import { generateEmailVerificationToken, verifyEmailVerificationToken } from '../utils/crypto';
-import { db as mockDb } from '../db/database';
+import { mockDb } from '../utils/mockDatabase';
 import { UserType, AccountStatus } from '../models/User';
 
 // Mock dependencies
 jest.mock('../services/authService');
 jest.mock('../utils/crypto');
-jest.mock('../db/database');
+jest.mock('../utils/mockDatabase');
 jest.mock('../utils/logger');
 
 const mockAuthService = AuthService as jest.Mocked<typeof AuthService>;
@@ -230,13 +230,11 @@ describe('Account Verification', () => {
         email
       });
       
-      const mockFindUserById = jest.fn() as jest.MockedFunction<(id: string) => Promise<unknown>>;
-      mockFindUserById
+      const mockFindUserById = jest.fn<(id: string) => Promise<unknown>>()
         .mockResolvedValueOnce(mockUser) // First call for verification
         .mockResolvedValueOnce(updatedUser);
 
-      const mockUpdateUser = jest.fn() as jest.MockedFunction<(id: string, updates: unknown) => Promise<void>>;
-      mockUpdateUser.mockResolvedValue(undefined);
+      const mockUpdateUser = jest.fn<(id: string, data: unknown) => Promise<void>>().mockResolvedValue(undefined);
       
       (mockDb as any).findUserById = mockFindUserById;
       (mockDb as any).updateUser = mockUpdateUser;
@@ -284,8 +282,7 @@ describe('Account Verification', () => {
         email
       });
       
-      const mockFindUserById = jest.fn() as jest.MockedFunction<(id: string) => Promise<unknown>>;
-      mockFindUserById.mockResolvedValue(null);
+      const mockFindUserById = jest.fn<(id: string) => Promise<unknown>>().mockResolvedValue(null);
       (mockDb as any).findUserById = mockFindUserById;
 
       // Act
@@ -315,8 +312,7 @@ describe('Account Verification', () => {
         email: tokenEmail
       });
       
-      const mockFindUserById = jest.fn() as jest.MockedFunction<(id: string) => Promise<unknown>>;
-      mockFindUserById.mockResolvedValue(mockUser);
+      const mockFindUserById = jest.fn<(id: string) => Promise<unknown>>().mockResolvedValue(mockUser);
       (mockDb as any).findUserById = mockFindUserById;
 
       // Act
@@ -345,8 +341,7 @@ describe('Account Verification', () => {
         email
       });
       
-      const mockFindUserById = jest.fn() as jest.MockedFunction<(id: string) => Promise<unknown>>;
-      mockFindUserById.mockResolvedValue(mockUser);
+      const mockFindUserById = jest.fn<(id: string) => Promise<unknown>>().mockResolvedValue(mockUser);
       (mockDb as any).findUserById = mockFindUserById;
 
       // Act

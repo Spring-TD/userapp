@@ -1,5 +1,9 @@
 # PowerShell script to configure account-ms gateway environment variables on Fly.io
 # This configures the API gateway to route to the correct microservice URLs
+#
+# Registration is proxied to client-auth-ms; merchant signup bootstraps API keys via SERVICE_AUTH_URL
+# on the client-auth-ms app (not on account-ms). If you see ENOTFOUND service-auth-ms.fly.internal,
+# run springApp/client-auth-ms/configure-fly-env.ps1 against app client-auth-ms.
 
 Write-Host "Configuring account-ms API Gateway URLs on Fly.io..." -ForegroundColor Green
 
@@ -17,6 +21,7 @@ fly secrets set `
 
 Write-Host ""
 Write-Host "Gateway URLs configured successfully!" -ForegroundColor Green
+Write-Host "Also set SERVICE_AUTH_URL on client-auth-ms (see client-auth-ms/configure-fly-env.ps1)." -ForegroundColor Yellow
 Write-Host "The account-ms app will restart automatically." -ForegroundColor Yellow
 Write-Host ""
 Write-Host "Wait about 30 seconds, then test with:" -ForegroundColor Cyan

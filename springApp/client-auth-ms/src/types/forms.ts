@@ -15,7 +15,8 @@ export interface UserRegistrationForm {
   email: string;
   phone: string;
   country: string;
-  password: string;
+  password?: string; // optional: when empty, user_ref is required
+  user_ref?: string;
 }
 
 export interface AdminRegistrationForm {

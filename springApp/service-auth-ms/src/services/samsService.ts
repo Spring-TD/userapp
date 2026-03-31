@@ -3,9 +3,9 @@
  * Contains business logic for service management, credentials, and IP whitelisting
  */
 
-import { 
-  Service, 
-  Credential, 
+import {
+  Service,
+  Credential,
   IPWhitelist,
   CreateServiceRequest,
   CreateServiceResponse,
@@ -40,7 +40,7 @@ export class ServiceService {
   ): Promise<CreateServiceResponse> {
     try {
       // Check if service name already exists
-      const existingService = SAMSDatabase.services.findByName(serviceData.name);
+      const existingService = await SAMSDatabase.services.findByName(serviceData.name);
       if (existingService) {
         return {
           success: false,
@@ -73,7 +73,7 @@ export class ServiceService {
       if (createdBy !== undefined) {
         serviceParams.created_by = createdBy;
       }
-      const service = SAMSDatabase.services.create(serviceParams);
+      const service = await SAMSDatabase.services.create(serviceParams);
 
       logger.info('Service created successfully', {
         serviceId: service.service_id,
@@ -102,8 +102,8 @@ export class ServiceService {
    */
   static async getAllServices(): Promise<GetServicesResponse> {
     try {
-      const services = SAMSDatabase.services.findAll();
-      
+      const services = await SAMSDatabase.services.findAll();
+
       return {
         success: true,
         message: 'Services retrieved successfully',
@@ -127,7 +127,7 @@ export class ServiceService {
    */
   static async getServiceById(serviceId: string): Promise<GetServiceResponse> {
     try {
-      const service = SAMSDatabase.services.findById(serviceId);
+      const service = await SAMSDatabase.services.findById(serviceId);
       if (!service) {
         return {
           success: false,
@@ -136,8 +136,8 @@ export class ServiceService {
         };
       }
 
-      const whitelistedIps = SAMSDatabase.ipWhitelists.findByServiceId(serviceId);
-      const activeCredentials = SAMSDatabase.credentials.findActiveByServiceId(serviceId);
+      const whitelistedIps = await SAMSDatabase.ipWhitelists.findByServiceId(serviceId);
+      const activeCredentials = await SAMSDatabase.credentials.findActiveByServiceId(serviceId);
 
       return {
         success: true,
@@ -162,12 +162,12 @@ export class ServiceService {
    * Update service status
    */
   static async updateServiceStatus(
-    serviceId: string, 
+    serviceId: string,
     status: ServiceStatus,
     updatedBy?: string
   ): Promise<{ success: boolean; message: string; service?: Service }> {
     try {
-      const service = SAMSDatabase.services.findById(serviceId);
+      const service = await SAMSDatabase.services.findById(serviceId);
       if (!service) {
         return {
           success: false,
@@ -175,7 +175,7 @@ export class ServiceService {
         };
       }
 
-      const updatedService = SAMSDatabase.services.update(serviceId, { 
+      const updatedService = await SAMSDatabase.services.update(serviceId, {
         status,
         updated_at: new Date()
       });
@@ -209,7 +209,7 @@ export class ServiceService {
     decommissionedBy?: string
   ): Promise<{ success: boolean; message: string }> {
     try {
-      const service = SAMSDatabase.services.findById(serviceId);
+      const service = await SAMSDatabase.services.findById(serviceId);
       if (!service) {
         return {
           success: false,
@@ -218,19 +218,19 @@ export class ServiceService {
       }
 
       // Update status to decommissioned instead of deleting
-      SAMSDatabase.services.update(serviceId, {
+      await SAMSDatabase.services.update(serviceId, {
         status: ServiceStatus.DECOMMISSIONED,
         updated_at: new Date()
       });
 
       // Deactivate all IP whitelists
-      SAMSDatabase.ipWhitelists.deleteByServiceId(serviceId);
+      await SAMSDatabase.ipWhitelists.deleteByServiceId(serviceId);
 
       // Revoke all credentials
-      const credentials = SAMSDatabase.credentials.findByServiceId(serviceId);
-      credentials.forEach(credential => {
-        SAMSDatabase.credentials.void(credential.credential_id);
-      });
+      const credentials = await SAMSDatabase.credentials.findByServiceId(serviceId);
+      for (const credential of credentials) {
+        await SAMSDatabase.credentials.void(credential.credential_id);
+      }
 
       logger.info('Service decommissioned', {
         serviceId,
@@ -279,7 +279,7 @@ export class WhitelistService {
   ): Promise<{ success: boolean; message: string; whitelisted?: IPWhitelist[] }> {
     try {
       // Verify service exists
-      const service = SAMSDatabase.services.findById(serviceId);
+      const service = await SAMSDatabase.services.findById(serviceId);
       if (!service) {
         return {
           success: false,
@@ -307,8 +307,8 @@ export class WhitelistService {
         }
 
         // Check if IP is already whitelisted
-        const existing = SAMSDatabase.ipWhitelists.findByServiceId(serviceId)
-          .find(entry => entry.ip_address === ipAddress && entry.is_active);
+        const existingEntries = await SAMSDatabase.ipWhitelists.findByServiceId(serviceId);
+        const existing = existingEntries.find(entry => entry.ip_address === ipAddress && entry.is_active);
 
         if (existing) {
           logger.warn('IP address already whitelisted', { serviceId, ipAddress });
@@ -327,7 +327,7 @@ export class WhitelistService {
         if (createdBy !== undefined) {
           whitelistParams.created_by = createdBy;
         }
-        const whitelist = SAMSDatabase.ipWhitelists.create(whitelistParams);
+        const whitelist = await SAMSDatabase.ipWhitelists.create(whitelistParams);
 
         whitelistedEntries.push(whitelist);
       }
@@ -361,7 +361,7 @@ export class WhitelistService {
     ipAddress: string
   ): Promise<{ isAllowed: boolean; reason?: string }> {
     try {
-      const service = SAMSDatabase.services.findById(serviceId);
+      const service = await SAMSDatabase.services.findById(serviceId);
       if (!service) {
         return { isAllowed: false, reason: 'Service not found' };
       }
@@ -370,8 +370,8 @@ export class WhitelistService {
         return { isAllowed: false, reason: 'Service is not active' };
       }
 
-      const isWhitelisted = SAMSDatabase.ipWhitelists.isIPWhitelisted(serviceId, ipAddress);
-      
+      const isWhitelisted = await SAMSDatabase.ipWhitelists.isIPWhitelisted(serviceId, ipAddress);
+
       if (!isWhitelisted) {
         logger.warn('IP access denied - not whitelisted', { serviceId, ipAddress });
         return { isAllowed: false, reason: 'IP address not whitelisted for this service' };
@@ -390,7 +390,7 @@ export class WhitelistService {
    */
   static async getWhitelistedIPs(serviceId: string): Promise<IPWhitelist[]> {
     try {
-      return SAMSDatabase.ipWhitelists.findByServiceId(serviceId);
+      return await SAMSDatabase.ipWhitelists.findByServiceId(serviceId);
     } catch (error) {
       logger.error('Error retrieving whitelisted IPs', { error, serviceId });
       return [];
@@ -413,7 +413,7 @@ export class WhitelistService {
       if (maskNum < 0 || maskNum > 32) return false;
       return this.isValidIPv4(address);
     }
-    
+
     return this.isValidIPv4(ip);
   }
 
@@ -423,7 +423,7 @@ export class WhitelistService {
   private static isValidIPv4(ip: string): boolean {
     const parts = ip.split('.');
     if (parts.length !== 4) return false;
-    
+
     return parts.every(part => {
       const num = parseInt(part);
       return num >= 0 && num <= 255 && part === num.toString();
@@ -446,7 +446,7 @@ export class CredentialService {
   ): Promise<CreateCredentialResponse> {
     try {
       // Verify service exists
-      const service = SAMSDatabase.services.findById(serviceId);
+      const service = await SAMSDatabase.services.findById(serviceId);
       if (!service) {
         return {
           success: false,
@@ -465,7 +465,7 @@ export class CredentialService {
 
       // Verify target service exists if specified
       if (credentialData.target_service_id) {
-        const targetService = SAMSDatabase.services.findById(credentialData.target_service_id);
+        const targetService = await SAMSDatabase.services.findById(credentialData.target_service_id);
         if (!targetService) {
           return {
             success: false,
@@ -480,7 +480,7 @@ export class CredentialService {
       const credentialHash = await this.hashCredential(credentialValue);
 
       // Calculate expiration date
-      const expiresAt = credentialData.expires_in 
+      const expiresAt = credentialData.expires_in
         ? new Date(Date.now() + credentialData.expires_in * 1000)
         : undefined;
 
@@ -507,7 +507,7 @@ export class CredentialService {
       if (createdBy !== undefined) {
         credentialParams.created_by = createdBy;
       }
-      const credential = SAMSDatabase.credentials.create(credentialParams);
+      const credential = await SAMSDatabase.credentials.create(credentialParams);
 
       logger.info('Credential created', {
         credentialId: credential.credential_id,
@@ -548,7 +548,7 @@ export class CredentialService {
   ): Promise<CreateCredentialResponse> {
     try {
       // Verify service exists
-      const service = SAMSDatabase.services.findById(serviceId);
+      const service = await SAMSDatabase.services.findById(serviceId);
       if (!service) {
         return {
           success: false,
@@ -567,7 +567,7 @@ export class CredentialService {
 
       // Verify target service exists if specified
       if (credentialData.target_service_id) {
-        const targetService = SAMSDatabase.services.findById(credentialData.target_service_id);
+        const targetService = await SAMSDatabase.services.findById(credentialData.target_service_id);
         if (!targetService) {
           return {
             success: false,
@@ -582,7 +582,7 @@ export class CredentialService {
       const credentialHash = await this.hashCredential(credentialValue);
 
       // Calculate expiration date
-      const expiresAt = credentialData.expires_in 
+      const expiresAt = credentialData.expires_in
         ? new Date(Date.now() + credentialData.expires_in * 1000)
         : undefined;
 
@@ -607,7 +607,7 @@ export class CredentialService {
       if (createdBy !== undefined) {
         credentialParams.created_by = createdBy;
       }
-      const credential = SAMSDatabase.credentials.create(credentialParams);
+      const credential = await SAMSDatabase.credentials.create(credentialParams);
 
       logger.info('Merchant-specific credential created', {
         credentialId: credential.credential_id,
@@ -646,8 +646,8 @@ export class CredentialService {
     try {
       // Extract user merchant ID from the request if available
       const userMerchantId = (validationData as any).user_merchant_id || undefined;
-      
-      const validation = SAMSDatabase.credentials.validate(
+
+      const validation = await SAMSDatabase.credentials.validate(
         validationData.credential_value,
         validationData.service_id,
         userMerchantId  // Pass merchant ID for validation
@@ -698,11 +698,11 @@ export class CredentialService {
         service_id: credential!.service_id,
         permissions: credential!.permissions || []
       };
-      
+
       if (credential!.expires_at !== undefined) {
         responseData.expires_at = credential!.expires_at;
       }
-      
+
       if (credential!.rate_limit !== undefined) {
         responseData.rate_limit = credential!.rate_limit;
       }
@@ -733,7 +733,7 @@ export class CredentialService {
     voidedBy?: string
   ): Promise<VoidCredentialResponse> {
     try {
-      const credential = SAMSDatabase.credentials.findById(credentialId);
+      const credential = await SAMSDatabase.credentials.findById(credentialId);
       if (!credential) {
         return {
           success: false,
@@ -748,7 +748,7 @@ export class CredentialService {
         };
       }
 
-      const success = SAMSDatabase.credentials.void(credentialId);
+      const success = await SAMSDatabase.credentials.void(credentialId);
       if (!success) {
         return {
           success: false,
@@ -790,7 +790,7 @@ export class CredentialService {
   ): Promise<CreateCredentialResponse & { status?: number }> {
     try {
       // Find the existing credential
-      const existingCredential = SAMSDatabase.credentials.findById(credentialId);
+      const existingCredential = await SAMSDatabase.credentials.findById(credentialId);
       if (!existingCredential) {
         return {
           success: false,
@@ -816,7 +816,7 @@ export class CredentialService {
       const permissions = existingCredential.permissions || [];
       const rateLimit = existingCredential.rate_limit;
       const userMerchantId = existingCredential.user_merchant_id;
-      
+
       // Calculate expiration (maintain same duration if it had one)
       let expiresIn: number | undefined;
       if (existingCredential.expires_at) {
@@ -830,7 +830,7 @@ export class CredentialService {
         permissions: permissions,
         user_merchant_id: userMerchantId
       };
-      
+
       // Only add optional properties if they exist
       if (targetServiceId !== undefined) {
         newCredentialData.target_service_id = targetServiceId;
@@ -865,9 +865,9 @@ export class CredentialService {
       );
 
       if (!voidResult.success) {
-        logger.warn('Failed to void old credential during regeneration', { 
-          credentialId, 
-          newCredentialId: newCredentialResult.data?.credential?.credential_id 
+        logger.warn('Failed to void old credential during regeneration', {
+          credentialId,
+          newCredentialId: newCredentialResult.data?.credential?.credential_id
         });
         // Continue with success even if void fails, but log the warning
       }
@@ -902,7 +902,7 @@ export class CredentialService {
    */
   static async getServiceCredentials(serviceId: string): Promise<Credential[]> {
     try {
-      return SAMSDatabase.credentials.findByServiceId(serviceId);
+      return await SAMSDatabase.credentials.findByServiceId(serviceId);
     } catch (error) {
       logger.error('Error retrieving service credentials', { error, serviceId });
       return [];
@@ -914,7 +914,7 @@ export class CredentialService {
    */
   static async cleanupExpiredCredentials(): Promise<number> {
     try {
-      const expiredCount = SAMSDatabase.credentials.markExpired();
+      const expiredCount = await SAMSDatabase.credentials.markExpired();
       logger.info('Expired credentials cleaned up', { count: expiredCount });
       return expiredCount;
     } catch (error) {
@@ -968,7 +968,7 @@ export class SAMSService {
   static async initialize(): Promise<void> {
     try {
       await SAMSDatabase.initialize();
-      
+
       // Start cleanup job for expired credentials
       setInterval(() => {
         CredentialService.cleanupExpiredCredentials();
@@ -984,8 +984,8 @@ export class SAMSService {
   /**
    * Get system health status
    */
-  static getHealthStatus() {
-    const stats = SAMSDatabase.getStats();
+  static async getHealthStatus() {
+    const stats = await SAMSDatabase.getStats();
     return {
       status: 'healthy',
       services: stats.services,

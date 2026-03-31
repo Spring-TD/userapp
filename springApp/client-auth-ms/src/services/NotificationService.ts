@@ -104,15 +104,10 @@ export class NotificationService {
     return this.sendNotification(request);
   }
 
-  async sendOTP(email: string, otpCode: string, purpose: string): Promise<SendNotificationResponse> {
-    const purposeLabel: Record<string, string> = {
-      verification: 'account verification',
-      'password-reset': 'password reset',
-      login: 'login',
-    };
+  async sendOTP(recipient: string, otpCode: string, purpose: string, channel: 'email' | 'sms' = 'email'): Promise<SendNotificationResponse> {
     const request: SendNotificationRequest = {
-      channel: 'email',
-      recipient: email,
+      channel,
+      recipient,
       template: 'otp',
       data: {
         otpCode,

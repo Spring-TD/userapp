@@ -1,7 +1,5 @@
 export enum Permission {
   CREATE_ADMIN = 'create_admin',
-  GENERATE_SECRET_KEYS = 'generate_secret_keys',
-  SEE_SECRET_KEYS = 'see_secret_keys',
   EDIT_PRODUCTS = 'edit_products',
   CREATE_PRODUCTS = 'create_products',
   VIEW_PRODUCTS = 'view_products',
@@ -51,6 +49,7 @@ export interface User extends BaseUser {
   user_merchant_id: string;
   country: string;
   role_id?: string; // ID of the role assigned to this user
+  user_ref?: string; // External user reference (required when password is not set)
 }
 
 export interface Merchant extends BaseUser {
