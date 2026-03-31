@@ -177,7 +177,7 @@ export class AuthService {
       return {
         success: true,
         user: userWithoutPassword,
-        verificationEmailSent
+        verificationEmailSent,
       };
     } catch (error) {
       console.error('Error registering user:', error);
