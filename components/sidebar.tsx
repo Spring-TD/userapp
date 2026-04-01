@@ -54,9 +54,10 @@ const Sidebar: React.FC<SidebarProps> = ({ className = "" }) => {
     const stored = typeof window !== "undefined" ? localStorage.getItem(COMPLIANCE_COMPLETE_KEY) : null
     const run = async () => {
       try {
-        const res = await ComplianceService.getKycStatusForCurrentUser()
+        const preferredUserId = effectiveUser?.id
+        const res = await ComplianceService.getKycStatusForCurrentUser(preferredUserId)
         const status = (res as { data?: { status?: string } })?.data?.status
-        if (!cancelled && status?.toLowerCase() === "approved") {
+        if (!cancelled && status === "approved") {
           setComplianceComplete(true)
           if (typeof window !== "undefined") {
             window.localStorage.setItem(COMPLIANCE_COMPLETE_KEY, "true")

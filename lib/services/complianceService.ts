@@ -2,19 +2,42 @@ import { apiClient } from "@/lib/api";
 import { getAccessToken } from "@/lib/cookieAuth";
 import { ENDPOINTS } from "@/lib/endpoints";
 
-// Decode userId from JWT (mirrors logic in kycService)
-function decodeUserIdFromToken(t: string | null): string | null {
+const isDev = process.env.NODE_ENV !== "production";
+const OBJECT_ID_REGEX = /^[a-f\d]{24}$/i;
+
+function isLikelyObjectId(value: unknown): value is string {
+  return typeof value === "string" && OBJECT_ID_REGEX.test(value);
+}
+
+// Decode likely user IDs from JWT; some tokens carry multiple ID fields.
+function decodeCandidateUserIdsFromToken(t: string | null): string[] {
   try {
-    if (!t) return null;
+    if (!t) return [];
     const [, payload] = t.split(".");
-    if (!payload) return null;
+    if (!payload) return [];
     const decoded = JSON.parse(
       typeof atob === "function" ? atob(payload) : Buffer.from(payload, "base64").toString("utf8"),
     );
-    return decoded?.userId || decoded?.sub || decoded?.id || decoded?._id || null;
+    const candidates = [
+      decoded?.sub,
+      decoded?.id,
+      decoded?._id,
+      decoded?.userId,
+      decoded?.user_id,
+      decoded?.uid,
+      decoded?.merchantId,
+      decoded?.userMerchantId,
+      decoded?.user_merchant_id,
+    ].filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+    return Array.from(new Set(candidates));
   } catch {
-    return null;
+    return [];
   }
+}
+
+function pickObjectIdCandidates(values: Array<unknown>): string[] {
+  const filtered = values.filter(isLikelyObjectId);
+  return Array.from(new Set(filtered));
 }
 
 export class ComplianceService {
@@ -33,18 +56,68 @@ export class ComplianceService {
     return res.data;
   }
 
-  static async getKycStatusForCurrentUser() {
+  static async getKycStatusForCurrentUser(userIdOverride?: string) {
     const token = getAccessToken();
-    const userId = decodeUserIdFromToken(token);
-    if (!userId) throw new Error("Unable to resolve userId from token");
-    const res = await apiClient.get(ENDPOINTS.compliance.status(userId));
-    return res.data;
+    let profileIdCandidates: string[] = [];
+    try {
+      const profileRes = await apiClient.get(ENDPOINTS.user.profile);
+      const profileData = (profileRes?.data as { data?: Record<string, unknown> })?.data ?? {};
+      profileIdCandidates = pickObjectIdCandidates([
+        profileData?.id,
+        profileData?._id,
+        profileData?.userId,
+        profileData?.user_id,
+      ]);
+      if (isDev) {
+        console.log("[ComplianceService] Profile-derived ID candidates:", profileIdCandidates, "raw:", profileData);
+      }
+    } catch (err) {
+      if (isDev) {
+        console.log("[ComplianceService] Failed to fetch profile for ID resolution:", err);
+      }
+    }
+
+    const tokenIdCandidates = pickObjectIdCandidates(decodeCandidateUserIdsFromToken(token));
+    const overrideCandidates = pickObjectIdCandidates([userIdOverride]);
+    const uniqueCandidateUserIds = Array.from(
+      new Set([...overrideCandidates, ...profileIdCandidates, ...tokenIdCandidates]),
+    );
+    if (uniqueCandidateUserIds.length === 0) throw new Error("Unable to resolve userId from token");
+    if (isDev) {
+      console.log("[ComplianceService] KYC status candidate IDs:", uniqueCandidateUserIds);
+    }
+
+    let lastError: unknown = null;
+    for (const userId of uniqueCandidateUserIds) {
+      try {
+        if (isDev) {
+          console.log("[ComplianceService] Checking KYC status for userId:", userId);
+        }
+        const res = await apiClient.get(ENDPOINTS.compliance.status(userId));
+        if (isDev) {
+          console.log("[ComplianceService] KYC status success for userId:", userId, "response:", res.data);
+        }
+        return res.data;
+      } catch (err) {
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        const responseData = (err as { response?: { data?: unknown } })?.response?.data;
+        lastError = err;
+        if (isDev) {
+          console.log("[ComplianceService] KYC status failed for userId:", userId, "status:", status, "response:", responseData);
+        }
+        // Try the next candidate for not-found IDs.
+        if (status === 404) continue;
+        throw err;
+      }
+    }
+
+    throw lastError ?? new Error("Unable to fetch KYC status");
   }
 
   // --- Shareholders (per compliance-ms docs: GET with merchantId, PUT full array) ---
   static async getShareholdersForCurrentMerchant() {
     const token = getAccessToken();
-    const userId = decodeUserIdFromToken(token);
+    const userId = decodeCandidateUserIdsFromToken(token)[0] ?? null;
     if (!userId) return [];
     try {
       const res = await apiClient.get(ENDPOINTS.compliance.business.beneficialOwners(userId));

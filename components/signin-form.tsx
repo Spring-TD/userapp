@@ -10,6 +10,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { useAuth } from "@/hooks/useAuth"
+import { getUserFromToken } from "@/lib/tokenManager"
 import { ComplianceService } from "@/lib/services/complianceService"
 import { COMPLIANCE_COMPLETE_KEY } from "@/lib/compliance"
 
@@ -29,8 +30,9 @@ export function SigninForm() {
 
   const resolvePostLoginRoute = async () => {
     try {
-      const res = await ComplianceService.getKycStatusForCurrentUser()
-      const status = (res as { data?: { status?: string } })?.data?.status?.toLowerCase()
+      const preferredUserId = getUserFromToken()?.id
+      const res = await ComplianceService.getKycStatusForCurrentUser(preferredUserId)
+      const status = (res as { data?: { status?: string } })?.data?.status
       if (status === "approved") {
         if (typeof window !== "undefined") {
           window.localStorage.setItem(COMPLIANCE_COMPLETE_KEY, "true")
