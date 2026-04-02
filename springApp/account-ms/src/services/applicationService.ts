@@ -24,14 +24,14 @@ class ApplicationService {
                 throw new Error('Product not found');
             }
 
-            // 2. Enforce server-side: product must be active for this merchant (app)
-            const merchantId = product.appId;
-            if (!merchantId) {
-                throw new Error('Product is not active for this merchant. Only active products can be applied for.');
+            // 2. Enforce server-side: product must be active for its owning app
+            const appId = product.appId;
+            if (!appId) {
+                throw new Error('Product is not active for this app. Only active products can be applied for.');
             }
-            const pricing = await productService.getProductPricing(input.productId, merchantId);
+            const pricing = await productService.getProductPricing(input.productId, appId);
             if (pricing?.isActive !== true) {
-                throw new Error('Product is not active for this merchant. Only active products can be applied for.');
+                throw new Error('Product is not active for this app. Only active products can be applied for.');
             }
 
             // 3. Check if product requires approval

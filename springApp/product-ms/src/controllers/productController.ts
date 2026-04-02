@@ -276,14 +276,14 @@ export class ProductController {
     }
   };
 
-  // Toggle product activation for a merchant
+  // Toggle product activation for an app
   toggleProductActivation = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { merchantId, productId } = req.params;
+      const { appId, productId } = req.params;
       const { activate } = req.body;
 
-      if (!merchantId) {
-        throw new ApiError(400, 'Merchant ID is required');
+      if (!appId) {
+        throw new ApiError(400, 'App ID is required');
       }
       
       if (!productId) {
@@ -294,16 +294,16 @@ export class ProductController {
         throw new ApiError(400, 'Activate flag is required');
       }
 
-      const result = await this.productService.toggleProductActivation(merchantId, productId, activate);
+      const product = await this.productService.toggleProductActivation(appId, productId, activate);
 
-      if (!result) {
+      if (!product) {
         throw new ApiError(500, 'Failed to toggle product activation');
       }
 
       res.json({
         success: true,
         message: `Product ${activate ? 'activated' : 'deactivated'} successfully`,
-        data: { productId, merchantId, isActive: activate }
+        data: product
       });
     } catch (error) {
       if (error instanceof ApiError) {
@@ -322,29 +322,29 @@ export class ProductController {
     }
   };
 
-  // Update merchant-specific product configuration (e.g., interest rate adjustments)
+  // Update app-specific product configuration (e.g., interest rate adjustments)
   updateMerchantProductConfiguration = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { merchantId, productId } = req.params;
+      const { appId, productId } = req.params;
       const configData = req.body;
 
-      if (!merchantId) {
-        throw new ApiError(400, 'Merchant ID is required');
+      if (!appId) {
+        throw new ApiError(400, 'App ID is required');
       }
       
       if (!productId) {
         throw new ApiError(400, 'Product ID is required');
       }
 
-      const updatedConfig = await this.productService.updateMerchantProductConfiguration(merchantId, productId, configData);
+      const updatedConfig = await this.productService.updateMerchantProductConfiguration(appId, productId, configData);
 
       if (!updatedConfig) {
-        throw new ApiError(500, 'Failed to update merchant product configuration');
+        throw new ApiError(404, 'App product not found');
       }
 
       res.json({
         success: true,
-        message: 'Merchant product configuration updated successfully',
+        message: 'App product configuration updated successfully',
         data: updatedConfig
       });
     } catch (error) {
@@ -356,7 +356,7 @@ export class ProductController {
         return;
       }
 
-      console.error('Error in updateMerchantProductConfiguration controller:', error);
+      console.error('Error in updateAppProductConfiguration controller:', error);
       res.status(500).json({
         success: false,
         error: 'Internal server error'
@@ -364,20 +364,20 @@ export class ProductController {
     }
   };
 
-  // Get merchant-specific product configuration
+  // Get app-specific product configuration
   getMerchantProductConfiguration = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { merchantId, productId } = req.params;
+      const { appId, productId } = req.params;
 
-      if (!merchantId) {
-        throw new ApiError(400, 'Merchant ID is required');
+      if (!appId) {
+        throw new ApiError(400, 'App ID is required');
       }
       
       if (!productId) {
         throw new ApiError(400, 'Product ID is required');
       }
 
-      const config = await this.productService.getMerchantProductConfiguration(merchantId, productId);
+      const config = await this.productService.getMerchantProductConfiguration(appId, productId);
 
       res.json({
         success: true,

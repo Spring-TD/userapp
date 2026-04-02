@@ -29,7 +29,7 @@ export const db = {
   ): Promise<MerchantProductConfiguration> {
     const doc = await MerchantProductConfigurationModel.create({
       productId: data.productId,
-      merchantId: data.merchantId,
+      appId: data.appId,
       isActive: data.isActive ?? false,
       pricingType: data.pricingType,
       pricingCondition: data.pricingCondition,
@@ -45,11 +45,11 @@ export const db = {
   },
 
   async findMerchantConfiguration(
-    merchantId: string,
+    appId: string,
     productId: string
   ): Promise<MerchantProductConfiguration | null> {
     const doc = await MerchantProductConfigurationModel.findOne({
-      merchantId,
+      appId,
       productId
     });
     return docToMerchantConfig(doc);
@@ -63,19 +63,19 @@ export const db = {
   },
 
   async findConfigurationsByMerchantId(
-    merchantId: string
+    appId: string
   ): Promise<MerchantProductConfiguration[]> {
-    const docs = await MerchantProductConfigurationModel.find({ merchantId });
+    const docs = await MerchantProductConfigurationModel.find({ appId });
     return docs.map((d) => docToMerchantConfig(d)!).filter(Boolean);
   },
 
   async updateMerchantConfiguration(
-    merchantId: string,
+    appId: string,
     productId: string,
-    updates: Partial<Omit<MerchantProductConfiguration, 'id' | 'productId' | 'merchantId' | 'createdAt' | 'updatedAt'>>
+    updates: Partial<Omit<MerchantProductConfiguration, 'id' | 'productId' | 'appId' | 'createdAt' | 'updatedAt'>>
   ): Promise<MerchantProductConfiguration | null> {
     const doc = await MerchantProductConfigurationModel.findOneAndUpdate(
-      { merchantId, productId },
+      { appId, productId },
       { $set: updates },
       { new: true }
     );
@@ -86,7 +86,7 @@ export const db = {
     data: Omit<MerchantProductConfiguration, 'id' | 'createdAt' | 'updatedAt'>
   ): Promise<MerchantProductConfiguration> {
     const doc = await MerchantProductConfigurationModel.findOneAndUpdate(
-      { merchantId: data.merchantId, productId: data.productId },
+      { appId: data.appId, productId: data.productId },
       {
         $set: {
           isActive: data.isActive ?? false,
@@ -107,11 +107,11 @@ export const db = {
   },
 
   async deleteMerchantConfiguration(
-    merchantId: string,
+    appId: string,
     productId: string
   ): Promise<boolean> {
     const result = await MerchantProductConfigurationModel.deleteOne({
-      merchantId,
+      appId,
       productId
     });
     return result.deletedCount > 0;

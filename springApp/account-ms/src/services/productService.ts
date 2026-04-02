@@ -22,7 +22,7 @@ export interface ProductPricing {
     maximumAmount?: number;
     price?: number; // For commodity products
     currency?: string;
-    // Merchant-specific pricing configuration
+    // App-specific pricing configuration
     pricingType?: 'percent' | 'Fixed pricing';
     pricingCondition?: 'With cap' | 'No Cap';
     upperCap?: number;
@@ -93,7 +93,7 @@ class ProductService {
      * Get product pricing/configuration
      * This retrieves the pricing details for a product
      */
-    async getProductPricing(productId: string, merchantId?: string): Promise<ProductPricing | null> {
+    async getProductPricing(productId: string, appId?: string): Promise<ProductPricing | null> {
         try {
             // Get product info first
             const productInfo = await this.getProductInfo(productId);
@@ -117,10 +117,10 @@ class ProductService {
                 currency: productInfo.currency
             };
 
-            // If merchantId is provided, get merchant-specific pricing configuration
-            if (merchantId) {
+            // If appId is provided, get app-specific pricing configuration
+            if (appId) {
                 try {
-                    const configResponse = await axios.get(`${this.baseUrl}/api/v1/products/config/${merchantId}/${productId}`, {
+                    const configResponse = await axios.get(`${this.baseUrl}/api/v1/products/config/${appId}/${productId}`, {
                         headers: {
                             'Authorization': 'Bearer sams_account_service_token'
                         }
@@ -129,7 +129,7 @@ class ProductService {
                     if (configResponse.data.success && configResponse.data.data) {
                         const config = configResponse.data.data;
                         
-                        // Merge merchant-specific pricing configuration with base pricing
+                        // Merge app-specific pricing configuration with base pricing
                         pricing = {
                             ...pricing,
                             pricingType: config.pricingType,
@@ -145,7 +145,7 @@ class ProductService {
                         };
                     }
                 } catch (configError: any) {
-                    console.warn(`No merchant-specific configuration found for merchant ${merchantId} and product ${productId}:`, configError.message);
+                    console.warn(`No app-specific configuration found for app ${appId} and product ${productId}:`, configError.message);
                     // Continue with base pricing if merchant config doesn't exist
                 }
             }
@@ -162,7 +162,7 @@ class ProductService {
      */
     async getProductsByAppId(appId: string): Promise<ProductInfo[]> {
         try {
-            const response = await axios.get(`${this.baseUrl}/api/v1/products/merchant/${appId}`, {
+            const response = await axios.get(`${this.baseUrl}/api/v1/products/app/${appId}`, {
                 headers: {
                     'Authorization': 'Bearer sams_account_service_token'
                 }
@@ -182,9 +182,9 @@ class ProductService {
      * Calculate pricing for an account based on product
      * This helps determine fees, interest rates, etc. for an account
      */
-    async calculateAccountPricing(productId: string, accountType: string, amount: number, merchantId?: string): Promise<any> {
+    async calculateAccountPricing(productId: string, accountType: string, amount: number, appId?: string): Promise<any> {
         try {
-            const pricing = await this.getProductPricing(productId, merchantId);
+            const pricing = await this.getProductPricing(productId, appId);
 
             if (!pricing) {
                 return {
@@ -300,11 +300,11 @@ class ProductService {
      * Set or update product pricing
      * This allows account-ms to influence product pricing based on account data
      */
-    async updateProductPricing(productId: string, merchantId: string, pricingUpdates: Partial<ProductPricing>): Promise<boolean> {
+    async updateProductPricing(productId: string, appId: string, pricingUpdates: Partial<ProductPricing>): Promise<boolean> {
         try {
-            // Update merchant-specific product configuration with new pricing
+            // Update app-specific product configuration with new pricing
             const response = await axios.put(
-                `${this.baseUrl}/api/v1/products/config/${merchantId}/${productId}`,
+                `${this.baseUrl}/api/v1/products/config/${appId}/${productId}`,
                 pricingUpdates, // Send the pricing updates directly as the body
                 {
                     headers: {

@@ -16,11 +16,12 @@ router.get('/', productController.getAllProducts);
 router.get('/:id', productController.getProductById);
 router.put('/:id', productController.updateProduct);
 router.delete('/:id', productController.deleteProduct);
+router.get('/app/:appId', productController.getProductsByMerchant);
 router.get('/merchant/:appId', productController.getProductsByMerchant);
-// Endpoints for merchant product management
-router.put('/toggle/:merchantId/:productId', productController.toggleProductActivation);
-router.put('/config/:merchantId/:productId', productController.updateMerchantProductConfiguration);
-router.get('/config/:merchantId/:productId', productController.getMerchantProductConfiguration);
+// Endpoints for app-scoped product management
+router.put('/toggle/:appId/:productId', productController.toggleProductActivation);
+router.put('/config/:appId/:productId', productController.updateMerchantProductConfiguration);
+router.get('/config/:appId/:productId', productController.getMerchantProductConfiguration);
 router.get('/:id/action', productController.checkProductAction);
 router.put('/:id/manage', validate(updateProductSchema), productController.manageProduct);
 

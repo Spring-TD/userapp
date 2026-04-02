@@ -26,9 +26,9 @@ export class ConfigurationController {
         throw new ApiError(400, 'Product ID and Product Type are required');
       }
 
-      // For now, use a default merchant ID since this is not provided in the request
-      const merchantId = 'default-merchant';
-      const configuration = await this.productService.createProductConfiguration(configData, merchantId);
+      // For now, use a default app ID since this is not provided in the request
+      const appId = 'default-app';
+      const configuration = await this.productService.createProductConfiguration(configData, appId);
       
       res.status(201).json({
         success: true,

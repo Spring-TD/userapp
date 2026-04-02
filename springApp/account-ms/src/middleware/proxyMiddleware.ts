@@ -4,12 +4,15 @@ import { config } from '../config/environment';
 
 export const setupProxies = (app: Express) => {
     // Helper to create proxy options
-    const createOptions = (target: string): Options => ({
+    const createOptions = (target: string, pathPrefix?: string): Options => ({
         target,
         changeOrigin: true,
-        pathRewrite: {
-            // We keep the path as is
-        },
+        // When mounting `app.use('/api/v1/auth', proxy)`, Express strips the mount path
+        // from `req.url` before handing it to the proxy. `client-auth-ms` expects the
+        // `/api/v1/auth` prefix, so we re-add it via `pathRewrite`.
+        pathRewrite: pathPrefix
+            ? { '^/': `${pathPrefix}/` }
+            : {},
         // We don't need on: proxyReq here if we mount this BEFORE body-parser
     });
 
@@ -45,7 +48,12 @@ export const setupProxies = (app: Express) => {
     // Create App Service Proxy
     app.use(
         '/api/v1/apps',
-        createProxyMiddleware(createOptions(config.createAppServiceUrl))
+        // Preserve `/api/v1/apps` prefix for the upstream.
+        // Without pathRewrite, Express strips the mount path so create-app-ms receives `/`
+        // and returns its root status payload instead of the apps handler.
+        createProxyMiddleware(
+            createOptions(config.createAppServiceUrl, '/api/v1/apps')
+        )
     );
 
     // Payment Service Proxy
@@ -63,10 +71,25 @@ export const setupProxies = (app: Express) => {
     // Client Auth Service Proxy
     const clientAuthTarget = config.clientAuthServiceUrl;
 
-    app.use('/api/v1/auth', createProxyMiddleware(createOptions(clientAuthTarget)));
-    app.use('/api/v1/registration', createProxyMiddleware(createOptions(clientAuthTarget)));
-    app.use('/api/v1/otp', createProxyMiddleware(createOptions(clientAuthTarget)));
-    app.use('/api/v1/password', createProxyMiddleware(createOptions(clientAuthTarget)));
-    app.use('/api/v1/user', createProxyMiddleware(createOptions(clientAuthTarget)));
+    app.use(
+        '/api/v1/auth',
+        createProxyMiddleware(createOptions(clientAuthTarget, '/api/v1/auth'))
+    );
+    app.use(
+        '/api/v1/registration',
+        createProxyMiddleware(createOptions(clientAuthTarget, '/api/v1/registration'))
+    );
+    app.use(
+        '/api/v1/otp',
+        createProxyMiddleware(createOptions(clientAuthTarget, '/api/v1/otp'))
+    );
+    app.use(
+        '/api/v1/password',
+        createProxyMiddleware(createOptions(clientAuthTarget, '/api/v1/password'))
+    );
+    app.use(
+        '/api/v1/user',
+        createProxyMiddleware(createOptions(clientAuthTarget, '/api/v1/user'))
+    );
     app.use('/verify-email', createProxyMiddleware(createOptions(clientAuthTarget)));
 };

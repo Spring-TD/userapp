@@ -1,9 +1,5 @@
-import { Product, CreateProductRequest, UpdateProductRequest, SelectProductTypeRequest, CreateProductAfterTypeRequest } from '../types/product';
+import { Product } from '../types/product';
 import {
-  LoanProductConfiguration,
-  MortgageProductConfiguration,
-  SavingsProductConfiguration,
-  CommodityProductConfiguration,
   ProductConfiguration,
   MerchantProductConfiguration,
   CreateProductConfigurationRequest,
@@ -11,79 +7,153 @@ import {
 } from '../types/productConfiguration';
 import axios from 'axios';
 import { config } from '../config/environment';
-import { db } from '../db/database';
+import { ProductModel, toProduct } from '../models/ProductModel';
+import { normalizeProductType } from '../utils/productType';
 
 export class ProductService {
+  private getAuthHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {};
+    if (config.plataPublicKey) headers['X-Public-Key'] = config.plataPublicKey;
+    if (config.plataSecretKey) headers['X-Secret-Key'] = config.plataSecretKey;
+    return headers;
+  }
 
-  // Fetch all products from server product-ms
+  private async fetchUpstreamProductById(id: string): Promise<Product | null> {
+    try {
+      const response = await axios.get(`${config.serverProductServiceUrl}/api/v1/products/${id}`, {
+        headers: this.getAuthHeaders()
+      });
+      return response.data.data || null;
+    } catch (error) {
+      console.error('Error fetching upstream product by ID from server:', error);
+      return null;
+    }
+  }
+
+  private async getLocalProductById(id: string): Promise<Product | null> {
+    try {
+      const doc = await ProductModel.findById(id);
+      return doc ? toProduct(doc) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private buildLocalProductPayload(product: Product, appId: string, isActive: boolean): Omit<Product, 'id'> {
+    const now = new Date().toISOString();
+    return {
+      referenceNumber: product.referenceNumber,
+      name: product.name,
+      description: product.description ?? '',
+      type: normalizeProductType(product.type),
+      subType: product.subType,
+      appId,
+      status: product.status ?? 'incomplete',
+      isActive,
+      createdAt: product.createdAt || now,
+      updatedAt: now,
+      metadata: product.metadata,
+      structure: product.structure,
+      about: product.about,
+      requirements: product.requirements,
+      feesAndCharges: product.feesAndCharges,
+      properties: product.properties,
+      config: product.config,
+      equityContribution: product.equityContribution,
+      propertyValue: product.propertyValue,
+      price: product.price,
+      minimumQuantity: product.minimumQuantity,
+      unitOfMeasure: product.unitOfMeasure,
+      commodityPrices: product.commodityPrices
+    };
+  }
+
+  private sanitizeProductUpdate(updateData: Partial<Product>): Partial<Omit<Product, 'id'>> {
+    const next: Partial<Omit<Product, 'id'>> = {};
+    const keys: Array<keyof Omit<Product, 'id'>> = [
+      'name',
+      'description',
+      'type',
+      'subType',
+      'status',
+      'isActive',
+      'metadata',
+      'structure',
+      'about',
+      'requirements',
+      'feesAndCharges',
+      'properties',
+      'config',
+      'equityContribution',
+      'propertyValue',
+      'price',
+      'minimumQuantity',
+      'unitOfMeasure',
+      'commodityPrices'
+    ];
+
+    for (const key of keys) {
+      if (updateData[key] !== undefined) {
+        (next as Record<string, unknown>)[key] =
+          key === 'type' && typeof updateData[key] === 'string'
+            ? normalizeProductType(updateData[key] as string)
+            : updateData[key];
+      }
+    }
+
+    next.updatedAt = new Date().toISOString();
+    return next;
+  }
+
+  private toLegacyConfigurationShape(product: Product): MerchantProductConfiguration {
+    return {
+      id: product.id,
+      productId: product.id,
+      appId: product.appId,
+      isActive: product.isActive,
+      createdAt: product.createdAt,
+      updatedAt: product.updatedAt
+    };
+  }
+
+  // Fetch all products from upstream product-ms
   async getAllProducts(): Promise<Product[]> {
     try {
-      const headers: Record<string, string> = {};
-      if (config.plataPublicKey) headers['X-Public-Key'] = config.plataPublicKey;
-      if (config.plataSecretKey) headers['X-Secret-Key'] = config.plataSecretKey;
-
       const response = await axios.get(`${config.serverProductServiceUrl}/api/v1/products`, {
-        headers
+        headers: this.getAuthHeaders()
       });
-      const products = response.data.data || [];
-      
-      // Return products with default merchant configuration
-      return products.map((product: Product) => ({
-        ...product,
-        merchantConfig: null
-      }));
+      return response.data.data || [];
     } catch (error) {
       console.error('Error fetching products from server:', error);
       return [];
     }
   }
 
-  // Fetch a single product by ID from server product-ms
+  // Resolve local app-scoped products first, then fall back to upstream catalog.
   async getProductById(id: string): Promise<Product | null> {
-    try {
-      const response = await axios.get(`${config.serverProductServiceUrl}/api/v1/products/${id}`);
-      const product = response.data.data || null;
-      
-      if (product) {
-        return {
-          ...product,
-          merchantConfig: null
-        };
-      }
-      
-      return null;
-    } catch (error) {
-      console.error('Error fetching product by ID from server:', error);
-      return null;
+    const localProduct = await this.getLocalProductById(id);
+    if (localProduct) {
+      return localProduct;
     }
+    return this.fetchUpstreamProductById(id);
   }
 
-  // Fetch products by merchant ID from server product-ms
-  async getProductsByMerchant(merchantId: string): Promise<Product[]> {
+  // Fetch products that have been persisted for a specific app in the local products collection.
+  async getProductsByMerchant(appId: string): Promise<Product[]> {
     try {
-      const response = await axios.get(`${config.serverProductServiceUrl}/api/v1/products/app/${merchantId}`);
-      const products = response.data.data || [];
-      
-      // Enhance products with merchant-specific configurations
-      const enhancedProducts = await Promise.all(products.map(async (product: Product) => {
-        const merchantConfig = await this.getMerchantProductConfiguration(merchantId, product.id);
-        return {
-          ...product,
-          merchantConfig: merchantConfig || null
-        };
-      }));
-      
-      return enhancedProducts;
+      const docs = await ProductModel.find({ appId }).sort({ updatedAt: -1 });
+      return docs.map((doc) => toProduct(doc));
     } catch (error) {
-      console.error('Error fetching products by app ID from server:', error);
+      console.error('Error fetching products by app ID from local database:', error);
       return [];
     }
   }
 
-  // Check product action capability
   async checkProductAction(id: string): Promise<any> {
     try {
-      const response = await axios.get(`${config.serverProductServiceUrl}/api/v1/products/${id}/action`);
+      const response = await axios.get(`${config.serverProductServiceUrl}/api/v1/products/${id}/action`, {
+        headers: this.getAuthHeaders()
+      });
       return response.data.data || null;
     } catch (error) {
       console.error('Error checking product action from server:', error);
@@ -91,92 +161,105 @@ export class ProductService {
     }
   }
 
-  // Configuration management methods
-  // Note: Actual product creation happens in server/product-ms
-  // This service only handles merchant-specific configurations
+  async createProductConfiguration(configData: CreateProductConfigurationRequest, appId: string): Promise<MerchantProductConfiguration> {
+    const upstreamProduct = await this.fetchUpstreamProductById(configData.productId);
+    if (!upstreamProduct) {
+      throw new Error('Product not found');
+    }
 
-  // Create merchant-specific product configuration (persisted in MongoDB)
-  async createProductConfiguration(configData: CreateProductConfigurationRequest, merchantId: string): Promise<MerchantProductConfiguration> {
-    return db.createMerchantConfiguration({
-      productId: configData.productId,
-      merchantId,
-      isActive: false,
-      pricingType: undefined,
-      pricingCondition: undefined,
-      upperCap: undefined,
-      lowerCap: undefined,
-      springTDFee: undefined,
-      serviceFee: undefined,
-      markupRate: 0,
-      customTerms: {},
-      enabledFeatures: []
+    const existing = await ProductModel.findOne({
+      appId,
+      referenceNumber: upstreamProduct.referenceNumber
     });
+
+    if (existing) {
+      return this.toLegacyConfigurationShape(toProduct(existing));
+    }
+
+    const created = await ProductModel.create(this.buildLocalProductPayload(upstreamProduct, appId, false));
+    return this.toLegacyConfigurationShape(toProduct(created));
   }
 
-  // Methods for actual product creation and updates are not implemented
-  // as this service is read-only for product data
-  // Product creation/update/delete happens in server/product-ms
-
   async getProductConfiguration(productId: string): Promise<ProductConfiguration | null> {
-    return db.findConfigurationByProductId(productId);
+    const product = await this.getLocalProductById(productId);
+    return product ? this.toLegacyConfigurationShape(product) : null;
   }
 
   async updateProductConfiguration(productId: string, updateData: UpdateProductConfigurationRequest): Promise<ProductConfiguration | null> {
-    // Update the first merchant config found for this product (configuration API has no merchantId)
-    const existing = await db.findConfigurationByProductId(productId);
-    if (!existing || !('merchantId' in existing)) return null;
-    return db.updateMerchantConfiguration(
-      existing.merchantId,
+    const doc = await ProductModel.findByIdAndUpdate(
       productId,
-      updateData.configuration ?? {}
+      this.sanitizeProductUpdate(updateData.configuration as Partial<Product>),
+      { new: true }
     );
+    return doc ? this.toLegacyConfigurationShape(toProduct(doc)) : null;
   }
 
   async deleteProductConfiguration(productId: string): Promise<boolean> {
-    return db.deleteConfigurationByProductId(productId);
+    const result = await ProductModel.deleteOne({ _id: productId });
+    return result.deletedCount > 0;
   }
 
-  // Get merchant-specific product configuration
-  async getMerchantProductConfiguration(merchantId: string, productId: string): Promise<MerchantProductConfiguration | null> {
-    return db.findMerchantConfiguration(merchantId, productId);
-  }
+  // Returns the locally persisted app product document.
+  async getMerchantProductConfiguration(appId: string, productId: string): Promise<Product | null> {
+    const localProduct = await this.getLocalProductById(productId);
+    if (localProduct && localProduct.appId === appId) {
+      return localProduct;
+    }
 
-  // Toggle product activation for a merchant (persisted in MongoDB)
-  async toggleProductActivation(merchantId: string, productId: string, activate: boolean): Promise<boolean> {
-    await db.upsertMerchantConfiguration({
-      productId,
-      merchantId,
-      isActive: activate,
-      markupRate: 0,
-      customTerms: {},
-      enabledFeatures: []
+    const upstreamProduct = await this.fetchUpstreamProductById(productId);
+    if (!upstreamProduct) {
+      return null;
+    }
+
+    const doc = await ProductModel.findOne({
+      appId,
+      referenceNumber: upstreamProduct.referenceNumber
     });
-    return true;
+    return doc ? toProduct(doc) : null;
   }
 
-  // Update merchant-specific product configuration (e.g., interest rate adjustments) - persisted in MongoDB
+  // Activating clones the upstream product into the local products collection for that app.
+  async toggleProductActivation(appId: string, productId: string, activate: boolean): Promise<Product | null> {
+    const localProduct = await this.getMerchantProductConfiguration(appId, productId);
+
+    if (localProduct) {
+      const updated = await ProductModel.findByIdAndUpdate(
+        localProduct.id,
+        { $set: { isActive: activate, updatedAt: new Date().toISOString() } },
+        { new: true }
+      );
+      return updated ? toProduct(updated) : null;
+    }
+
+    if (!activate) {
+      return null;
+    }
+
+    const upstreamProduct = await this.fetchUpstreamProductById(productId);
+    if (!upstreamProduct) {
+      return null;
+    }
+
+    const created = await ProductModel.create(this.buildLocalProductPayload(upstreamProduct, appId, true));
+    return toProduct(created);
+  }
+
+  // Updates the locally persisted app product document with Plata-shaped fields.
   async updateMerchantProductConfiguration(
-    merchantId: string,
+    appId: string,
     productId: string,
-    updateData: Partial<MerchantProductConfiguration>
-  ): Promise<MerchantProductConfiguration | null> {
-    const updated = await db.updateMerchantConfiguration(merchantId, productId, updateData);
-    if (updated) return updated;
-    // Upsert if no existing config
-    return db.upsertMerchantConfiguration({
-      productId,
-      merchantId,
-      isActive: updateData.isActive ?? true,
-      pricingType: updateData.pricingType,
-      pricingCondition: updateData.pricingCondition,
-      upperCap: updateData.upperCap,
-      lowerCap: updateData.lowerCap,
-      springTDFee: updateData.springTDFee,
-      serviceFee: updateData.serviceFee,
-      markupRate: updateData.markupRate ?? 0,
-      customTerms: updateData.customTerms ?? {},
-      enabledFeatures: updateData.enabledFeatures ?? []
-    });
-  }
+    updateData: Partial<Product>
+  ): Promise<Product | null> {
+    const localProduct = await this.getMerchantProductConfiguration(appId, productId);
+    if (!localProduct) {
+      return null;
+    }
 
+    const updated = await ProductModel.findByIdAndUpdate(
+      localProduct.id,
+      this.sanitizeProductUpdate(updateData),
+      { new: true }
+    );
+    return updated ? toProduct(updated) : null;
+  }
 }

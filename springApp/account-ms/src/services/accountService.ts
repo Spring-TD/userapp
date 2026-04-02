@@ -213,9 +213,9 @@ class AccountService {
   }
 
   // Calculate pricing for an account based on product
-  async calculateAccountPricing(productId: string, accountType: string, amount: number, merchantId?: string): Promise<any> {
+  async calculateAccountPricing(productId: string, accountType: string, amount: number, appId?: string): Promise<any> {
     try {
-      return await productService.calculateAccountPricing(productId, accountType, amount, merchantId);
+      return await productService.calculateAccountPricing(productId, accountType, amount, appId);
     } catch (error: any) {
       console.error('Error calculating account pricing:', error);
       throw error;

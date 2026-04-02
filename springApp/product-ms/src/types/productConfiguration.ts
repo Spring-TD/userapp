@@ -190,7 +190,7 @@ export interface CommodityProductConfiguration extends BaseProductConfiguration 
 
 // Merchant-specific product configuration
 export interface MerchantProductConfiguration extends BaseProductConfiguration {
-  merchantId: string;
+  appId: string;
   isActive: boolean;
   
   // Pricing configuration
@@ -203,8 +203,8 @@ export interface MerchantProductConfiguration extends BaseProductConfiguration {
   markupRate?: number; // Additional rate added to base rate (Your Mark-up Fee)
   
   // Additional configuration
-  customTerms?: Record<string, any>; // Custom terms for this merchant
-  enabledFeatures?: string[]; // Features enabled for this merchant
+  customTerms?: Record<string, any>; // Custom terms for this app
+  enabledFeatures?: string[]; // Features enabled for this app
 }
 
 // Union type for all product configurations
