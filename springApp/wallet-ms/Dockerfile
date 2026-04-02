@@ -11,6 +11,7 @@ RUN npm ci
 # Copy source code
 COPY tsconfig*.json ./
 COPY src ./src
+COPY openapi.json ./openapi.json
 
 # Build TypeScript
 RUN npm run build
@@ -31,6 +32,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 # Copy built application from builder
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/openapi.json ./openapi.json
 
 # Change ownership to non-root user
 RUN chown -R appuser:appgroup /app

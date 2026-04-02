@@ -1,6 +1,12 @@
 import axios from 'axios';
 import { config } from '../config/environment';
 
+const purposeLabel: Record<string, string> = {
+  verification: 'Verification',
+  'password-reset': 'Password Reset',
+  login: 'Login',
+};
+
 export interface SendNotificationRequest {
   channel: 'email' | 'sms';
   recipient: string;

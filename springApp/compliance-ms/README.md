@@ -36,12 +36,39 @@ This service has been aligned with `plata/compliance-ms`.
 - **Runtime**: Node.js 18+
 - **Framework**: Express.js with TypeScript
 - **Database**: MongoDB (Mongoose); use MONGODB_URI or DATABASE_URL for connection (e.g. DigitalOcean Managed MongoDB)
+- **Document Storage**: DigitalOcean Spaces via S3-compatible API
 - **Authentication**: JWT (JSON Web Tokens)
 - **Validation**: Joi
 - **Testing**: Jest + Supertest
 - **Security**: helmet, CORS, express-rate-limit
 - **Logging**: Winston
 - **Verification Provider**: Prembly API (KYC, AML, CAC, Sanctions, Liveness)
+
+## Document Upload Setup
+
+KYC document binaries are uploaded directly by `compliance-ms` to DigitalOcean Spaces through `POST /api/v1/kyc/upload` (also available through `/api/v1/compliance/upload`). Submission payloads should then store the returned `url` as each document's `fileUrl`.
+
+Required environment variables:
+
+```env
+DO_SPACES_REGION=nyc3
+DO_SPACES_ENDPOINT=https://nyc3.digitaloceanspaces.com
+DO_SPACES_BUCKET=springtd-compliance-documents
+DO_SPACES_ACCESS_KEY_ID=your-access-key
+DO_SPACES_SECRET_ACCESS_KEY=your-secret-key
+```
+
+Optional:
+
+```env
+DO_SPACES_CDN_URL=https://springtd-compliance-documents.nyc3.cdn.digitaloceanspaces.com
+```
+
+Example upload flow:
+
+1. `POST` multipart form-data to `/api/v1/kyc/upload` with the file in the `file` field.
+2. Read the response `{ success, url, key }`.
+3. Send that `url` as the document `fileUrl` in the subsequent KYC submission payload.
 
 ## API Documentation
 

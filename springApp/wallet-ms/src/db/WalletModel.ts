@@ -5,6 +5,7 @@ export interface IWalletDoc extends Document {
   _id: mongoose.Types.ObjectId;
   walletType: 'MERCHANT' | 'USER';
   merchantId?: string;
+  appId?: string;
   userId?: string;
   merchantWalletType?: string;
   name: string;
@@ -21,6 +22,7 @@ const WalletSchema = new Schema<IWalletDoc>(
   {
     walletType: { type: String, required: true, enum: ['MERCHANT', 'USER'] },
     merchantId: { type: String },
+    appId: { type: String },
     userId: { type: String },
     merchantWalletType: { type: String, enum: Object.values(MerchantWalletType) },
     name: { type: String, required: true },
@@ -33,7 +35,7 @@ const WalletSchema = new Schema<IWalletDoc>(
   { timestamps: true }
 );
 
-WalletSchema.index({ merchantId: 1, merchantWalletType: 1 }, { unique: true, sparse: true });
+WalletSchema.index({ merchantId: 1, appId: 1, merchantWalletType: 1 }, { unique: true, sparse: true });
 WalletSchema.index({ userId: 1 }, { unique: true, sparse: true });
 
 export default mongoose.model<IWalletDoc>('Wallet', WalletSchema);

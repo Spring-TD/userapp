@@ -6,6 +6,7 @@ import { MerchantWalletType, TransactionType } from '../models/Wallet';
 
 // Define interfaces for the validated data
 interface CreateMerchantWalletData {
+  appId?: string;
   name: string;
   currency: string;
   merchantWalletType: MerchantWalletType;
@@ -120,10 +121,11 @@ export class WalletController {
       }
 
       const merchantId = req.user.merchantId || req.user.userId;
-      const { name, currency, merchantWalletType } = value!;
+      const { appId, name, currency, merchantWalletType } = value!;
 
       const result = await WalletService.createMerchantWallet({
         merchantId,
+        appId,
         name: name || `${merchantWalletType} Wallet`,
         currency: currency || 'USD',
         merchantWalletType
@@ -139,6 +141,7 @@ export class WalletController {
 
       logger.info('Merchant wallet created successfully', {
         merchantId,
+        appId,
         walletId: result.wallet?.id,
         walletType: merchantWalletType
       });
@@ -171,9 +174,9 @@ export class WalletController {
       }
 
       const merchantId = req.user.merchantId || req.user.userId;
-      const { currency } = req.body;
+      const { currency, appId } = req.body;
 
-      const result = await WalletService.createAllMerchantWallets(merchantId, currency || 'USD');
+      const result = await WalletService.createAllMerchantWallets(merchantId, currency || 'USD', false, appId);
 
       if (!result.success) {
         res.status(400).json({
@@ -185,6 +188,7 @@ export class WalletController {
 
       logger.info('All merchant wallets created successfully', {
         merchantId,
+        appId,
         walletCount: result.wallets?.length
       });
 
@@ -282,7 +286,8 @@ export class WalletController {
         return;
       }
 
-      const result = await WalletService.getAllMerchantWallets(merchantId);
+      const appId = typeof req.query.appId === 'string' ? req.query.appId : undefined;
+      const result = await WalletService.getAllMerchantWallets(merchantId, appId);
 
       if (!result.success) {
         res.status(400).json({

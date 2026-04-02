@@ -46,7 +46,12 @@ export const authenticate = async (
       );
       
       if (response.data.success && response.data.data?.user) {
-        req.user = response.data.data.user;
+        const user = response.data.data.user;
+        req.user = {
+          ...user,
+          // Normalize merchant identity from either auth payload shape.
+          merchantId: user.merchantId || user.userMerchantId
+        };
         next();
       } else {
         res.status(401).json({
@@ -55,9 +60,38 @@ export const authenticate = async (
         });
       }
     } catch (authError) {
-      res.status(401).json({
+      if (axios.isAxiosError(authError)) {
+        const upstreamStatus = authError.response?.status;
+        const upstreamError =
+          authError.response?.data?.error ||
+          authError.response?.data?.message ||
+          authError.message;
+
+        console.error('Auth service token verification failed', {
+          authServiceUrl: config.authServiceUrl,
+          upstreamStatus,
+          upstreamError
+        });
+
+        if (upstreamStatus === 401) {
+          res.status(401).json({
+            success: false,
+            error: upstreamError || 'Invalid token'
+          });
+          return;
+        }
+
+        res.status(503).json({
+          success: false,
+          error: 'Auth service unreachable'
+        });
+        return;
+      }
+
+      console.error('Unexpected auth middleware error', authError);
+      res.status(503).json({
         success: false,
-        error: 'Invalid token'
+        error: 'Auth service unreachable'
       });
     }
   } catch (error) {
@@ -78,7 +112,8 @@ export const authorizeMerchant = (
     return;
   }
   
-  if (req.user.userType !== 'MERCHANT') {
+  const userType = (req.user.userType || '').toLowerCase();
+  if (userType !== 'merchant') {
     res.status(403).json({
       success: false,
       error: 'Access denied. Merchant access required.'
@@ -102,7 +137,8 @@ export const authorizeUser = (
     return;
   }
   
-  if (req.user.userType !== 'USER') {
+  const userType = (req.user.userType || '').toLowerCase();
+  if (userType !== 'user') {
     res.status(403).json({
       success: false,
       error: 'Access denied. User access required.'

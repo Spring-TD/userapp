@@ -4,6 +4,31 @@ import jwt from 'jsonwebtoken';
 import { logger } from '../utils/logger';
 import { UserType } from '../types/kycTypes';
 
+type AuthTokenPayload = {
+  userId: string;
+  userType: UserType;
+  email?: string;
+  type?: string;
+  iat: number;
+  exp: number;
+};
+
+const verifyUserToken = (token: string): AuthTokenPayload => {
+  const primarySecret = process.env.JWT_SECRET || 'default-secret-key';
+
+  try {
+    return jwt.verify(token, primarySecret) as AuthTokenPayload;
+  } catch {
+    // Fall through to client-auth verification so gateway-issued login tokens work.
+  }
+
+  const clientAuthSecret = process.env.CLIENT_AUTH_JWT_SECRET || primarySecret;
+  return jwt.verify(token, clientAuthSecret, {
+    issuer: 'client-auth-ms',
+    audience: 'user'
+  }) as AuthTokenPayload;
+};
+
 // Extend the Request type to include user information
 declare global {
   namespace Express {
@@ -40,15 +65,8 @@ export const authenticate = (req: Request, res: Response, next: NextFunction): a
     // Extract token
     const token = authHeader.split(' ')[1];
     
-    // Verify token
-    const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-key';
-    const decoded = jwt.verify(token, JWT_SECRET) as { 
-      userId: string, 
-      userType: UserType, 
-      email?: string,
-      iat: number,
-      exp: number
-    };
+    // Verify token. Accept both compliance-native tokens and client-auth-ms access tokens.
+    const decoded = verifyUserToken(token);
     
     // Attach user to request
     req.user = {

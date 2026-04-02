@@ -50,6 +50,7 @@ function docToTransaction(doc: mongoose.Document | null): Transaction | null {
 export const db = {
   async createMerchantWallet(data: {
     merchantId: string;
+    appId?: string;
     name: string;
     currency: string;
     merchantWalletType: MerchantWalletType;
@@ -57,6 +58,7 @@ export const db = {
     const doc = await WalletModel.create({
       walletType: 'MERCHANT',
       merchantId: data.merchantId,
+      appId: data.appId,
       merchantWalletType: data.merchantWalletType,
       name: data.name,
       balance: 0,
@@ -94,18 +96,24 @@ export const db = {
 
   async getMerchantWalletByType(
     merchantId: string,
-    merchantWalletType: MerchantWalletType
+    merchantWalletType: MerchantWalletType,
+    appId?: string
   ): Promise<MerchantWallet | null> {
     const doc = await WalletModel.findOne({
       walletType: 'MERCHANT',
       merchantId,
+      ...(appId ? { appId } : {}),
       merchantWalletType
     });
     return docToWallet(doc) as MerchantWallet | null;
   },
 
-  async getAllMerchantWallets(merchantId: string): Promise<MerchantWallet[]> {
-    const docs = await WalletModel.find({ walletType: 'MERCHANT', merchantId });
+  async getAllMerchantWallets(merchantId: string, appId?: string): Promise<MerchantWallet[]> {
+    const docs = await WalletModel.find({
+      walletType: 'MERCHANT',
+      merchantId,
+      ...(appId ? { appId } : {})
+    });
     return docs.map((d) => docToWallet(d) as MerchantWallet).filter(Boolean);
   },
 

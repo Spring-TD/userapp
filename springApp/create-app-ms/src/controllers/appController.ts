@@ -6,8 +6,16 @@ import { WalletService } from '../services/walletService';
 import { TransactionService } from '../services/transactionService';
 import { DriveService } from '../services/driveService';
 
+declare const console: any;
+
 // Extend Request interface to include user data
 interface AuthenticatedRequest extends Request {
+  body: any;
+  params: Record<string, string>;
+  headers: {
+    authorization?: string;
+    [key: string]: string | string[] | undefined;
+  };
   user?: {
     userId: string;
     email: string;
@@ -42,8 +50,10 @@ export class AppController {
     if (!this.isMerchantUser(req)) {
       return;
     }
-    const merchantId = this.getRequestMerchantId(req);
-    if (!merchantId || app.merchantId !== merchantId) {
+    const merchantIds = [req.user?.userMerchantId, req.user?.userId].filter(
+      (value): value is string => Boolean(value)
+    );
+    if (merchantIds.length === 0 || !merchantIds.includes(app.merchantId)) {
       throw new ApiError(403, 'You can only view your own apps');
     }
   }
@@ -52,8 +62,10 @@ export class AppController {
     if (!this.isMerchantUser(req)) {
       return;
     }
-    const merchantId = this.getRequestMerchantId(req);
-    if (!merchantId || merchantId !== merchantIdFromPath) {
+    const merchantIds = [req.user?.userMerchantId, req.user?.userId].filter(
+      (value): value is string => Boolean(value)
+    );
+    if (merchantIds.length === 0 || !merchantIds.includes(merchantIdFromPath)) {
       throw new ApiError(403, 'You can only view your own apps');
     }
   }
@@ -68,7 +80,7 @@ export class AppController {
       }
       
       // For merchants, use their merchant ID; for admins, allow specifying merchant ID in request
-      const merchantId = req.user.userType === 'MERCHANT' 
+      const merchantId = this.isMerchantUser(req)
         ? req.user.userMerchantId || req.user.userId 
         : appData.merchantId || req.user.userId;
 
@@ -277,9 +289,10 @@ export class AppController {
       if (!app) {
         throw new ApiError(404, 'App not found');
       }
-      const userType = (req.user.userType || '').toLowerCase();
-      const merchantId = req.user.userMerchantId || req.user.userId;
-      if (userType === 'merchant' && app.merchantId !== merchantId) {
+      const merchantIds = [req.user.userMerchantId, req.user.userId].filter(
+        (value): value is string => Boolean(value)
+      );
+      if (this.isMerchantUser(req) && !merchantIds.includes(app.merchantId)) {
         throw new ApiError(403, 'You can only update status for your own apps');
       }
 
@@ -426,8 +439,10 @@ export class AppController {
     try {
       let apps = await this.appService.getAllApps();
       if (this.isMerchantUser(req)) {
-        const merchantId = this.getRequestMerchantId(req);
-        apps = apps.filter((app) => app.merchantId === merchantId);
+        const merchantIds = [req.user?.userMerchantId, req.user?.userId].filter(
+          (value): value is string => Boolean(value)
+        );
+        apps = apps.filter((app) => merchantIds.includes(app.merchantId));
       }
 
       res.json({

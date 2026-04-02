@@ -186,12 +186,32 @@ export class AuthController {
         return;
       }
 
-      // In a real implementation, you would verify the token
-      // For now, just return success indicating the token is valid
+      const verification = verifyToken(token, 'access');
+
+      if (!verification.valid || !verification.payload) {
+        res.status(401).json({
+          success: false,
+          error: verification.error || 'Invalid or expired token'
+        });
+        return;
+      }
+
+      const user = {
+        userId: verification.payload.userId,
+        email: verification.payload.email,
+        userType: verification.payload.userType,
+        userMerchantId: verification.payload.userMerchantId,
+        merchantId: verification.payload.userMerchantId,
+        sessionId: verification.payload.sessionId as string | undefined,
+      };
+
       res.status(200).json({
         success: true,
-        message: 'Token verification not fully implemented in this simplified version',
-        data: { valid: true }
+        message: 'Token is valid',
+        data: {
+          valid: true,
+          user
+        }
       });
     } catch (error) {
       console.error('Error in verifyToken:', error);

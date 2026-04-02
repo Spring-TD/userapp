@@ -81,10 +81,8 @@ app.use(errorHandler);
 
 async function start() {
   const port = config.port;
-  const host = '0.0.0.0';
-
-  const server = app.listen(port, host, () => {
-    console.log(`🚀 Client Auth Microservice running on ${host}:${port}`);
+  const server = app.listen(port, () => {
+    console.log(`🚀 Client Auth Microservice running on port ${port}`);
     console.log(`📱 Environment: ${config.nodeEnv}`);
     console.log(`🔗 Service Auth URL: ${config.serviceAuthUrl} (timeout ${config.serviceAuthHttpTimeoutMs}ms)`);
   });

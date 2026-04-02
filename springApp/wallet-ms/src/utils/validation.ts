@@ -11,6 +11,11 @@ const merchantIdSchema = Joi.string().min(1).max(100).optional().messages({
   'string.max': 'Merchant ID must not exceed 100 characters'
 });
 
+const appIdSchema = Joi.string().min(1).max(100).optional().messages({
+  'string.min': 'App ID must not be empty',
+  'string.max': 'App ID must not exceed 100 characters'
+});
+
 const userIdSchema = Joi.string().min(1).max(100).required().messages({
   'string.min': 'User ID must not be empty',
   'string.max': 'User ID must not exceed 100 characters',
@@ -87,6 +92,7 @@ const paymentMethodSchema = Joi.string().valid('CARD', 'BANK_TRANSFER', 'WALLET'
 
 // Wallet validation schemas
 export const createMerchantWalletSchema = Joi.object({
+  appId: appIdSchema,
   name: nameSchema,
   currency: currencySchema,
   merchantWalletType: merchantWalletTypeSchema.required()
