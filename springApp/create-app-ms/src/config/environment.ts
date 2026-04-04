@@ -13,7 +13,23 @@ interface Config {
   publicKey: string;
   jwtSecret: string;
   mongoUri: string;
+  /** DigitalOcean Spaces (S3-compatible) for PWA template assets (logo, splash images). */
+  doSpaces: {
+    region: string;
+    endpoint: string;
+    bucket: string;
+    accessKeyId: string;
+    secretAccessKey: string;
+    /** e.g. https://bucket.nyc3.cdn.digitaloceanspaces.com — optional */
+    cdnBaseUrl: string;
+    /** Key prefix for PWA uploads, default pwa-assets */
+    pwaKeyPrefix: string;
+  };
+  /** Max upload size for PWA asset images (bytes). */
+  pwaAssetMaxBytes: number;
 }
+
+const pwaAssetMaxMb = parseInt(process.env.PWA_ASSET_MAX_UPLOAD_MB || '5', 10);
 
 export const config: Config = {
   port: parseInt(process.env.PORT || '3002', 10),
@@ -24,5 +40,15 @@ export const config: Config = {
   specialApiKey: process.env.SPECIAL_API_KEY || 'default-special-key',
   publicKey: process.env.PUBLIC_KEY || 'default-public-key',
   jwtSecret: process.env.JWT_SECRET || 'fallback-secret-key-for-development-purposes-only',
-  mongoUri: process.env.MONGODB_URI || 'mongodb://localhost:27017/create-app-ms'
+  mongoUri: process.env.MONGODB_URI || 'mongodb://localhost:27017/create-app-ms',
+  doSpaces: {
+    region: process.env.DO_SPACES_REGION || '',
+    endpoint: process.env.DO_SPACES_ENDPOINT || '',
+    bucket: process.env.DO_SPACES_BUCKET || '',
+    accessKeyId: process.env.DO_SPACES_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.DO_SPACES_SECRET_ACCESS_KEY || '',
+    cdnBaseUrl: process.env.DO_SPACES_CDN_URL || '',
+    pwaKeyPrefix: (process.env.DO_SPACES_PWA_PREFIX || 'pwa-assets').replace(/^\/+|\/+$/g, '')
+  },
+  pwaAssetMaxBytes: Math.max(1, pwaAssetMaxMb) * 1024 * 1024
 };

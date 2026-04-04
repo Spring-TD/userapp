@@ -372,14 +372,25 @@
  */
 
 import { Router } from 'express';
+import multer from 'multer';
+import { config } from '../config/environment';
 import { AppService } from '../services/appService';
+import { AppPwaTemplateService } from '../services/appPwaTemplateService';
 import { AppController } from '../controllers/appController';
+import { AppPwaTemplateController } from '../controllers/appPwaTemplateController';
 import { apiKeyAuth } from '../middleware/apiKeyAuth';
 import { authenticate, merchantOnly } from '../middleware/auth';
+
+const pwaAssetUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: config.pwaAssetMaxBytes }
+});
 
 const router = Router();
 const appService = new AppService();
 const appController = new AppController(appService);
+const pwaTemplateService = new AppPwaTemplateService();
+const appPwaTemplateController = new AppPwaTemplateController(appService, pwaTemplateService);
 
 // Create a new app - now requires authentication
 router.post('/', authenticate, merchantOnly, appController.createApp);
@@ -392,6 +403,66 @@ router.get('/:id', authenticate, merchantOnly, appController.getAppById);
 
 // Get apps by merchant ID
 router.get('/merchant/:merchantId', authenticate, merchantOnly, appController.getAppsByMerchantId);
+
+// PWA templates (splash / onboarding JSON per app — many per app)
+router.get(
+  '/:appId/pwa-templates',
+  authenticate,
+  merchantOnly,
+  appPwaTemplateController.list
+);
+router.post(
+  '/:appId/pwa-templates',
+  authenticate,
+  merchantOnly,
+  appPwaTemplateController.create
+);
+router.get(
+  '/:appId/pwa-templates/:templateId',
+  authenticate,
+  merchantOnly,
+  appPwaTemplateController.getById
+);
+router.put(
+  '/:appId/pwa-templates/:templateId',
+  authenticate,
+  merchantOnly,
+  appPwaTemplateController.update
+);
+router.delete(
+  '/:appId/pwa-templates/:templateId',
+  authenticate,
+  merchantOnly,
+  appPwaTemplateController.remove
+);
+router.patch(
+  '/:appId/pwa-templates/:templateId/apply',
+  authenticate,
+  merchantOnly,
+  appPwaTemplateController.apply
+);
+
+router.post(
+  '/:appId/pwa-templates/:templateId/assets/logo',
+  authenticate,
+  merchantOnly,
+  pwaAssetUpload.single('file'),
+  appPwaTemplateController.uploadAssetLogo
+);
+router.post(
+  '/:appId/pwa-templates/:templateId/assets/splash',
+  authenticate,
+  merchantOnly,
+  pwaAssetUpload.single('file'),
+  appPwaTemplateController.uploadAssetSplash
+);
+router.post(
+  '/:appId/pwa-templates/:templateId/onboarding/screens/:screenIndex/image',
+  authenticate,
+  merchantOnly,
+  pwaAssetUpload.single('file'),
+  appPwaTemplateController.uploadOnboardingScreenImage
+);
 
 // Update app
 router.put('/:id', appController.updateApp);

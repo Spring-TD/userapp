@@ -13,8 +13,8 @@ import { normalizeProductType } from '../utils/productType';
 export class ProductService {
   private getAuthHeaders(): Record<string, string> {
     const headers: Record<string, string> = {};
-    if (config.plataPublicKey) headers['X-Public-Key'] = config.plataPublicKey;
-    if (config.plataSecretKey) headers['X-Secret-Key'] = config.plataSecretKey;
+    if (config.plataPublicKey) headers['PLATA_PUBLIC_KEY'] = config.plataPublicKey;
+    if (config.plataSecretKey) headers['PLATA_SECRET_KEY'] = config.plataSecretKey;
     return headers;
   }
 
@@ -116,7 +116,7 @@ export class ProductService {
     };
   }
 
-  // Fetch all products from upstream product-ms
+  // Fetch all products from upstream Plata account-ms (GET /api/v1/products)
   async getAllProducts(): Promise<Product[]> {
     try {
       const response = await axios.get(`${config.serverProductServiceUrl}/api/v1/products`, {

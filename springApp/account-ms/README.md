@@ -25,6 +25,8 @@ The service is deployed on Fly.io and is accessible at: https://account-ms.fly.d
 
 Health check endpoint: https://account-ms.fly.dev/health
 
+**Plata merchant catalog:** If you are calling **`GET /api/v1/products`** with **`PLATA_PUBLIC_KEY`** / **`PLATA_SECRET_KEY`** (keys issued on Plata), use **`https://account-ms-plata.fly.dev`**, not `account-ms.fly.dev`. This Spring deployment is a separate Fly app; using Plata keys against `account-ms.fly.dev` can fail (e.g. 502) if that route proxies to an unavailable backend or is not configured for Plata gateway verification.
+
 ## Getting Started
 
 ### Prerequisites

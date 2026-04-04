@@ -1,5 +1,6 @@
 import { App, AppStatus, CreateAppRequest, UpdateAppRequest } from '../types/app';
 import { AppModel } from '../models/appModel';
+import { AppPwaTemplateModel } from '../models/appPwaTemplateModel';
 import { ApiError } from '../middleware/errorHandler';
 import { validateCreateAppRequest } from '../utils/validation';
 
@@ -59,6 +60,9 @@ export class AppService {
     }
 
     const deleted = await AppModel.deleteApp(id);
+    if (deleted) {
+      await AppPwaTemplateModel.deleteByAppId(id);
+    }
     return deleted;
   }
 

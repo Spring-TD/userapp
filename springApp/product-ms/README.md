@@ -14,10 +14,10 @@ Deployment URL: https://product-ms.fly.dev/
 
 ## Plata Authentication
 
-`GET /api/v1/products` fetches the full catalog from the upstream product service and forwards these credentials server-to-server:
+`GET /api/v1/products` fetches the full catalog from **Plata account-ms** (same host as `https://account-ms-plata.fly.dev/api/v1/products` in production) and sends merchant API keys server-to-server as:
 
-- `X-Public-Key`
-- `X-Secret-Key`
+- `PLATA_PUBLIC_KEY`
+- `PLATA_SECRET_KEY`
 
 These values come from environment variables.
 
@@ -25,8 +25,14 @@ These values come from environment variables.
 
 - `PLATA_PUBLIC_KEY`
 - `PLATA_SECRET_KEY`
-- `SERVER_PRODUCT_SERVICE_URL`
 - `MONGODB_URI` or `DATABASE_URL`
+
+### Optional upstream URL
+
+- `PLATA_ACCOUNT_SERVICE_URL` — preferred base URL for account-ms (no trailing slash), e.g. `https://account-ms-plata.fly.dev`
+- `SERVER_PRODUCT_SERVICE_URL` — same role if `PLATA_ACCOUNT_SERVICE_URL` is unset
+
+If both are unset but `PLATA_PUBLIC_KEY` and `PLATA_SECRET_KEY` are set, the service defaults to `https://account-ms-plata.fly.dev` so Fly deployments only need the key secrets. For local development without Plata keys, the default is `http://localhost:3005`.
 
 ## Current Flow
 

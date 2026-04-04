@@ -21,6 +21,8 @@ Deployment URL: https://create-app-ms.fly.dev/
 - Special endpoints requiring API key authentication for advanced operations
 - **Authentication required for app creation** - Merchant ID is extracted from authenticated user context
 - **Merchant app visibility fully enforced** - merchants can only view apps they own
+- **PWA templates** — Many templates per app, stored in MongoDB (`AppPwaTemplate`). Each has a JSON `config` with nested sections aligned to the App Creator wizard: `asset`, `splash`, `onboarding`, `appProfile` (theme: text / element / background / menu colors), `policyTerms`, `support`, `dns`. Used later by the Progressive Web App (PWA); this is separate from core app fields and from the **`create-default-merchant-apps.js`** mock seed script (that script is unchanged).
+- **Template asset uploads** — Logo and splash images can be uploaded to **DigitalOcean Spaces** (S3-compatible); public URLs and object keys are stored under `config.asset`.
 
 ## API Endpoints
 
@@ -105,6 +107,53 @@ Updates the app status to **active** or **suspended**. Merchants can suspend an 
 - `status` (string, required): Either `"active"` or `"suspended"`
 
 **Response:** Returns the updated app with the new status.
+
+### PWA splash color options (public)
+
+```
+GET /api/v1/pwa/splash-color-options
+```
+
+No authentication. Returns a shared palette the App Creator can use for **primary** and **secondary** splash colors:
+
+- **`data.options`**: array of `{ id, label, hex }` — importable from `src/constants/pwaSplashColorOptions.ts` as `APP_PWA_SPLASH_COLOR_OPTIONS` (also re-exported from `src/types/pwaTemplate.ts`).
+- **`data.defaults`**: `{ primaryColor, secondaryColor }` — same defaults as the template API when colors are missing.
+
+Saving a template still uses `config.splash.primaryColor` / `secondaryColor` with any valid hex; the palette is a convenience, not a hard allow-list.
+
+### PWA template endpoints
+
+All routes below require JWT authentication (`Authorization: Bearer …`) and merchant (or admin) role. Merchants may only access templates for apps they own (`app.merchantId`).
+
+Each **template** document includes: `name`, optional `category`, `description`, `iconKey`, a JSON **`config`** object (seven section keys; see below), `isApplied` (only one template per app should be applied for the PWA), and timestamps.
+
+**`config` sections (top-level keys):** `asset`, `splash`, `onboarding`, `appProfile`, `policyTerms`, `support`, `dns`.  
+**`config.asset` (strings, all optional):** `logoUrl`, `logoKey`, `splashImageUrl`, `splashImageKey`, `siteDescription` — logo/splash URLs and Spaces keys; `siteDescription` is the user-facing app description.  
+**`config.splash`:** `primaryColor` and `secondaryColor` — CSS hex strings (`#rgb`, `#rrggbb`, or `#rrggbbaa`) for the splash screen. If omitted or invalid in stored data, the API coerces to defaults **`#6B46C1`** (primary) and **`#E5E7EB`** (secondary) so the PWA always receives both colors.  
+**`config.onboarding`:** `{ "screens": [ ... ] }` — ordered onboarding steps (screen 1 = index `0`). Each element may include **`title`**, **`description`**, **`screenImageUrl`**, **`screenImageKey`** (all optional strings). Images are uploaded via multipart (below); title/description are set with `PUT` on the template. Only the key **`screens`** is allowed under `onboarding`.  
+**`config.appProfile`:** theme colors for the PWA (CSS hex per slot). Top-level keys only: **`textColors`**, **`elementColors`**, **`backgroundColors`**, **`menuColors`**. Each is an object with **`primary`** / **`secondary`** strings; **`textColors`** and **`menuColors`** also allow **`auxiliary`**. Updates merge **per group** (e.g. you can patch only `textColors.primary`).  
+Other sections (`policyTerms`, etc.) are arbitrary JSON objects (nested content as the PWA defines).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/apps/:appId/pwa-templates` | List templates for an app |
+| `POST` | `/api/v1/apps/:appId/pwa-templates` | Create a template (`name`, `config` required; `config` must include only allowed top-level keys; omitted sections default to `{}`) |
+| `GET` | `/api/v1/apps/:appId/pwa-templates/:templateId` | Get one template |
+| `PUT` | `/api/v1/apps/:appId/pwa-templates/:templateId` | Update template (partial `config` merges per section; `asset`, `splash`, `onboarding` merge shallowly within the section; `appProfile` merges **deeply** per color group (`textColors`, `elementColors`, …) — for onboarding, sending `screens` replaces that array) |
+| `DELETE` | `/api/v1/apps/:appId/pwa-templates/:templateId` | Delete template |
+| `PATCH` | `/api/v1/apps/:appId/pwa-templates/:templateId/apply` | Set this template as applied (`isApplied: true`) and clear `isApplied` on others for the app |
+
+**Asset image uploads (multipart → DigitalOcean Spaces):**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/v1/apps/:appId/pwa-templates/:templateId/assets/logo` | Upload logo image; field name **`file`**. JPEG, PNG, or WebP. Updates `config.asset.logoUrl` and `logoKey`. |
+| `POST` | `/api/v1/apps/:appId/pwa-templates/:templateId/assets/splash` | Upload splash image; field name **`file`**. Updates `config.asset.splashImageUrl` and `splashImageKey`. |
+| `POST` | `/api/v1/apps/:appId/pwa-templates/:templateId/onboarding/screens/:screenIndex/image` | Upload image for onboarding screen **`screenIndex`** (0-based); field name **`file`**. Pads `screens` with empty objects if needed; sets `screenImageUrl` / `screenImageKey` on that entry. |
+
+Uploads require Spaces to be configured (see **Environment variables**). If Spaces is not configured, uploads return **503**. Maximum size defaults to **5 MB** (`PWA_ASSET_MAX_UPLOAD_MB`).
+
+Deleting an app removes its PWA template documents as well.
 
 ### Transaction Endpoints
 
@@ -710,6 +759,21 @@ Registers a callback for user application status or wallet events.
 - `status`: Document status ('pending', 'verified', 'rejected')
 - `metadata`: Additional metadata about the document (optional)
 
+### AppPwaTemplate (PWA builder)
+
+Stored in MongoDB collection `AppPwaTemplate`. Many rows per `appId`.
+
+- `id`: Template id
+- `appId`: Owning application
+- `name`, `category`, `description`, `iconKey`: Display metadata for the “Choose your template” UI
+- `config`: JSON object with required section keys `asset`, `splash`, `onboarding`, `appProfile`, `policyTerms`, `support`, `dns` (each an object; nested fields are up to the PWA except as noted)
+- `config.asset`: `logoUrl`, `logoKey`, `splashImageUrl`, `splashImageKey`, `siteDescription` (all optional strings)
+- `config.splash`: `primaryColor`, `secondaryColor` (hex strings; defaults `#6B46C1` / `#E5E7EB` when missing)
+- `config.onboarding`: `screens[]` with per-screen `title`, `description`, `screenImageUrl`, `screenImageKey` (optional strings)
+- `config.appProfile`: `textColors`, `elementColors`, `backgroundColors`, `menuColors` — nested `primary` / `secondary` (and `auxiliary` for text + menu); values are hex strings
+- `isApplied`: Whether this template is the active one for the PWA (at most one `true` per app after `apply`)
+- `createdAt`, `updatedAt`
+
 ## Integration with Product Microservice
 
 The Create App Microservice integrates with the Product Microservice through the `appId` field and product keys. When creating a product, the Product Microservice requires an `appId` that corresponds to an application created through this service.
@@ -753,12 +817,25 @@ curl -X GET "http://localhost:3002/api/v1/special/apps" \
 
 - `PORT`: Port number for the service (default: 3002)
 - `NODE_ENV`: Environment (development, production, etc.)
+- `MONGODB_URI`: MongoDB connection string (apps, transactions, drive documents, PWA templates)
 - `SERVICE_AUTH_URL`: URL for the Service Authentication Microservice
 - `PRODUCT_SERVICE_URL`: URL for the Product Microservice
 - `WALLET_SERVICE_URL`: URL for the Wallet Microservice
 - `SPECIAL_API_KEY`: Special API key for authenticating special endpoints
 - `PUBLIC_KEY`: Public key for authenticating special endpoints
 - `JWT_SECRET`: Secret key for JWT token verification
+
+**DigitalOcean Spaces (PWA template logo/splash uploads — optional but required for uploads):**
+
+- `DO_SPACES_REGION` — Region slug (e.g. `nyc3`, `fra1`)
+- `DO_SPACES_ENDPOINT` — e.g. `https://nyc3.digitaloceanspaces.com`
+- `DO_SPACES_BUCKET` — Space name
+- `DO_SPACES_ACCESS_KEY_ID` / `DO_SPACES_SECRET_ACCESS_KEY` — Spaces API keys
+- `DO_SPACES_CDN_URL` — Optional CDN base for public URLs
+- `DO_SPACES_PWA_PREFIX` — Object key prefix for uploads (default `pwa-assets`)
+- `PWA_ASSET_MAX_UPLOAD_MB` — Max image size in MB for logo/splash (default `5`)
+
+See `.env.example` for a template.
 
 ## Installation
 
