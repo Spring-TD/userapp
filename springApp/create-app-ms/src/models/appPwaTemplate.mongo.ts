@@ -14,7 +14,7 @@ const AppPwaTemplateSchema = new Schema<IAppPwaTemplateDocument>(
     category: { type: String, trim: true },
     description: { type: String, trim: true },
     iconKey: { type: String, trim: true },
-    // Seven top-level sections: asset, splash, onboarding, appProfile (theme color groups), …
+    // Seven top-level sections: asset, splash, onboarding, appProfile, policyTerms (privacy + ToS), …
     config: { type: Schema.Types.Mixed, required: true, default: {} },
     isApplied: { type: Boolean, default: false },
     createdAt: { type: String, default: () => new Date().toISOString() },

@@ -6,7 +6,7 @@ Deployment URL: https://create-app-ms.fly.dev/
 
 ## Features
 
-- Create new applications with detailed information (App Name, Website URL, App Alias, App Description)
+- Create new applications with detailed information (App Name, Website URL, App Alias, App Description); each app gets a unique **`subdomain`** and default platform URL (see **Create App** below)
 - App status is **active** or **suspended**. Merchants can suspend or reactivate an app via `PATCH /api/v1/apps/{id}/status`.
 - Retrieve applications by ID or merchant ID
 - Retrieve all applications
@@ -21,7 +21,7 @@ Deployment URL: https://create-app-ms.fly.dev/
 - Special endpoints requiring API key authentication for advanced operations
 - **Authentication required for app creation** - Merchant ID is extracted from authenticated user context
 - **Merchant app visibility fully enforced** - merchants can only view apps they own
-- **PWA templates** — Many templates per app, stored in MongoDB (`AppPwaTemplate`). Each has a JSON `config` with nested sections aligned to the App Creator wizard: `asset`, `splash`, `onboarding`, `appProfile` (theme: text / element / background / menu colors), `policyTerms`, `support`, `dns`. Used later by the Progressive Web App (PWA); this is separate from core app fields and from the **`create-default-merchant-apps.js`** mock seed script (that script is unchanged).
+- **PWA templates** — Many templates per app, stored in MongoDB (`AppPwaTemplate`). Each has a JSON `config` with nested sections aligned to the App Creator wizard: `asset`, `splash`, `onboarding`, `appProfile` (global font + theme: text / element / background / menu colors), `policyTerms`, `support`, `dns`. Used later by the Progressive Web App (PWA); this is separate from core app fields and from the **`create-default-merchant-apps.js`** mock seed script (that script is unchanged).
 - **Template asset uploads** — Logo and splash images can be uploaded to **DigitalOcean Spaces** (S3-compatible); public URLs and object keys are stored under `config.asset`.
 
 ## API Endpoints
@@ -43,9 +43,10 @@ Creates a new application and automatically creates merchant wallets for it (TRE
 - `alias` (string, required): Application alias (2-50 characters)
 - `description` (string, required): Application description (10-1000 characters)
 - `merchantId` (string, optional): ID of the merchant who owns the application (extracted from authenticated user for merchants, required for admins)
+- `subdomain` (string, optional): Desired hostname label for `https://{subdomain}.{APP_PLATFORM_BASE_DOMAIN}`; if omitted, a unique slug is generated from `name`.
 
 **Response:**
-Returns the created application with auto-generated ID and timestamps, along with merchant wallet creation information.
+Returns the created application with **`subdomain`** (unique) and **`defaultAppUrl`** (platform URL), plus merchant wallet creation information.
 
 ### Get All Apps
 ```
@@ -108,18 +109,31 @@ Updates the app status to **active** or **suspended**. Merchants can suspend an 
 
 **Response:** Returns the updated app with the new status.
 
-### PWA splash color options (public)
+### PWA color options (public)
 
 ```
-GET /api/v1/pwa/splash-color-options
+GET /api/v1/pwa/color-options
 ```
 
-No authentication. Returns a shared palette the App Creator can use for **primary** and **secondary** splash colors:
+No authentication. Returns a shared hex palette for **splash** primary/secondary, **Global Styling** (`config.appProfile` text/background pickers), and any other color fields that accept the same `{ id, label, hex }` list:
 
 - **`data.options`**: array of `{ id, label, hex }` — importable from `src/constants/pwaSplashColorOptions.ts` as `APP_PWA_SPLASH_COLOR_OPTIONS` (also re-exported from `src/types/pwaTemplate.ts`).
-- **`data.defaults`**: `{ primaryColor, secondaryColor }` — same defaults as the template API when colors are missing.
+- **`data.defaults`**: `{ primaryColor, secondaryColor }` — same defaults as the template API for **splash** when those colors are missing.
 
-Saving a template still uses `config.splash.primaryColor` / `secondaryColor` with any valid hex; the palette is a convenience, not a hard allow-list.
+Saving a template still accepts any valid hex for `config.splash` and `config.appProfile` color groups; the palette is a convenience, not a hard allow-list.
+
+### PWA font options (public)
+
+```
+GET /api/v1/pwa/font-options
+```
+
+No authentication. Returns curated choices for **Global Styling** → **`config.appProfile.fontFamily`**:
+
+- **`data.options`**: array of `{ id, label, value }` — use **`value`** when saving the template; importable from `src/constants/pwaAppProfileFontOptions.ts` as `APP_PWA_APP_PROFILE_FONT_OPTIONS` (also re-exported from `src/types/pwaTemplate.ts`).
+- **`data.defaultFontFamily`**: suggested default (e.g. `Inter`) when the user has not chosen a font.
+
+Saving still accepts any string up to 120 characters for `fontFamily`; the list is a convenience for the dropdown, not a hard allow-list. Ensure the PWA loads web fonts (e.g. Google Fonts) for families that are not system fonts.
 
 ### PWA template endpoints
 
@@ -131,15 +145,17 @@ Each **template** document includes: `name`, optional `category`, `description`,
 **`config.asset` (strings, all optional):** `logoUrl`, `logoKey`, `splashImageUrl`, `splashImageKey`, `siteDescription` — logo/splash URLs and Spaces keys; `siteDescription` is the user-facing app description.  
 **`config.splash`:** `primaryColor` and `secondaryColor` — CSS hex strings (`#rgb`, `#rrggbb`, or `#rrggbbaa`) for the splash screen. If omitted or invalid in stored data, the API coerces to defaults **`#6B46C1`** (primary) and **`#E5E7EB`** (secondary) so the PWA always receives both colors.  
 **`config.onboarding`:** `{ "screens": [ ... ] }` — ordered onboarding steps (screen 1 = index `0`). Each element may include **`title`**, **`description`**, **`screenImageUrl`**, **`screenImageKey`** (all optional strings). Images are uploaded via multipart (below); title/description are set with `PUT` on the template. Only the key **`screens`** is allowed under `onboarding`.  
-**`config.appProfile`:** theme colors for the PWA (CSS hex per slot). Top-level keys only: **`textColors`**, **`elementColors`**, **`backgroundColors`**, **`menuColors`**. Each is an object with **`primary`** / **`secondary`** strings; **`textColors`** and **`menuColors`** also allow **`auxiliary`**. Updates merge **per group** (e.g. you can patch only `textColors.primary`).  
-Other sections (`policyTerms`, etc.) are arbitrary JSON objects (nested content as the PWA defines).
+**`config.appProfile`:** global styling for the PWA. Optional **`fontFamily`** (string, e.g. `Inter`) plus theme colors as CSS hex per slot. Top-level keys: **`fontFamily`**, **`textColors`**, **`elementColors`**, **`backgroundColors`**, **`menuColors`**. Each color group is an object with **`primary`** / **`secondary`** strings; **`textColors`** and **`menuColors`** also allow **`auxiliary`**. Updates merge **per group** / field (e.g. patch only `textColors.primary` or only `fontFamily`).  
+**`config.policyTerms`:** **`privacyPolicy`** and **`termsOfService`**. Each is an object with optional string fields **`title`** (card heading / version label), **`contentHtml`** (TipTap/HTML from the rich text editor), **`contentText`** (Text/HTML editor mode if used), optional **`contentJson`** (TipTap `getJSON()` for lossless reload), plus optional **`media`**: an array of `{ url?, key?, caption? }` for linked files or figures. When you patch a document, string fields merge field-by-field; **`media`** and **`contentJson`** are **replaced in full** when present in the patch (send `null` to clear). Updates merge **per document** (patch only `privacyPolicy` or only `termsOfService`, and merge fields inside).  
+**`config.support`:** optional string fields only (unknown keys rejected): **`contactEmail`**, **`contactPhone`**, **`website`**, **`linkedinPage`**, **`instagramHandle`**, **`twitterHandle`**, **`privacyPolicyLink`**, **`termsAndConditionsLink`** — matches the App Creator Support form (contact, social handles, policy links). Updates merge **shallowly** (patch only the keys you send).  
+**`config.dns`:** custom domain & platform URL (Shopify-style). Each **app** gets a unique **`subdomain`** at creation (`POST /api/v1/apps`), e.g. `my-store`, and the API returns **`defaultAppUrl`** as `https://{subdomain}.{APP_PLATFORM_BASE_DOMAIN}` (defaults: **`springtd.com`**, **`https`** — see `.env.example`). When you **create a PWA template**, if `config.dns.defaultAppUrl` is omitted, the service fills **`subdomain`**, **`defaultAppUrl`**, and **`useCustomDomain: false`** from the app. Optional fields (unknown keys rejected): **`useCustomDomain`**, **`customDomain`**, **`customDomainVerificationStatus`** (`pending` \| `verified` \| `failed`), **`dnsRecords`** (array of `{ type: A \| AAAA \| CNAME \| TXT, name, value }` for the DNS table UI), **`verificationTxtValue`**, **`vercelDomainId`**, **`vercelProjectId`**. Custom domain DNS is intended to be managed via **Vercel** (add domain in Vercel, copy records into `dnsRecords` / drive verification from your worker using the Vercel API). Updates merge **shallowly** at the top level; **`dnsRecords`** is replaced in full when present in the patch.
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/v1/apps/:appId/pwa-templates` | List templates for an app |
 | `POST` | `/api/v1/apps/:appId/pwa-templates` | Create a template (`name`, `config` required; `config` must include only allowed top-level keys; omitted sections default to `{}`) |
 | `GET` | `/api/v1/apps/:appId/pwa-templates/:templateId` | Get one template |
-| `PUT` | `/api/v1/apps/:appId/pwa-templates/:templateId` | Update template (partial `config` merges per section; `asset`, `splash`, `onboarding` merge shallowly within the section; `appProfile` merges **deeply** per color group (`textColors`, `elementColors`, …) — for onboarding, sending `screens` replaces that array) |
+| `PUT` | `/api/v1/apps/:appId/pwa-templates/:templateId` | Update template (partial `config` merges per section; `asset`, `splash`, `onboarding` merge shallowly within the section; `appProfile` merges **deeply** per color group; `policyTerms` merges **deeply** per document (`privacyPolicy` / `termsOfService`) — for onboarding, sending `screens` replaces that array) |
 | `DELETE` | `/api/v1/apps/:appId/pwa-templates/:templateId` | Delete template |
 | `PATCH` | `/api/v1/apps/:appId/pwa-templates/:templateId/apply` | Set this template as applied (`isApplied: true`) and clear `isApplied` on others for the app |
 
@@ -151,7 +167,7 @@ Other sections (`policyTerms`, etc.) are arbitrary JSON objects (nested content 
 | `POST` | `/api/v1/apps/:appId/pwa-templates/:templateId/assets/splash` | Upload splash image; field name **`file`**. Updates `config.asset.splashImageUrl` and `splashImageKey`. |
 | `POST` | `/api/v1/apps/:appId/pwa-templates/:templateId/onboarding/screens/:screenIndex/image` | Upload image for onboarding screen **`screenIndex`** (0-based); field name **`file`**. Pads `screens` with empty objects if needed; sets `screenImageUrl` / `screenImageKey` on that entry. |
 
-Uploads require Spaces to be configured (see **Environment variables**). If Spaces is not configured, uploads return **503**. Maximum size defaults to **5 MB** (`PWA_ASSET_MAX_UPLOAD_MB`).
+Uploads require Spaces to be configured (see **Environment variables**). If Spaces is not configured, uploads return **503**. Maximum size defaults to **2 MB** (`PWA_ASSET_MAX_UPLOAD_MB`).
 
 Deleting an app removes its PWA template documents as well.
 
@@ -766,11 +782,12 @@ Stored in MongoDB collection `AppPwaTemplate`. Many rows per `appId`.
 - `id`: Template id
 - `appId`: Owning application
 - `name`, `category`, `description`, `iconKey`: Display metadata for the “Choose your template” UI
-- `config`: JSON object with required section keys `asset`, `splash`, `onboarding`, `appProfile`, `policyTerms`, `support`, `dns` (each an object; nested fields are up to the PWA except as noted)
+- `config`: JSON object with required section keys `asset`, `splash`, `onboarding`, `appProfile`, `policyTerms`, `support`, `dns` (`support`: eight optional strings; `dns`: structured fields as in **`config.dns`** above)
 - `config.asset`: `logoUrl`, `logoKey`, `splashImageUrl`, `splashImageKey`, `siteDescription` (all optional strings)
 - `config.splash`: `primaryColor`, `secondaryColor` (hex strings; defaults `#6B46C1` / `#E5E7EB` when missing)
 - `config.onboarding`: `screens[]` with per-screen `title`, `description`, `screenImageUrl`, `screenImageKey` (optional strings)
-- `config.appProfile`: `textColors`, `elementColors`, `backgroundColors`, `menuColors` — nested `primary` / `secondary` (and `auxiliary` for text + menu); values are hex strings
+- `config.appProfile`: optional `fontFamily`; `textColors`, `elementColors`, `backgroundColors`, `menuColors` — nested `primary` / `secondary` (and `auxiliary` for text + menu); color values are hex strings
+- `config.policyTerms`: `privacyPolicy`, `termsOfService` — each with optional `title`, `contentHtml`, `contentText`, optional `contentJson` (TipTap document object), and optional `media[]` (`url`, `key`, `caption` per item)
 - `isApplied`: Whether this template is the active one for the PWA (at most one `true` per app after `apply`)
 - `createdAt`, `updatedAt`
 
@@ -833,7 +850,7 @@ curl -X GET "http://localhost:3002/api/v1/special/apps" \
 - `DO_SPACES_ACCESS_KEY_ID` / `DO_SPACES_SECRET_ACCESS_KEY` — Spaces API keys
 - `DO_SPACES_CDN_URL` — Optional CDN base for public URLs
 - `DO_SPACES_PWA_PREFIX` — Object key prefix for uploads (default `pwa-assets`)
-- `PWA_ASSET_MAX_UPLOAD_MB` — Max image size in MB for logo/splash (default `5`)
+- `PWA_ASSET_MAX_UPLOAD_MB` — Max image size in MB for logo/splash (default `2`)
 
 See `.env.example` for a template.
 

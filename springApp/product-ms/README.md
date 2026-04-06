@@ -14,12 +14,14 @@ Deployment URL: https://product-ms.fly.dev/
 
 ## Plata Authentication
 
-`GET /api/v1/products` fetches the full catalog from **Plata account-ms** (same host as `https://account-ms-plata.fly.dev/api/v1/products` in production) and sends merchant API keys server-to-server as:
+Upstream calls use **`PLATA_ACCOUNT_SERVICE_URL`** (see env) plus **`GET /api/v1/products`** (and related paths). The Plata gateway expects **only** these headers (it does not use `Authorization` or Bearer):
 
 - `PLATA_PUBLIC_KEY`
 - `PLATA_SECRET_KEY`
 
-These values come from environment variables.
+Values come from the same-named environment variables in this service. The gateway forwards them to service-auth verification (`public_key` / `secret_key` plus IP policy).
+
+When clients call **`GET https://account-ms.fly.dev/api/v1/products`**, Spring **account-ms** proxies to this **`product-ms`** service, which then performs the upstream request above to Plata.
 
 ### Required Environment Variables
 
@@ -34,16 +36,23 @@ These values come from environment variables.
 
 If both are unset but `PLATA_PUBLIC_KEY` and `PLATA_SECRET_KEY` are set, the service defaults to `https://account-ms-plata.fly.dev` so Fly deployments only need the key secrets. For local development without Plata keys, the default is `http://localhost:3005`.
 
+### Fly.io
+
+- **`PORT`** / **`internal_port`**: `fly.toml` and the app use **4005**. The process listens on **`0.0.0.0`** (required for the Fly proxy). Invalid `PORT` values fall back to **4005** so `listen()` never receives `NaN`.
+- **`MONGODB_URI` or `DATABASE_URL`**: Set a reachable MongoDB URL as a Fly secret. If Mongo is missing or wrong, the app **keeps running** and retries the connection (so the machine does not crash-loop); `/health` still responds while the DB is disconnected.
+- **`[[http_service.checks]]`** on **`GET /health`** (with a generous **`grace_period`**) tells Fly when the machine is ready. The **Dockerfile does not define a Docker `HEALTHCHECK`** — only Fly’s checks are used, to avoid two competing health systems.
+- **`min_machines_running = 1`**: Keeps one machine in the primary region so the proxy usually has a target (reduces “Proxy not finding machines” when scale-to-zero and restarts interact badly). You can lower to `0` to save cost if stable.
+
 ## Current Flow
 
 1. Frontend fetches the full selectable catalog from `GET /api/v1/products`.
 2. User turns on a product for an app using `PUT /api/v1/products/toggle/:appId/:productId`.
 3. `product-ms` fetches that product from upstream and stores a local copy in MongoDB `products`.
-4. Frontend fetches enabled products for that app using `GET /api/v1/products/app/:appId`.
+4. Frontend lists app-scoped products saved locally using `GET /api/v1/products/app/:appId`. That response includes **every** local row for the app (both `isActive: true` and `isActive: false`). Filter client-side to `isActive === true` when you only want products that are still turned on.
 
 ## Storage Model
 
-Enabled products are saved in the local MongoDB `products` collection, not in `MerchantProductConfiguration`.
+Per-app product copies (active or inactive) live in the local MongoDB `products` collection, not in `MerchantProductConfiguration`.
 
 The local document shape follows the Plata product model, including fields such as:
 
@@ -61,7 +70,7 @@ The local document shape follows the Plata product model, including fields such 
 - `requirements`
 - `feesAndCharges`
 
-This means app-enabled products are stored as full product documents, not as lightweight activation records.
+This means each app’s products are stored as full product documents (with `isActive`), not as lightweight activation-only records.
 
 ## API Endpoints
 
@@ -79,7 +88,7 @@ Fetch a product by ID. Local app product documents are resolved first; if none e
 
 ### Get Products For An App
 
-Fetch products that have been saved locally for a specific app.
+Fetch **all** product documents that have been saved locally for a specific app (same data as stored in MongoDB for that `appId`). This is **not** filtered to “enabled only”: documents that were turned off remain in the collection with `isActive: false`. To show only products that are still on, filter the array where **`isActive` is `true`** (or handle missing `isActive` according to your client rules).
 
 **Endpoints:**
 
@@ -164,7 +173,7 @@ Fetch the full product catalog:
 curl -X GET http://localhost:4005/api/v1/products
 ```
 
-Fetch enabled products for an app:
+Fetch all app-scoped products for an app (includes inactive; filter by `isActive` for only turned-on):
 
 ```bash
 curl -X GET http://localhost:4005/api/v1/products/app/{appId}
@@ -218,5 +227,5 @@ curl -X GET http://localhost:4005/api/v1/products/{productId}/action
 ## Notes
 
 - Product creation, updates, and deletions for the master catalog still belong to the upstream Plata product service.
-- This service is responsible for app-specific enabled product persistence.
-- The local `products` collection is the source of truth for which products are enabled for a specific app.
+- This service is responsible for app-specific product persistence (per-app copies in the local `products` collection).
+- The local `products` collection is the source of truth for which catalog products an app has activated at least once; each document’s **`isActive`** field indicates whether that product is currently turned on (`false` means it was turned off but the row is still returned by `GET .../app/:appId`).

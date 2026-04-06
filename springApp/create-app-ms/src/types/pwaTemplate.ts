@@ -76,10 +76,95 @@ export interface AppPwaMenuColors {
 }
 
 export interface AppPwaAppProfileSection {
+  /** Global font stack name (e.g. `Inter`, `system-ui`). */
+  fontFamily?: string;
   textColors?: AppPwaTextColors;
   elementColors?: AppPwaElementColors;
   backgroundColors?: AppPwaBackgroundColors;
   menuColors?: AppPwaMenuColors;
+}
+
+/** Inline attachment for a policy/terms document (e.g. PDF or image hosted on Spaces). */
+export interface AppPwaPolicyTermsMediaItem {
+  url?: string;
+  key?: string;
+  caption?: string;
+}
+
+/**
+ * One legal document (Privacy Policy or Terms of Service) from the rich-text editors.
+ * - **`contentHtml`** — TipTap/HTML output (`editor.getHTML()`): canonical formatted body for rendering.
+ * - **`contentJson`** — optional TipTap document (`editor.getJSON()`) for lossless reload in the editor.
+ * - **`contentText`** — plain or alternate text mode if you use it.
+ * - **`media`** — linked files or figures alongside the text.
+ */
+export interface AppPwaPolicyTermsDocument {
+  /** Card heading / version label (e.g. next to the pencil icon). */
+  title?: string;
+  contentHtml?: string;
+  contentText?: string;
+  /**
+   * TipTap / ProseMirror JSON document. Store with `contentHtml` so the PWA can render without the editor.
+   * Must be a JSON object at the root (not an array).
+   */
+  contentJson?: unknown;
+  media?: AppPwaPolicyTermsMediaItem[];
+}
+
+/** Policy / Terms tab: privacy policy and terms of service content. */
+export interface AppPwaPolicyTermsSection {
+  privacyPolicy?: AppPwaPolicyTermsDocument;
+  termsOfService?: AppPwaPolicyTermsDocument;
+}
+
+/**
+ * Support tab (contact & links), aligned with App Creator form fields.
+ * All values are optional strings; required-field rules are enforced in the UI.
+ */
+export interface AppPwaSupportSection {
+  contactEmail?: string;
+  contactPhone?: string;
+  website?: string;
+  linkedinPage?: string;
+  instagramHandle?: string;
+  twitterHandle?: string;
+  privacyPolicyLink?: string;
+  termsAndConditionsLink?: string;
+}
+
+/** DNS / TXT row shown in App Creator (typically returned from Vercel when adding a domain). */
+export type AppPwaDnsRecordType = 'A' | 'AAAA' | 'CNAME' | 'TXT';
+
+export interface AppPwaDnsRecordRow {
+  type: AppPwaDnsRecordType;
+  /** Name / host (e.g. `@`, `www`, `_acme-challenge`). */
+  name: string;
+  /** Value / target (IP, hostname, or TXT payload). */
+  value: string;
+}
+
+/**
+ * Custom domain & DNS (Vercel). Default host is assigned on the app (`{subdomain}.{platformDomain}`);
+ * custom hostname and record rows are stored for the App Creator UI and verification flow.
+ */
+export interface AppPwaDnsSection {
+  /** Full default origin for the app on your platform, e.g. `https://abc.springtd.com`. */
+  defaultAppUrl?: string;
+  /** Subdomain label only (matches `App.subdomain`). */
+  subdomain?: string;
+  /** Merchant toggled custom domain in App Creator. */
+  useCustomDomain?: boolean;
+  /** User-owned hostname (e.g. `app.client.com`). */
+  customDomain?: string;
+  /** Reflects whether DNS has been verified (Vercel domain status can be mirrored here). */
+  customDomainVerificationStatus?: 'pending' | 'verified' | 'failed';
+  /** Records the user must configure at their DNS provider (often from Vercel). */
+  dnsRecords?: AppPwaDnsRecordRow[];
+  /** Optional TXT token string for domain verification UI. */
+  verificationTxtValue?: string;
+  /** Optional opaque ids when integrating Vercel Domain / Project APIs server-side. */
+  vercelDomainId?: string;
+  vercelProjectId?: string;
 }
 
 export interface AppPwaTemplateConfig {
@@ -87,9 +172,9 @@ export interface AppPwaTemplateConfig {
   splash: AppPwaSplashSection;
   onboarding: AppPwaOnboardingSection;
   appProfile: AppPwaAppProfileSection;
-  policyTerms: Record<string, unknown>;
-  support: Record<string, unknown>;
-  dns: Record<string, unknown>;
+  policyTerms: AppPwaPolicyTermsSection;
+  support: AppPwaSupportSection;
+  dns: AppPwaDnsSection;
 }
 
 export type AppPwaTemplateSectionKey = keyof AppPwaTemplateConfig;
@@ -128,3 +213,8 @@ export interface UpdateAppPwaTemplateRequest {
 
 export type { PwaSplashColorOption } from '../constants/pwaSplashColorOptions';
 export { APP_PWA_SPLASH_COLOR_OPTIONS } from '../constants/pwaSplashColorOptions';
+export type { PwaAppProfileFontOption } from '../constants/pwaAppProfileFontOptions';
+export {
+  APP_PWA_APP_PROFILE_DEFAULT_FONT_FAMILY,
+  APP_PWA_APP_PROFILE_FONT_OPTIONS
+} from '../constants/pwaAppProfileFontOptions';

@@ -71,19 +71,31 @@ app.use('/api/v1/configurations', configurationRoutes);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-// Connect to MongoDB before starting server
-mongoose.connect(config.mongoUri)
-  .then(() => {
-    console.log('✅ Connected to MongoDB (DigitalOcean)');
-  })
-  .catch((err) => {
-    console.error('❌ MongoDB connection error:', err);
-    process.exit(1);
-  });
+// Listen first so Fly's proxy always has a target; retry Mongo instead of process.exit (missing/wrong MONGODB_URI on Fly was crashing the machine in a loop).
+const MONGO_RETRY_MS = 5000;
+function connectMongo(): void {
+  const rs = mongoose.connection.readyState;
+  if (rs === 1) return; // connected
+  if (rs === 2) return; // in-flight connect; wait for it to settle
+
+  mongoose
+    .connect(config.mongoUri, {
+      serverSelectionTimeoutMS: 10_000
+    })
+    .then(() => {
+      console.log('✅ Connected to MongoDB');
+    })
+    .catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`❌ MongoDB connection error (retry in ${MONGO_RETRY_MS}ms):`, msg);
+      setTimeout(connectMongo, MONGO_RETRY_MS);
+    });
+}
 
 const server = app.listen(config.port, '0.0.0.0', () => {
-  console.log(`🚀 Product Microservice running on port ${config.port}`);
+  console.log(`🚀 Product Microservice listening on 0.0.0.0:${config.port}`);
   console.log(`📱 Environment: ${config.nodeEnv}`);
+  connectMongo();
 });
 
 process.on('SIGTERM', () => {

@@ -27,9 +27,13 @@ interface Config {
   };
   /** Max upload size for PWA asset images (bytes). */
   pwaAssetMaxBytes: number;
+  /** Hostname only, e.g. springtd.com — used for default app URLs `{subdomain}.{appPlatformBaseDomain}`. */
+  appPlatformBaseDomain: string;
+  /** URL scheme for default app URLs (usually https). */
+  appUrlScheme: string;
 }
 
-const pwaAssetMaxMb = parseInt(process.env.PWA_ASSET_MAX_UPLOAD_MB || '5', 10);
+const pwaAssetMaxMb = parseInt(process.env.PWA_ASSET_MAX_UPLOAD_MB || '2', 10);
 
 export const config: Config = {
   port: parseInt(process.env.PORT || '3002', 10),
@@ -50,5 +54,13 @@ export const config: Config = {
     cdnBaseUrl: process.env.DO_SPACES_CDN_URL || '',
     pwaKeyPrefix: (process.env.DO_SPACES_PWA_PREFIX || 'pwa-assets').replace(/^\/+|\/+$/g, '')
   },
-  pwaAssetMaxBytes: Math.max(1, pwaAssetMaxMb) * 1024 * 1024
+  pwaAssetMaxBytes: Math.max(1, pwaAssetMaxMb) * 1024 * 1024,
+  appPlatformBaseDomain: (process.env.APP_PLATFORM_BASE_DOMAIN || 'springtd.com').replace(/^\.+|\.+$/g, ''),
+  appUrlScheme: (process.env.APP_URL_SCHEME || 'https').replace(/:$/, '')
 };
+
+/** Full default URL for an app on the platform origin, e.g. https://my-store.springtd.com */
+export function buildDefaultAppUrl(subdomain: string): string {
+  const s = subdomain.trim().toLowerCase();
+  return `${config.appUrlScheme}://${s}.${config.appPlatformBaseDomain}`;
+}

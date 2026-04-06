@@ -7,6 +7,11 @@ export interface App {
   alias: string;
   description: string;
   merchantId: string;
+  /**
+   * Unique hostname label for the default app URL on the platform domain
+   * (`{subdomain}.{APP_PLATFORM_BASE_DOMAIN}`), assigned at creation (Shopify-style).
+   */
+  subdomain?: string;
   status: AppStatus;
   createdAt: string;
   updatedAt: string;
@@ -19,6 +24,8 @@ export interface CreateAppRequest {
   alias: string;
   description: string;
   merchantId?: string; // Made optional since it can be extracted from authenticated user
+  /** Optional; if omitted, a unique slug is generated from `name`. */
+  subdomain?: string;
 }
 
 export interface UpdateAppRequest {

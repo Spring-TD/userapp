@@ -11,21 +11,33 @@ import { ProductModel, toProduct } from '../models/ProductModel';
 import { normalizeProductType } from '../utils/productType';
 
 export class ProductService {
-  private getAuthHeaders(): Record<string, string> {
+  /**
+   * Plata gateway reads these headers only (no Authorization / Bearer).
+   * Values come from PLATA_PUBLIC_KEY / PLATA_SECRET_KEY in env → forwarded to service-auth as public_key / secret_key.
+   */
+  private getUpstreamAuthHeaders(): Record<string, string> {
     const headers: Record<string, string> = {};
     if (config.plataPublicKey) headers['PLATA_PUBLIC_KEY'] = config.plataPublicKey;
     if (config.plataSecretKey) headers['PLATA_SECRET_KEY'] = config.plataSecretKey;
     return headers;
   }
 
+  private logUpstreamError(context: string, error: unknown): void {
+    if (axios.isAxiosError(error)) {
+      console.error(context, error.response?.data ?? error.message);
+    } else {
+      console.error(context, error);
+    }
+  }
+
   private async fetchUpstreamProductById(id: string): Promise<Product | null> {
     try {
-      const response = await axios.get(`${config.serverProductServiceUrl}/api/v1/products/${id}`, {
-        headers: this.getAuthHeaders()
+      const response = await axios.get(`${config.plataAccountServiceUrl}/api/v1/products/${id}`, {
+        headers: this.getUpstreamAuthHeaders()
       });
       return response.data.data || null;
     } catch (error) {
-      console.error('Error fetching upstream product by ID from server:', error);
+      this.logUpstreamError('Error fetching upstream product by ID from server:', error);
       return null;
     }
   }
@@ -116,15 +128,15 @@ export class ProductService {
     };
   }
 
-  // Fetch all products from upstream Plata account-ms (GET /api/v1/products)
+  // Fetch all products from upstream: GET ${PLATA_ACCOUNT_SERVICE_URL}/api/v1/products
   async getAllProducts(): Promise<Product[]> {
     try {
-      const response = await axios.get(`${config.serverProductServiceUrl}/api/v1/products`, {
-        headers: this.getAuthHeaders()
+      const response = await axios.get(`${config.plataAccountServiceUrl}/api/v1/products`, {
+        headers: this.getUpstreamAuthHeaders()
       });
       return response.data.data || [];
     } catch (error) {
-      console.error('Error fetching products from server:', error);
+      this.logUpstreamError('Error fetching products from server:', error);
       return [];
     }
   }
@@ -151,12 +163,12 @@ export class ProductService {
 
   async checkProductAction(id: string): Promise<any> {
     try {
-      const response = await axios.get(`${config.serverProductServiceUrl}/api/v1/products/${id}/action`, {
-        headers: this.getAuthHeaders()
+      const response = await axios.get(`${config.plataAccountServiceUrl}/api/v1/products/${id}/action`, {
+        headers: this.getUpstreamAuthHeaders()
       });
       return response.data.data || null;
     } catch (error) {
-      console.error('Error checking product action from server:', error);
+      this.logUpstreamError('Error checking product action from server:', error);
       return null;
     }
   }

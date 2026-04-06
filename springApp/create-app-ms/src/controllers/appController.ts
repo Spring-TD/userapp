@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { buildDefaultAppUrl } from '../config/environment';
 import { AppService } from '../services/appService';
 import { App, CreateAppRequest, UpdateAppRequest, TransactionQueryParams, DriveDocumentQueryParams } from '../types/app';
 import { ApiError } from '../middleware/errorHandler';
@@ -108,7 +109,12 @@ export class AppController {
         success: true,
         message: 'App created successfully',
         data: {
-          app,
+          app: {
+            ...app,
+            ...(app.subdomain
+              ? { defaultAppUrl: buildDefaultAppUrl(app.subdomain) }
+              : {})
+          },
           merchantWallets: merchantWalletsResult
         }
       });

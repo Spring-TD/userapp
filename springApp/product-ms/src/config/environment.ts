@@ -26,6 +26,15 @@ function resolveUpstreamProductCatalogBaseUrl(): string {
   return 'http://localhost:3005';
 }
 
+const upstreamProductCatalogBaseUrl = resolveUpstreamProductCatalogBaseUrl();
+
+/** Fly sets PORT; invalid values must not produce NaN (would crash listen()). */
+function resolveListenPort(): number {
+  const raw = process.env.PORT || '4005';
+  const n = Number.parseInt(String(raw), 10);
+  return Number.isFinite(n) && n > 0 && n < 65536 ? n : 4005;
+}
+
 interface EnvironmentConfig {
   port: number;
   nodeEnv: string;
@@ -34,11 +43,15 @@ interface EnvironmentConfig {
   corsOrigins: string[];
   logLevel: string;
   /**
-   * Plata account-ms base URL (GET /api/v1/products, GET /api/v1/products/:id, etc.).
-   * @see resolveUpstreamProductCatalogBaseUrl
+   * Plata account-ms / gateway base URL from `PLATA_ACCOUNT_SERVICE_URL` (or fallbacks).
+   * Use with `/api/v1/products`, `/api/v1/products/:id`, etc.
+   */
+  plataAccountServiceUrl: string;
+  /**
+   * @deprecated Use plataAccountServiceUrl — same value, kept for any external references.
    */
   serverProductServiceUrl: string;
-  /** Merchant API keys used by account-ms gateway for GET /api/v1/products */
+  /** Merchant API keys used for upstream Plata requests */
   plataPublicKey: string;
   plataSecretKey: string;
   /** Max request body size for JSON (e.g. '10mb') */
@@ -46,12 +59,13 @@ interface EnvironmentConfig {
 }
 
 export const config: EnvironmentConfig = {
-  port: parseInt(process.env.PORT || '4005', 10),
+  port: resolveListenPort(),
   nodeEnv: process.env.NODE_ENV || 'development',
   mongoUri: process.env.MONGODB_URI || process.env.DATABASE_URL || 'mongodb://localhost:27017/product_ms',
   corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:4001'],
   logLevel: process.env.LOG_LEVEL || 'info',
-  serverProductServiceUrl: resolveUpstreamProductCatalogBaseUrl(),
+  plataAccountServiceUrl: upstreamProductCatalogBaseUrl,
+  serverProductServiceUrl: upstreamProductCatalogBaseUrl,
   plataPublicKey: process.env.PLATA_PUBLIC_KEY || '',
   plataSecretKey: process.env.PLATA_SECRET_KEY || '',
   requestBodyLimit: process.env.REQUEST_BODY_LIMIT || '10mb',

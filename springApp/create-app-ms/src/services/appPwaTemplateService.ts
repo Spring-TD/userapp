@@ -1,5 +1,6 @@
-import { config } from '../config/environment';
+import { buildDefaultAppUrl, config } from '../config/environment';
 import { ApiError } from '../middleware/errorHandler';
+import { AppModel } from '../models/appModel';
 import { AppPwaTemplateModel } from '../models/appPwaTemplateModel';
 import {
   deleteFromSpaces,
@@ -209,16 +210,36 @@ export class AppPwaTemplateService {
 
   async create(appId: string, body: CreateAppPwaTemplateRequest): Promise<AppPwaTemplate> {
     validateCreateBody(body);
-    const config = normalizeAppPwaTemplateConfigForCreate(
+    let templateConfig = normalizeAppPwaTemplateConfigForCreate(
       body.config as Record<string, unknown>
     );
+
+    const app = await AppModel.getAppById(appId);
+    if (app?.subdomain) {
+      const dns = templateConfig.dns;
+      const hasDefault =
+        typeof dns?.defaultAppUrl === 'string' && dns.defaultAppUrl.trim().length > 0;
+      if (!hasDefault) {
+        templateConfig = mergeAppPwaTemplateConfig(
+          templateConfig as unknown as Record<string, unknown>,
+          {
+            dns: {
+              subdomain: app.subdomain,
+              defaultAppUrl: buildDefaultAppUrl(app.subdomain),
+              useCustomDomain: dns?.useCustomDomain ?? false
+            }
+          }
+        );
+      }
+    }
+
     const created = await AppPwaTemplateModel.createForApp(appId, {
       ...body,
       name: body.name.trim(),
       category: body.category?.trim(),
       description: body.description?.trim(),
       iconKey: body.iconKey?.trim(),
-      config: config as unknown as Record<string, unknown>
+      config: templateConfig as unknown as Record<string, unknown>
     });
     return this.withCoercedConfig(created);
   }

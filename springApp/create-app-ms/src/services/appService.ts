@@ -3,6 +3,11 @@ import { AppModel } from '../models/appModel';
 import { AppPwaTemplateModel } from '../models/appPwaTemplateModel';
 import { ApiError } from '../middleware/errorHandler';
 import { validateCreateAppRequest } from '../utils/validation';
+import {
+  generateUniqueSubdomain,
+  sanitizeSubdomain,
+  validateSubdomain
+} from '../utils/subdomainUtils';
 
 export class AppService {
   async createApp(appData: CreateAppRequest): Promise<App> {
@@ -17,7 +22,23 @@ export class AppService {
       throw new ApiError(400, 'Merchant ID is required');
     }
 
-    const newApp = await AppModel.createApp(appData);
+    const existingSubdomains = await AppModel.getAllSubdomains();
+    let subdomain: string;
+    if (appData.subdomain !== undefined && appData.subdomain !== '') {
+      const err = validateSubdomain(appData.subdomain.trim().toLowerCase());
+      if (err) {
+        throw new ApiError(400, err);
+      }
+      subdomain = appData.subdomain.trim().toLowerCase();
+    } else {
+      subdomain = sanitizeSubdomain(appData.name);
+    }
+    subdomain = generateUniqueSubdomain(subdomain, existingSubdomains);
+
+    const newApp = await AppModel.createApp({
+      ...appData,
+      subdomain
+    });
     return newApp;
   }
 

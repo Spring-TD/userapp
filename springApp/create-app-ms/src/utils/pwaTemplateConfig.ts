@@ -2,20 +2,42 @@ import { ApiError } from '../middleware/errorHandler';
 import {
   APP_PWA_SPLASH_DEFAULT_COLORS,
   type AppPwaAppProfileSection,
+  type AppPwaBackgroundColors,
+  type AppPwaElementColors,
+  type AppPwaMenuColors,
+  type AppPwaPolicyTermsDocument,
+  type AppPwaPolicyTermsMediaItem,
+  type AppPwaPolicyTermsSection,
   type AppPwaAssetSection,
   type AppPwaOnboardingScreen,
   type AppPwaOnboardingSection,
   type AppPwaSplashSection,
+  type AppPwaDnsRecordRow,
+  type AppPwaDnsRecordType,
+  type AppPwaDnsSection,
+  type AppPwaSupportSection,
   type AppPwaTemplateConfig,
-  type AppPwaTemplateSectionKey
+  type AppPwaTemplateSectionKey,
+  type AppPwaTextColors
 } from '../types/pwaTemplate';
 
-const APP_PROFILE_GROUP_KEYS = [
+/** Top-level keys allowed under `config.appProfile` (global styling + theme colors). */
+const APP_PROFILE_KEYS = [
+  'fontFamily',
   'textColors',
   'elementColors',
   'backgroundColors',
   'menuColors'
 ] as const;
+
+const APP_PROFILE_COLOR_GROUP_KEYS = [
+  'textColors',
+  'elementColors',
+  'backgroundColors',
+  'menuColors'
+] as const;
+
+const APP_PROFILE_FONT_FAMILY_MAX_LEN = 120;
 
 /** primary / secondary / auxiliary (text & menu) */
 const PROFILE_TEXT_KEYS = ['primary', 'secondary', 'auxiliary'] as const;
@@ -23,6 +45,15 @@ const PROFILE_TEXT_KEYS = ['primary', 'secondary', 'auxiliary'] as const;
 const PROFILE_PAIR_KEYS = ['primary', 'secondary'] as const;
 /** primary / secondary / auxiliary (menu) */
 const PROFILE_MENU_KEYS = ['primary', 'secondary', 'auxiliary'] as const;
+
+const POLICY_TERMS_TOP_KEYS = ['privacyPolicy', 'termsOfService'] as const;
+const POLICY_DOC_STRING_KEYS = ['title', 'contentHtml', 'contentText'] as const;
+const POLICY_DOC_KEYS = [
+  ...POLICY_DOC_STRING_KEYS,
+  'media',
+  'contentJson'
+] as const;
+const POLICY_MEDIA_ITEM_KEYS = ['url', 'key', 'caption'] as const;
 
 const ONBOARDING_SCREEN_STRING_KEYS = [
   'title',
@@ -39,6 +70,34 @@ export const APP_PWA_ASSET_STRING_KEYS = [
   'splashImageKey',
   'siteDescription'
 ] as const;
+
+/** Support tab: contact email/phone, site, social handles, policy links. */
+export const APP_PWA_SUPPORT_STRING_KEYS = [
+  'contactEmail',
+  'contactPhone',
+  'website',
+  'linkedinPage',
+  'instagramHandle',
+  'twitterHandle',
+  'privacyPolicyLink',
+  'termsAndConditionsLink'
+] as const;
+
+const APP_PWA_DNS_RECORD_TYPES: AppPwaDnsRecordType[] = ['A', 'AAAA', 'CNAME', 'TXT'];
+
+const APP_PWA_DNS_TOP_KEYS = [
+  'defaultAppUrl',
+  'subdomain',
+  'useCustomDomain',
+  'customDomain',
+  'customDomainVerificationStatus',
+  'dnsRecords',
+  'verificationTxtValue',
+  'vercelDomainId',
+  'vercelProjectId'
+] as const;
+
+const APP_PWA_DNS_VERIFICATION = ['pending', 'verified', 'failed'] as const;
 
 const HEX_COLOR_RE = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/;
 
@@ -95,6 +154,124 @@ function coerceAssetSection(raw: Record<string, unknown>): AppPwaAssetSection {
     }
   }
   return out;
+}
+
+function assertSupportSection(raw: Record<string, unknown>): AppPwaSupportSection {
+  for (const k of Object.keys(raw)) {
+    if (!APP_PWA_SUPPORT_STRING_KEYS.includes(k as (typeof APP_PWA_SUPPORT_STRING_KEYS)[number])) {
+      throw new ApiError(400, `config.support unknown key "${k}"`);
+    }
+  }
+  const out: AppPwaSupportSection = {};
+  for (const k of APP_PWA_SUPPORT_STRING_KEYS) {
+    if (raw[k] !== undefined && raw[k] !== null) {
+      if (typeof raw[k] !== 'string') {
+        throw new ApiError(400, `config.support.${k} must be a string`);
+      }
+      (out as Record<string, string>)[k] = raw[k];
+    }
+  }
+  return out;
+}
+
+function coerceSupportSection(raw: Record<string, unknown>): AppPwaSupportSection {
+  const out: AppPwaSupportSection = {};
+  for (const k of APP_PWA_SUPPORT_STRING_KEYS) {
+    const v = raw[k];
+    if (v !== undefined && typeof v === 'string') {
+      (out as Record<string, string>)[k] = v;
+    }
+  }
+  return out;
+}
+
+function assertDnsRecordRow(raw: unknown, path: string): AppPwaDnsRecordRow {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new ApiError(400, `${path} must be an object`);
+  }
+  const o = raw as Record<string, unknown>;
+  for (const k of Object.keys(o)) {
+    if (k !== 'type' && k !== 'name' && k !== 'value') {
+      throw new ApiError(400, `${path} unknown key "${k}"`);
+    }
+  }
+  if (typeof o.type !== 'string' || !APP_PWA_DNS_RECORD_TYPES.includes(o.type as AppPwaDnsRecordType)) {
+    throw new ApiError(400, `${path}.type must be one of A, AAAA, CNAME, TXT`);
+  }
+  if (typeof o.name !== 'string') {
+    throw new ApiError(400, `${path}.name must be a string`);
+  }
+  if (typeof o.value !== 'string') {
+    throw new ApiError(400, `${path}.value must be a string`);
+  }
+  return {
+    type: o.type as AppPwaDnsRecordType,
+    name: o.name,
+    value: o.value
+  };
+}
+
+function assertDnsSection(raw: Record<string, unknown>): AppPwaDnsSection {
+  for (const k of Object.keys(raw)) {
+    if (!APP_PWA_DNS_TOP_KEYS.includes(k as (typeof APP_PWA_DNS_TOP_KEYS)[number])) {
+      throw new ApiError(400, `config.dns unknown key "${k}"`);
+    }
+  }
+  const out: AppPwaDnsSection = {};
+  for (const k of [
+    'defaultAppUrl',
+    'subdomain',
+    'customDomain',
+    'verificationTxtValue',
+    'vercelDomainId',
+    'vercelProjectId'
+  ] as const) {
+    if (raw[k] !== undefined && raw[k] !== null) {
+      if (typeof raw[k] !== 'string') {
+        throw new ApiError(400, `config.dns.${k} must be a string`);
+      }
+      (out as Record<string, string>)[k] = raw[k];
+    }
+  }
+  if (raw.useCustomDomain !== undefined && raw.useCustomDomain !== null) {
+    if (typeof raw.useCustomDomain !== 'boolean') {
+      throw new ApiError(400, 'config.dns.useCustomDomain must be a boolean');
+    }
+    out.useCustomDomain = raw.useCustomDomain;
+  }
+  if (raw.customDomainVerificationStatus !== undefined && raw.customDomainVerificationStatus !== null) {
+    const s = raw.customDomainVerificationStatus;
+    if (typeof s !== 'string' || !APP_PWA_DNS_VERIFICATION.includes(s as (typeof APP_PWA_DNS_VERIFICATION)[number])) {
+      throw new ApiError(
+        400,
+        'config.dns.customDomainVerificationStatus must be one of pending, verified, failed'
+      );
+    }
+    out.customDomainVerificationStatus = s as AppPwaDnsSection['customDomainVerificationStatus'];
+  }
+  if (raw.dnsRecords !== undefined && raw.dnsRecords !== null) {
+    if (!Array.isArray(raw.dnsRecords)) {
+      throw new ApiError(400, 'config.dns.dnsRecords must be an array');
+    }
+    out.dnsRecords = raw.dnsRecords.map((row, i) =>
+      assertDnsRecordRow(row, `config.dns.dnsRecords[${i}]`)
+    );
+  }
+  return out;
+}
+
+function coerceDnsSection(raw: Record<string, unknown>): AppPwaDnsSection {
+  const filtered: Record<string, unknown> = {};
+  for (const k of APP_PWA_DNS_TOP_KEYS) {
+    if (raw[k] !== undefined) {
+      filtered[k] = raw[k];
+    }
+  }
+  try {
+    return assertDnsSection(filtered);
+  } catch {
+    return {};
+  }
 }
 
 function assertSplashSection(raw: Record<string, unknown>): AppPwaSplashSection {
@@ -245,11 +422,26 @@ function parseColorSubgroup(
 
 function assertAppProfileSection(raw: Record<string, unknown>): AppPwaAppProfileSection {
   for (const k of Object.keys(raw)) {
-    if (!APP_PROFILE_GROUP_KEYS.includes(k as (typeof APP_PROFILE_GROUP_KEYS)[number])) {
+    if (!APP_PROFILE_KEYS.includes(k as (typeof APP_PROFILE_KEYS)[number])) {
       throw new ApiError(400, `config.appProfile unknown key "${k}"`);
     }
   }
   const out: AppPwaAppProfileSection = {};
+  if (raw.fontFamily !== undefined && raw.fontFamily !== null) {
+    if (typeof raw.fontFamily !== 'string') {
+      throw new ApiError(400, 'config.appProfile.fontFamily must be a string');
+    }
+    const t = raw.fontFamily.trim();
+    if (t.length > APP_PROFILE_FONT_FAMILY_MAX_LEN) {
+      throw new ApiError(
+        400,
+        `config.appProfile.fontFamily must be at most ${APP_PROFILE_FONT_FAMILY_MAX_LEN} characters`
+      );
+    }
+    if (t.length > 0) {
+      out.fontFamily = t;
+    }
+  }
   if (raw.textColors !== undefined) {
     out.textColors = parseColorSubgroup(
       raw.textColors,
@@ -301,7 +493,13 @@ function coerceColorSubgroup(
 
 function coerceAppProfileSection(raw: Record<string, unknown>): AppPwaAppProfileSection {
   const out: AppPwaAppProfileSection = {};
-  for (const k of APP_PROFILE_GROUP_KEYS) {
+  if (typeof raw.fontFamily === 'string') {
+    const t = raw.fontFamily.trim();
+    if (t.length > 0 && t.length <= APP_PROFILE_FONT_FAMILY_MAX_LEN) {
+      out.fontFamily = t;
+    }
+  }
+  for (const k of APP_PROFILE_COLOR_GROUP_KEYS) {
     if (!Object.prototype.hasOwnProperty.call(raw, k)) {
       continue;
     }
@@ -324,13 +522,13 @@ function coerceAppProfileSection(raw: Record<string, unknown>): AppPwaAppProfile
 }
 
 function mergeColorSubgroup(
-  existing: Record<string, string> | undefined,
+  existing: Record<string, string> | AppPwaTextColors | AppPwaElementColors | AppPwaBackgroundColors | AppPwaMenuColors | undefined,
   patch: unknown,
   path: string,
   allowed: readonly string[]
 ): Record<string, string> | undefined {
   if (patch === undefined) {
-    return existing;
+    return existing as Record<string, string> | undefined;
   }
   if (patch === null) {
     return undefined;
@@ -344,7 +542,8 @@ function mergeColorSubgroup(
       throw new ApiError(400, `${path} unknown key "${k}"`);
     }
   }
-  const merged: Record<string, string> = { ...(existing || {}) };
+  const prior = (existing || {}) as Record<string, string>;
+  const merged: Record<string, string> = { ...prior };
   for (const k of allowed) {
     if (!Object.prototype.hasOwnProperty.call(p, k)) {
       continue;
@@ -364,11 +563,32 @@ function mergeAppProfileDeep(
   patch: Record<string, unknown>
 ): AppPwaAppProfileSection {
   for (const k of Object.keys(patch)) {
-    if (!APP_PROFILE_GROUP_KEYS.includes(k as (typeof APP_PROFILE_GROUP_KEYS)[number])) {
+    if (!APP_PROFILE_KEYS.includes(k as (typeof APP_PROFILE_KEYS)[number])) {
       throw new ApiError(400, `config.appProfile unknown key "${k}"`);
     }
   }
   const out: AppPwaAppProfileSection = { ...existing };
+  if (Object.prototype.hasOwnProperty.call(patch, 'fontFamily')) {
+    const v = patch.fontFamily;
+    if (v === null || v === undefined || v === '') {
+      delete out.fontFamily;
+    } else if (typeof v === 'string') {
+      const t = v.trim();
+      if (t.length > APP_PROFILE_FONT_FAMILY_MAX_LEN) {
+        throw new ApiError(
+          400,
+          `config.appProfile.fontFamily must be at most ${APP_PROFILE_FONT_FAMILY_MAX_LEN} characters`
+        );
+      }
+      if (t.length > 0) {
+        out.fontFamily = t;
+      } else {
+        delete out.fontFamily;
+      }
+    } else {
+      throw new ApiError(400, 'config.appProfile.fontFamily must be a string');
+    }
+  }
   if (patch.textColors !== undefined) {
     out.textColors = mergeColorSubgroup(
       existing.textColors,
@@ -404,6 +624,251 @@ function mergeAppProfileDeep(
   return out;
 }
 
+function assertPolicyString(path: string, value: unknown): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== 'string') {
+    throw new ApiError(400, `${path} must be a string`);
+  }
+  return value;
+}
+
+function assertPolicyMediaItem(raw: unknown, path: string): AppPwaPolicyTermsMediaItem {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new ApiError(400, `${path} must be an object`);
+  }
+  const o = raw as Record<string, unknown>;
+  for (const k of Object.keys(o)) {
+    if (!POLICY_MEDIA_ITEM_KEYS.includes(k as (typeof POLICY_MEDIA_ITEM_KEYS)[number])) {
+      throw new ApiError(400, `${path} unknown key "${k}"`);
+    }
+  }
+  const out: AppPwaPolicyTermsMediaItem = {};
+  for (const k of POLICY_MEDIA_ITEM_KEYS) {
+    if (o[k] === undefined || o[k] === null) {
+      continue;
+    }
+    if (typeof o[k] !== 'string') {
+      throw new ApiError(400, `${path}.${k} must be a string`);
+    }
+    (out as Record<string, string>)[k] = o[k] as string;
+  }
+  return out;
+}
+
+function assertPolicyMediaArray(raw: unknown, path: string): AppPwaPolicyTermsMediaItem[] {
+  if (!Array.isArray(raw)) {
+    throw new ApiError(400, `${path} must be an array`);
+  }
+  return raw.map((item, i) => assertPolicyMediaItem(item, `${path}[${i}]`));
+}
+
+/** TipTap `getJSON()` root must be a non-null object (not a top-level array). */
+function assertPolicyContentJson(raw: unknown, path: string): unknown {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new ApiError(400, `${path} must be a JSON object`);
+  }
+  return raw;
+}
+
+function parsePolicyDocument(
+  raw: unknown,
+  path: string
+): AppPwaPolicyTermsDocument | undefined {
+  if (raw === undefined || raw === null) {
+    return undefined;
+  }
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new ApiError(400, `${path} must be an object`);
+  }
+  const o = raw as Record<string, unknown>;
+  for (const k of Object.keys(o)) {
+    if (!POLICY_DOC_KEYS.includes(k as (typeof POLICY_DOC_KEYS)[number])) {
+      throw new ApiError(400, `${path} unknown key "${k}"`);
+    }
+  }
+  const out: AppPwaPolicyTermsDocument = {};
+  for (const k of POLICY_DOC_STRING_KEYS) {
+    const v = assertPolicyString(`${path}.${k}`, o[k]);
+    if (v !== undefined) {
+      (out as Record<string, string>)[k] = v;
+    }
+  }
+  if (o.media !== undefined) {
+    if (o.media === null) {
+      throw new ApiError(400, `${path}.media must be an array`);
+    }
+    out.media = assertPolicyMediaArray(o.media, `${path}.media`);
+  }
+  if (o.contentJson !== undefined) {
+    if (o.contentJson === null) {
+      throw new ApiError(400, `${path}.contentJson must be a JSON object`);
+    }
+    out.contentJson = assertPolicyContentJson(o.contentJson, `${path}.contentJson`);
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function assertPolicyTermsSection(raw: Record<string, unknown>): AppPwaPolicyTermsSection {
+  for (const k of Object.keys(raw)) {
+    if (!POLICY_TERMS_TOP_KEYS.includes(k as (typeof POLICY_TERMS_TOP_KEYS)[number])) {
+      throw new ApiError(400, `config.policyTerms unknown key "${k}"`);
+    }
+  }
+  const out: AppPwaPolicyTermsSection = {};
+  if (raw.privacyPolicy !== undefined) {
+    out.privacyPolicy = parsePolicyDocument(
+      raw.privacyPolicy,
+      'config.policyTerms.privacyPolicy'
+    );
+  }
+  if (raw.termsOfService !== undefined) {
+    out.termsOfService = parsePolicyDocument(
+      raw.termsOfService,
+      'config.policyTerms.termsOfService'
+    );
+  }
+  return out;
+}
+
+function coercePolicyDocument(raw: unknown): AppPwaPolicyTermsDocument | undefined {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return undefined;
+  }
+  const o = raw as Record<string, unknown>;
+  const out: AppPwaPolicyTermsDocument = {};
+  for (const k of POLICY_DOC_STRING_KEYS) {
+    const v = o[k];
+    if (typeof v === 'string') {
+      (out as Record<string, string>)[k] = v;
+    }
+  }
+  if (Array.isArray(o.media)) {
+    const items: AppPwaPolicyTermsMediaItem[] = [];
+    for (const item of o.media) {
+      if (item !== null && typeof item === 'object' && !Array.isArray(item)) {
+        const mi = item as Record<string, unknown>;
+        const entry: AppPwaPolicyTermsMediaItem = {};
+        for (const mk of POLICY_MEDIA_ITEM_KEYS) {
+          const mv = mi[mk];
+          if (typeof mv === 'string') {
+            (entry as Record<string, string>)[mk] = mv;
+          }
+        }
+        items.push(entry);
+      }
+    }
+    out.media = items;
+  }
+  if (
+    o.contentJson !== undefined &&
+    o.contentJson !== null &&
+    typeof o.contentJson === 'object' &&
+    !Array.isArray(o.contentJson)
+  ) {
+    out.contentJson = o.contentJson;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function coercePolicyTermsSection(raw: Record<string, unknown>): AppPwaPolicyTermsSection {
+  const out: AppPwaPolicyTermsSection = {};
+  if (raw.privacyPolicy !== undefined) {
+    const d = coercePolicyDocument(raw.privacyPolicy);
+    if (d) {
+      out.privacyPolicy = d;
+    }
+  }
+  if (raw.termsOfService !== undefined) {
+    const d = coercePolicyDocument(raw.termsOfService);
+    if (d) {
+      out.termsOfService = d;
+    }
+  }
+  return out;
+}
+
+function mergePolicyDocument(
+  existing: AppPwaPolicyTermsDocument | undefined,
+  patch: unknown,
+  path: string
+): AppPwaPolicyTermsDocument | undefined {
+  if (patch === undefined) {
+    return existing;
+  }
+  if (patch === null) {
+    return undefined;
+  }
+  if (typeof patch !== 'object' || Array.isArray(patch)) {
+    throw new ApiError(400, `${path} must be an object`);
+  }
+  const p = patch as Record<string, unknown>;
+  for (const k of Object.keys(p)) {
+    if (!POLICY_DOC_KEYS.includes(k as (typeof POLICY_DOC_KEYS)[number])) {
+      throw new ApiError(400, `${path} unknown key "${k}"`);
+    }
+  }
+  const merged: AppPwaPolicyTermsDocument = { ...(existing || {}) };
+  for (const k of POLICY_DOC_STRING_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(p, k)) {
+      continue;
+    }
+    const v = p[k];
+    if (v === null || v === undefined) {
+      delete merged[k];
+    } else if (typeof v === 'string') {
+      merged[k] = v;
+    } else {
+      throw new ApiError(400, `${path}.${k} must be a string`);
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(p, 'media')) {
+    const v = p.media;
+    if (v === null || v === undefined) {
+      delete merged.media;
+    } else {
+      merged.media = assertPolicyMediaArray(v, `${path}.media`);
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(p, 'contentJson')) {
+    const v = p.contentJson;
+    if (v === null || v === undefined) {
+      delete merged.contentJson;
+    } else {
+      merged.contentJson = assertPolicyContentJson(v, `${path}.contentJson`);
+    }
+  }
+  return Object.keys(merged).length > 0 ? merged : undefined;
+}
+
+function mergePolicyTermsDeep(
+  existing: AppPwaPolicyTermsSection,
+  patch: Record<string, unknown>
+): AppPwaPolicyTermsSection {
+  for (const k of Object.keys(patch)) {
+    if (!POLICY_TERMS_TOP_KEYS.includes(k as (typeof POLICY_TERMS_TOP_KEYS)[number])) {
+      throw new ApiError(400, `config.policyTerms unknown key "${k}"`);
+    }
+  }
+  const out: AppPwaPolicyTermsSection = { ...existing };
+  if (patch.privacyPolicy !== undefined) {
+    out.privacyPolicy = mergePolicyDocument(
+      existing.privacyPolicy,
+      patch.privacyPolicy,
+      'config.policyTerms.privacyPolicy'
+    );
+  }
+  if (patch.termsOfService !== undefined) {
+    out.termsOfService = mergePolicyDocument(
+      existing.termsOfService,
+      patch.termsOfService,
+      'config.policyTerms.termsOfService'
+    );
+  }
+  return out;
+}
+
 /** Legacy or partial DB documents → always seven section objects. */
 export function coerceAppPwaTemplateConfig(existing: unknown): AppPwaTemplateConfig {
   const raw =
@@ -425,8 +890,12 @@ export function coerceAppPwaTemplateConfig(existing: unknown): AppPwaTemplateCon
       out[key] = coerceOnboardingSection(section);
     } else if (key === 'appProfile') {
       out[key] = coerceAppProfileSection(section);
-    } else {
-      out[key] = section;
+    } else if (key === 'policyTerms') {
+      out[key] = coercePolicyTermsSection(section);
+    } else if (key === 'support') {
+      out[key] = coerceSupportSection(section);
+    } else if (key === 'dns') {
+      out[key] = coerceDnsSection(section);
     }
   }
   return out;
@@ -458,6 +927,10 @@ export function normalizeAppPwaTemplateConfigForCreate(
       out[key] = assertOnboardingSection(raw);
     } else if (key === 'appProfile') {
       out[key] = assertAppProfileSection(raw);
+    } else if (key === 'policyTerms') {
+      out[key] = assertPolicyTermsSection(raw);
+    } else if (key === 'support') {
+      out[key] = assertSupportSection(raw);
     } else {
       out[key] = raw;
     }
@@ -496,7 +969,7 @@ export function mergeAppPwaTemplateConfig(
         } as Record<string, unknown>);
       } else if (key === 'onboarding') {
         base[key] = assertOnboardingSection({
-          ...(base[key] as Record<string, unknown>),
+          ...(base[key] as unknown as Record<string, unknown>),
           ...next
         } as Record<string, unknown>);
       } else if (key === 'appProfile') {
@@ -504,8 +977,21 @@ export function mergeAppPwaTemplateConfig(
           base[key] as AppPwaAppProfileSection,
           next
         );
-      } else {
-        base[key] = { ...base[key], ...next };
+      } else if (key === 'policyTerms') {
+        base[key] = mergePolicyTermsDeep(
+          base[key] as AppPwaPolicyTermsSection,
+          next
+        );
+      } else if (key === 'support') {
+        base[key] = assertSupportSection({
+          ...(base[key] as Record<string, unknown>),
+          ...next
+        } as Record<string, unknown>);
+      } else if (key === 'dns') {
+        base[key] = assertDnsSection({
+          ...(base[key] as Record<string, unknown>),
+          ...next
+        } as Record<string, unknown>);
       }
     }
   }

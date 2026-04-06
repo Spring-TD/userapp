@@ -11,6 +11,13 @@ const AppSchema = new Schema<IAppDocument>({
     alias: { type: String, required: true, unique: true },
     description: { type: String, required: true },
     merchantId: { type: String, required: true },
+    subdomain: {
+        type: String,
+        trim: true,
+        lowercase: true,
+        sparse: true,
+        unique: true
+    },
     status: {
         type: String,
         enum: ['active', 'suspended'],

@@ -1,6 +1,6 @@
 /**
  * Shared palette for App Creator splash primary/secondary pickers.
- * Frontend may import this module or call GET /api/v1/pwa/splash-color-options.
+ * Frontend may import this module or call GET /api/v1/pwa/color-options.
  * Stored template values use `hex`; any valid hex is still accepted on save.
  */
 export interface PwaSplashColorOption {

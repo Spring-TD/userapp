@@ -2,6 +2,17 @@ import { App, CreateAppRequest } from '../types/app';
 import { AppMongoModel } from './app.mongo';
 
 export class AppModel {
+  static async getAllSubdomains(): Promise<string[]> {
+    const docs = await AppMongoModel.find({
+      subdomain: { $exists: true, $nin: [null, ''] }
+    })
+      .select('subdomain')
+      .lean();
+    return docs
+      .map((d: { subdomain?: string }) => d.subdomain)
+      .filter((s): s is string => Boolean(s));
+  }
+
   static async createApp(appData: CreateAppRequest): Promise<App> {
     // Ensure merchantId is provided (should be guaranteed by controller)
     if (!appData.merchantId) {

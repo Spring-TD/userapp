@@ -32,18 +32,20 @@ RUN npm ci --omit=dev && npm cache clean --force
 # Copy built application from builder
 COPY --from=builder /app/dist ./dist
 
+# OpenAPI spec (read at runtime by dist/config/swagger.js → /app/openapi.json)
+COPY openapi.json ./openapi.json
+
 # Change ownership to non-root user
 RUN chown -R appuser:appgroup /app
 
 # Switch to non-root user
 USER appuser
 
-# Expose port
-EXPOSE 3005
+# Must match fly.toml internal_port / PORT (default 4005)
+EXPOSE 4005
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3005/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+# No Docker HEALTHCHECK: Fly.io uses [[http_service.checks]] in fly.toml. A duplicate
+# Docker health probe can mark the container unhealthy and fight the Fly proxy.
 
 # Start application
 CMD ["node", "dist/index.js"]
