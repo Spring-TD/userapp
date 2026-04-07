@@ -8,8 +8,32 @@ import {
   sanitizeSubdomain,
   validateSubdomain
 } from '../utils/subdomainUtils';
+import { buildDefaultAppUrl, config } from '../config/environment';
+import { deleteFromSpaces, isSpacesConfigured, uploadToSpaces } from './spacesService';
 
 export class AppService {
+  private static readonly MANIFEST_MIME = new Set<string>([
+    'application/json',
+    'application/manifest+json',
+    'text/json'
+  ]);
+
+  private async uploadManifestToSpaces(
+    appId: string,
+    suffix: string,
+    file: { buffer: Buffer; originalname: string }
+  ): Promise<{ url: string; key: string }> {
+    const prefix = config.doSpaces.pwaKeyPrefix;
+    const fileName = (file.originalname || '').trim().toLowerCase();
+    const safeName = (fileName || 'manifest.json').replace(/[^a-z0-9._-]/g, '-');
+    const objectKey = `${prefix}/${appId}/manifests/${Date.now()}-${suffix}-${safeName}`;
+    try {
+      return await uploadToSpaces(file.buffer, objectKey, 'application/json');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown upload error';
+      throw new ApiError(502, `Failed to upload manifest to file storage: ${message}`);
+    }
+  }
   async createApp(appData: CreateAppRequest): Promise<App> {
     // Validate the request using our validation utility
     const validationError = validateCreateAppRequest(appData);
@@ -204,5 +228,159 @@ export class AppService {
     }
 
     return { successCount, failedCount, results };
+  }
+
+  async uploadManifestFiles(
+    appId: string,
+    files: Array<{ buffer: Buffer; mimetype: string; originalname: string }>
+  ): Promise<App> {
+    if (!appId) {
+      throw new ApiError(400, 'App ID is required');
+    }
+    if (!files.length) {
+      throw new ApiError(400, 'At least one manifest file is required (multipart field name: files)');
+    }
+    if (!isSpacesConfigured()) {
+      throw new ApiError(
+        503,
+        'File storage is not configured. Set DigitalOcean Spaces environment variables (see .env.example).'
+      );
+    }
+
+    const app = await AppModel.getAppById(appId);
+    if (!app) {
+      throw new ApiError(404, 'App not found');
+    }
+
+    const oldKeys = Array.isArray(app.manifestKeys) ? app.manifestKeys : [];
+    const uploaded: Array<{ url: string; key: string }> = [];
+
+    for (let i = 0; i < files.length; i += 1) {
+      const file = files[i];
+      const normalizedMime = file.mimetype.toLowerCase().split(';')[0].trim();
+      const fileName = (file.originalname || '').trim().toLowerCase();
+      if (!AppService.MANIFEST_MIME.has(normalizedMime) && !fileName.endsWith('.json')) {
+        throw new ApiError(
+          400,
+          'Invalid manifest file type. Only JSON files are allowed (application/json or .json)'
+        );
+      }
+      if (file.buffer.length > config.pwaAssetMaxBytes) {
+        throw new ApiError(
+          400,
+          `File too large (max ${Math.floor(config.pwaAssetMaxBytes / (1024 * 1024))}MB)`
+        );
+      }
+      uploaded.push(await this.uploadManifestToSpaces(appId, String(i), file));
+    }
+
+    const manifestUrls = uploaded.map((item) => item.url);
+    const manifestKeys = uploaded.map((item) => item.key);
+    const updated = await AppModel.updateApp(appId, { manifestUrls, manifestKeys });
+    if (!updated) {
+      throw new ApiError(500, 'Failed to update app after manifest upload');
+    }
+
+    for (const key of oldKeys) {
+      if (!manifestKeys.includes(key)) {
+        void deleteFromSpaces(key);
+      }
+    }
+    return updated;
+  }
+
+  async replaceManifestFile(
+    appId: string,
+    manifestIndex: number,
+    file: { buffer: Buffer; mimetype: string; originalname: string }
+  ): Promise<App> {
+    if (!appId) {
+      throw new ApiError(400, 'App ID is required');
+    }
+    if (!Number.isInteger(manifestIndex) || manifestIndex < 0) {
+      throw new ApiError(400, 'manifestIndex must be a non-negative integer');
+    }
+    if (!isSpacesConfigured()) {
+      throw new ApiError(
+        503,
+        'File storage is not configured. Set DigitalOcean Spaces environment variables (see .env.example).'
+      );
+    }
+
+    const app = await AppModel.getAppById(appId);
+    if (!app) {
+      throw new ApiError(404, 'App not found');
+    }
+    const manifestUrls = Array.isArray(app.manifestUrls) ? [...app.manifestUrls] : [];
+    const manifestKeys = Array.isArray(app.manifestKeys) ? [...app.manifestKeys] : [];
+    if (manifestIndex >= manifestUrls.length || manifestIndex >= manifestKeys.length) {
+      throw new ApiError(404, 'Manifest index not found');
+    }
+
+    const normalizedMime = file.mimetype.toLowerCase().split(';')[0].trim();
+    const fileName = (file.originalname || '').trim().toLowerCase();
+    if (!AppService.MANIFEST_MIME.has(normalizedMime) && !fileName.endsWith('.json')) {
+      throw new ApiError(
+        400,
+        'Invalid manifest file type. Only JSON files are allowed (application/json or .json)'
+      );
+    }
+    if (file.buffer.length > config.pwaAssetMaxBytes) {
+      throw new ApiError(
+        400,
+        `File too large (max ${Math.floor(config.pwaAssetMaxBytes / (1024 * 1024))}MB)`
+      );
+    }
+
+    const uploaded = await this.uploadManifestToSpaces(appId, String(manifestIndex), file);
+
+    const oldKey = manifestKeys[manifestIndex];
+    manifestUrls[manifestIndex] = uploaded.url;
+    manifestKeys[manifestIndex] = uploaded.key;
+
+    const updated = await AppModel.updateApp(appId, { manifestUrls, manifestKeys });
+    if (!updated) {
+      throw new ApiError(500, 'Failed to update app after manifest replace');
+    }
+    if (oldKey && oldKey !== uploaded.key) {
+      void deleteFromSpaces(oldKey);
+    }
+    return updated;
+  }
+
+  async deleteManifestFile(appId: string, manifestIndex: number): Promise<App> {
+    if (!appId) {
+      throw new ApiError(400, 'App ID is required');
+    }
+    if (!Number.isInteger(manifestIndex) || manifestIndex < 0) {
+      throw new ApiError(400, 'manifestIndex must be a non-negative integer');
+    }
+
+    const app = await AppModel.getAppById(appId);
+    if (!app) {
+      throw new ApiError(404, 'App not found');
+    }
+    const manifestUrls = Array.isArray(app.manifestUrls) ? [...app.manifestUrls] : [];
+    const manifestKeys = Array.isArray(app.manifestKeys) ? [...app.manifestKeys] : [];
+    if (manifestIndex >= manifestUrls.length || manifestIndex >= manifestKeys.length) {
+      throw new ApiError(404, 'Manifest index not found');
+    }
+
+    const oldKey = manifestKeys[manifestIndex];
+    manifestUrls.splice(manifestIndex, 1);
+    manifestKeys.splice(manifestIndex, 1);
+
+    const updated = await AppModel.updateApp(appId, { manifestUrls, manifestKeys });
+    if (!updated) {
+      throw new ApiError(500, 'Failed to update app after manifest delete');
+    }
+    if (oldKey) {
+      void deleteFromSpaces(oldKey);
+    }
+    return updated;
+  }
+
+  getDefaultAppUrl(app: App): string | undefined {
+    return app.subdomain ? buildDefaultAppUrl(app.subdomain) : undefined;
   }
 }

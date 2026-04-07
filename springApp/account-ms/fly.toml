@@ -4,7 +4,7 @@
 #
 
 app = 'account-ms'
-primary_region = 'lhr'
+primary_region = 'fra'
 
 [env]
   PORT = '4008'

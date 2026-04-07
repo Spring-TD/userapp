@@ -25,7 +25,9 @@ const AppSchema = new Schema<IAppDocument>({
     },
     createdAt: { type: String, default: () => new Date().toISOString() },
     updatedAt: { type: String, default: () => new Date().toISOString() },
-    productKeys: { type: [String], default: [] }
+    productKeys: { type: [String], default: [] },
+    manifestUrls: { type: [String], default: [] },
+    manifestKeys: { type: [String], default: [] }
 }, {
     timestamps: false, // We use custom createdAt/updatedAt strings to match interface
     toJSON: {

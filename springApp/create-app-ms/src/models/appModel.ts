@@ -25,7 +25,9 @@ export class AppModel {
       status: 'active',
       createdAt: now,
       updatedAt: now,
-      productKeys: []
+      productKeys: [],
+      manifestUrls: [],
+      manifestKeys: []
     });
 
     return newApp.toJSON() as unknown as App;

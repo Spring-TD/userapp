@@ -396,6 +396,142 @@ export class AppController {
     }
   };
 
+  getManifestFiles = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      if (!id) {
+        throw new ApiError(400, 'App ID is required');
+      }
+      const app = await this.appService.getAppById(id);
+      if (!app) {
+        throw new ApiError(404, 'App not found');
+      }
+      this.assertMerchantOwnsApp(req, app);
+      res.json({
+        success: true,
+        data: {
+          manifestUrls: app.manifestUrls || [],
+          manifestKeys: app.manifestKeys || []
+        }
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({ success: false, error: error.message });
+        return;
+      }
+      console.error('Error in getManifestFiles controller:', error);
+      res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  };
+
+  uploadManifestFiles = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      if (!id) {
+        throw new ApiError(400, 'App ID is required');
+      }
+      const app = await this.appService.getAppById(id);
+      if (!app) {
+        throw new ApiError(404, 'App not found');
+      }
+      this.assertMerchantOwnsApp(req, app);
+      const files = (req as Request & { files?: Express.Multer.File[] }).files;
+      if (!Array.isArray(files) || files.length === 0) {
+        throw new ApiError(400, 'Manifest file(s) are required (multipart field name: files)');
+      }
+      const updated = await this.appService.uploadManifestFiles(
+        id,
+        files.map((file) => ({
+          buffer: file.buffer,
+          mimetype: file.mimetype,
+          originalname: file.originalname
+        }))
+      );
+      res.json({
+        success: true,
+        message: 'Manifest file(s) uploaded and saved on app',
+        data: updated
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({ success: false, error: error.message });
+        return;
+      }
+      console.error('Error in uploadManifestFiles controller:', error);
+      res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  };
+
+  replaceManifestFile = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id, manifestIndex: manifestIndexParam } = req.params;
+      if (!id || manifestIndexParam === undefined) {
+        throw new ApiError(400, 'App ID and manifest index are required');
+      }
+      const manifestIndex = parseInt(manifestIndexParam, 10);
+      if (Number.isNaN(manifestIndex) || manifestIndex < 0) {
+        throw new ApiError(400, 'manifestIndex must be a non-negative integer');
+      }
+      const app = await this.appService.getAppById(id);
+      if (!app) {
+        throw new ApiError(404, 'App not found');
+      }
+      this.assertMerchantOwnsApp(req, app);
+      const file = (req as Request & { file?: Express.Multer.File }).file;
+      if (!file?.buffer) {
+        throw new ApiError(400, 'Manifest file is required (multipart field name: file)');
+      }
+      const updated = await this.appService.replaceManifestFile(id, manifestIndex, {
+        buffer: file.buffer,
+        mimetype: file.mimetype,
+        originalname: file.originalname
+      });
+      res.json({
+        success: true,
+        message: 'Manifest file replaced',
+        data: updated
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({ success: false, error: error.message });
+        return;
+      }
+      console.error('Error in replaceManifestFile controller:', error);
+      res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  };
+
+  deleteManifestFile = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id, manifestIndex: manifestIndexParam } = req.params;
+      if (!id || manifestIndexParam === undefined) {
+        throw new ApiError(400, 'App ID and manifest index are required');
+      }
+      const manifestIndex = parseInt(manifestIndexParam, 10);
+      if (Number.isNaN(manifestIndex) || manifestIndex < 0) {
+        throw new ApiError(400, 'manifestIndex must be a non-negative integer');
+      }
+      const app = await this.appService.getAppById(id);
+      if (!app) {
+        throw new ApiError(404, 'App not found');
+      }
+      this.assertMerchantOwnsApp(req, app);
+      const updated = await this.appService.deleteManifestFile(id, manifestIndex);
+      res.json({
+        success: true,
+        message: 'Manifest file deleted',
+        data: updated
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({ success: false, error: error.message });
+        return;
+      }
+      console.error('Error in deleteManifestFile controller:', error);
+      res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  };
+
   getAppWallets = async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;

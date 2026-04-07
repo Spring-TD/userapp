@@ -1,7 +1,7 @@
 # fly.toml app configuration file for payment-ms
 
 app = 'payment-ms'
-primary_region = 'lhr'
+primary_region = 'fra'
 
 [env]
   PORT = '4007'

@@ -463,7 +463,6 @@ router.post(
   pwaAssetUpload.single('file'),
   appPwaTemplateController.uploadOnboardingScreenImage
 );
-
 // Update app
 router.put('/:id', appController.updateApp);
 
@@ -481,6 +480,29 @@ router.get('/:id/product-keys', appController.getProductKeys);
 
 // Get merchant wallets for app (TREASURY, OPERATION, KYC)
 router.get('/:id/wallets', authenticate, merchantOnly, appController.getAppWallets);
+
+// App-level manifest files (independent from PWA templates)
+router.get('/:id/manifests', authenticate, merchantOnly, appController.getManifestFiles);
+router.post(
+  '/:id/manifests',
+  authenticate,
+  merchantOnly,
+  pwaAssetUpload.array('files'),
+  appController.uploadManifestFiles
+);
+router.put(
+  '/:id/manifests/:manifestIndex',
+  authenticate,
+  merchantOnly,
+  pwaAssetUpload.single('file'),
+  appController.replaceManifestFile
+);
+router.delete(
+  '/:id/manifests/:manifestIndex',
+  authenticate,
+  merchantOnly,
+  appController.deleteManifestFile
+);
 
 // Transaction endpoints
 router.get('/:id/transactions', authenticate, merchantOnly, appController.getTransactions);

@@ -4,7 +4,7 @@
 #
 
 app = 'compliance-ms'
-primary_region = 'cdg'
+primary_region = 'fra'
 
 [build]
 

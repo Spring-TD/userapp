@@ -16,6 +16,10 @@ export interface App {
   createdAt: string;
   updatedAt: string;
   productKeys?: string[]; // Array of product keys associated with this app
+  /** App-level manifest file public URLs (independent from PWA templates). */
+  manifestUrls?: string[];
+  /** App-level manifest file object keys in DigitalOcean Spaces. */
+  manifestKeys?: string[];
 }
 
 export interface CreateAppRequest {

@@ -23,6 +23,7 @@ Deployment URL: https://create-app-ms.fly.dev/
 - **Merchant app visibility fully enforced** - merchants can only view apps they own
 - **PWA templates** — Many templates per app, stored in MongoDB (`AppPwaTemplate`). Each has a JSON `config` with nested sections aligned to the App Creator wizard: `asset`, `splash`, `onboarding`, `appProfile` (global font + theme: text / element / background / menu colors), `policyTerms`, `support`, `dns`. Used later by the Progressive Web App (PWA); this is separate from core app fields and from the **`create-default-merchant-apps.js`** mock seed script (that script is unchanged).
 - **Template asset uploads** — Logo and splash images can be uploaded to **DigitalOcean Spaces** (S3-compatible); public URLs and object keys are stored under `config.asset`.
+- **App-level manifest uploads** — Manifest JSON files are stored independently on the app (not tied to a template). Files are uploaded to Spaces under an app-scoped `/manifests/` path; URLs and keys are saved on the app document.
 
 ## API Endpoints
 
@@ -170,6 +171,19 @@ Each **template** document includes: `name`, optional `category`, `description`,
 Uploads require Spaces to be configured (see **Environment variables**). If Spaces is not configured, uploads return **503**. Maximum size defaults to **2 MB** (`PWA_ASSET_MAX_UPLOAD_MB`).
 
 Deleting an app removes its PWA template documents as well.
+
+### App-level manifest endpoints
+
+Manifest files are app-scoped and independent from PWA templates.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/apps/:id/manifests` | List app manifest references (`manifestUrls[]`, `manifestKeys[]`). |
+| `POST` | `/api/v1/apps/:id/manifests` | Upload one or many manifest JSON files; field name **`files`**. Replaces existing app manifest list. |
+| `PUT` | `/api/v1/apps/:id/manifests/:manifestIndex` | Replace one manifest at index (**0-based**); field name **`file`**. |
+| `DELETE` | `/api/v1/apps/:id/manifests/:manifestIndex` | Delete one manifest at index (**0-based**). |
+
+Manifest uploads accept `application/json`, `application/manifest+json`, `text/json`, or `.json` extension. Files are stored in Spaces under `/{appId}/manifests/`.
 
 ### Transaction Endpoints
 
@@ -751,6 +765,8 @@ Registers a callback for user application status or wallet events.
 - `createdAt`: Creation timestamp (auto-generated)
 - `updatedAt`: Last update timestamp (auto-generated)
 - `productKeys`: Array of product keys associated with this application (optional)
+- `manifestUrls`: App-level manifest public URLs (optional string array)
+- `manifestKeys`: App-level Spaces object keys for manifests (optional string array)
 
 ### Transaction
 - `id`: Unique identifier for the transaction (auto-generated)
