@@ -72,6 +72,25 @@ The local document shape follows the Plata product model, including fields such 
 
 This means each app’s products are stored as full product documents (with `isActive`), not as lightweight activation-only records.
 
+### Fees and Charges Model (Additive)
+
+For app-scoped products, fees now follow an additive model:
+
+- `baseFeesAndCharges`: the immutable fee values copied from upstream when the product is first turned on.
+- `merchantFeeAdditions`: merchant-provided extra values (non-negative only).
+- `feesAndCharges`: computed totals saved by the service and shown to customers.
+
+Computation rule per matching fee/penalty item:
+
+- **Total value = base value + merchant addition**
+- If the base value is a percentage, the merchant addition is also treated as additive percentage.
+- Negative merchant additions are rejected.
+
+Visibility rules:
+
+- Merchant/Admin views (`GET /api/v1/products/app/:appId`, `GET /api/v1/products/merchant/:appId`, `GET /api/v1/products/config/:appId/:productId`) include all three layers.
+- Customer-facing product reads (`GET /api/v1/products`, `GET /api/v1/products/:id`) expose only total `feesAndCharges` (base/addition layers are hidden).
+
 ## API Endpoints
 
 ### Get All Products
@@ -147,6 +166,8 @@ Update the locally stored app product document.
 
 This endpoint now updates the Plata-shaped local product document for that app.
 
+For fees, merchants should send additions under `merchantFeeAdditions` only. The service recalculates and persists total `feesAndCharges` using base + additions.
+
 ### Get App Product
 
 Get the locally stored app product document.
@@ -211,12 +232,32 @@ Update an app-specific product:
 curl -X PUT http://localhost:4005/api/v1/products/config/{appId}/{productId} \
   -H "Content-Type: application/json" \
   -d '{
-    "isActive": true,
+    "merchantFeeAdditions": {
+      "fees": [
+        {
+          "name": "Processing Fee",
+          "feeType": "Flat",
+          "value": "10000"
+        }
+      ],
+      "lateRepayment": {
+        "penalties": [
+          {
+            "name": "Late Repayment Penalty",
+            "penaltyType": "Percentage",
+            "value": "2",
+            "triggerDurationDays": 30
+          }
+        ]
+      }
+    },
     "metadata": {
-      "source": "frontend"
+      "source": "merchant-config-ui"
     }
   }'
 ```
+
+If the base `Processing Fee (Flat)` is `20000` and merchant addition is `10000`, the saved total in `feesAndCharges` becomes `30000`.
 
 Check allowed action for a product:
 

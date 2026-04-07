@@ -130,6 +130,8 @@ export interface Product {
   about?: LoanAbout;
   requirements?: LoanRequirements;
   feesAndCharges?: LoanFeesAndCharges;
+  baseFeesAndCharges?: LoanFeesAndCharges;
+  merchantFeeAdditions?: LoanFeesAndCharges;
   properties?: MortgageProperty[];
   config?: ProductTypeConfig;
   equityContribution?: number;
@@ -152,6 +154,8 @@ export interface CreateProductRequest {
   about?: LoanAbout;
   requirements?: LoanRequirements;
   feesAndCharges?: LoanFeesAndCharges;
+  baseFeesAndCharges?: LoanFeesAndCharges;
+  merchantFeeAdditions?: LoanFeesAndCharges;
   properties?: MortgageProperty[];
   config?: ProductTypeConfig;
   commodityPrices?: CommodityPriceEntry[];
@@ -169,6 +173,8 @@ export interface UpdateProductRequest {
   about?: LoanAbout;
   requirements?: LoanRequirements;
   feesAndCharges?: LoanFeesAndCharges;
+  baseFeesAndCharges?: LoanFeesAndCharges;
+  merchantFeeAdditions?: LoanFeesAndCharges;
   properties?: MortgageProperty[];
   config?: ProductTypeConfig;
   equityContribution?: number;

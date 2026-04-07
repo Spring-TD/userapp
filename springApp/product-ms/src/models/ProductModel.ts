@@ -282,7 +282,9 @@ const baseProductSchema = new Schema<IProductDocument>(
     },
     createdAt: { type: String, required: true },
     updatedAt: { type: String, required: true },
-    metadata: { type: Schema.Types.Mixed }
+    metadata: { type: Schema.Types.Mixed },
+    baseFeesAndCharges: { type: loanFeesAndChargesSchema },
+    merchantFeeAdditions: { type: loanFeesAndChargesSchema }
   },
   { discriminatorKey: 'type', collection: 'products', timestamps: false }
 );
@@ -338,6 +340,14 @@ export function toProduct(doc: IProductDocument | Record<string, unknown>): Prod
     feesAndCharges:
       raw.feesAndCharges !== undefined && raw.feesAndCharges !== null && typeof raw.feesAndCharges === 'object'
         ? (raw.feesAndCharges as Product['feesAndCharges'])
+        : undefined,
+    baseFeesAndCharges:
+      raw.baseFeesAndCharges !== undefined && raw.baseFeesAndCharges !== null && typeof raw.baseFeesAndCharges === 'object'
+        ? (raw.baseFeesAndCharges as Product['baseFeesAndCharges'])
+        : undefined,
+    merchantFeeAdditions:
+      raw.merchantFeeAdditions !== undefined && raw.merchantFeeAdditions !== null && typeof raw.merchantFeeAdditions === 'object'
+        ? (raw.merchantFeeAdditions as Product['merchantFeeAdditions'])
         : undefined,
     properties:
       raw.properties !== undefined && Array.isArray(raw.properties)

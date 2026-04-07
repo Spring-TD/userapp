@@ -11,6 +11,148 @@ import { ProductModel, toProduct } from '../models/ProductModel';
 import { normalizeProductType } from '../utils/productType';
 
 export class ProductService {
+  private toNumeric(value: unknown): number {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const cleaned = value.replace(/,/g, '').trim();
+      const parsed = Number(cleaned);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+    return 0;
+  }
+
+  private mergeFeeItems(
+    baseItems: Array<{ name: string; feeType?: string; value?: string }> = [],
+    merchantItems: Array<{ name: string; feeType?: string; value?: string }> = []
+  ): Array<{ name: string; feeType?: string; value?: string }> {
+    const additionsByKey = new Map<string, number>();
+    for (const item of merchantItems) {
+      const name = item.name.trim();
+      const feeType = (item.feeType ?? '').trim();
+      if (!name) continue;
+      const delta = this.toNumeric(item.value);
+      if (delta < 0) {
+        throw new Error(`Merchant addition cannot be negative for fee "${name}"`);
+      }
+      additionsByKey.set(`${name.toLowerCase()}|${feeType.toLowerCase()}`, delta);
+    }
+
+    return baseItems.map((baseItem) => {
+      const name = baseItem.name.trim();
+      const feeType = (baseItem.feeType ?? '').trim();
+      const key = `${name.toLowerCase()}|${feeType.toLowerCase()}`;
+      const baseValue = this.toNumeric(baseItem.value);
+      const merchantDelta = additionsByKey.get(key) ?? 0;
+      return {
+        ...baseItem,
+        value: String(baseValue + merchantDelta)
+      };
+    });
+  }
+
+  private mergePenaltyItems(
+    baseItems: Array<{ name?: string; penaltyType?: string; value?: string; triggerDurationDays?: number }> = [],
+    merchantItems: Array<{ name?: string; penaltyType?: string; value?: string; triggerDurationDays?: number }> = []
+  ): Array<{ name?: string; penaltyType?: string; value?: string; triggerDurationDays?: number }> {
+    const additionsByKey = new Map<string, number>();
+    for (const item of merchantItems) {
+      const name = (item.name ?? '').trim();
+      const penaltyType = (item.penaltyType ?? '').trim();
+      const trigger = item.triggerDurationDays ?? 0;
+      if (!name) continue;
+      const delta = this.toNumeric(item.value);
+      if (delta < 0) {
+        throw new Error(`Merchant addition cannot be negative for penalty "${name}"`);
+      }
+      additionsByKey.set(`${name.toLowerCase()}|${penaltyType.toLowerCase()}|${trigger}`, delta);
+    }
+
+    return baseItems.map((baseItem) => {
+      const name = (baseItem.name ?? '').trim();
+      const penaltyType = (baseItem.penaltyType ?? '').trim();
+      const trigger = baseItem.triggerDurationDays ?? 0;
+      const key = `${name.toLowerCase()}|${penaltyType.toLowerCase()}|${trigger}`;
+      const baseValue = this.toNumeric(baseItem.value);
+      const merchantDelta = additionsByKey.get(key) ?? 0;
+      return {
+        ...baseItem,
+        value: String(baseValue + merchantDelta)
+      };
+    });
+  }
+
+  private computeTotalFeesAndCharges(
+    baseFees?: Product['feesAndCharges'],
+    merchantAdditions?: Product['merchantFeeAdditions']
+  ): Product['feesAndCharges'] | undefined {
+    if (!baseFees) {
+      return undefined;
+    }
+
+    return {
+      ...baseFees,
+      fees: this.mergeFeeItems(baseFees.fees, merchantAdditions?.fees),
+      lateRepayment: baseFees.lateRepayment
+        ? {
+            ...baseFees.lateRepayment,
+            penalties: this.mergePenaltyItems(
+              baseFees.lateRepayment.penalties,
+              merchantAdditions?.lateRepayment?.penalties
+            )
+          }
+        : undefined,
+      forcefulWithdrawalPenalties: this.mergePenaltyItems(
+        baseFees.forcefulWithdrawalPenalties,
+        merchantAdditions?.forcefulWithdrawalPenalties
+      )
+    };
+  }
+
+  private sanitizeMerchantFeeAdditions(additions?: Product['merchantFeeAdditions']): Product['merchantFeeAdditions'] | undefined {
+    if (!additions) {
+      return undefined;
+    }
+
+    const enforceNonNegative = (value: unknown, label: string): string => {
+      const numeric = this.toNumeric(value);
+      if (numeric < 0) {
+        throw new Error(`${label} cannot be negative`);
+      }
+      return String(numeric);
+    };
+
+    return {
+      ...additions,
+      fees: additions.fees?.map((item) => ({
+        ...item,
+        value: enforceNonNegative(item.value, `Merchant fee addition for "${item.name ?? 'Unnamed fee'}"`)
+      })),
+      lateRepayment: additions.lateRepayment
+        ? {
+            ...additions.lateRepayment,
+            penalties: additions.lateRepayment.penalties?.map((item) => ({
+              ...item,
+              value: enforceNonNegative(item.value, `Merchant penalty addition for "${item.name ?? 'Unnamed penalty'}"`)
+            }))
+          }
+        : undefined,
+      forcefulWithdrawalPenalties: additions.forcefulWithdrawalPenalties?.map((item) => ({
+        ...item,
+        value: enforceNonNegative(item.value, `Merchant forceful withdrawal addition for "${item.name ?? 'Unnamed penalty'}"`)
+      }))
+    };
+  }
+
+  private toCustomerProduct(product: Product): Product {
+    const next = { ...product };
+    delete next.baseFeesAndCharges;
+    delete next.merchantFeeAdditions;
+    return next;
+  }
   /**
    * Plata gateway reads these headers only (no Authorization / Bearer).
    * Values come from PLATA_PUBLIC_KEY / PLATA_SECRET_KEY in env → forwarded to service-auth as public_key / secret_key.
@@ -69,6 +211,8 @@ export class ProductService {
       about: product.about,
       requirements: product.requirements,
       feesAndCharges: product.feesAndCharges,
+      baseFeesAndCharges: product.feesAndCharges,
+      merchantFeeAdditions: undefined,
       properties: product.properties,
       config: product.config,
       equityContribution: product.equityContribution,
@@ -94,6 +238,8 @@ export class ProductService {
       'about',
       'requirements',
       'feesAndCharges',
+      'baseFeesAndCharges',
+      'merchantFeeAdditions',
       'properties',
       'config',
       'equityContribution',
@@ -134,7 +280,7 @@ export class ProductService {
       const response = await axios.get(`${config.plataAccountServiceUrl}/api/v1/products`, {
         headers: this.getUpstreamAuthHeaders()
       });
-      return response.data.data || [];
+      return (response.data.data || []).map((product: Product) => this.toCustomerProduct(product));
     } catch (error) {
       this.logUpstreamError('Error fetching products from server:', error);
       return [];
@@ -145,9 +291,10 @@ export class ProductService {
   async getProductById(id: string): Promise<Product | null> {
     const localProduct = await this.getLocalProductById(id);
     if (localProduct) {
-      return localProduct;
+      return this.toCustomerProduct(localProduct);
     }
-    return this.fetchUpstreamProductById(id);
+    const upstreamProduct = await this.fetchUpstreamProductById(id);
+    return upstreamProduct ? this.toCustomerProduct(upstreamProduct) : null;
   }
 
   // Fetch products that have been persisted for a specific app in the local products collection.
@@ -267,9 +414,24 @@ export class ProductService {
       return null;
     }
 
+    const baseFeesAndCharges = localProduct.baseFeesAndCharges ?? localProduct.feesAndCharges;
+    const merchantFeeAdditions = this.sanitizeMerchantFeeAdditions(
+      updateData.merchantFeeAdditions ?? localProduct.merchantFeeAdditions
+    );
+    const totalFeesAndCharges = this.computeTotalFeesAndCharges(baseFeesAndCharges, merchantFeeAdditions);
+
+    const sanitizedUpdate = this.sanitizeProductUpdate(updateData);
+    delete sanitizedUpdate.feesAndCharges;
+    delete sanitizedUpdate.baseFeesAndCharges;
+
     const updated = await ProductModel.findByIdAndUpdate(
       localProduct.id,
-      this.sanitizeProductUpdate(updateData),
+      {
+        ...sanitizedUpdate,
+        baseFeesAndCharges,
+        merchantFeeAdditions,
+        feesAndCharges: totalFeesAndCharges
+      },
       { new: true }
     );
     return updated ? toProduct(updated) : null;
