@@ -13,12 +13,12 @@ const API_UPSTREAM_BASE = getApiUpstreamBase();
  */
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const appId = params.id;
+        const { id: appId } = await params;
 
-        // Fetch active configuration from create-app-ms
+        // Fetch active configuration from upstream app API (see getApiUpstreamBase)
         const response = await fetch(
             `${API_UPSTREAM_BASE}/api/v1/apps/${appId}/configuration`,
             {

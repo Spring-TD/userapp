@@ -8,10 +8,10 @@ const API_UPSTREAM_BASE = getApiUpstreamBase();
 // POST - Apply a template to the app's configuration
 export async function POST(
     request: NextRequest,
-    { params }: { params: { id: string; templateId: string } }
+    { params }: { params: Promise<{ id: string; templateId: string }> }
 ) {
     try {
-        const { id: appId, templateId } = params;
+        const { id: appId, templateId } = await params;
         const authHeader = request.headers.get('Authorization');
 
         const response = await fetch(

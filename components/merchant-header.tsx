@@ -1,8 +1,9 @@
 "use client"
 
 import { useEffect } from "react"
-import { Bell, User, ChevronLeft, Loader2 } from "lucide-react"
+import { Bell, User, ChevronLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { usePathname, useRouter } from "next/navigation"
 import { useAppDispatch, useAppSelector } from "@/store/hooks"
@@ -55,10 +56,7 @@ export default function MerchantHeader({ breadcrumb }: MerchantHeaderProps) {
                 type="button"
               >
                 {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Loading apps…
-                  </>
+                  <Skeleton className="h-9 min-w-[140px] rounded-md bg-white/25" aria-hidden />
                 ) : (
                   <>
                     {displayName}

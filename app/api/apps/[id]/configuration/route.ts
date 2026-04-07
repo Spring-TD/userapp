@@ -7,10 +7,10 @@ const API_UPSTREAM_BASE = getApiUpstreamBase();
 
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const appId = params.id;
+        const { id: appId } = await params;
         const authHeader = request.headers.get('Authorization');
 
         const response = await fetch(
@@ -45,10 +45,10 @@ export async function GET(
 
 export async function PUT(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const appId = params.id;
+        const { id: appId } = await params;
         const authHeader = request.headers.get('Authorization');
         const body = await request.json();
 

@@ -8,10 +8,10 @@ const API_UPSTREAM_BASE = getApiUpstreamBase();
 // PUT - Activate a specific configuration
 export async function PUT(
     request: NextRequest,
-    { params }: { params: { id: string; configurationId: string } }
+    { params }: { params: Promise<{ id: string; configurationId: string }> }
 ) {
     try {
-        const { id: appId, configurationId } = params;
+        const { id: appId, configurationId } = await params;
         const authHeader = request.headers.get('Authorization');
 
         const response = await fetch(

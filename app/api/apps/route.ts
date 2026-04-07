@@ -14,8 +14,8 @@ const CREATE_APP_URL = getApiUpstreamBase();
 const CREATE_APP_USE_ORIGINAL_TOKEN = process.env.CREATE_APP_USE_ORIGINAL_TOKEN !== 'false';
 const JWT_SECRET = process.env.JWT_SECRET || 'Jb@1zP!k9#tW$xL&5aVn*QyR7gE^cF#Qb23'; // Fallback to service-auth-ms secret
 
-// The create-app-ms backend may use a different JWT_SECRET.
-// Priority: CREATE_APP_JWT_SECRET env > JWT_SECRET env > create-app-ms's fallback ('fallback_secret_key')
+// The upstream app API may use a different JWT_SECRET.
+// Priority: CREATE_APP_JWT_SECRET env > JWT_SECRET env > upstream fallback ('fallback_secret_key')
 const CREATE_APP_JWT_SECRET = process.env.CREATE_APP_JWT_SECRET || process.env.JWT_SECRET || 'fallback_secret_key';
 
 if (!process.env.JWT_SECRET) {
@@ -129,7 +129,7 @@ function transformJwtForBackend(authHeader: string): string {
 
         const signOptions: jwt.SignOptions = {
             expiresIn: `${secondsLeft}s`,
-            // create-app-ms verifies these exact claims:
+            // Upstream app API verifies these exact claims:
             issuer: 'service-auth-ms',
             audience: 'client-app',
         };

@@ -8,10 +8,10 @@ const API_UPSTREAM_BASE = getApiUpstreamBase();
 // GET - Get all templates for an app
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const appId = params.id;
+        const { id: appId } = await params;
         const authHeader = request.headers.get('Authorization');
 
         const response = await fetch(
@@ -47,10 +47,10 @@ export async function GET(
 // POST - Create a new template
 export async function POST(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const appId = params.id;
+        const { id: appId } = await params;
         const authHeader = request.headers.get('Authorization');
         const body = await request.json();
 

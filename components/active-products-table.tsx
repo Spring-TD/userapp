@@ -120,6 +120,7 @@ export function ActiveProductsTable() {
   const effectiveAppId = urlAppId || selectedAppId || null
 
   const [isConfigureOpen, setIsConfigureOpen] = useState(false)
+  const [configureProduct, setConfigureProduct] = useState<ActiveProductRow | null>(null)
   const [activeTab, setActiveTab] = useState("mortgage")
   const [searchQuery, setSearchQuery] = useState("")
   const [products, setProducts] = useState<ActiveProductRow[]>([])
@@ -297,6 +298,7 @@ export function ActiveProductsTable() {
                       <Button
                         onClick={(e) => {
                           e.stopPropagation()
+                          setConfigureProduct(product)
                           setIsConfigureOpen(true)
                         }}
                         className="bg-[#dcdcdc] hover:bg-[#d1d1d1] text-gray-700 rounded-full h-8 px-6 text-xs font-semibold shadow-none w-[100px]"
@@ -312,7 +314,14 @@ export function ActiveProductsTable() {
         )}
       </div>
 
-      <ConfigurePricingSheet open={isConfigureOpen} onOpenChange={setIsConfigureOpen} />
+      <ConfigurePricingSheet
+        open={isConfigureOpen}
+        onOpenChange={(open) => {
+          setIsConfigureOpen(open)
+          if (!open) setConfigureProduct(null)
+        }}
+        product={configureProduct}
+      />
     </div>
   )
 }

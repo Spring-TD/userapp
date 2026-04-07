@@ -1211,6 +1211,72 @@ export const appTemplateApi = {
   },
 };
 
+/** Runtime PWA publish — proxied to Create App MS `/api/v1/apps/:appId/pwa/*`. */
+export interface PwaPublishPayload {
+  publishId: string;
+  appId: string;
+  templateId: string;
+  version: string;
+  manifestUrl: string;
+  serviceWorkerUrl: string;
+  pwaEntryUrl: string;
+  publishedAt: string;
+}
+
+export interface PwaPublishStatusData {
+  isPublished: boolean;
+  appId: string;
+  templateId?: string;
+  version?: string;
+  manifestReady?: boolean;
+  serviceWorkerReady?: boolean;
+  iconsReady?: boolean;
+  httpsReady?: boolean;
+  customDomainReady?: boolean;
+  warnings?: string[];
+  errors?: string[];
+}
+
+export const pwaPublishApi = {
+  async publish(
+    appId: string,
+    body?: { templateId?: string; publishMode?: string }
+  ): Promise<ApiResponse<PwaPublishPayload>> {
+    const response = await fetch(`/api/apps/${appId}/pwa/publish`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(body ?? { publishMode: 'apply-and-publish' }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      const err = data as { error?: string; details?: string[] };
+      const msg =
+        err.details?.length
+          ? `${err.error || 'PWA publish validation failed'}: ${err.details.join('; ')}`
+          : err.error || 'Failed to publish PWA';
+      throw new Error(msg);
+    }
+
+    return data as ApiResponse<PwaPublishPayload>;
+  },
+
+  async getStatus(appId: string): Promise<ApiResponse<PwaPublishStatusData>> {
+    const response = await fetch(`/api/apps/${appId}/pwa/status`, {
+      headers: getAuthHeaders(),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error((data as { error?: string }).error || 'Failed to load PWA status');
+    }
+
+    return data as ApiResponse<PwaPublishStatusData>;
+  },
+};
+
 /** Public PWA palette / fonts — GET /api/v1/pwa/* (proxied to Create App MS). */
 export const pwaPublicOptionsApi = {
   async getColorOptions(): Promise<

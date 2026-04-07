@@ -5,6 +5,8 @@ import {
     AppConfiguration,
     appConfigurationApi,
     appTemplateApi,
+    pwaPublishApi,
+    type PwaPublishPayload,
     PredefinedTemplate,
     AppElementsConfig,
     OnboardingConfig,
@@ -68,7 +70,12 @@ interface AppBuilderContextValue extends AppBuilderState {
     saveSection: (section: 'appElements' | 'onboarding' | 'appProfile' | 'policy' | 'support' | 'dns') => Promise<void>
     
     // Publish actions
-    publishConfiguration: () => Promise<{ success: boolean; versionId?: string }>
+    publishConfiguration: () => Promise<{
+        success: boolean
+        versionId?: string
+        publish?: PwaPublishPayload
+        error?: string
+    }>
     restoreConfiguration: (configurationId: string) => Promise<{ success: boolean }>
     
     // Utility
@@ -156,13 +163,6 @@ export function AppBuilderProvider({ children, initialAppId }: AppBuilderProvide
         ...initialState,
         appId: initialAppId || null,
     })
-
-    // Load configuration when appId changes
-    useEffect(() => {
-        if (initialAppId) {
-            loadConfiguration(initialAppId)
-        }
-    }, [initialAppId])
 
     // ==================
     // Core Actions
@@ -335,6 +335,13 @@ export function AppBuilderProvider({ children, initialAppId }: AppBuilderProvide
             }))
         }
     }, [])
+
+    // When the resolved app id appears (URL or Redux), set it immediately so publish/save work; then load config.
+    useEffect(() => {
+        if (!initialAppId) return
+        setState((prev) => (prev.appId === initialAppId ? prev : { ...prev, appId: initialAppId }))
+        void loadConfiguration(initialAppId)
+    }, [initialAppId, loadConfiguration])
 
     const applyTemplate = useCallback((template: PredefinedTemplate) => {
         const config = template.configuration
@@ -517,10 +524,19 @@ export function AppBuilderProvider({ children, initialAppId }: AppBuilderProvide
     // Publish Actions
     // ==================
 
-    const publishConfiguration = useCallback(async (): Promise<{ success: boolean; versionId?: string }> => {
+    const publishConfiguration = useCallback(async (): Promise<{
+        success: boolean
+        versionId?: string
+        publish?: PwaPublishPayload
+        error?: string
+    }> => {
         if (!state.appId) {
-            console.error('Cannot publish: No appId set')
-            return { success: false }
+            console.error("Cannot publish: No appId set. Open App Builder with a selected merchant app (sidebar) or ?appId= in the URL.")
+            return {
+                success: false,
+                error:
+                    "No app selected. Choose an app from the merchant app dropdown, or open App Builder with ?appId=your-app-id.",
+            }
         }
 
         setState(prev => ({ ...prev, isSaving: true, error: null }))
@@ -540,14 +556,17 @@ export function AppBuilderProvider({ children, initialAppId }: AppBuilderProvide
                 await appTemplateApi.updateTemplate(state.appId, state.pwaTemplateId, {
                     config: fullPwaConfig,
                 })
-                await appTemplateApi.applyTemplate(state.appId, state.pwaTemplateId)
+                const publishRes = await pwaPublishApi.publish(state.appId, {
+                    templateId: state.pwaTemplateId,
+                    publishMode: 'apply-and-publish',
+                })
                 setState(prev => ({
                     ...prev,
                     isSaving: false,
                     hasUnsavedChanges: false,
                     lastSavedAt: new Date(),
                 }))
-                return { success: true, versionId: state.pwaTemplateId }
+                return { success: true, versionId: state.pwaTemplateId, publish: publishRes.data }
             }
 
             const configUpdate: Partial<AppConfiguration> = {
@@ -582,12 +601,13 @@ export function AppBuilderProvider({ children, initialAppId }: AppBuilderProvide
             throw new Error('Failed to create configuration version')
         } catch (error) {
             console.error('Failed to publish configuration:', error)
+            const message = error instanceof Error ? error.message : 'Failed to publish configuration'
             setState(prev => ({
                 ...prev,
                 isSaving: false,
-                error: error instanceof Error ? error.message : 'Failed to publish configuration',
+                error: message,
             }))
-            return { success: false }
+            return { success: false, error: message }
         }
     }, [
         state.appId,

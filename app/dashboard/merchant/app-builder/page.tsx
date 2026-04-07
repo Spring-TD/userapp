@@ -12,11 +12,13 @@ import { SupportTab } from "@/components/app-builder/support-tab"
 import { DNSTab } from "@/components/app-builder/dns-tab"
 import { PublishTab } from "@/components/app-builder/publish-tab"
 import { TemplateTab } from "@/components/app-builder/template-tab"
-import { TabNavigation, KeyboardHints } from "@/components/app-builder/ui"
+import { TabNavigation } from "@/components/app-builder/ui"
 
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { RotateCw, Check, Loader2, AlertCircle } from "lucide-react"
 import { AppBuilderProvider, useAppBuilder } from "@/contexts/AppBuilderContext"
+import { useAppSelector } from "@/store/hooks"
 import {
    Tooltip,
    TooltipContent,
@@ -36,6 +38,40 @@ const tabs = [
     { value: "dns", label: "DNS", description: "Custom domain setup" },
     { value: "publish", label: "Publish", description: "Deploy your app" },
 ]
+
+function AppBuilderLoadingSkeleton() {
+    return (
+        <div
+            className="h-full flex flex-col pt-6 px-8"
+            role="status"
+            aria-label="Loading app configuration"
+        >
+            <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <Skeleton className="h-7 w-40" />
+                    <Skeleton className="h-5 w-28 rounded" />
+                </div>
+                <Skeleton className="h-4 w-36" />
+            </div>
+            <div className="flex flex-wrap items-end justify-between gap-4 border-b border-gray-200">
+                <div className="flex gap-2 overflow-x-auto pb-3 scrollbar-hide">
+                    {tabs.map((tab) => (
+                        <Skeleton key={tab.value} className="h-8 w-[72px] shrink-0 rounded-md" />
+                    ))}
+                </div>
+                <Skeleton className="h-9 w-[120px] rounded-lg mb-3 shrink-0" />
+            </div>
+            <div className="flex-1 pt-6 space-y-4">
+                <Skeleton className="h-6 w-2/3 max-w-lg" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Skeleton className="h-44 rounded-xl" />
+                    <Skeleton className="h-44 rounded-xl" />
+                </div>
+                <Skeleton className="h-24 rounded-xl max-w-2xl" />
+            </div>
+        </div>
+    )
+}
 
 // Helper to determine tab completion status
 function useTabCompletion() {
@@ -103,16 +139,9 @@ function AppBuilderContent() {
     const completedTabs = Object.values(completionStatus).filter(Boolean).length
     const totalTabs = tabs.length - 1 // Exclude publish from count
 
-    // Loading state
+    // Loading state — skeleton layout mirrors header + tabs + content
     if (isLoading) {
-        return (
-            <div className="h-full flex items-center justify-center">
-                <div className="flex flex-col items-center gap-4">
-                    <Loader2 className="w-8 h-8 text-[#7C3AED] animate-spin" />
-                    <p className="text-gray-500">Loading configuration...</p>
-                </div>
-            </div>
-        )
+        return <AppBuilderLoadingSkeleton />
     }
 
     return (
@@ -257,9 +286,6 @@ function AppBuilderContent() {
                         </TabsContent>
                     </div>
                 </Tabs>
-
-                {/* Keyboard hints */}
-                <KeyboardHints />
             </div>
         </TooltipProvider>
     )
@@ -267,10 +293,13 @@ function AppBuilderContent() {
 
 function AppBuilderPageInner() {
     const searchParams = useSearchParams()
-    const appId = searchParams.get('appId') || undefined
+    const urlAppId = searchParams.get("appId") || undefined
+    const selectedAppId = useAppSelector((s) => s.merchantApps.selectedAppId)
+    /** URL wins; otherwise use the app selected in the merchant header/sidebar (same as Products). */
+    const effectiveAppId = urlAppId || selectedAppId || undefined
 
     return (
-        <AppBuilderProvider initialAppId={appId}>
+        <AppBuilderProvider initialAppId={effectiveAppId}>
             <AppBuilderContent />
         </AppBuilderProvider>
     )

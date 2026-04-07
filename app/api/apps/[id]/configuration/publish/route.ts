@@ -8,10 +8,10 @@ const API_UPSTREAM_BASE = getApiUpstreamBase();
 // GET - Get configurations for publish UI
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const appId = params.id;
+        const { id: appId } = await params;
         const authHeader = request.headers.get('Authorization');
 
         const response = await fetch(

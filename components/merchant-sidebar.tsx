@@ -17,8 +17,8 @@ import { useAuth } from "@/hooks/useAuth"
 import { useAppDispatch, useAppSelector } from "@/store/hooks"
 import { setSelectedMerchantApp } from "@/store/merchantAppsSlice"
 import { buildMerchantProductsUrl } from "@/lib/merchantAppNavigation"
-import { Loader2 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Skeleton } from "@/components/ui/skeleton"
 import { getUserFromToken } from "@/lib/tokenManager"
 
 interface NavItem {
@@ -147,7 +147,7 @@ const MerchantSidebar: React.FC<MerchantSidebarProps> = ({ className = "" }) => 
     {
       icon: <FaCubes size={20} />,
       label: "App Builder",
-      href: `/dashboard/merchant/app-builder`,
+      href: `/dashboard/merchant/app-builder${appQuery}`,
     },
     {
       icon: <TbCodeCircle2Filled size={20} />,
@@ -181,10 +181,7 @@ const MerchantSidebar: React.FC<MerchantSidebarProps> = ({ className = "" }) => 
               type="button"
             >
               {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-                  <span className="truncate">Loading…</span>
-                </>
+                <Skeleton className="h-9 w-full rounded-md bg-white/25" aria-hidden />
               ) : (
                 <>
                   <span className="truncate">{sidebarAppLabel}</span>

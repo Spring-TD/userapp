@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
  */
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const authHeader = request.headers.get('authorization');
@@ -18,7 +18,7 @@ export async function GET(
             );
         }
 
-        const appId = params.id;
+        const { id: appId } = await params;
 
         // TODO: Replace with actual database query
         // For now, return mock data or implement with your database

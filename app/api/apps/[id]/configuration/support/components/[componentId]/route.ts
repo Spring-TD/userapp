@@ -8,10 +8,10 @@ const API_UPSTREAM_BASE = getApiUpstreamBase();
 // PUT - Update a support component
 export async function PUT(
     request: NextRequest,
-    { params }: { params: { id: string; componentId: string } }
+    { params }: { params: Promise<{ id: string; componentId: string }> }
 ) {
     try {
-        const { id: appId, componentId } = params;
+        const { id: appId, componentId } = await params;
         const authHeader = request.headers.get('Authorization');
         const body = await request.json();
 
@@ -49,10 +49,10 @@ export async function PUT(
 // DELETE - Delete a support component
 export async function DELETE(
     request: NextRequest,
-    { params }: { params: { id: string; componentId: string } }
+    { params }: { params: Promise<{ id: string; componentId: string }> }
 ) {
     try {
-        const { id: appId, componentId } = params;
+        const { id: appId, componentId } = await params;
         const authHeader = request.headers.get('Authorization');
 
         const response = await fetch(

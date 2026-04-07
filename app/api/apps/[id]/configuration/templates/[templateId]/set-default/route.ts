@@ -8,10 +8,10 @@ const API_UPSTREAM_BASE = getApiUpstreamBase();
 /** Maps to Create App MS: PATCH …/pwa-templates/:templateId/apply (set applied template for PWA). */
 export async function PUT(
     request: NextRequest,
-    { params }: { params: { id: string; templateId: string } }
+    { params }: { params: Promise<{ id: string; templateId: string }> }
 ) {
     try {
-        const { id: appId, templateId } = params;
+        const { id: appId, templateId } = await params;
         const authHeader = request.headers.get('Authorization');
 
         const response = await fetch(

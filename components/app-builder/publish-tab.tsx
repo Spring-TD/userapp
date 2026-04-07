@@ -19,10 +19,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { useAppBuilder } from "@/contexts/AppBuilderContext"
-import { useState, useEffect } from "react"
-import { appConfigurationApi, type AppConfiguration } from "@/lib/services/appService"
+import { useState, useEffect, useCallback } from "react"
+import { appConfigurationApi, type AppConfiguration, pwaPublishApi, type PwaPublishPayload, type PwaPublishStatusData } from "@/lib/services/appService"
 import { toast } from "sonner"
 import { format, formatDistanceToNow } from "date-fns"
+import Link from "next/link"
 
 interface ConfigVersion {
   id: string
@@ -38,6 +39,7 @@ export function PublishTab() {
     appId, 
     hasUnsavedChanges, 
     isLoading,
+    pwaTemplateId,
     publishConfiguration,
     restoreConfiguration,
     getChangedSections,
@@ -45,6 +47,9 @@ export function PublishTab() {
   
   const [versions, setVersions] = useState<ConfigVersion[]>([])
   const [loadingVersions, setLoadingVersions] = useState(true)
+  const [pwaStatus, setPwaStatus] = useState<PwaPublishStatusData | null>(null)
+  const [pwaStatusLoading, setPwaStatusLoading] = useState(false)
+  const [lastPwaPublish, setLastPwaPublish] = useState<PwaPublishPayload | null>(null)
   const [publishing, setPublishing] = useState(false)
   const [restoring, setRestoring] = useState<string | null>(null)
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false)
@@ -86,6 +91,23 @@ export function PublishTab() {
     fetchVersions()
   }, [appId])
 
+  const fetchPwaRuntimeStatus = useCallback(async () => {
+    if (!appId) return
+    setPwaStatusLoading(true)
+    try {
+      const res = await pwaPublishApi.getStatus(appId)
+      if (res.data) setPwaStatus(res.data)
+    } catch {
+      setPwaStatus(null)
+    } finally {
+      setPwaStatusLoading(false)
+    }
+  }, [appId])
+
+  useEffect(() => {
+    fetchPwaRuntimeStatus()
+  }, [fetchPwaRuntimeStatus])
+
   function getUpdatedSectionsFromConfig(config: AppConfiguration): string[] {
     const sections: string[] = []
     if (config.appElements?.logo || config.appElements?.splash) sections.push('Assets')
@@ -104,14 +126,17 @@ export function PublishTab() {
       const result = await publishConfiguration()
       
       if (result.success) {
+        const desc = result.publish
+          ? `PWA runtime ${result.publish.version}. Entry: ${result.publish.pwaEntryUrl}`
+          : "Your app changes are now live."
         toast.success("🚀 Configuration published successfully!", {
-          description: "Your app changes are now live.",
+          description: desc,
         })
-        
-        // Refresh the version list
+        if (result.publish) setLastPwaPublish(result.publish)
         await fetchVersions()
+        await fetchPwaRuntimeStatus()
       } else {
-        toast.error("Failed to publish configuration")
+        toast.error(result.error || "Failed to publish configuration")
       }
     } catch (error) {
       toast.error("Failed to publish configuration")
@@ -164,6 +189,9 @@ export function PublishTab() {
   const archivedVersions = versions.filter(v => v.status === 'archived')
   const changedSections = getChangedSections()
 
+  const proxyManifestPath = appId ? `/api/apps/${appId}/pwa/manifest.webmanifest` : ""
+  const proxySwPath = appId ? `/api/apps/${appId}/pwa/sw.js` : ""
+
   if (isLoading || loadingVersions) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -185,16 +213,132 @@ export function PublishTab() {
             Manage your app configuration versions and publish changes
           </p>
         </div>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={fetchVersions}
-          className="gap-2"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              fetchVersions()
+              fetchPwaRuntimeStatus()
+            }}
+            className="gap-2"
+            disabled={pwaStatusLoading}
+          >
+            <RefreshCw className={`w-4 h-4 ${pwaStatusLoading ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
+
+      {/* PWA runtime (Create App MS) */}
+      {appId && (
+        <div className="rounded-xl border border-gray-200 bg-white p-6 space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="font-semibold text-gray-900">PWA runtime</h3>
+              <p className="text-sm text-gray-500 mt-1">
+                Installable manifest and service worker from Create App MS. Shown when this app uses a PWA template.
+              </p>
+            </div>
+            {pwaStatus?.isPublished && (
+              <span className="inline-flex items-center gap-1.5 bg-green-100 text-green-800 px-3 py-1.5 rounded-full text-xs font-semibold shrink-0">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Published
+              </span>
+            )}
+          </div>
+
+          {!pwaTemplateId && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+              This session is not tied to a PWA template id. Runtime publish runs when you publish from a template-backed app builder load.
+            </div>
+          )}
+
+          {pwaStatus && (
+            <div className="grid sm:grid-cols-2 gap-3 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500">Manifest</span>
+                <span className={pwaStatus.manifestReady ? "text-green-700 font-medium" : "text-gray-700"}>
+                  {pwaStatus.manifestReady ? "Ready" : "Not ready"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500">Service worker</span>
+                <span className={pwaStatus.serviceWorkerReady ? "text-green-700 font-medium" : "text-gray-700"}>
+                  {pwaStatus.serviceWorkerReady ? "Ready" : "Not ready"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500">Icons</span>
+                <span className={pwaStatus.iconsReady ? "text-green-700 font-medium" : "text-gray-700"}>
+                  {pwaStatus.iconsReady ? "Ready" : "Not ready"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500">HTTPS</span>
+                <span className={pwaStatus.httpsReady ? "text-green-700 font-medium" : "text-gray-700"}>
+                  {pwaStatus.httpsReady ? "OK" : "Check"}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {(pwaStatus?.warnings?.length || pwaStatus?.errors?.length) ? (
+            <div className="space-y-2 text-sm">
+              {pwaStatus?.errors?.map((e, i) => (
+                <div key={`e-${i}`} className="flex gap-2 text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{e}</span>
+                </div>
+              ))}
+              {pwaStatus?.warnings?.map((w, i) => (
+                <div key={`w-${i}`} className="flex gap-2 text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{w}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {(lastPwaPublish || pwaStatus?.version) && (
+            <div className="text-xs text-gray-600 space-y-1">
+              <p>
+                <span className="text-gray-500">Version:</span>{" "}
+                {lastPwaPublish?.version ?? pwaStatus?.version ?? "—"}
+              </p>
+              {(lastPwaPublish?.pwaEntryUrl) && (
+                <p className="truncate">
+                  <span className="text-gray-500">Entry URL:</span>{" "}
+                  <a href={lastPwaPublish.pwaEntryUrl} target="_blank" rel="noopener noreferrer" className="text-[#7C3AED] underline">
+                    {lastPwaPublish.pwaEntryUrl}
+                  </a>
+                </p>
+              )}
+            </div>
+          )}
+
+          {proxyManifestPath && (
+            <div className="flex flex-wrap gap-3 pt-2 border-t border-gray-100">
+              <Link
+                href={proxyManifestPath}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-medium text-[#7C3AED] hover:underline"
+              >
+                Open manifest (proxy)
+              </Link>
+              <Link
+                href={proxySwPath}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-medium text-[#7C3AED] hover:underline"
+              >
+                Open service worker (proxy)
+              </Link>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Publish New Version Card */}
       <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl border border-purple-100 p-6">

@@ -1,6 +1,10 @@
 "use client"
 
+import { useState } from "react"
+
 import CredentialsTabComponent from "@/components/CredentialsTab"
+import { Button } from "../ui/button"
+import { Eye, EyeOff, Plus } from "lucide-react"
 
 export function CredentialsTab() {
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({})

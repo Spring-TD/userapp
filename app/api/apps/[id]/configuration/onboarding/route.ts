@@ -8,10 +8,10 @@ const API_UPSTREAM_BASE = getApiUpstreamBase();
 // PUT - Update onboarding configuration
 export async function PUT(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const appId = params.id;
+        const { id: appId } = await params;
         const authHeader = request.headers.get('Authorization');
         const body = await request.json();
 

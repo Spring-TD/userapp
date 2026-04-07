@@ -318,20 +318,6 @@ export default function SettingsPage() {
                                     className="bg-[#F0F2F5] border-none text-gray-900 placeholder:text-gray-400 h-12"
                                 />
                             </div>
-                    <div className="space-y-6 max-w-5xl">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-                            <div className="space-y-2">
-                                <Label htmlFor="fullName" className="text-gray-600 font-normal">
-                                    Full name
-                                </Label>
-                                <Input
-                                    id="fullName"
-                                    placeholder="Please enter your full name"
-                                    value={fullName}
-                                    onChange={(e) => setFullName(e.target.value)}
-                                    className="bg-[#F0F2F5] border-none text-gray-900 placeholder:text-gray-400 h-12"
-                                />
-                            </div>
 
                             <div className="space-y-2">
                                 <Label htmlFor="email" className="text-gray-600 font-normal">
@@ -345,32 +331,7 @@ export default function SettingsPage() {
                                     className="bg-[#F0F2F5] border-none text-gray-900 placeholder:text-gray-400 h-12"
                                 />
                             </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="email" className="text-gray-600 font-normal">
-                                    Email
-                                </Label>
-                                <Input
-                                    id="email"
-                                    type="email"
-                                    value={currentEmail}
-                                    readOnly
-                                    className="bg-[#F0F2F5] border-none text-gray-900 placeholder:text-gray-400 h-12"
-                                />
-                            </div>
 
-                            <div className="space-y-2">
-                                <Label htmlFor="country" className="text-gray-600 font-normal">
-                                    Country
-                                </Label>
-                                <div className="grid grid-cols-1 gap-3">
-                                    <CountrySelect
-                                        value={resolvedCountryCode}
-                                        onValueChange={(value) => setCountry(value)}
-                                        placeholder="Select Country"
-                                        triggerClassName="w-full !h-12 bg-[#F0F2F5] border-none text-gray-900 placeholder:text-gray-400"
-                                    />
-                                </div>
-                            </div>
                             <div className="space-y-2">
                                 <Label htmlFor="country" className="text-gray-600 font-normal">
                                     Country
@@ -488,9 +449,6 @@ export default function SettingsPage() {
                                     type="password"
                                     value={passwordCurrent}
                                     onChange={(e) => setPasswordCurrent(e.target.value)}
-                                    type="password"
-                                    value={passwordCurrent}
-                                    onChange={(e) => setPasswordCurrent(e.target.value)}
                                     className="bg-[#F0F2F5] border-none text-gray-900 placeholder:text-gray-400 h-12"
                                 />
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -499,16 +457,10 @@ export default function SettingsPage() {
                                         type="password"
                                         value={passwordNew}
                                         onChange={(e) => setPasswordNew(e.target.value)}
-                                        type="password"
-                                        value={passwordNew}
-                                        onChange={(e) => setPasswordNew(e.target.value)}
                                         className="bg-[#F0F2F5] border-none text-gray-900 placeholder:text-gray-400 h-12"
                                     />
                                     <Input
                                         placeholder="Confirm New Password"
-                                        type="password"
-                                        value={passwordConfirm}
-                                        onChange={(e) => setPasswordConfirm(e.target.value)}
                                         type="password"
                                         value={passwordConfirm}
                                         onChange={(e) => setPasswordConfirm(e.target.value)}
@@ -535,34 +487,6 @@ export default function SettingsPage() {
                                 <p className="text-sm text-gray-500">Manage your active login sessions across devices</p>
                             </div>
                             <div className="bg-[#F0F2F5] rounded-lg p-6 space-y-4">
-                                {sessionsError ? <p className="text-sm text-red-600">{sessionsError}</p> : null}
-                                {sessionsLoading ? (
-                                    <p className="text-sm text-gray-500">Loading sessions...</p>
-                                ) : sessions.length === 0 ? (
-                                    <p className="text-sm text-gray-500">No active sessions.</p>
-                                ) : (
-                                    sessions.map((s) => (
-                                        <div key={s.id} className="flex justify-between items-center bg-white p-4 rounded-md shadow-sm">
-                                            <div>
-                                                <p className="font-medium text-gray-900">{s.deviceInfo || "Unknown device"}</p>
-                                                <p className="text-sm text-gray-500">
-                                                    {s.ipAddress ? `${s.ipAddress} • ` : ""}
-                                                    {s.lastActiveAt ? `Last active: ${s.lastActiveAt}` : "Active"}
-                                                </p>
-                                            </div>
-                                            {s.isCurrent ? (
-                                                <span className="text-green-600 text-sm font-medium">Current</span>
-                                            ) : (
-                                                <button
-                                                    className="text-red-500 text-sm font-medium hover:text-red-600"
-                                                    onClick={() => void handleRevokeSession(s.id)}
-                                                >
-                                                    Revoke
-                                                </button>
-                                            )}
-                                        </div>
-                                    ))
-                                )}
                                 {sessionsError ? <p className="text-sm text-red-600">{sessionsError}</p> : null}
                                 {sessionsLoading ? (
                                     <p className="text-sm text-gray-500">Loading sessions...</p>
@@ -833,12 +757,6 @@ export default function SettingsPage() {
                                 <li>You can reactivate within 90 days</li>
                                 <li>After 90 days, your account may be permanently deleted</li>
                             </ul>
-                            <Button
-                                className="bg-[#FF4D4F] hover:bg-[#FF7875] text-white border-none px-6"
-                                onClick={() => void handleDeactivate()}
-                                disabled={deactivateLoading}
-                            >
-                                {deactivateLoading ? "Deactivating..." : "Deactivate Account"}
                             <Button
                                 className="bg-[#FF4D4F] hover:bg-[#FF7875] text-white border-none px-6"
                                 onClick={() => void handleDeactivate()}

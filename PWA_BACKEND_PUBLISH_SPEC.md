@@ -1,73 +1,96 @@
-# PWA Publish Contract (Frontend -> Backend)
+# PWA Publish Contract Status (Frontend ↔ Create App MS)
 
 ## Purpose
 
-This document defines the backend changes required to make App Builder publish a fully working Progressive Web App (PWA) with predictable behavior and seamless frontend integration.
-
-The frontend already:
-- Creates/updates PWA templates via `config` sections.
-- Uploads logo/splash/onboarding images.
-- Marks one template as applied (`isApplied`) on publish.
-
-What is still needed is a **runtime publish artifact contract** (manifest + service worker + publish status) so installability and offline behavior are guaranteed.
+Single reference for **backend contract**, **what the Spring frontend implements today**, and **what is still open** (backend, frontend, or ops).
 
 ---
 
-## Current Frontend Behavior (Already Implemented)
+## Executive summary
 
-### 1) Template persistence (Create App MS)
-
-Frontend uses these routes (proxied through Next API):
-- `GET /api/apps/:appId/configuration/templates` -> upstream `GET /api/v1/apps/:appId/pwa-templates`
-- `POST /api/apps/:appId/configuration/templates` -> upstream `POST /api/v1/apps/:appId/pwa-templates`
-- `GET /api/apps/:appId/configuration/templates/:templateId` -> upstream `GET /api/v1/apps/:appId/pwa-templates/:templateId`
-- `PUT /api/apps/:appId/configuration/templates/:templateId` -> upstream `PUT /api/v1/apps/:appId/pwa-templates/:templateId`
-- `DELETE /api/apps/:appId/configuration/templates/:templateId` -> upstream `DELETE /api/v1/apps/:appId/pwa-templates/:templateId`
-- `POST /api/apps/:appId/configuration/templates/:templateId/apply` -> upstream `PATCH /api/v1/apps/:appId/pwa-templates/:templateId/apply`
-
-### 2) Asset uploads (already wired)
-
-- `POST /api/apps/:appId/pwa-templates/:templateId/assets/logo`
-- `POST /api/apps/:appId/pwa-templates/:templateId/assets/splash`
-- `POST /api/apps/:appId/pwa-templates/:templateId/onboarding/screens/:screenIndex/image`
-
-Field name: `file` (multipart/form-data).
-
-### 3) Config shape sent by frontend
-
-Frontend maps App Builder state to template `config` in this exact sectioned shape:
-- `asset`
-- `splash`
-- `onboarding`
-- `appProfile`
-- `policyTerms`
-- `support`
-- `dns`
-
-Notes:
-- `onboarding.screens[]` is used (0-based).
-- `appProfile.fontFamily` is included.
-- Colors are sent as hex strings.
-- `dns.defaultAppUrl` and `dns.customDomain*` fields are sent when provided.
-
-### 4) Upstream base URL
-
-All frontend API proxies use the same backend base from:
-- `NEXT_PUBLIC_API_URL` (via shared helper `getApiUpstreamBase()`).
+| Area | Status |
+|------|--------|
+| Create App MS: template CRUD, uploads, runtime publish/status/artifacts | Implemented (per backend team) |
+| Next.js API proxies for PWA runtime | **Done** — `app/api/apps/[id]/pwa/*` |
+| App Builder: save template → runtime publish on “Publish” | **Done** when session has `pwaTemplateId` |
+| Publish tab: status, warnings/errors, proxy links, last publish | **Done** |
+| Legacy configuration publish path (no PWA template id) | **No** runtime `POST …/pwa/publish` — unchanged |
+| App-level manifest file uploads (`/api/v1/apps/:id/manifests`) | **Not** integrated in App Builder UI |
+| Hardening (preflight-only publish, blocker-based disable, backend URL display) | **Optional / partial** — see [Remaining work](#remaining-work-not-done-or-optional) |
 
 ---
 
-## Required Backend Additions
+## Frontend integration (implemented)
 
-## A) Publish Endpoint
+### Next.js proxies (same upstream base as other app routes)
 
-### `POST /api/v1/apps/:appId/pwa/publish`
+All forward `Authorization` from the browser to Create App MS. Artifact routes stream the upstream body and preserve `Content-Type`, `Cache-Control`, and `ETag` when present.
 
-Publishes a PWA build artifact from either:
-1. `templateId` in request body, or
-2. currently applied template for the app.
+| Next route | Upstream |
+|------------|----------|
+| `POST /api/apps/:appId/pwa/publish` | `POST /api/v1/apps/:appId/pwa/publish` |
+| `GET /api/apps/:appId/pwa/status` | `GET /api/v1/apps/:appId/pwa/status` |
+| `GET /api/apps/:appId/pwa/manifest.webmanifest` | `GET /api/v1/apps/:appId/pwa/manifest.webmanifest` (body streamed, headers preserved) |
+| `GET /api/apps/:appId/pwa/sw.js` | `GET /api/v1/apps/:appId/pwa/sw.js` (same) |
 
-### Request
+Files: `app/api/apps/[id]/pwa/publish/route.ts`, `…/status/route.ts`, `…/manifest.webmanifest/route.ts`, `…/sw.js/route.ts`.
+
+### Client API
+
+- `lib/services/appService.ts`: `pwaPublishApi.publish()`, `pwaPublishApi.getStatus()`, types `PwaPublishPayload`, `PwaPublishStatusData`.
+- Publish failures surface `422` `details[]` in thrown `Error` message (concatenated for toasts).
+
+### App Builder context
+
+- `contexts/AppBuilderContext.tsx`: `publishConfiguration()` — when `pwaTemplateId` is set:
+  1. `PUT` full template `config` (unchanged).
+  2. `POST …/pwa/publish` with `{ templateId, publishMode: "apply-and-publish" }` (replaces apply-only).
+- Returns `{ success, versionId?, publish?, error? }` so the UI can show validation errors.
+
+### Publish tab UI
+
+- `components/app-builder/publish-tab.tsx`:
+  - Loads `GET /pwa/status` on mount and when Refresh runs (with version history refresh).
+  - After successful publish, refreshes PWA status; stores last `publish` payload for version / entry URL.
+  - Shows readiness flags, warnings, errors, links to **same-origin** manifest + SW proxies (`/api/apps/.../pwa/...`).
+  - If `pwaTemplateId` is missing: **banner** explaining runtime publish only runs for template-backed sessions.
+
+### Upstream base URL
+
+Proxies use `getApiUpstreamBase()` → `NEXT_PUBLIC_API_URL` (see `lib/server/apiUpstreamBase.ts`). **All** existing `/api/apps/...` routes to Create App MS share this. If PWA calls fail against the wrong host, set `NEXT_PUBLIC_API_URL` to the Create App MS base (see project README).
+
+---
+
+## Backend surface (reference)
+
+### Template + options (unchanged)
+
+- `GET|POST /api/v1/apps/:appId/pwa-templates`, `PUT|DELETE …/:templateId`, `PATCH …/apply`
+- Asset uploads: logo, splash, onboarding screen image
+- `GET /api/v1/pwa/color-options`, `GET /api/v1/pwa/font-options`
+- App-level manifest **files** (separate from runtime generated manifest): `GET|POST /api/v1/apps/:id/manifests`, `PUT|DELETE …/:manifestIndex`
+
+### Runtime publish (generated manifest + SW)
+
+- `POST /api/v1/apps/:appId/pwa/publish`
+- `GET /api/v1/apps/:appId/pwa/status`
+- `GET /api/v1/apps/:appId/pwa/manifest.webmanifest`
+- `GET /api/v1/apps/:appId/pwa/sw.js`
+
+### Runtime behavior (Create App MS — documented)
+
+- **`GET /pwa/status`** is safe **before** the first publish: returns readiness flags with **warnings** (for example including *No published PWA version yet*), not a hard error.
+- **`GET …/pwa/manifest.webmanifest`** and **`GET …/pwa/sw.js`** return **`404`** with a **clear JSON error** when no published artifact exists yet.
+- **Service worker** responses include `Content-Type: application/javascript`, **`ETag`**, and cache headers (`no-cache, must-revalidate` per backend) for predictable version checks.
+- **Concurrent publishes** for the same `appId` are **last-write-wins**; publish **history** is retained in **`AppPwaPublish`** for audit and rollback workflows.
+
+### Request / response contracts
+
+See sections A–C below (keep in sync with Create App MS).
+
+### A) `POST /api/v1/apps/:appId/pwa/publish`
+
+Publishes from request `templateId` or from currently applied template.
 
 ```json
 {
@@ -76,38 +99,22 @@ Publishes a PWA build artifact from either:
 }
 ```
 
-`publishMode` can be optional; default behavior should be:
-- If `templateId` present: mark it applied, then publish.
-- Else publish currently applied template.
-
-### Success Response (contract)
+Success `data` payload shape (illustrative):
 
 ```json
 {
-  "success": true,
-  "message": "PWA published successfully",
-  "data": {
-    "publishId": "pwa_pub_123",
-    "appId": "app_123",
-    "templateId": "tpl_456",
-    "version": "2026-04-07T10:33:12.121Z",
-    "manifestUrl": "https://<host>/api/v1/apps/app_123/pwa/manifest.webmanifest",
-    "serviceWorkerUrl": "https://<host>/api/v1/apps/app_123/pwa/sw.js",
-    "pwaEntryUrl": "https://my-app.springtd.com/",
-    "publishedAt": "2026-04-07T10:33:12.121Z"
-  }
+  "publishId": "pwa_pub_123",
+  "appId": "app_123",
+  "templateId": "tpl_456",
+  "version": "2026-04-07T10:33:12.121Z",
+  "manifestUrl": "https://<host>/api/v1/apps/app_123/pwa/manifest.webmanifest",
+  "serviceWorkerUrl": "https://<host>/api/v1/apps/app_123/pwa/sw.js",
+  "pwaEntryUrl": "https://my-app.springtd.com/",
+  "publishedAt": "2026-04-07T10:33:12.121Z"
 }
 ```
 
----
-
-## B) Publish Status Endpoint
-
-### `GET /api/v1/apps/:appId/pwa/status`
-
-Returns whether app is publish-ready and/or published.
-
-### Success Response
+### B) `GET /api/v1/apps/:appId/pwa/status`
 
 ```json
 {
@@ -128,142 +135,77 @@ Returns whether app is publish-ready and/or published.
 }
 ```
 
----
+### C) Runtime artifacts
 
-## C) Runtime Artifact Endpoints
+- `GET …/pwa/manifest.webmanifest` — generated Web App Manifest (not raw template JSON).
+- `GET …/pwa/sw.js` — versioned service worker.
 
-### `GET /api/v1/apps/:appId/pwa/manifest.webmanifest`
+Minimum manifest keys: `name`, `short_name`, `start_url`, `scope`, `display`, `theme_color`, `background_color`, `icons` (include 192 and 512).
 
-Returns generated manifest JSON (not template config).
+### Validation (`422`)
 
-Minimum required keys:
-- `name`
-- `short_name`
-- `start_url`
-- `scope`
-- `display` (`standalone`)
-- `theme_color`
-- `background_color`
-- `icons` (must include 192 and 512)
-
-### `GET /api/v1/apps/:appId/pwa/sw.js`
-
-Returns versioned service worker script for the app.
-
-Recommended headers:
-- `Content-Type: application/javascript`
-- cache headers suitable for SW versioning strategy.
+`{ "success": false, "error": "…", "details": ["…"] }` for publish validation failures.
 
 ---
 
-## Mapping Rules (Template Config -> Runtime Manifest)
+## Mapping rules (template config → runtime manifest)
 
-Use deterministic mapping so frontend and backend stay aligned.
+- `config.asset.siteDescription` → `manifest.description`
+- `config.splash.primaryColor` / `secondaryColor` → `theme_color` / `background_color`
+- `config.asset.logoUrl` (+ generated icons if any) → `manifest.icons[]`
+- `app.name` → `manifest.name`; `app.alias` (or truncated) → `short_name`
+- `config.dns.defaultAppUrl` or verified custom domain → `start_url`, `scope`, `pwaEntryUrl`
 
-- `config.asset.siteDescription` -> `manifest.description`
-- `config.splash.primaryColor` -> `manifest.theme_color`
-- `config.splash.secondaryColor` -> `manifest.background_color`
-- `config.asset.logoUrl` and/or generated resized icons -> `manifest.icons[]`
-- `app.name` -> `manifest.name`
-- `app.alias` or truncated name -> `manifest.short_name`
-- `config.dns.defaultAppUrl` or validated custom domain -> `start_url`, `scope`, `pwaEntryUrl`
-
-If a field is missing:
-- Apply safe defaults, but also report warnings in `pwa/status`.
+Missing fields: safe defaults + warnings on `pwa/status` where applicable.
 
 ---
 
-## Validation Rules Required Before Publish
+## Data model (implemented on backend)
 
-Reject publish with `422` if any critical requirement fails:
-- No template resolved (`templateId` missing and no applied template).
-- Missing icon source (`asset.logoUrl`) and no generated fallback icons.
-- Invalid `splash` color format.
-- App has no valid URL base for `start_url`/`scope`.
-- Domain not HTTPS in production.
-
-### Error Response (uniform)
-
-```json
-{
-  "success": false,
-  "error": "PWA publish validation failed",
-  "details": [
-    "logoUrl is required",
-    "primaryColor must be a valid hex color"
-  ]
-}
-```
-
-Use this same envelope for 4xx/5xx errors across PWA endpoints.
+`AppPwaPublish` (separate from `AppPwaTemplate`): versioned publish state, `artifactUrls`, `manifest`, `serviceWorkerMeta`, `status`, `warnings`, `errors`, timestamps.
 
 ---
 
-## Backend Storage Recommendation
+## Remaining work (not done or optional)
 
-Store publish output separately from editable template config.
+### Frontend
 
-Suggested model: `AppPwaPublish`
-- `id`
-- `appId`
-- `templateId`
-- `version`
-- `manifest` (resolved runtime manifest)
-- `serviceWorkerMeta` (hash/version/path)
-- `artifactUrls` (`manifestUrl`, `serviceWorkerUrl`, `pwaEntryUrl`)
-- `status` (`published`, `failed`, `pending`)
-- `warnings`, `errors`
-- `publishedAt`, `updatedAt`
+1. **Legacy publish path** — If `pwaTemplateId` is null, `publishConfiguration` still uses `appConfigurationApi.createConfiguration` + `updatePublishingStatus`. No call to `POST …/pwa/publish`. If product requires runtime PWA for those apps, either always load a PWA template in the builder or extend this branch to publish after template resolution.
+2. **Dedicated `manifestUrl` / `serviceWorkerUrl` from API** — UI shows `pwaEntryUrl` from last publish and **proxy** links for manifest/SW. Optional: also show backend-returned URLs from `publish.data` as copyable text.
+3. **Preflight-only UX** — Optional “Check readiness” that only calls `GET /pwa/status` (no publish).
+4. **Disable Publish when status indicates blockers** — Today Publish is gated by `hasUnsavedChanges` + local `publishing`; optional: also use `pwa/status` `errors[]` to disable or warn.
+5. **Double-submit** — Publish button uses local `publishing`; optional: also use context `isSaving` from `publishConfiguration` during the whole request.
+6. **App-level manifest uploads** — Backend `GET|POST|PUT|DELETE …/apps/:id/manifests` is **not** wired in App Builder; add only if product needs user-uploaded manifest JSON alongside the generated runtime manifest.
 
-Why separate storage:
-- Keeps draft template edits independent from deployed runtime state.
-- Supports rollback/version history.
-- Makes status checks fast and deterministic.
+### Backend / ops (staging verification)
+
+Smoke-test against deployed Create App MS: `422` + `details[]`, ownership on publish/status/artifact routes, and that manifest/SW proxy behavior matches expectations (including `404` JSON before first publish). Operational: structured logging for `appId`, `templateId`, `publishId`, validation failures (service-side).
 
 ---
 
-## Why This Will Integrate Seamlessly
+## Edge-case checklist (QA)
 
-1. **Contract matches existing frontend flow**
-   - Frontend already reads/writes template `config` and calls apply.
-   - Publish endpoint simply extends that flow instead of replacing it.
+Use this for release sign-off.
 
-2. **No breaking changes to current template APIs**
-   - Existing `pwa-templates` CRUD remains as source-of-truth editor data.
-   - New endpoints only add runtime publishing concerns.
-
-3. **Deterministic mapping**
-   - Frontend and backend use the same section names (`asset`, `splash`, etc.).
-   - Reduces field mismatch and ambiguous interpretation.
-
-4. **Operational visibility**
-   - `pwa/status` gives a machine-readable readiness checklist.
-   - Frontend can show exact blockers and avoid blind publish failures.
-
-5. **Production-safe rollout**
-   - Validation + explicit error details prevent broken manifests.
-   - Runtime artifacts are versionable and can be rolled back.
-
-6. **Separation of concerns**
-   - Template editing (UI concern) and runtime PWA artifact generation (deployment concern) are decoupled.
+| Check | Owner |
+|-------|--------|
+| Publish with template: `422` shows `details` in toast | Frontend |
+| After success: status refresh + entry URL + proxy links work | Frontend |
+| Wrong `NEXT_PUBLIC_API_URL` → clear failure | Ops / env |
+| Backend `422`, ownership, pre-publish `404` on manifest/SW | Backend |
 
 ---
 
-## Suggested Rollout Plan (Backend)
+## Backend implementation notes (Create App MS repo)
 
-1. Implement `POST /pwa/publish` with hardcoded manifest defaults.
-2. Implement `GET /pwa/status` and return readiness flags.
-3. Implement `GET /pwa/manifest.webmanifest` and `GET /pwa/sw.js`.
-4. Add strict validation + detailed `details[]`.
-5. Add versioning + rollback metadata.
+Reference modules (names may vary slightly):
+
+- `appPwaPublish` model, `pwaPublish` types, `appPwaPublishService`, `appPwaPublishController`
+- `pwaManifestBuilder`, `pwaPublishValidation`, `pwaServiceWorkerBuilder`
+- `getAppliedByAppId` on template model
 
 ---
 
-## Frontend Integration After Backend Is Ready
+## Document history
 
-Once these endpoints are live, frontend will:
-- Call `POST /pwa/publish` from Publish tab.
-- Poll/read `GET /pwa/status`.
-- Display publish health and runtime URLs.
-- Keep existing template editing and apply behavior unchanged.
-
+- **2026-04** — Frontend wiring: proxies (including `ETag` + cache on artifact routes), `pwaPublishApi`, context publish flow, Publish tab status + links. Spec aligned with Create App MS runtime behavior (status before publish, `404` manifest/SW, SW headers, `AppPwaPublish` history, last-write-wins).

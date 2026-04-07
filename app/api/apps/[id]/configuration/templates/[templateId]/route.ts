@@ -8,10 +8,10 @@ const API_UPSTREAM_BASE = getApiUpstreamBase();
 // GET - Get a specific template
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string; templateId: string } }
+    { params }: { params: Promise<{ id: string; templateId: string }> }
 ) {
     try {
-        const { id: appId, templateId } = params;
+        const { id: appId, templateId } = await params;
         const authHeader = request.headers.get('Authorization');
 
         const response = await fetch(
@@ -47,10 +47,10 @@ export async function GET(
 // PUT - Update a template
 export async function PUT(
     request: NextRequest,
-    { params }: { params: { id: string; templateId: string } }
+    { params }: { params: Promise<{ id: string; templateId: string }> }
 ) {
     try {
-        const { id: appId, templateId } = params;
+        const { id: appId, templateId } = await params;
         const authHeader = request.headers.get('Authorization');
         const body = await request.json();
 
@@ -88,10 +88,10 @@ export async function PUT(
 // DELETE - Delete a template
 export async function DELETE(
     request: NextRequest,
-    { params }: { params: { id: string; templateId: string } }
+    { params }: { params: Promise<{ id: string; templateId: string }> }
 ) {
     try {
-        const { id: appId, templateId } = params;
+        const { id: appId, templateId } = await params;
         const authHeader = request.headers.get('Authorization');
 
         const response = await fetch(
