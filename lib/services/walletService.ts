@@ -66,7 +66,18 @@ export const merchantWalletApi = {
     appId?: string
   ) {
     const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/merchant`, {
+  async createMerchantWallet(
+    merchantId: string,
+    walletType: 'TREASURY' | 'OPERATION' | 'KYC',
+    appId?: string
+  ) {
+    const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/merchant`, {
       method: 'POST',
+      body: JSON.stringify({
+        merchantId,
+        merchantWalletType: walletType,
+        ...(appId ? { appId } : {}),
+      }),
       body: JSON.stringify({
         merchantId,
         merchantWalletType: walletType,
@@ -88,7 +99,10 @@ export const merchantWalletApi = {
    */
   async createAllMerchantWallets(merchantId: string, appId?: string) {
     const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/merchant/all`, {
+  async createAllMerchantWallets(merchantId: string, appId?: string) {
+    const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/merchant/all`, {
       method: 'POST',
+      body: JSON.stringify({ merchantId, ...(appId ? { appId } : {}) }),
       body: JSON.stringify({ merchantId, ...(appId ? { appId } : {}) }),
     });
 
@@ -110,7 +124,14 @@ export const merchantWalletApi = {
     appId?: string
   ) {
     const query = appId ? `?appId=${encodeURIComponent(appId)}` : '';
+  async getMerchantWallet(
+    merchantId: string,
+    walletType: 'TREASURY' | 'OPERATION' | 'KYC',
+    appId?: string
+  ) {
+    const query = appId ? `?appId=${encodeURIComponent(appId)}` : '';
     const response = await fetchWithAuth(
+      `${WALLET_API_V1}/wallets/merchant/${merchantId}/type/${walletType}${query}`
       `${WALLET_API_V1}/wallets/merchant/${merchantId}/type/${walletType}${query}`
     );
 
@@ -139,6 +160,9 @@ export const merchantWalletApi = {
   async getAllMerchantWallets(merchantId: string, appId?: string) {
     const query = appId ? `?appId=${encodeURIComponent(appId)}` : '';
     const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/merchant/${merchantId}/all${query}`, {
+  async getAllMerchantWallets(merchantId: string, appId?: string) {
+    const query = appId ? `?appId=${encodeURIComponent(appId)}` : '';
+    const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/merchant/${merchantId}/all${query}`, {
     });
 
     const data = await response.json();
@@ -154,6 +178,7 @@ export const merchantWalletApi = {
    * Update merchant wallet balance
    */
   async updateMerchantWalletBalance(merchantId: string, walletType: string, amount: number) {
+    const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/merchant/balance`, {
     const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/merchant/balance`, {
       method: 'PUT',
       body: JSON.stringify({ merchantId, walletType, amount }),
@@ -176,6 +201,7 @@ export const userWalletApi = {
    */
   async createUserWallet(userId: string, merchantId: string, description?: string) {
     const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/user`, {
+    const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/user`, {
       method: 'POST',
       body: JSON.stringify({ userId, merchantId, description }),
     });
@@ -194,6 +220,7 @@ export const userWalletApi = {
    */
   async getUserWallet(userId: string) {
     const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/user/${userId}`, {
+    const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/user/${userId}`, {
     });
 
     const data = await response.json();
@@ -209,6 +236,7 @@ export const userWalletApi = {
    * Update user wallet balance
    */
   async updateUserWalletBalance(userId: string, amount: number, description?: string) {
+    const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/user/${userId}/balance`, {
     const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/user/${userId}/balance`, {
       method: 'PUT',
       body: JSON.stringify({ amount, description }),
@@ -247,6 +275,7 @@ export const userWalletApi = {
     }
 
     const url = `${WALLET_API_V1}/wallets/user/${userId}/transactions?${queryParams.toString()}`;
+    const url = `${WALLET_API_V1}/wallets/user/${userId}/transactions?${queryParams.toString()}`;
     const response = await fetchWithAuth(url, {});
 
     const data = await response.json();
@@ -269,6 +298,7 @@ export const userWalletApi = {
       description: string;
     }
   ) {
+    const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/user/${userId}/transfer`, {
     const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/user/${userId}/transfer`, {
       method: 'POST',
       body: JSON.stringify(transferData),
@@ -299,6 +329,7 @@ export const userWalletApi = {
     }
   ) {
     const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/user/${userId}/api-call`, {
+    const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/user/${userId}/api-call`, {
       method: 'POST',
       body: JSON.stringify(apiCallData),
     });
@@ -316,6 +347,7 @@ export const userWalletApi = {
    * Get all user wallets for a merchant
    */
   async getUserWalletsByMerchant(merchantId: string) {
+    const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/merchant/${merchantId}/users`, {
     const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/merchant/${merchantId}/users`, {
     });
 
@@ -335,6 +367,7 @@ export const walletTransferApi = {
    * Transfer from Operation wallet to KYC wallet
    */
   async transferOperationToKyc(merchantId: string, amount: number, description: string) {
+    const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/operation-to-kyc`, {
     const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/operation-to-kyc`, {
       method: 'POST',
       body: JSON.stringify({ merchantId, amount, description }),
@@ -358,6 +391,7 @@ export const walletTransferApi = {
    */
   async transferKycToOperation(merchantId: string, amount: number, description: string) {
     const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/kyc-to-operation`, {
+    const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/kyc-to-operation`, {
       method: 'POST',
       body: JSON.stringify({ merchantId, amount, description }),
     });
@@ -378,6 +412,49 @@ export const walletTransferApi = {
 
 // Transaction Queries
 export const transactionApi = {
+  /**
+   * Get Treasury wallet transactions
+   */
+  async getTreasuryTransactions(
+    merchantId: string,
+    params?: {
+      page?: number;
+      limit?: number;
+      type?: 'CREDIT' | 'DEBIT';
+      status?: string;
+      startDate?: string;
+      endDate?: string;
+    }
+  ) {
+    const queryParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          queryParams.append(key, value.toString());
+        }
+      });
+    }
+
+    const url = `${WALLET_API_V1}/wallets/treasury/${merchantId}/transactions?${queryParams.toString()}`;
+    const response = await fetchWithAuth(url, {});
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to fetch treasury transactions');
+    }
+
+    if (data.data?.transactions) {
+      return {
+        success: data.success,
+        data: data.data.transactions,
+        message: data.message,
+      } as WalletApiResponse<Transaction[]>;
+    }
+
+    return data as WalletApiResponse<Transaction[]>;
+  },
+
   /**
    * Get Treasury wallet transactions
    */
@@ -445,6 +522,7 @@ export const transactionApi = {
     }
 
     const url = `${WALLET_API_V1}/wallets/operation/${merchantId}/transactions?${queryParams.toString()}`;
+    const url = `${WALLET_API_V1}/wallets/operation/${merchantId}/transactions?${queryParams.toString()}`;
     const response = await fetchWithAuth(url, {});
 
     const data = await response.json();
@@ -490,6 +568,7 @@ export const transactionApi = {
     }
 
     const url = `${WALLET_API_V1}/wallets/kyc/${merchantId}/transactions?${queryParams.toString()}`;
+    const url = `${WALLET_API_V1}/wallets/kyc/${merchantId}/transactions?${queryParams.toString()}`;
     const response = await fetchWithAuth(url, {});
 
     const data = await response.json();
@@ -509,6 +588,7 @@ export const billingApi = {
    */
   async debitOperationWallet(merchantId: string, amount: number, description: string) {
     const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/operation/debit`, {
+    const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/operation/debit`, {
       method: 'POST',
       body: JSON.stringify({ merchantId, amount, description }),
     });
@@ -526,6 +606,7 @@ export const billingApi = {
    * Debit KYC wallet
    */
   async debitKycWallet(merchantId: string, amount: number, description: string) {
+    const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/kyc/debit`, {
     const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/kyc/debit`, {
       method: 'POST',
       body: JSON.stringify({ merchantId, amount, description }),
@@ -545,6 +626,7 @@ export const billingApi = {
    */
   async processKycFee(merchantId: string, amount: number, description?: string) {
     const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/kyc/fee`, {
+    const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/kyc/fee`, {
       method: 'POST',
       body: JSON.stringify({ merchantId, amount, description: description || 'KYC Fee' }),
     });
@@ -563,6 +645,7 @@ export const billingApi = {
    */
   async debitUserWallet(userId: string, amount: number, description: string) {
     const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/treasury/debit`, {
+    const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/treasury/debit`, {
       method: 'POST',
       body: JSON.stringify({ userId, amount, description }),
     });
@@ -580,6 +663,7 @@ export const billingApi = {
    * Debit Treasury wallet
    */
   async debitTreasuryWallet(merchantId: string, amount: number, description: string) {
+    const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/treasury/debit-merchant`, {
     const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/treasury/debit-merchant`, {
       method: 'POST',
       body: JSON.stringify({ merchantId, amount, description }),
@@ -609,6 +693,7 @@ export const fundingApi = {
     metadata?: any;
   }) {
     const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/funding/callback`, {
+    const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/funding/callback`, {
       method: 'POST',
       body: JSON.stringify(callbackData),
     });
@@ -627,6 +712,7 @@ export const fundingApi = {
    */
   async checkFundingStatus(transactionId: string) {
     const response = await fetchWithAuth(
+      `${WALLET_API_V1}/wallets/funding/status/${transactionId}`,
       `${WALLET_API_V1}/wallets/funding/status/${transactionId}`,
       {}
     );

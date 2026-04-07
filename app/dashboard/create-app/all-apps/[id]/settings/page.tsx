@@ -2,9 +2,16 @@
 
 import { useState, useEffect, useMemo } from "react"
 import { useRouter, useParams } from "next/navigation"
+import { useState, useEffect, useMemo } from "react"
+import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Trash2, AlertTriangle, Loader2, Copy, Eye, EyeOff, Plus, Download } from "lucide-react"
+import { Trash2, AlertTriangle, Loader2, Copy, Eye, EyeOff, Plus, Download } from "lucide-react"
 import { getAccessToken } from "@/lib/cookieAuth"
+import { toast } from "sonner"
+import { Skeleton } from "@/components/ui/skeleton"
+
+type AppRecord = Record<string, unknown>
 import { toast } from "sonner"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -16,6 +23,148 @@ interface App {
   alias?: string
   description?: string
   status: string
+  [key: string]: unknown
+}
+
+const LABEL_FOR_FIELD: Record<string, string> = {
+  clientSecret: "Client secret",
+  client_secret: "Client secret",
+  secretKey: "Secret key",
+  secret_key: "Secret key",
+  apiSecret: "API secret",
+  api_secret: "API secret",
+  apiKey: "API key",
+  api_key: "API key",
+  springAppSecret: "Spring app secret",
+  webhookSecret: "Webhook secret",
+  webhook_secret: "Webhook secret",
+  privateKey: "Private key",
+  publicKey: "Public key",
+}
+
+function humanizeFieldKey(key: string) {
+  return key
+    .replace(/([A-Z])/g, " $1")
+    .replace(/_/g, " ")
+    .trim()
+    .replace(/^\w/, (c) => c.toUpperCase())
+}
+
+const MASK = "••••••••••"
+
+/** Private key column: signing secret material (API: secretKey, clientSecret, …). */
+function pickSecretKeyValue(app: App | null): string {
+  if (!app) return ""
+  const a = app as AppRecord
+  const keys = [
+    "secretKey",
+    "secret_key",
+    "clientSecret",
+    "client_secret",
+    "apiSecret",
+    "api_secret",
+    "springAppSecret",
+    "webhookSecret",
+    "webhook_secret",
+    "privateKey",
+    "private_key",
+  ]
+  for (const k of keys) {
+    const v = a[k]
+    if (v != null && String(v).trim()) return String(v).trim()
+  }
+  const creds = a.credentials
+  if (creds && typeof creds === "object") {
+    const nested = creds as AppRecord
+    for (const k of keys) {
+      const v = nested[k]
+      if (v != null && String(v).trim()) return String(v).trim()
+    }
+  }
+  return ""
+}
+
+/** Public key column: publishable key material (API: publicKey, publishable apiKey, …). */
+function pickPublicKeyValue(app: App | null): string {
+  if (!app) return ""
+  const a = app as AppRecord
+  const keys = ["publicKey", "public_key", "apiKey", "api_key", "publishableKey", "publishable_key"]
+  for (const k of keys) {
+    const v = a[k]
+    if (v != null && String(v).trim()) return String(v).trim()
+  }
+  const creds = a.credentials
+  if (creds && typeof creds === "object") {
+    const nested = creds as AppRecord
+    for (const k of keys) {
+      const v = nested[k]
+      if (v != null && String(v).trim()) return String(v).trim()
+    }
+  }
+  return ""
+}
+
+function formatCredentialDate(raw: unknown): string {
+  if (raw == null || raw === "") return "—"
+  const d = new Date(String(raw))
+  if (Number.isNaN(d.getTime())) return String(raw)
+  return d.toLocaleDateString(undefined, { day: "2-digit", month: "2-digit", year: "numeric" })
+}
+
+function collectExtraCredentialRows(app: App | null): { id: string; label: string; value: string }[] {
+  if (!app) return []
+  const rows: { id: string; label: string; value: string }[] = []
+  const seen = new Set<string>()
+  const secretVal = pickSecretKeyValue(app)
+  const publicVal = pickPublicKeyValue(app)
+
+  const pushValue = (id: string, label: string, raw: unknown) => {
+    if (raw === undefined || raw === null) return
+    const value = String(raw).trim()
+    if (!value || seen.has(id) || value === secretVal || value === publicVal) return
+    seen.add(id)
+    rows.push({ id, label, value })
+  }
+
+  const skip = new Set([
+    "secretKey",
+    "secret_key",
+    "clientSecret",
+    "client_secret",
+    "apiSecret",
+    "api_secret",
+    "springAppSecret",
+    "webhookSecret",
+    "webhook_secret",
+    "publicKey",
+    "public_key",
+    "apiKey",
+    "api_key",
+    "publishableKey",
+    "publishable_key",
+    "credentials",
+  ])
+
+  for (const key of Object.keys(app)) {
+    if (skip.has(key)) continue
+    const v = (app as AppRecord)[key]
+    if (typeof v === "string" && v.length > 8 && /secret|key|token/i.test(key)) {
+      pushValue(`extra-${key}`, LABEL_FOR_FIELD[key] ?? humanizeFieldKey(key), v)
+    }
+  }
+
+  const pk = (app as AppRecord).productKeys ?? (app as AppRecord).product_keys
+  if (Array.isArray(pk)) {
+    pk.forEach((item, i) => {
+      pushValue(
+        `productKey-${i}`,
+        `Product key ${i + 1}`,
+        typeof item === "object" && item !== null ? JSON.stringify(item) : item,
+      )
+    })
+  }
+
+  return rows
   [key: string]: unknown
 }
 
@@ -172,14 +321,20 @@ const getAuthHeaders = () => {
 export default function SettingsPage() {
   const params = useParams()
   const appId = params.id as string
+export default function SettingsPage() {
+  const params = useParams()
+  const appId = params.id as string
   const router = useRouter()
   const [app, setApp] = useState<App | null>(null)
+  const [keysBundle, setKeysBundle] = useState<App | null>(null)
   const [keysBundle, setKeysBundle] = useState<App | null>(null)
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [confirmText, setConfirmText] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [generatingKey, setGeneratingKey] = useState(false)
+  const [loadingKeys, setLoadingKeys] = useState(true)
 
   useEffect(() => {
     const fetchApp = async () => {
@@ -320,6 +475,60 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <div className="flex-1 bg-white p-8">
+        <Skeleton className="h-8 w-28 mb-6" />
+
+        <div className="border border-gray-200 rounded-lg p-6 mb-8">
+          <Skeleton className="h-5 w-40 mb-4" />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-5 w-40" />
+            </div>
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-5 w-28" />
+            </div>
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-6 w-24 rounded-full" />
+            </div>
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-14" />
+              <Skeleton className="h-5 w-32" />
+            </div>
+          </div>
+        </div>
+
+        <div className="border border-gray-200 rounded-lg p-6 mb-8">
+          <div className="space-y-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
+              <div className="space-y-2">
+                <Skeleton className="h-6 w-56" />
+                <Skeleton className="h-4 w-80" />
+              </div>
+              <Skeleton className="h-10 w-56 rounded-md" />
+            </div>
+
+            <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+              <div className="min-w-[720px]">
+                <div className="grid grid-cols-6 gap-4 p-4 bg-gray-50 border-b border-gray-200">
+                  {Array.from({ length: 6 }).map((_, idx) => (
+                    <Skeleton key={idx} className="h-4 w-24" />
+                  ))}
+                </div>
+                {Array.from({ length: 2 }).map((_, rowIdx) => (
+                  <div key={rowIdx} className="grid grid-cols-6 gap-4 p-4 border-b border-gray-100 last:border-b-0 items-center">
+                    <Skeleton className="h-5 w-28 font-mono" />
+                    <Skeleton className="h-5 w-44" />
+                    <Skeleton className="h-5 w-44" />
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-9 w-28 rounded-md" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         <Skeleton className="h-8 w-28 mb-6" />
 
         <div className="border border-gray-200 rounded-lg p-6 mb-8">

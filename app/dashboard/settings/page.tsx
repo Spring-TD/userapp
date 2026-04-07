@@ -248,6 +248,7 @@ export default function SettingsPage() {
         <div className="p-8 bg-white min-h-full">
             <div className="flex flex-col space-y-8">
                 {/* Header with Tabs */}
+                {/* Header with Tabs */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-gray-200 pb-0">
                     <div className="flex-1">
                         <Tabs
@@ -279,6 +280,24 @@ export default function SettingsPage() {
                                     className="bg-[#F0F2F5] border-none text-gray-900 placeholder:text-gray-400 h-12"
                                 />
                             </div>
+                    <div className="space-y-6 max-w-5xl">
+                          <div>
+                                <h3 className="text-lg font-semibold text-gray-900">Update Account</h3>
+                                <p className="text-sm text-gray-500">Update your account information.</p>
+                            </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+                            <div className="space-y-2">
+                                <Label htmlFor="fullName" className="text-gray-600 font-normal">
+                                    Full name
+                                </Label>
+                                <Input
+                                    id="fullName"
+                                    placeholder="Please enter your full name"
+                                    value={fullName}
+                                    onChange={(e) => setFullName(e.target.value)}
+                                    className="bg-[#F0F2F5] border-none text-gray-900 placeholder:text-gray-400 h-12"
+                                />
+                            </div>
 
                             <div className="space-y-2">
                                 <Label htmlFor="email" className="text-gray-600 font-normal">
@@ -292,7 +311,32 @@ export default function SettingsPage() {
                                     className="bg-[#F0F2F5] border-none text-gray-900 placeholder:text-gray-400 h-12"
                                 />
                             </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="email" className="text-gray-600 font-normal">
+                                    Email
+                                </Label>
+                                <Input
+                                    id="email"
+                                    type="email"
+                                    value={currentEmail}
+                                    readOnly
+                                    className="bg-[#F0F2F5] border-none text-gray-900 placeholder:text-gray-400 h-12"
+                                />
+                            </div>
 
+                            <div className="space-y-2">
+                                <Label htmlFor="country" className="text-gray-600 font-normal">
+                                    Country
+                                </Label>
+                                <div className="grid grid-cols-1 gap-3">
+                                    <CountrySelect
+                                        value={resolvedCountryCode}
+                                        onValueChange={(value) => setCountry(value)}
+                                        placeholder="Select Country"
+                                        triggerClassName="w-full !h-12 bg-[#F0F2F5] border-none text-gray-900 placeholder:text-gray-400"
+                                    />
+                                </div>
+                            </div>
                             <div className="space-y-2">
                                 <Label htmlFor="country" className="text-gray-600 font-normal">
                                     Country
@@ -381,8 +425,93 @@ export default function SettingsPage() {
                                     value={emailCurrentPassword}
                                     onChange={(e) => setEmailCurrentPassword(e.target.value)}
                                     className="bg-[#F0F2F5] border-none text-gray-900 placeholder:text-gray-400 h-12"
+                            <div className="space-y-2">
+                                <Label htmlFor="phone" className="text-gray-600 font-normal">
+                                    Phone number
+                                </Label>
+                                <div className="flex">
+                                    <div className="flex items-center justify-center bg-[#F0F2F5] px-3 rounded-l-md border-r border-gray-300 text-gray-500 h-12 min-w-[56px] w-[56px]">
+                                        {normalizedDialCode || "+"}
+                                    </div>
+                                    <Input
+                                        id="phone"
+                                        placeholder="Please enter your phone number"
+                                        value={phone}
+                                        onChange={(e) => setPhone(e.target.value)}
+                                        className="bg-[#F0F2F5] border-none text-gray-900 placeholder:text-gray-400 h-12 rounded-l-none"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mt-6">
+                            <Button
+                                className="bg-[#9A813F] text-white hover:bg-[#8A7335] rounded-md px-6"
+                                onClick={() => void handleUpdateProfile()}
+                                disabled={profileUpdating}
+                            >
+                                {profileUpdating ? "Updating..." : "Update Profile"}
+                            </Button>
+                        </div>
+
+                        <div className=" rounded-lg py-6 space-y-4">
+                            <div>
+                                <h3 className="text-lg font-semibold text-gray-900">Update Email</h3>
+                                <p className="text-sm text-gray-500">Confirm your password and provide the new email.</p>
+                            </div>
+
+                            <div className="flex lg:flex-row flex-col gap-x-8 w-full">
+                            <div className="space-y-2 w-full">
+                                <Label htmlFor="newEmail" className="text-gray-600 font-normal">
+                                    New email
+                                </Label>
+                                <Input
+                                    id="newEmail"
+                                    type="email"
+                                    placeholder="Please enter your new email"
+                                    value={newEmail}
+                                    onChange={(e) => setNewEmail(e.target.value)}
+                                    className="bg-[#F0F2F5] border-none text-gray-900 placeholder:text-gray-400 h-12"
                                 />
                             </div>
+                            <div className="space-y-2 w-full">
+                                <Label htmlFor="confirmEmail" className="text-gray-600 font-normal">
+                                    Confirm new email
+                                </Label>
+                                <Input
+                                    id="confirmEmail"
+                                    type="email"
+                                    placeholder="Please confirm your new email"
+                                    value={confirmEmail}
+                                    onChange={(e) => setConfirmEmail(e.target.value)}
+                                    className="bg-[#F0F2F5] border-none text-gray-900 placeholder:text-gray-400 h-12"
+                                />
+                            </div>
+
+                            <div className="space-y-2 w-full">
+                                <Label htmlFor="emailCurrentPassword" className="text-gray-600 font-normal">
+                                    Current password
+                                </Label>
+                                <Input
+                                    id="emailCurrentPassword"
+                                    type="password"
+                                    placeholder="Enter your current password"
+                                    value={emailCurrentPassword}
+                                    onChange={(e) => setEmailCurrentPassword(e.target.value)}
+                                    className="bg-[#F0F2F5] border-none text-gray-900 placeholder:text-gray-400 h-12"
+                                />
+                            </div>
+
+                            </div>
+
+                            
+                            <Button
+                                className="bg-[#9A813F] text-white hover:bg-[#8A7335] rounded-md px-6"
+                                onClick={() => void handleUpdateEmail()}
+                                disabled={emailUpdating || profileUpdating}
+                            >
+                                {emailUpdating ? "Updating..." : "Update Email"}
+                            </Button>
 
                             </div>
 
@@ -412,11 +541,17 @@ export default function SettingsPage() {
                                     type="password"
                                     value={passwordCurrent}
                                     onChange={(e) => setPasswordCurrent(e.target.value)}
+                                    type="password"
+                                    value={passwordCurrent}
+                                    onChange={(e) => setPasswordCurrent(e.target.value)}
                                     className="bg-[#F0F2F5] border-none text-gray-900 placeholder:text-gray-400 h-12"
                                 />
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <Input
                                         placeholder="Enter New Password"
+                                        type="password"
+                                        value={passwordNew}
+                                        onChange={(e) => setPasswordNew(e.target.value)}
                                         type="password"
                                         value={passwordNew}
                                         onChange={(e) => setPasswordNew(e.target.value)}
@@ -427,9 +562,22 @@ export default function SettingsPage() {
                                         type="password"
                                         value={passwordConfirm}
                                         onChange={(e) => setPasswordConfirm(e.target.value)}
+                                        type="password"
+                                        value={passwordConfirm}
+                                        onChange={(e) => setPasswordConfirm(e.target.value)}
                                         className="bg-[#F0F2F5] border-none text-gray-900 placeholder:text-gray-400 h-12"
                                     />
                                 </div>
+                            </div>
+                            
+                            <div className="mt-6">
+                                <Button
+                                    className="bg-[#9A813F] text-white hover:bg-[#8A7335] rounded-md px-6"
+                                    onClick={() => void handleChangePassword()}
+                                    disabled={passwordUpdating}
+                                >
+                                    {passwordUpdating ? "Updating..." : "Update Password"}
+                                </Button>
                             </div>
                             
                             <div className="mt-6">
@@ -450,6 +598,33 @@ export default function SettingsPage() {
                                 <p className="text-sm text-gray-500">Manage your active login sessions across devices.</p>
                             </div>
                             <div className="bg-[#F0F2F5] rounded-lg p-6 space-y-4">
+                                {sessionsLoading ? (
+                                    <p className="text-sm text-gray-500">Loading sessions...</p>
+                                ) : sessions.length === 0 ? (
+                                    <p className="text-sm text-gray-500">No active sessions.</p>
+                                ) : (
+                                    sessions.map((s) => (
+                                        <div key={s.id} className="flex justify-between items-center bg-white p-4 rounded-md shadow-sm">
+                                            <div>
+                                                <p className="font-medium text-gray-900">{s.deviceInfo || "Unknown device"}</p>
+                                                <p className="text-sm text-gray-500">
+                                                    {s.ipAddress ? `${s.ipAddress} • ` : ""}
+                                                    {s.lastActiveAt ? `Last active: ${s.lastActiveAt}` : "Active"}
+                                                </p>
+                                            </div>
+                                            {s.isCurrent ? (
+                                                <span className="text-green-600 text-sm font-medium">Current</span>
+                                            ) : (
+                                                <button
+                                                    className="text-red-500 text-sm font-medium hover:text-red-600"
+                                                    onClick={() => void handleRevokeSession(s.id)}
+                                                >
+                                                    Revoke
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))
+                                )}
                                 {sessionsLoading ? (
                                     <p className="text-sm text-gray-500">Loading sessions...</p>
                                 ) : sessions.length === 0 ? (
@@ -659,7 +834,10 @@ export default function SettingsPage() {
                             className="bg-[#FF4D4F] hover:bg-[#FF7875] text-white px-6"
                                     onClick={() => void handleDeactivate()}
                                     disabled={deactivateLoading}
+                                    onClick={() => void handleDeactivate()}
+                                    disabled={deactivateLoading}
                         >
+                                    {deactivateLoading ? "Deactivating..." : "Yes"}
                                     {deactivateLoading ? "Deactivating..." : "Yes"}
                         </AlertDialogAction>
                     </AlertDialogFooter>

@@ -123,9 +123,14 @@ export default function MerchantAppsSidebar() {
                 <Avatar className="w-10 h-10 border-2 border-white shadow-sm">
                   <AvatarFallback className="text-sm font-semibold text-gray-900">{initials}</AvatarFallback>
                 </Avatar>
+                <Avatar className="w-10 h-10 border-2 border-white shadow-sm">
+                  <AvatarFallback className="text-sm font-semibold text-gray-900">{initials}</AvatarFallback>
+                </Avatar>
                 <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
             </div>
             <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-gray-900 truncate">{displayName}</p>
+                <p className="text-xs text-gray-500 truncate">{displayEmail}</p>
                 <p className="text-sm font-bold text-gray-900 truncate">{displayName}</p>
                 <p className="text-xs text-gray-500 truncate">{displayEmail}</p>
             </div>

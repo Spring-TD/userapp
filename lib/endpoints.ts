@@ -279,7 +279,7 @@ export const BACKEND = {
 // Compliance (KYC) handled by single catch-all: /api/compliance/[...path]
 const AUTH_BASE = "/v1/auth"
 const OTP_BASE = "/otp"
-const USER_BASE = "/user"
+const USER_BASE = "/v1/user"
 const COMPLIANCE_BASE = "/compliance"
 
 export const ENDPOINTS = {

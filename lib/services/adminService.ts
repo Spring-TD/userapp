@@ -10,6 +10,7 @@
 
 const ADMIN_ACCOUNT_BASE =
     process.env.NEXT_PUBLIC_API_URL || 'https://account-ms.fly.dev';
+    process.env.NEXT_PUBLIC_API_URL || 'https://account-ms.fly.dev';
 const ADMIN_WALLET_BASE =
     process.env.NEXT_PUBLIC_API_URL || 'https://account-ms.fly.dev';
 const ADMIN_PRODUCT_BASE =
