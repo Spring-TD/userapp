@@ -10,7 +10,6 @@ import { RiSettings3Fill } from "react-icons/ri"
 import { FiLogOut } from "react-icons/fi"
 import { ChevronDown, ChevronUp } from "lucide-react"
 import { useState } from "react"
-import { ShieldCheck } from "lucide-react"
 import { useAuth } from "@/hooks/useAuth"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { getUserFromToken } from "@/lib/tokenManager"
@@ -47,11 +46,11 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ className = "", appId }) => {
   const initials = initialsFromName || (displayEmail?.charAt(0) ?? "U").toUpperCase()
 
   const navItems: NavItem[] = [
-    {
-      icon: <ShieldCheck size={20} />,
-      label: "Admin",
-      href: `/dashboard/create-app/all-apps/${appId}/admin`,
-    },
+    // {
+    //   icon: <ShieldCheck size={20} />,
+    //   label: "Admin",
+    //   href: `/dashboard/create-app/all-apps/${appId}/admin`,
+    // },
     {
       icon: <FaWallet size={20} />,
       label: "Wallets",

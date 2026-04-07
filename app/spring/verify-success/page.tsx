@@ -4,9 +4,15 @@ import { AuthLayout } from "@/components/auth-layout"
 import { Button } from "@/components/ui/button"
 import { Check } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { clearSecureTokens } from "@/lib/tokenManager"
 
 export default function VerifySuccessPage() {
     const router = useRouter()
+
+    const handleContinue = () => {
+        clearSecureTokens()
+        router.push("/spring/signin")
+    }
 
     return (
         <AuthLayout>
@@ -20,14 +26,14 @@ export default function VerifySuccessPage() {
                 <h1 className="text-2xl font-bold text-gray-900 mb-2">Email verified!</h1>
 
                 <p className="text-sm text-gray-500 mb-8 text-center">
-                    You've successfully created your Merchant account
+                    You've successfully created your Merchant account. Sign in to continue.
                 </p>
 
                 <Button
-                    onClick={() => router.push("/spring/onboarding")}
+                    onClick={handleContinue}
                     className="w-full h-12 bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-medium rounded-lg text-base shadow-md hover:shadow-lg max-w-xs"
                 >
-                    Continue
+                    Continue to sign in
                 </Button>
             </div>
         </AuthLayout>

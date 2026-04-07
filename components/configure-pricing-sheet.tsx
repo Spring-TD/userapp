@@ -3,15 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Drawer } from "@/components/drawer"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Loader2, Pencil } from "lucide-react"
 import { productApi } from "@/lib/services/product-api"
 import { toast } from "sonner"
@@ -138,20 +130,12 @@ interface ConfigurePricingSheetProps {
 
 export function ConfigurePricingSheet({ open, onOpenChange, product }: ConfigurePricingSheetProps) {
   const [tab, setTab] = useState<ConfigTab>("fees")
-  const [view, setView] = useState<"tables" | "pricing">("tables")
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [rawConfig, setRawConfig] = useState<unknown>(null)
   const [fees, setFees] = useState<DisplayFee[]>(() => DEMO_FEES.map((r) => ({ ...r })))
-  const [editingIndex, setEditingIndex] = useState<number | null>(null)
-
-  const [pricingType, setPricingType] = useState("")
-  const [pricingCondition, setPricingCondition] = useState("")
-  const [upperCap, setUpperCap] = useState("")
-  const [floorCap, setFloorCap] = useState("")
-  const [springFee, setSpringFee] = useState("")
-  const [markupFee, setMarkupFee] = useState("")
-  const [serviceFee, setServiceFee] = useState("")
+  /** Row id where the merchant "Your pricing" field is an input */
+  const [editingRowId, setEditingRowId] = useState<string | null>(null)
 
   const title = "Configure Product"
 
@@ -180,39 +164,15 @@ export function ConfigurePricingSheet({ open, onOpenChange, product }: Configure
   useEffect(() => {
     if (!open) return
     setTab("fees")
-    setView("tables")
-    setEditingIndex(null)
+    setEditingRowId(null)
     void loadConfig()
   }, [open, loadConfig])
 
-  const openPricingDetail = (index: number, mode: "add" | "edit") => {
-    setEditingIndex(index)
-    const row = fees[index]
-    if (mode === "edit" && row) {
-      setMarkupFee(row.yourValue)
-      setSpringFee("")
-    } else {
-      setMarkupFee("")
-      setSpringFee("")
-    }
-    setPricingType("")
-    setPricingCondition("")
-    setUpperCap("")
-    setFloorCap("")
-    setServiceFee("")
-    setView("pricing")
-  }
+  const updateFeeRow = useCallback((id: string, patch: Partial<DisplayFee>) => {
+    setFees((prev) => prev.map((f) => (f.id === id ? { ...f, ...patch } : f)))
+  }, [])
 
-  const applyPricingDetail = () => {
-    if (editingIndex == null) return
-    const value = markupFee.trim() || springFee.trim() || ""
-    setFees((prev) =>
-      prev.map((f, i) => (i === editingIndex ? { ...f, yourValue: value || f.yourValue } : f)),
-    )
-    setView("tables")
-    setEditingIndex(null)
-    toast.success("Pricing updated for this fee")
-  }
+  const hasMerchantPricing = (row: DisplayFee) => row.yourValue.trim() !== ""
 
   const handleSubmit = async () => {
     if (!product?.id) {
@@ -294,224 +254,108 @@ export function ConfigurePricingSheet({ open, onOpenChange, product }: Configure
 
         {tab === "fees" && (
           <>
-            {view === "tables" && (
-              <div className="space-y-6">
-                {loading && (
-                  <div className="flex items-center gap-2 text-sm text-gray-500">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading fees…
-                  </div>
-                )}
+            <div className="space-y-6">
+              {loading && (
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading fees…
+                </div>
+              )}
 
-                {/* Section 1 — Available / Base */}
-                <div
-                  className="rounded-xl border-2 border-dashed p-5 space-y-4"
-                  style={{ borderColor: ACCENT }}
-                >
-                  <h3 className="font-semibold text-gray-900">Available/Base Fees</h3>
-                  <div className="overflow-x-auto rounded-lg border border-gray-200">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-gray-100/80 text-left text-gray-500">
-                          <th className="px-4 py-3 font-medium">Name</th>
-                          <th className="px-4 py-3 font-medium">Type</th>
-                          <th className="px-4 py-3 font-medium">Value</th>
-                          <th className="px-4 py-3 font-medium text-right w-[140px]"> </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {fees.map((row, i) => (
+              <div
+                className="rounded-xl border-2 border-dashed p-5 space-y-4"
+                style={{ borderColor: ACCENT }}
+              >
+                <h3 className="font-semibold text-gray-900">Available/Base Fees</h3>
+                <div className="overflow-x-auto rounded-lg border border-gray-200">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-100/80 text-left text-gray-500">
+                        <th className="px-4 py-3 font-medium">Name</th>
+                        <th className="px-4 py-3 font-medium">Type</th>
+                        <th className="px-4 py-3 font-medium">Value</th>
+                        <th className="px-4 py-3 font-medium bg-gray-200/60">Your pricing</th>
+                        <th className="px-4 py-3 font-medium text-right min-w-[120px]"> </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {fees.map((row) => {
+                        const isEditing = editingRowId === row.id
+                        const added = hasMerchantPricing(row)
+                        return (
                           <tr key={row.id} className="border-t border-gray-100">
                             <td className="px-4 py-3 font-medium text-gray-900">{row.name}</td>
                             <td className="px-4 py-3 text-gray-700">{row.feeType}</td>
-                            <td className="px-4 py-3 text-gray-800">{row.baseValue}</td>
+                            <td className="px-4 py-3 text-gray-800 min-w-[100px]">{row.baseValue}</td>
+                            <td className="px-4 py-3 bg-gray-100/90 text-gray-900 min-w-[120px]">
+                              {isEditing ? (
+                                <Input
+                                  value={row.yourValue}
+                                  onChange={(e) => updateFeeRow(row.id, { yourValue: e.target.value })}
+                                  className="h-9 border-[#E2E8F0] bg-white"
+                                  placeholder="Enter your pricing"
+                                  aria-label={`${row.name} your pricing`}
+                                />
+                              ) : (
+                                <span className="font-medium">{row.yourValue.trim() ? row.yourValue : "—"}</span>
+                              )}
+                            </td>
                             <td className="px-4 py-3 text-right">
-                              <button
-                                type="button"
-                                onClick={() => openPricingDetail(i, "add")}
-                                className="text-xs font-semibold text-[#7C3AED] border border-[#7C3AED] rounded-full px-3 py-1.5 hover:bg-violet-50"
-                              >
-                                Add Pricing
-                              </button>
+                              {isEditing ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingRowId(null)}
+                                  className="text-xs font-semibold text-[#7C3AED] border border-[#7C3AED] rounded-full px-3 py-1.5 hover:bg-violet-50"
+                                >
+                                  Done
+                                </button>
+                              ) : added ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingRowId(row.id)}
+                                  className="inline-flex items-center justify-end gap-1 text-xs font-semibold text-[#7C3AED] border border-[#7C3AED] rounded-full px-3 py-1.5 hover:bg-violet-50"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                  Edit
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingRowId(row.id)}
+                                  className="text-xs font-semibold text-[#7C3AED] border border-[#7C3AED] rounded-full px-3 py-1.5 hover:bg-violet-50"
+                                >
+                                  Add Pricing
+                                </button>
+                              )}
                             </td>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* Section 2 — Your charges */}
-                <div
-                  className="rounded-xl border-2 border-dashed p-5 space-y-4"
-                  style={{ borderColor: ACCENT }}
-                >
-                  <h3 className="font-semibold text-gray-900">Your Charges</h3>
-                  <div className="overflow-x-auto rounded-lg border border-gray-200">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-gray-100/80 text-left text-gray-500">
-                          <th className="px-4 py-3 font-medium">Name</th>
-                          <th className="px-4 py-3 font-medium">Type</th>
-                          <th className="px-4 py-3 font-medium">Value</th>
-                          <th className="px-4 py-3 font-medium bg-gray-200/60">Your Charges</th>
-                          <th className="px-4 py-3 font-medium w-[100px]"> </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {fees.map((row, i) => (
-                          <tr key={`y-${row.id}`} className="border-t border-gray-100">
-                            <td className="px-4 py-3 font-medium text-gray-900">{row.name}</td>
-                            <td className="px-4 py-3 text-gray-700">{row.feeType}</td>
-                            <td className="px-4 py-3 text-gray-600">{row.baseValue}</td>
-                            <td className="px-4 py-3 bg-gray-100/90 font-medium text-gray-900">
-                              {row.yourValue || "—"}
-                            </td>
-                            <td className="px-4 py-3">
-                              <button
-                                type="button"
-                                onClick={() => openPricingDetail(i, "edit")}
-                                className="inline-flex items-center gap-1 text-xs font-semibold text-[#7C3AED] hover:underline"
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                                Edit
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        )
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               </div>
-            )}
+            </div>
 
-            {view === "pricing" && (
-              <div className="space-y-5">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="text-[#7C3AED] -ml-2"
-                  onClick={() => {
-                    setView("tables")
-                    setEditingIndex(null)
-                  }}
-                >
-                  ← Back to fees
-                </Button>
-
-                <div className="space-y-2">
-                  <Label htmlFor="pricing-type" className="font-normal text-gray-700">
-                    Select Pricing Type
-                  </Label>
-                  <Select value={pricingType || undefined} onValueChange={setPricingType}>
-                    <SelectTrigger id="pricing-type" className="!h-12 border-[#E2E8F0] bg-white rounded-xl w-full">
-                      <SelectValue placeholder="" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="flat">Flat Rate</SelectItem>
-                      <SelectItem value="percentage">Percentage</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="pricing-condition" className="font-normal text-gray-700">
-                    Select Pricing Condition
-                  </Label>
-                  <Select value={pricingCondition || undefined} onValueChange={setPricingCondition}>
-                    <SelectTrigger id="pricing-condition" className="!h-12 border-[#E2E8F0] bg-white rounded-xl w-full">
-                      <SelectValue placeholder="" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="standard">Standard</SelectItem>
-                      <SelectItem value="premium">Premium</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="upper-cap">Upper Cap</Label>
-                  <Input id="upper-cap" value={upperCap} onChange={(e) => setUpperCap(e.target.value)} className="h-12 border-[#E2E8F0] rounded-xl" />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="floor-cap">Floor Cap</Label>
-                  <Input id="floor-cap" value={floorCap} onChange={(e) => setFloorCap(e.target.value)} className="h-12 border-[#E2E8F0] rounded-xl" />
-                </div>
-
-                <p className="text-sm font-medium text-gray-900">
-                  Where markup is more than &ldquo;Upper cap&rdquo;, Upper cap fee will be charged as flat rate
-                </p>
-
-                <div className="space-y-2">
-                  <Label htmlFor="spring-fee">SpringTD Fee</Label>
-                  <Input id="spring-fee" value={springFee} onChange={(e) => setSpringFee(e.target.value)} className="h-12 border-[#E2E8F0] rounded-xl" />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="markup-fee">Your Mark-up Fee</Label>
-                  <Input
-                    id="markup-fee"
-                    value={markupFee}
-                    onChange={(e) => setMarkupFee(e.target.value)}
-                    className="h-12 border-[#E2E8F0] rounded-xl"
-                    placeholder="Shown under Your Charges"
-                  />
-                </div>
-
-                <div className="space-y-2 pt-2">
-                  <div className="text-sm font-medium text-gray-900">What you will be charged by Spring</div>
-                  <Label htmlFor="service-fee">Service Fee</Label>
-                  <Input id="service-fee" value={serviceFee} onChange={(e) => setServiceFee(e.target.value)} className="h-12 border-[#E2E8F0] rounded-xl" />
-                </div>
-
-                <p className="text-xs text-gray-600">This will be charged additional to &ldquo;Mark-up Fee&rdquo;</p>
-
-                <div className="flex gap-3 pt-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="flex-1 border-[#7C3AED] text-[#7C3AED] hover:bg-violet-50"
-                    onClick={() => {
-                      setView("tables")
-                      setEditingIndex(null)
-                    }}
-                  >
-                    Back
-                  </Button>
-                  <Button
-                    type="button"
-                    className="flex-1 bg-[#7C3AED] hover:bg-[#6D28D9] text-white"
-                    onClick={applyPricingDetail}
-                  >
-                    Apply
-                  </Button>
-                </div>
-              </div>
-            )}
+            <div className="flex gap-3 pt-2 border-t border-gray-100">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1 border-[#7C3AED] text-[#7C3AED] h-12"
+                onClick={() => onOpenChange(false)}
+              >
+                Back
+              </Button>
+              <Button
+                type="button"
+                className="flex-1 bg-[#7C3AED] hover:bg-[#6D28D9] text-white h-12"
+                disabled={saving}
+                onClick={handleSubmit}
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Submit"}
+              </Button>
+            </div>
           </>
-        )}
-
-        {tab === "fees" && view === "tables" && (
-          <div className="flex gap-3 pt-2 border-t border-gray-100">
-            <Button
-              type="button"
-              variant="outline"
-              className="flex-1 border-[#7C3AED] text-[#7C3AED] h-12"
-              onClick={() => onOpenChange(false)}
-            >
-              Back
-            </Button>
-            <Button
-              type="button"
-              className="flex-1 bg-[#7C3AED] hover:bg-[#6D28D9] text-white h-12"
-              disabled={saving}
-              onClick={handleSubmit}
-            >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Submit"}
-            </Button>
-          </div>
         )}
       </div>
     </Drawer>

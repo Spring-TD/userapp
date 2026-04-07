@@ -9,7 +9,6 @@ import { GitBranch, Receipt, CreditCard, Shield, FileText } from 'lucide-react'
 import { RiSettings3Fill } from "react-icons/ri"
 import { FiLogOut } from "react-icons/fi"
 import { ChevronDown, ChevronUp } from 'lucide-react'
-import { TbCodeCircle2Filled } from "react-icons/tb"
 import { useState, useMemo, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -149,11 +148,11 @@ const MerchantSidebar: React.FC<MerchantSidebarProps> = ({ className = "" }) => 
       label: "App Builder",
       href: `/dashboard/merchant/app-builder${appQuery}`,
     },
-    {
-      icon: <TbCodeCircle2Filled size={20} />,
-      label: "Developer",
-      href: `/dashboard/merchant/developer`,
-    },
+    // {
+    //   icon: <TbCodeCircle2Filled size={20} />,
+    //   label: "Developer",
+    //   href: `/dashboard/merchant/developer`,
+    // },
   ],
     [appQuery],
   )

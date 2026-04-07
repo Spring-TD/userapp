@@ -3,7 +3,7 @@
 import type { ReactNode } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutGrid, User, ShieldCheck, Code2, Settings, Search, LogOut } from "lucide-react"
+import { LayoutGrid, ShieldCheck, Settings, Search, LogOut } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/hooks/useAuth"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -41,9 +41,9 @@ export default function MerchantAppsSidebar() {
     requiresApproval?: boolean
   }[] = [
     { icon: <LayoutGrid size={20} />, label: "Apps", href: "/dashboard/merchant", requiresApproval: true },
-    { icon: <User size={20} />, label: "Admin", href: "/dashboard/merchant/admin", requiresApproval: true },
+    // { icon: <User size={20} />, label: "Admin", href: "/dashboard/merchant/admin", requiresApproval: true },
     { icon: <ShieldCheck size={20} />, label: "Compliance", href: "/dashboard/merchant/compliance", requiresApproval: false },
-    { icon: <Code2 size={20} />, label: "Developer", href: "/dashboard/merchant/developer", requiresApproval: true },
+    // { icon: <Code2 size={20} />, label: "Developer", href: "/dashboard/merchant/developer", requiresApproval: true },
   ]
 
   return (
