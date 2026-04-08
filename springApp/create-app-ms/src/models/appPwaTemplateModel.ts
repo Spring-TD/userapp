@@ -48,6 +48,17 @@ export class AppPwaTemplateModel {
     return doc ? toAppPwaTemplate(doc.toJSON()) : null;
   }
 
+  static async getAppliedByAppId(appId: string): Promise<AppPwaTemplate | null> {
+    if (!Types.ObjectId.isValid(appId)) {
+      return null;
+    }
+    const doc = await AppPwaTemplateMongoModel.findOne({
+      appId: new Types.ObjectId(appId),
+      isApplied: true
+    }).sort({ updatedAt: -1 });
+    return doc ? toAppPwaTemplate(doc.toJSON()) : null;
+  }
+
   static async update(
     templateId: string,
     appId: string,

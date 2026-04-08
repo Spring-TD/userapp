@@ -268,6 +268,8 @@ const commodityDiscriminatorSchema = new Schema(
 
 const baseProductSchema = new Schema<IProductDocument>(
   {
+    upstreamProductId: { type: String, index: true },
+    upstreamAppId: { type: String, index: true },
     referenceNumber: { type: String, required: true },
     name: { type: String, required: true },
     description: { type: String, required: true, default: '' },
@@ -311,6 +313,8 @@ export function toProduct(doc: IProductDocument | Record<string, unknown>): Prod
 
   return {
     id: (raw._id as mongoose.Types.ObjectId)?.toString?.() ?? '',
+    upstreamProductId: raw.upstreamProductId as string | undefined,
+    upstreamAppId: raw.upstreamAppId as string | undefined,
     referenceNumber: raw.referenceNumber as string,
     name: raw.name as string,
     description: (raw.description as string) ?? '',

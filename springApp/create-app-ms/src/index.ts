@@ -43,6 +43,10 @@ app.get('/', (_req, res) => {
         '/api/v1/apps/:appId/pwa-templates/:templateId/assets/splash',
       appPwaTemplateOnboardingScreenImage:
         '/api/v1/apps/:appId/pwa-templates/:templateId/onboarding/screens/:screenIndex/image',
+      appPwaPublish: '/api/v1/apps/:appId/pwa/publish',
+      appPwaStatus: '/api/v1/apps/:appId/pwa/status',
+      appPwaManifest: '/api/v1/apps/:appId/pwa/manifest.webmanifest',
+      appPwaServiceWorker: '/api/v1/apps/:appId/pwa/sw.js',
       appManifestUpload: '/api/v1/apps/:id/manifests',
       appManifestReplace: '/api/v1/apps/:id/manifests/:manifestIndex',
       appManifestDelete: '/api/v1/apps/:id/manifests/:manifestIndex',

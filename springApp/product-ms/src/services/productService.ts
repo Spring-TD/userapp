@@ -196,6 +196,8 @@ export class ProductService {
   private buildLocalProductPayload(product: Product, appId: string, isActive: boolean): Omit<Product, 'id'> {
     const now = new Date().toISOString();
     return {
+      upstreamProductId: product.id,
+      upstreamAppId: product.appId,
       referenceNumber: product.referenceNumber,
       name: product.name,
       description: product.description ?? '',

@@ -185,6 +185,46 @@ Manifest files are app-scoped and independent from PWA templates.
 
 Manifest uploads accept `application/json`, `application/manifest+json`, `text/json`, or `.json` extension. Files are stored in Spaces under `/{appId}/manifests/`.
 
+### PWA publish/runtime endpoints
+
+Runtime publish artifacts are generated from the resolved template config and stored as versioned publish records (separate from editable template drafts).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/v1/apps/:appId/pwa/publish` | Publish runtime PWA artifacts. If `templateId` is provided in body, it is applied then published; otherwise the currently applied template is used. |
+| `GET` | `/api/v1/apps/:appId/pwa/status` | Get publish/readiness status with warnings/errors and readiness flags. |
+| `GET` | `/api/v1/apps/:appId/pwa/manifest.webmanifest` | Get latest published runtime web manifest JSON. |
+| `GET` | `/api/v1/apps/:appId/pwa/sw.js` | Get latest published service worker JS. |
+
+**Publish request body (`POST /pwa/publish`):**
+
+```json
+{
+  "templateId": "optional-template-id",
+  "publishMode": "apply-and-publish"
+}
+```
+
+Validation failures return `422` with a consistent envelope:
+
+```json
+{
+  "success": false,
+  "error": "PWA publish validation failed",
+  "details": [
+    "logoUrl is required",
+    "primaryColor must be a valid hex color"
+  ]
+}
+```
+
+Additional runtime behavior:
+
+- `GET /api/v1/apps/:appId/pwa/status` is safe before first publish and returns readiness flags with warnings (including `No published PWA version yet`).
+- `GET /api/v1/apps/:appId/pwa/manifest.webmanifest` and `GET /api/v1/apps/:appId/pwa/sw.js` return `404` with a clear JSON error when no published artifact exists yet.
+- Service worker responses include `Content-Type: application/javascript`, `ETag`, and cache headers (`no-cache, must-revalidate`) for predictable version checks.
+- Concurrent publishes for the same app are **last-write-wins**; publish history is retained in `AppPwaPublish` for audit/rollback workflows.
+
 ### Transaction Endpoints
 
 #### Get App Transactions
@@ -806,6 +846,21 @@ Stored in MongoDB collection `AppPwaTemplate`. Many rows per `appId`.
 - `config.policyTerms`: `privacyPolicy`, `termsOfService` — each with optional `title`, `contentHtml`, `contentText`, optional `contentJson` (TipTap document object), and optional `media[]` (`url`, `key`, `caption` per item)
 - `isApplied`: Whether this template is the active one for the PWA (at most one `true` per app after `apply`)
 - `createdAt`, `updatedAt`
+
+### AppPwaPublish (PWA runtime artifacts)
+
+Stored separately from template drafts to track publish/runtime state.
+
+- `id`: Publish record id
+- `appId`: Owning application
+- `templateId`: Template used for this publish
+- `version`: Publish version (ISO timestamp)
+- `manifest`: Generated runtime web manifest payload
+- `serviceWorkerMeta`: Runtime SW metadata (`version`, `hash`, `path`, `contentType`)
+- `artifactUrls`: `manifestUrl`, `serviceWorkerUrl`, `pwaEntryUrl`
+- `status`: `pending` | `published` | `failed`
+- `warnings`, `errors`: Publish/readiness diagnostics
+- `publishedAt`, `updatedAt`
 
 ## Integration with Product Microservice
 

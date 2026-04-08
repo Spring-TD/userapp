@@ -376,8 +376,10 @@ import multer from 'multer';
 import { config } from '../config/environment';
 import { AppService } from '../services/appService';
 import { AppPwaTemplateService } from '../services/appPwaTemplateService';
+import { AppPwaPublishService } from '../services/appPwaPublishService';
 import { AppController } from '../controllers/appController';
 import { AppPwaTemplateController } from '../controllers/appPwaTemplateController';
+import { AppPwaPublishController } from '../controllers/appPwaPublishController';
 import { apiKeyAuth } from '../middleware/apiKeyAuth';
 import { authenticate, merchantOnly } from '../middleware/auth';
 
@@ -391,6 +393,8 @@ const appService = new AppService();
 const appController = new AppController(appService);
 const pwaTemplateService = new AppPwaTemplateService();
 const appPwaTemplateController = new AppPwaTemplateController(appService, pwaTemplateService);
+const appPwaPublishService = new AppPwaPublishService();
+const appPwaPublishController = new AppPwaPublishController(appService, appPwaPublishService);
 
 // Create a new app - now requires authentication
 router.post('/', authenticate, merchantOnly, appController.createApp);
@@ -441,6 +445,17 @@ router.patch(
   merchantOnly,
   appPwaTemplateController.apply
 );
+
+// PWA runtime publish/status/artifacts
+router.post('/:appId/pwa/publish', authenticate, merchantOnly, appPwaPublishController.publish);
+router.get('/:appId/pwa/status', authenticate, merchantOnly, appPwaPublishController.status);
+router.get(
+  '/:appId/pwa/manifest.webmanifest',
+  authenticate,
+  merchantOnly,
+  appPwaPublishController.manifest
+);
+router.get('/:appId/pwa/sw.js', authenticate, merchantOnly, appPwaPublishController.serviceWorker);
 
 router.post(
   '/:appId/pwa-templates/:templateId/assets/logo',

@@ -115,6 +115,8 @@ export interface ProductTypeConfig {
 
 export interface Product {
   id: string;
+  upstreamProductId?: string;
+  upstreamAppId?: string;
   referenceNumber: string;
   name: string;
   description: string;
@@ -143,6 +145,8 @@ export interface Product {
 }
 
 export interface CreateProductRequest {
+  upstreamProductId?: string;
+  upstreamAppId?: string;
   name: string;
   description: string;
   type: string;
@@ -162,6 +166,8 @@ export interface CreateProductRequest {
 }
 
 export interface UpdateProductRequest {
+  upstreamProductId?: string;
+  upstreamAppId?: string;
   name?: string;
   description?: string;
   type?: string;
