@@ -30,7 +30,11 @@ export const setupProxies = (app: Express) => {
     // Compliance Service Proxy
     app.use(
         '/api/v1/compliance',
-        createProxyMiddleware(createOptions(config.complianceServiceUrl))
+        createProxyMiddleware(createOptions(config.complianceServiceUrl, '/api/v1/compliance'))
+    );
+    app.use(
+        '/api/v1/kyc',
+        createProxyMiddleware(createOptions(config.complianceServiceUrl, '/api/v1/kyc'))
     );
 
     // Wallet Service Proxy
