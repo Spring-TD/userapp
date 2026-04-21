@@ -12,7 +12,7 @@ export default function MobileV2Layout({
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-7 bg-gray-900 rounded-b-3xl z-50"></div>
 
                 {/* Main Content Area */}
-                <div className="h-full w-full overflow-y-auto scrollbar-hide bg-[#2563EB]">
+                <div className="h-full w-full overflow-y-auto no-scrollbar bg-[#2563EB]">
                     {children}
                 </div>
             </div>

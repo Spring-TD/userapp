@@ -138,7 +138,7 @@ function SignupForm() {
         <p className="px-4 text-[15px] leading-normal text-gray-500">Create your account with the details below</p>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-4">
+      <div className="no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto pb-4">
         {!userMerchantId && (
           <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900">
             Missing <code className="font-mono">merchant_id</code>. Add <code className="font-mono">?merchant_id=…</code> to the URL or set{' '}
@@ -294,7 +294,6 @@ function FloatingField({
     </div>
   );
 }
-
 export default function SignupPage() {
   return (
     <Suspense
@@ -306,3 +305,4 @@ export default function SignupPage() {
     </Suspense>
   );
 }
+

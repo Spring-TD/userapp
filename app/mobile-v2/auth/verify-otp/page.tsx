@@ -112,7 +112,16 @@ function VerifyOtpContent() {
       </p>
 
       <div className="mb-8 w-full">
-        <InputOTP maxLength={6} value={code} onValueChange={setCode} containerClassName="gap-3 justify-start w-full flex-nowrap">
+        <InputOTP
+          maxLength={6}
+          value={code}
+          onChange={(value) => setCode(value)}
+          disabled={loading}
+          autoFocus
+          inputMode="numeric"
+          pattern="[0-9]*"
+          containerClassName="gap-3 justify-start w-full flex-nowrap"
+        >
           <InputOTPGroup className="gap-3 flex-nowrap">
             {[0, 1, 2, 3, 4, 5].map((idx) => (
               <InputOTPSlot

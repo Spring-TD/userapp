@@ -103,6 +103,9 @@ export const emailExistsThunk = createAsyncThunk<boolean, string, { rejectValue:
       if (typeof data.data?.exists === 'boolean') return data.data.exists
       return false
     } catch (error: unknown) {
+      const status = (error as { response?: { status?: number } })?.response?.status
+      // Some deployments may not expose email-exists yet; do not block signup flow.
+      if (status === 404) return false
       return rejectWithValue(normalizeClientAuthError(error))
     }
   },
