@@ -7,7 +7,6 @@ import { apiClient } from "@/lib/api"
 import { ENDPOINTS } from "@/lib/endpoints"
 import { Button } from "@/components/ui/button"
 import { toast } from "react-toastify"
-import { ProductAuthShell } from "@/components/product-auth-shell"
 import { AuthFormSkeleton } from "@/components/ui/app-loading-skeleton"
 
 function VerifyEmailContent() {
@@ -134,8 +133,8 @@ function VerifyEmailContent() {
   }
 
   return (
-    <ProductAuthShell contentClassName="max-w-md">
-      <div className="w-full">
+    <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center px-4 py-10">
+      <div className="w-full max-w-md">
         {/* OTP Input Card */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 shadow-sm">
           {/* Icon and Title */}
@@ -199,7 +198,7 @@ function VerifyEmailContent() {
           </p>
         </div>
       </div>
-    </ProductAuthShell>
+    </div>
   )
 }
 
@@ -207,9 +206,11 @@ export default function VerifyEmailPage() {
   return (
     <Suspense
       fallback={
-        <ProductAuthShell contentClassName="max-w-md">
+        <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center px-4 py-10">
+          <div className="w-full max-w-md">
           <AuthFormSkeleton />
-        </ProductAuthShell>
+          </div>
+        </div>
       }
     >
       <VerifyEmailContent />
