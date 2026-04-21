@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
-import { Bell, User, ChevronLeft } from "lucide-react"
+import { ChevronLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -9,6 +9,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { useAppDispatch, useAppSelector } from "@/store/hooks"
 import { fetchMerchantAppsThunk, setSelectedMerchantApp } from "@/store/merchantAppsSlice"
 import { buildMerchantProductsUrl } from "@/lib/merchantAppNavigation"
+import { DashboardTopRightControls } from "@/components/dashboard-top-right-controls"
 
 interface MerchantHeaderProps {
   breadcrumb?: React.ReactNode
@@ -84,15 +85,7 @@ export default function MerchantHeader({ breadcrumb }: MerchantHeaderProps) {
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        <button type="button" className="relative p-2 hover:bg-gray-100 rounded-full transition-colors">
-          <Bell size={20} className="text-gray-600" />
-          <span className="absolute top-1 right-1 w-2 h-2 bg-[#7C3AED] rounded-full" />
-        </button>
-        <button type="button" className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-          <User size={20} className="text-gray-600" />
-        </button>
-      </div>
+      <DashboardTopRightControls />
     </header>
   )
 }

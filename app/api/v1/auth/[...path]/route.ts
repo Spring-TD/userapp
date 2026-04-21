@@ -13,6 +13,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const key = getPathKey(await params.then((p) => p.path));
   if (key === 'get-token') return Auth.getToken(request);
   if (key === 'validate') return Auth.validateGet(request);
+  if (key === 'me') return Auth.me(request);
+  if (key.startsWith('email-exists/')) {
+    const email = decodeURIComponent(key.slice('email-exists/'.length));
+    return Auth.emailExists(request, email);
+  }
   return NextResponse.json({ error: 'Not found' }, { status: 404 });
 }
 
@@ -30,6 +35,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   if (key === 'resend-email-otp') return Auth.resendEmailOtp(request);
   if (key === 'password/forgot') return Auth.passwordForgot(request);
   if (key === 'password/reset') return Auth.passwordReset(request);
+  if (key === 'logout') return Auth.logout(request);
+  if (key === 'verify-token') return Auth.verifyTokenPost(request);
   return NextResponse.json({ error: 'Not found' }, { status: 404 });
 }
 

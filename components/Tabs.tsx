@@ -30,7 +30,7 @@ export default function Tabs({
 }: TabsProps) {
   return (
     <div className={`border-b border-gray-200 ${containerClassName}`}>
-      <nav className={`-mb-px flex space-x-8 ${className}`}>
+      <nav className={`-mb-px flex space-x-4 sm:space-x-8 overflow-x-auto whitespace-nowrap pr-2 ${className}`}>
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id
           const isLocked = tab.locked

@@ -25,8 +25,12 @@ function MobileV1Content() {
   // Fetch configuration from backend
   const { config, loading } = useMobileConfig({ appId });
 
-  const handleSignIn = () => {
+  const handleGetStarted = () => {
     router.push('/mobile/auth/signup');
+  };
+
+  const handleSignIn = () => {
+    router.push('/mobile/auth/login');
   };
 
   // Show loading state while fetching config
@@ -37,7 +41,7 @@ function MobileV1Content() {
   if (showSplash) {
     return (
       <V1SplashScreen
-        logo={config.splash.logo}
+        logo={config.splash.logo || '/images/mobile/mobile-splash-icon.png'}
         backgroundColor="#FFFFFF"
         textColor={config.theme.primaryColor}
         onComplete={() => setShowSplash(false)}
@@ -53,7 +57,8 @@ function MobileV1Content() {
       textColor={config.theme.headerTextColor}
       buttonColor={config.theme.primaryColor}
       buttonTextColor="#FFFFFF"
-      logo={config.splash.logo}
+      logo={config.splash.logo || '/images/mobile/mobile-splash-icon.png'}
+      onComplete={handleGetStarted}
       onSignIn={handleSignIn}
       showDecorations={true}
     />

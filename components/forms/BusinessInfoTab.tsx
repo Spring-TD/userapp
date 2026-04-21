@@ -113,7 +113,7 @@ const BusinessInfoTab: React.FC<BusinessInfoTabProps> = ({ onContinue }) => {
   const { merchantBusinessSurvey: formData, setMerchantBusinessSurvey } = useComplianceForm();
 
   // control collapsing animation for the businessModel select
-  const [isBusinessModelVisible, setIsBusinessModelVisible] = useState(true);
+  const [, setIsBusinessModelVisible] = useState(true);
 
   const [businessTypeOptions, setBusinessTypeOptions] = useState<{ value: string; label: string }[]>([]);
   const [industryTypeOptions, setIndustryTypeOptions] = useState<{ value: string; label: string }[]>([]);
@@ -153,15 +153,15 @@ const BusinessInfoTab: React.FC<BusinessInfoTabProps> = ({ onContinue }) => {
 
   return (
     <div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {/* Business Survey */}
-        <div className="bg-[#EDEDF2] rounded-xl p-6 border border-gray-200 h-[562px] w-[600px]">
+        <div className="bg-[#EDEDF2] rounded-xl p-4 sm:p-6 border border-gray-200 min-w-0">
           <h2 className="text-lg font-semibold text-gray-900">Business Survey</h2>
           <p className="text-sm text-gray-500 mt-1 mb-6">
             Fill in the required information below to create your business account.
           </p>
 
-          <div className="space-y-8">
+          <div className="space-y-6 sm:space-y-8">
             <FloatingSelect
               label="What do you want to create?"
               placeholderText={optionsLoading ? "Loading…" : "Select a Business Type"}
@@ -210,13 +210,13 @@ const BusinessInfoTab: React.FC<BusinessInfoTabProps> = ({ onContinue }) => {
         </div>
 
         {/* About the Business */}
-        <div className="bg-[#EDEDF2] rounded-xl p-6 border border-gray-200 w-[700px]">
+        <div className="bg-[#EDEDF2] rounded-xl p-4 sm:p-6 border border-gray-200 min-w-0">
           <h2 className="text-lg font-semibold text-gray-900">About the Business</h2>
           <p className="text-sm text-gray-500 mt-1 mb-6">
             Fill in the required information below to create your business account.
           </p>
 
-          <div className="space-y-8">
+          <div className="space-y-6 sm:space-y-8">
             <FloatingSelect
               label="Industry"
               placeholderText={optionsLoading ? "Loading…" : "Select Industry Type"}
@@ -271,7 +271,7 @@ const BusinessInfoTab: React.FC<BusinessInfoTabProps> = ({ onContinue }) => {
       <div className="mt-6 flex justify-end">
         <button
           type="button"
-          className="px-4 py-2 rounded-md text-sm font-medium shadow-sm cursor-pointer disabled:opacity-60"
+          className="w-full sm:w-auto px-4 py-2 rounded-md text-sm font-medium shadow-sm cursor-pointer disabled:opacity-60"
           style={{ backgroundColor: "#2563EB", color: "#fff" }}
           onClick={() => {
             toast.success('✅ Business info saved successfully');

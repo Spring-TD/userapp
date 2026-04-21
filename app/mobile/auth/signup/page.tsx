@@ -20,7 +20,7 @@ export default function SignupPage() {
     otp: '',
     pin: ''
   });
-  const [useEmail, setUseEmail] = useState(false);
+  const [useEmail, setUseEmail] = useState(true);
   const [timer, setTimer] = useState(56);
 
   useEffect(() => {
@@ -142,11 +142,15 @@ export default function SignupPage() {
               </p>
             </div>
 
-            <div className="flex justify-between gap-2 px-2">
+            <div className="flex items-center gap-5 px-2 flex-nowrap">
               {[1, 2, 3, 4, 5, 6].map((_, i) => (
-                <div key={i} className="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center">
-                  <div className={cn("w-2.5 h-2.5 rounded-full", formData.otp.length > i ? "bg-gray-900" : "bg-gray-300")} />
-                </div>
+                <div
+                  key={i}
+                  className={cn(
+                    "w-3 h-3 rounded-full transition-colors",
+                    formData.otp.length > i ? "bg-gray-800" : "bg-gray-300"
+                  )}
+                />
               ))}
             </div>
             {/* Hidden input for actual typing if needed, or just simulate for now */}
@@ -228,7 +232,7 @@ export default function SignupPage() {
                   {num}
                 </button>
               ))}
-              <button className="text-sm text-blue-600 font-medium flex items-center justify-center">
+              <button className="text-sm text-blue-600 font-medium whitespace-nowrap flex items-center justify-center">
                 Forgot PIN?
               </button>
               <button

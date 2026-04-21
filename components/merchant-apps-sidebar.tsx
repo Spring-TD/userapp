@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { LayoutGrid, ShieldCheck, Settings, Search, LogOut } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/hooks/useAuth"
@@ -17,7 +17,8 @@ const LOCK_MSG = "Complete Compliance (KYC) to unlock this section."
 
 export default function MerchantAppsSidebar() {
   const pathname = usePathname()
-  const { user } = useAuth()
+  const router = useRouter()
+  const { user, logout } = useAuth()
   const tokenUser = typeof window !== "undefined" ? getUserFromToken() : null
   const effectiveUser = user ?? tokenUser
 
@@ -33,6 +34,11 @@ export default function MerchantAppsSidebar() {
   const { isApproved, loading } = useMerchantCompliance()
   const bypass = isMerchantComplianceBypassEnabled()
   const lockNonCompliance = !bypass && !loading && !isApproved
+
+  const handleLogout = async () => {
+    await logout()
+    router.replace("/signin")
+  }
 
   const navItems: {
     icon: ReactNode
@@ -123,18 +129,16 @@ export default function MerchantAppsSidebar() {
                 <Avatar className="w-10 h-10 border-2 border-white shadow-sm">
                   <AvatarFallback className="text-sm font-semibold text-gray-900">{initials}</AvatarFallback>
                 </Avatar>
-                <Avatar className="w-10 h-10 border-2 border-white shadow-sm">
-                  <AvatarFallback className="text-sm font-semibold text-gray-900">{initials}</AvatarFallback>
-                </Avatar>
+            
                 <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
             </div>
             <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-gray-900 truncate">{displayName}</p>
                 <p className="text-xs text-gray-500 truncate">{displayEmail}</p>
-                <p className="text-sm font-bold text-gray-900 truncate">{displayName}</p>
-                <p className="text-xs text-gray-500 truncate">{displayEmail}</p>
             </div>
-            <LogOut size={18} className="text-gray-400 group-hover:text-gray-600" />
+            <button type="button" onClick={() => void handleLogout()} aria-label="Logout" className="p-1">
+              <LogOut size={18} className="text-gray-400 group-hover:text-gray-600" />
+            </button>
         </div>
       </div>
     </div>

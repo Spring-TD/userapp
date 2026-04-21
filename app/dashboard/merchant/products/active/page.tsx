@@ -16,8 +16,7 @@ export default function ProductOverviewPage() {
     <div className="p-8">
       <h1 className="text-2xl font-bold text-gray-900 mb-2">Activated Products</h1>
       <p className="text-sm text-gray-500 mb-8">
-        Products you have turned on for the selected app (from{" "}
-        <code className="rounded bg-gray-100 px-1 text-xs">GET /api/v1/products/app/:appId</code>).
+        Products you have turned on for the selected app
       </p>
       <Suspense fallback={<ActiveProductsFallback />}>
         <ActiveProductsTable />

@@ -63,19 +63,21 @@ export function V1OnboardingView({
 
       <div className="w-full z-10 mb-8 flex flex-col items-center space-y-8">
         <div className="flex flex-col items-center space-y-6 w-full">
-          <h2
-            className="text-lg font-semibold"
+          <button
+            type="button"
+            className="text-lg font-semibold cursor-pointer"
             style={{ color: textColor }}
+            onClick={onComplete}
           >
             Get started
-          </h2>
+          </button>
           <Button
             className="w-full rounded-full h-12 text-base font-medium"
             style={{
               backgroundColor: buttonColor,
               color: buttonTextColor,
             }}
-            onClick={onSignIn || onComplete}
+            onClick={onSignIn}
           >
             Sign in
           </Button>

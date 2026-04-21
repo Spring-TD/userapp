@@ -3,7 +3,6 @@
 import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from "react"
 import {
     AppConfiguration,
-    appConfigurationApi,
     appTemplateApi,
     pwaPublishApi,
     type PwaPublishPayload,
@@ -291,47 +290,27 @@ export function AppBuilderProvider({ children, initialAppId }: AppBuilderProvide
                 }))
                 return
             }
-        } catch (e) {
-            console.warn("[AppBuilder] PWA templates unavailable, falling back to legacy configuration", e)
-        }
 
-        try {
-            const response = await appConfigurationApi.getActiveConfiguration(appId)
-            const config = response.data
-
-            if (config) {
-                setState(prev => ({
-                    ...prev,
-                    appId,
-                    pwaTemplateId: null,
-                    configurationId: config.id,
-                    appElements: config.appElements || defaultAppElements,
-                    onboarding: config.onboarding || defaultOnboarding,
-                    appProfile: config.appProfile || defaultAppProfile,
-                    policy: config.policy || defaultPolicy,
-                    support: config.support || defaultSupport,
-                    dns: config.dns || defaultDNS,
-                    isLoading: false,
-                    hasUnsavedChanges: false,
-                    error: null,
-                }))
-            } else {
-                setState(prev => ({
-                    ...prev,
-                    appId,
-                    pwaTemplateId: null,
-                    isLoading: false,
-                    error: null,
-                }))
-            }
+            // No template exists yet for this app.
+            // Stop the loading state and let the UI render defaults.
+            setState(prev => ({
+                ...prev,
+                appId,
+                pwaTemplateId: null,
+                configurationId: null,
+                isLoading: false,
+                hasUnsavedChanges: false,
+                error: null,
+            }))
+            return
         } catch (error) {
-            console.error("Failed to load configuration:", error)
+            console.warn("[AppBuilder] Could not load PWA templates; using defaults until a template is created", error)
             setState(prev => ({
                 ...prev,
                 appId,
                 pwaTemplateId: null,
                 isLoading: false,
-                error: error instanceof Error ? error.message : "Failed to load configuration",
+                error: null,
             }))
         }
     }, [])
@@ -436,15 +415,19 @@ export function AppBuilderProvider({ children, initialAppId }: AppBuilderProvide
                     config: fullPwaConfig,
                 })
             } else {
-                const configUpdate: Partial<AppConfiguration> = {
-                    appElements: state.appElements,
-                    onboarding: state.onboarding,
-                    appProfile: state.appProfile,
-                    policy: state.policy,
-                    support: state.support,
-                    dns: state.dns,
-                }
-                await appConfigurationApi.updateConfiguration(state.appId, configUpdate)
+                const createRes = await appTemplateApi.createTemplate(state.appId, {
+                    name: "Default Template",
+                    description: "Auto-created from App Builder",
+                    config: fullPwaConfig,
+                })
+                const created = createRes.data as unknown as { id?: string; _id?: string } | undefined
+                const createdId = created?.id ?? created?._id
+                if (!createdId) throw new Error("Failed to create PWA template")
+                setState(prev => ({
+                    ...prev,
+                    pwaTemplateId: createdId,
+                    configurationId: createdId,
+                }))
             }
 
             setState(prev => ({
@@ -497,10 +480,20 @@ export function AppBuilderProvider({ children, initialAppId }: AppBuilderProvide
                         config: patch,
                     })
                 } else {
-                    const configUpdate: Partial<AppConfiguration> = {
-                        [section]: state[section],
-                    }
-                    await appConfigurationApi.updateConfiguration(state.appId, configUpdate)
+                    const fullPwaConfig = appBuilderSlicesToPwaConfig(slices)
+                    const createRes = await appTemplateApi.createTemplate(state.appId, {
+                        name: "Default Template",
+                        description: "Auto-created from App Builder",
+                        config: fullPwaConfig,
+                    })
+                    const created = createRes.data as unknown as { id?: string; _id?: string } | undefined
+                    const createdId = created?.id ?? created?._id
+                    if (!createdId) throw new Error("Failed to create PWA template")
+                    setState(prev => ({
+                        ...prev,
+                        pwaTemplateId: createdId,
+                        configurationId: createdId,
+                    }))
                 }
 
                 setState(prev => ({
@@ -569,36 +562,30 @@ export function AppBuilderProvider({ children, initialAppId }: AppBuilderProvide
                 return { success: true, versionId: state.pwaTemplateId, publish: publishRes.data }
             }
 
-            const configUpdate: Partial<AppConfiguration> = {
-                appElements: state.appElements,
-                onboarding: state.onboarding,
-                appProfile: state.appProfile,
-                policy: state.policy,
-                support: state.support,
-                dns: state.dns,
-            }
+            const createRes = await appTemplateApi.createTemplate(state.appId, {
+                name: "Default Template",
+                description: "Auto-created from App Builder",
+                config: fullPwaConfig,
+            })
+            const created = createRes.data as unknown as { id?: string; _id?: string } | undefined
+            const createdId = created?.id ?? created?._id
+            if (!createdId) throw new Error("Failed to create PWA template")
 
-            const createResponse = await appConfigurationApi.createConfiguration(
-                state.appId,
-                configUpdate,
-                { isActive: true },
-            )
+            await pwaPublishApi.publish(state.appId, {
+                templateId: createdId,
+                publishMode: 'apply-and-publish',
+            })
 
-            if (createResponse.data) {
-                await appConfigurationApi.updatePublishingStatus(state.appId, true)
+            setState(prev => ({
+                ...prev,
+                pwaTemplateId: createdId,
+                configurationId: createdId,
+                isSaving: false,
+                hasUnsavedChanges: false,
+                lastSavedAt: new Date(),
+            }))
 
-                setState(prev => ({
-                    ...prev,
-                    configurationId: createResponse.data?.id || prev.configurationId,
-                    isSaving: false,
-                    hasUnsavedChanges: false,
-                    lastSavedAt: new Date(),
-                }))
-
-                return { success: true, versionId: createResponse.data.id }
-            }
-
-            throw new Error('Failed to create configuration version')
+            return { success: true, versionId: createdId }
         } catch (error) {
             console.error('Failed to publish configuration:', error)
             const message = error instanceof Error ? error.message : 'Failed to publish configuration'
@@ -620,50 +607,10 @@ export function AppBuilderProvider({ children, initialAppId }: AppBuilderProvide
         state.dns,
     ])
 
-    const restoreConfiguration = useCallback(async (configurationId: string): Promise<{ success: boolean }> => {
-        if (!state.appId) {
-            console.error('Cannot restore: No appId set')
-            return { success: false }
-        }
-
-        setState(prev => ({ ...prev, isLoading: true, error: null }))
-
-        try {
-            // Activate the specified configuration version
-            const response = await appConfigurationApi.activateConfiguration(state.appId, configurationId)
-            
-            if (response.data) {
-                const config = response.data
-
-                setState(prev => ({
-                    ...prev,
-                    pwaTemplateId: null,
-                    configurationId: config.id,
-                    appElements: config.appElements || defaultAppElements,
-                    onboarding: config.onboarding || defaultOnboarding,
-                    appProfile: config.appProfile || defaultAppProfile,
-                    policy: config.policy || defaultPolicy,
-                    support: config.support || defaultSupport,
-                    dns: config.dns || defaultDNS,
-                    isLoading: false,
-                    hasUnsavedChanges: false,
-                    lastSavedAt: new Date(),
-                }))
-
-                return { success: true }
-            }
-
-            throw new Error('Failed to restore configuration')
-        } catch (error) {
-            console.error('Failed to restore configuration:', error)
-            setState(prev => ({
-                ...prev,
-                isLoading: false,
-                error: error instanceof Error ? error.message : 'Failed to restore configuration',
-            }))
-            return { success: false }
-        }
-    }, [state.appId])
+    const restoreConfiguration = useCallback(async (_configurationId: string): Promise<{ success: boolean }> => {
+        // Legacy configuration restore is intentionally disabled in PWA-template flow.
+        return { success: false }
+    }, [])
 
     // ==================
     // Utility Functions

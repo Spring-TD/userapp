@@ -290,18 +290,18 @@ const BusinessDocument: React.FC<Props> = ({ onContinue }) => {
   };
 
   return (
-    <div className="px-12 py-6">
+    <div className="px-0 sm:px-2 lg:px-4 py-4 sm:py-6">
       {/* Header inside big rounded pale card */}
-      <div className="bg-gray-100 rounded-2xl p-6 border border-gray-200">
+      <div className="bg-gray-100 rounded-2xl p-4 sm:p-6 border border-gray-200">
         <div className="text-center mb-4">
           <h2 className="text-[24px] font-semibold text-gray-900">Business Document Upload</h2>
           <p className="text-xs text-gray-500 mt-3">Upload company documents</p>
         </div>
 
         {/* Content area with two columns */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           {/* Left card: stacked upload rows */}
-          <div className="space-y-8">
+          <div className="space-y-5 sm:space-y-8 min-w-0">
             {leftList.map((item) => (
               <UploadCard
                 key={item.id}
@@ -316,7 +316,7 @@ const BusinessDocument: React.FC<Props> = ({ onContinue }) => {
           </div>
 
           {/* Right card: stacked upload rows */}
-          <div className="space-y-8">
+          <div className="space-y-5 sm:space-y-8 min-w-0">
             {rightList.map((item) => (
               <UploadCard
                 key={item.id}
@@ -336,7 +336,7 @@ const BusinessDocument: React.FC<Props> = ({ onContinue }) => {
       <div className="mt-6 flex justify-end">
         <button
           type="button"
-          className="px-4 py-2 rounded-md text-sm font-medium shadow-sm cursor-pointer disabled:opacity-60"
+          className="w-full sm:w-auto px-4 py-2 rounded-md text-sm font-medium shadow-sm cursor-pointer disabled:opacity-60"
           style={{ backgroundColor: "#2563EB", color: "#fff" }}
           onClick={submit}
           disabled={submitting}

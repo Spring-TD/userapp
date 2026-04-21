@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useAppBuilder } from "@/contexts/AppBuilderContext"
 import { useState, useEffect, useCallback } from "react"
-import { appConfigurationApi, type AppConfiguration, pwaPublishApi, type PwaPublishPayload, type PwaPublishStatusData } from "@/lib/services/appService"
+import { appTemplateApi, pwaPublishApi, type PwaPublishPayload, type PwaPublishStatusData } from "@/lib/services/appService"
 import { toast } from "sonner"
 import { format, formatDistanceToNow } from "date-fns"
 import Link from "next/link"
@@ -65,18 +65,27 @@ export function PublishTab() {
     setLoadingVersions(true)
     
     try {
-      const response = await appConfigurationApi.getAllConfigurations(appId)
-      const configs = response.data || []
-      
-      // Transform configurations to versions
-      const transformedVersions: ConfigVersion[] = configs.map((config: AppConfiguration, index: number) => ({
-        id: config.id || `version-${index}`,
-        versionRef: `App_v${configs.length - index}_${(config.id || '').slice(-6) || Math.random().toString(36).slice(-6)}`,
-        updatedSections: getUpdatedSectionsFromConfig(config),
-        lastUpdated: config.updatedAt ? new Date(config.updatedAt) : new Date(),
-        status: config.isActive ? 'current' : 'archived' as const,
-        isPublished: config.isActive,
-      }))
+      const response = await appTemplateApi.getAllTemplates(appId)
+      const raw = response.data as unknown
+      const templates = Array.isArray(raw)
+        ? (raw as Array<Record<string, unknown>>)
+        : raw && typeof raw === "object" && Array.isArray((raw as { templates?: unknown }).templates)
+          ? ((raw as { templates: Array<Record<string, unknown>> }).templates)
+          : []
+
+      const transformedVersions: ConfigVersion[] = templates.map((tpl, index) => {
+        const id = String(tpl.id ?? tpl._id ?? `template-${index}`)
+        const updatedAtRaw = tpl.updatedAt
+        const isCurrent = tpl.isApplied === true || tpl.isDefault === true || index === 0
+        return {
+          id,
+          versionRef: `PWA_v${templates.length - index}_${id.slice(-6) || Math.random().toString(36).slice(-6)}`,
+          updatedSections: getChangedSections(),
+          lastUpdated: typeof updatedAtRaw === "string" ? new Date(updatedAtRaw) : new Date(),
+          status: isCurrent ? "current" : "archived",
+          isPublished: isCurrent,
+        }
+      })
       
       setVersions(transformedVersions)
     } catch (error) {
@@ -107,18 +116,6 @@ export function PublishTab() {
   useEffect(() => {
     fetchPwaRuntimeStatus()
   }, [fetchPwaRuntimeStatus])
-
-  function getUpdatedSectionsFromConfig(config: AppConfiguration): string[] {
-    const sections: string[] = []
-    if (config.appElements?.logo || config.appElements?.splash) sections.push('Assets')
-    if (config.appElements?.buttons) sections.push('Splash')
-    if (config.onboarding?.splash1 || config.onboarding?.splash2) sections.push('Onboarding')
-    if (config.appProfile?.elementColors) sections.push('Profile')
-    if (config.dns?.customDomain) sections.push('DNS')
-    if (config.policy?.termsSection?.content || config.policy?.policySection?.content) sections.push('Policy')
-    if (config.support?.email || config.support?.phone) sections.push('Support')
-    return sections.length > 0 ? sections : ['Initial']
-  }
 
   const handlePublish = async () => {
     setPublishing(true)

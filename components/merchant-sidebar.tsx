@@ -63,7 +63,7 @@ function isSubNavActive(pathname: string, href: string, label: string): boolean 
 const MerchantSidebar: React.FC<MerchantSidebarProps> = ({ className = "" }) => {
   const pathname = usePathname()
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   const dispatch = useAppDispatch()
   const { apps, loading, selectedAppId, selectedAppName } = useAppSelector((s) => s.merchantApps)
 
@@ -94,6 +94,11 @@ const MerchantSidebar: React.FC<MerchantSidebarProps> = ({ className = "" }) => 
     ? `${(effectiveUser.firstName ?? "").trim().charAt(0)}${(effectiveUser.lastName ?? "").trim().charAt(0)}`.toUpperCase()
     : ""
   const initials = initialsFromName || (displayEmail?.charAt(0) ?? "U").toUpperCase()
+
+  const handleLogout = async () => {
+    await logout()
+    router.replace("/signin")
+  }
 
   const navItems: NavItem[] = useMemo(
     () => [
@@ -318,7 +323,7 @@ const MerchantSidebar: React.FC<MerchantSidebarProps> = ({ className = "" }) => 
 
         {/* Settings */}
         <ul className="space-y-1">
-          <li>
+          {/* <li>
             <Link
               href={`/dashboard/merchant/billing`}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors ${
@@ -330,7 +335,7 @@ const MerchantSidebar: React.FC<MerchantSidebarProps> = ({ className = "" }) => 
               <CreditCard size={20} />
               <span>Billing</span>
             </Link>
-          </li>
+          </li> */}
           <li>
             <Link
               href={`/dashboard/merchant/settings`}
@@ -359,7 +364,9 @@ const MerchantSidebar: React.FC<MerchantSidebarProps> = ({ className = "" }) => 
               <p className="text-xs text-gray-500">{displayEmail}</p>
             </div>
           </div>
-          <FiLogOut size={20} className="text-gray-500 cursor-pointer hover:text-gray-700" />
+          <button type="button" onClick={() => void handleLogout()} aria-label="Logout" className="p-1">
+            <FiLogOut size={20} className="text-gray-500 cursor-pointer hover:text-gray-700" />
+          </button>
         </div>
       </div>
     </div>

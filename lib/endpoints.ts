@@ -278,7 +278,6 @@ export const BACKEND = {
 // Auth + password + OTP handled by /api/v1/auth/[...path] (shows v1 in request path)
 // Compliance (KYC) handled by single catch-all: /api/compliance/[...path]
 const AUTH_BASE = "/v1/auth"
-const OTP_BASE = "/otp"
 const USER_BASE = "/v1/user"
 const COMPLIANCE_BASE = "/compliance"
 
@@ -298,8 +297,9 @@ export const ENDPOINTS = {
     },
     otp: {
       resendEmail: `${AUTH_BASE}/resend-email-otp`,
-      generate: `${OTP_BASE}/generate`,
-      verify: `${OTP_BASE}/verify`,
+      /** Proxied by app/api/v1/otp/generate/route.ts */
+      generate: `/v1/otp/generate`,
+      verify: `/v1/otp/verify`,
     },
     password: {
       forgot: `${AUTH_BASE}/password/forgot`,
@@ -350,8 +350,8 @@ export const ENDPOINTS = {
       message: `${COMPLIANCE_BASE}/business/message`,
       messages: `${COMPLIANCE_BASE}/business/messages`,
     },
-    /** GET — KYC status for user; use /api/compliance/... (same proxy as other KYC routes). */
-    status: (userId: string) => `${COMPLIANCE_BASE}/status/${encodeURIComponent(userId)}`,
+    /** GET — KYC status for user (direct v1 KYC proxy). */
+    status: (userId: string) => `/v1/kyc/status/${encodeURIComponent(userId)}`,
     admin: {
       users: `${COMPLIANCE_BASE}/admin/users`,
       documents: `${COMPLIANCE_BASE}/admin/documents`,

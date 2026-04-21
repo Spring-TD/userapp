@@ -87,14 +87,15 @@ export function ShareholderInfo() {
       )}
 
       <div className="flex justify-end">
-        <Button onClick={() => setShareholderDrawerOpen(true)} className="bg-[#2563EB] hover:bg-[#1D4ED8] text-white">
+        <Button onClick={() => setShareholderDrawerOpen(true)} className="w-full sm:w-auto bg-[#2563EB] hover:bg-[#1D4ED8] text-white">
           <Copy className="w-4 h-4 mr-2" />
           Create shareholder
         </Button>
       </div>
 
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <table className="w-full">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[860px]">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
@@ -138,6 +139,7 @@ export function ShareholderInfo() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       <CreateShareholderDrawer />

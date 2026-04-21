@@ -1018,7 +1018,7 @@ export const appTemplateApi = {
       iconKey: data.iconKey,
       config: data.config ?? emptyPwaTemplateConfig(),
     };
-    const response = await fetch(`/api/apps/${appId}/configuration/templates`, {
+    const response = await fetch(`/api/apps/${appId}/pwa-templates`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(body),
@@ -1037,7 +1037,7 @@ export const appTemplateApi = {
    * Get all templates for an app
    */
   async getAllTemplates(appId: string): Promise<ApiResponse<AppTemplate[]>> {
-    const response = await fetch(`/api/apps/${appId}/configuration/templates`, {
+    const response = await fetch(`/api/apps/${appId}/pwa-templates`, {
       headers: getAuthHeaders(),
     });
 
@@ -1054,7 +1054,7 @@ export const appTemplateApi = {
    * Get a specific template
    */
   async getTemplate(appId: string, templateId: string): Promise<ApiResponse<AppTemplate>> {
-    const response = await fetch(`/api/apps/${appId}/configuration/templates/${templateId}`, {
+    const response = await fetch(`/api/apps/${appId}/pwa-templates/${templateId}`, {
       headers: getAuthHeaders(),
     });
 
@@ -1071,7 +1071,7 @@ export const appTemplateApi = {
    * Mark template as applied for PWA (Next proxies PATCH …/pwa-templates/…/apply).
    */
   async applyTemplate(appId: string, templateId: string): Promise<ApiResponse<unknown>> {
-    const response = await fetch(`/api/apps/${appId}/configuration/templates/${templateId}/apply`, {
+    const response = await fetch(`/api/apps/${appId}/pwa-templates/${templateId}/apply`, {
       method: 'POST',
       headers: getAuthHeaders(),
     });
@@ -1106,7 +1106,7 @@ export const appTemplateApi = {
     if (data.iconKey !== undefined) payload.iconKey = data.iconKey;
     if (data.config !== undefined) payload.config = data.config;
 
-    const response = await fetch(`/api/apps/${appId}/configuration/templates/${templateId}`, {
+    const response = await fetch(`/api/apps/${appId}/pwa-templates/${templateId}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(payload),
@@ -1178,7 +1178,7 @@ export const appTemplateApi = {
    * Delete a template
    */
   async deleteTemplate(appId: string, templateId: string): Promise<ApiResponse<void>> {
-    const response = await fetch(`/api/apps/${appId}/configuration/templates/${templateId}`, {
+    const response = await fetch(`/api/apps/${appId}/pwa-templates/${templateId}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
     });

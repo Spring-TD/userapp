@@ -144,6 +144,15 @@ export class Compliance {
           ? parsed
           : { success: resp.ok, data: parsed }
 
+      // Debug merchant redirect behavior: log exactly what status endpoint returns.
+      if (pathSegments[0] === "status" && pathSegments[1]) {
+        console.info("[Compliance] GET /api/v1/kyc/status/:userId response", {
+          userId: pathSegments[1],
+          statusCode: resp.status,
+          payload: data,
+        })
+      }
+
       return NextResponse.json(data, { status: resp.status })
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "AbortError") {

@@ -311,6 +311,92 @@ export class Auth {
       return NextResponse.json({ success: false, error: msg }, { status: 500 });
     }
   }
+
+  static async logout(request: NextRequest) {
+    const authHeader = request.headers.get('Authorization');
+    const cookieToken = request.cookies.get('accessToken')?.value;
+    const bearer =
+      authHeader || (cookieToken ? `Bearer ${cookieToken}` : null);
+    if (!bearer) {
+      const cleared = NextResponse.json({ success: true });
+      cleared.cookies.set('accessToken', '', cookieOpts(0));
+      cleared.cookies.set('refreshToken', '', cookieOpts(0));
+      return cleared;
+    }
+    try {
+      const res = await axios.post(buildUrl(BACKEND.auth.logout), {}, {
+        ...axiosConfig,
+        headers: { Authorization: bearer, 'Content-Type': 'application/json' },
+      });
+      const out = NextResponse.json(res.data ?? { success: true }, { status: res.status });
+      out.cookies.set('accessToken', '', cookieOpts(0));
+      out.cookies.set('refreshToken', '', cookieOpts(0));
+      return out;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Logout failed';
+      console.error('[Auth] logout:', msg);
+      const out = NextResponse.json({ success: false, error: msg }, { status: 500 });
+      out.cookies.set('accessToken', '', cookieOpts(0));
+      out.cookies.set('refreshToken', '', cookieOpts(0));
+      return out;
+    }
+  }
+
+  static async me(request: NextRequest) {
+    const authHeader = request.headers.get('Authorization');
+    const cookieToken = request.cookies.get('accessToken')?.value;
+    const token = authHeader?.replace(/^Bearer\s+/i, '') || cookieToken;
+    if (!token) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+    try {
+      const res = await axios.get(buildUrl(BACKEND.auth.me), {
+        ...axiosConfig,
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
+      return NextResponse.json(res.data, { status: res.status });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to load profile';
+      console.error('[Auth] me:', msg);
+      return NextResponse.json({ success: false, error: msg }, { status: 500 });
+    }
+  }
+
+  static async verifyTokenPost(request: NextRequest) {
+    const authHeader = request.headers.get('Authorization');
+    const cookieToken = request.cookies.get('accessToken')?.value;
+    const bearer = authHeader || (cookieToken ? `Bearer ${cookieToken}` : null);
+    if (!bearer) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+    try {
+      const body = await request.json().catch(() => ({}));
+      const res = await axios.post(buildUrl(BACKEND.auth.verifyToken), body, {
+        ...axiosConfig,
+        headers: { Authorization: bearer, 'Content-Type': 'application/json' },
+      });
+      return NextResponse.json(res.data, { status: res.status });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Token verification failed';
+      console.error('[Auth] verifyToken:', msg);
+      return NextResponse.json({ success: false, error: msg }, { status: 500 });
+    }
+  }
+
+  static async emailExists(request: NextRequest, email: string) {
+    if (!email?.trim()) {
+      return NextResponse.json({ success: false, error: 'Email is required' }, { status: 400 });
+    }
+    const url = buildUrl(BACKEND.auth.emailExists(email));
+    try {
+      const res = await axios.get(url, axiosConfig);
+      return NextResponse.json(res.data, { status: res.status });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Request failed';
+      console.error('[Auth] emailExists:', msg, url);
+      return NextResponse.json({ success: false, error: msg }, { status: 500 });
+    }
+  }
 }
 
 type RouteParams = { params: Promise<{ path: string[] }> };
@@ -323,6 +409,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const key = getPathKey(await params.then((p) => p.path));
   if (key === 'get-token') return Auth.getToken(request);
   if (key === 'validate') return Auth.validateGet(request);
+  if (key === 'me') return Auth.me(request);
+  if (key.startsWith('email-exists/')) {
+    const email = decodeURIComponent(key.slice('email-exists/'.length));
+    return Auth.emailExists(request, email);
+  }
   return NextResponse.json({ error: 'Not found' }, { status: 404 });
 }
 
@@ -340,6 +431,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   if (key === 'resend-email-otp') return Auth.resendEmailOtp(request);
   if (key === 'password/forgot') return Auth.passwordForgot(request);
   if (key === 'password/reset') return Auth.passwordReset(request);
+  if (key === 'logout') return Auth.logout(request);
+  if (key === 'verify-token') return Auth.verifyTokenPost(request);
   return NextResponse.json({ error: 'Not found' }, { status: 404 });
 }
 

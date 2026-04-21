@@ -32,7 +32,7 @@ export default function LoginPage() {
       {/* Logo & Welcome */}
       <div className="flex flex-col items-center mb-10">
         <div className="w-20 h-20 mb-6 flex items-center justify-center">
-          <img src="/images/logo.png" alt="Logo" className="w-full h-full object-contain" />
+          <img src="/images/mobile/mobile-splash-icon.png" alt="Logo" className="w-full h-full object-contain" />
         </div>
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Welcome back!</h1>
         <p className="text-gray-500 text-center max-w-xs">

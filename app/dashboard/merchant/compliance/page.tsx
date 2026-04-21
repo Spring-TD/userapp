@@ -73,7 +73,7 @@ export default function ComplianceDashboard() {
   return (
     <ComplianceFormProvider>
       <div className="flex flex-col h-full">
-        <div className="px-8 py-4">
+        <div className="px-4 sm:px-6 lg:px-8 py-4">
           <Tabs
             tabs={tabs}
             activeTab={activeTab}
@@ -82,7 +82,7 @@ export default function ComplianceDashboard() {
           />
         </div>
 
-        <div className="flex-1 overflow-y-auto px-8 py-6">{renderTabContent()}</div>
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">{renderTabContent()}</div>
       </div>
     </ComplianceFormProvider>
   )

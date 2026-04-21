@@ -69,7 +69,10 @@ export default function NewPinPage() {
                         </button>
                     ))}
                     <div className="h-16 flex items-center justify-center">
-                        <span className="text-sm font-semibold text-[#2563EB] cursor-pointer" onClick={() => {/* Handle Forgot PIN logic */ }}>
+                        <span
+                            className="text-sm font-semibold text-[#2563EB] cursor-pointer whitespace-nowrap"
+                            onClick={() => {/* Handle Forgot PIN logic */ }}
+                        >
                             Forgot PIN?
                         </span>
                     </div>

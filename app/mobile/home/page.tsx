@@ -1,40 +1,50 @@
 'use client';
 
-import MobileBottomNav from '../components/MobileBottomNav';
-import { Bell, ArrowRight, Repeat, Home, Wallet, ShoppingCart, Plus, Share, CreditCard, FileText, ArrowUpRight, ArrowDownLeft, Loader2 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import Link from 'next/link';
+import {
+  Bell,
+  ArrowRight,
+  Repeat,
+  Home,
+  Wallet,
+  ShoppingCart,
+  Plus,
+  Share,
+  CreditCard,
+  FileText,
+  Loader2,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { FundWalletDrawer } from '../components/FundWalletDrawer';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
 import { getAccessToken } from '@/lib/cookieAuth';
+import MobileBottomNav from '../components/MobileBottomNav';
+import { FundWalletDrawer } from '../components/FundWalletDrawer';
 
 export default function HomePage() {
   const [isFundDrawerOpen, setIsFundDrawerOpen] = useState(false);
+  const [displayName, setDisplayName] = useState('User');
   const { formattedBalance, loading: walletLoading } = useWalletBalance();
 
-  // Extract user's name from JWT token
-  const [displayName, setDisplayName] = useState('User');
   useEffect(() => {
     try {
       const token = getAccessToken();
-      if (token) {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        const name = payload.firstName || payload.name || payload.email?.split('@')[0] || 'User';
-        setDisplayName(name);
-      }
+      if (!token) return;
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const name = payload.firstName || payload.name || payload.email?.split('@')[0] || 'User';
+      setDisplayName(name);
     } catch {
-      // silently fail
+      // no-op: fallback name already set
     }
   }, []);
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50 pb-24">
-      {/* Header */}
-      <header className="flex justify-between items-center p-6 pt-8">
+    <div className="flex min-h-screen flex-col bg-[#F3F3F3] pb-28">
+      <header className="flex items-center justify-between p-6 pt-8">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gray-300 overflow-hidden">
-            <img src="https://github.com/shadcn.png" alt="User" className="w-full h-full object-cover" />
+          <div className="h-10 w-10 overflow-hidden rounded-full bg-gray-300">
+            <img src="https://github.com/shadcn.png" alt="User" className="h-full w-full object-cover" />
           </div>
           <div className="text-gray-900">
             <span className="text-gray-500">Welcome </span>
@@ -42,72 +52,71 @@ export default function HomePage() {
           </div>
         </div>
         <div className="relative">
-          <Bell className="text-gray-600 w-6 h-6" />
-          <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-gray-50"></span>
+          <Bell className="h-6 w-6 text-gray-600" />
+          <span className="absolute right-0 top-0 h-2.5 w-2.5 rounded-full border-2 border-gray-50 bg-red-500" />
         </div>
       </header>
 
-      <div className="px-6 space-y-6">
-        {/* Balance Card */}
-        <Card className="p-6 rounded-[2rem] border-none shadow-sm bg-white">
-          <div className="text-center mb-6">
-            <p className="text-gray-500 text-sm mb-1">Wallet Balance</p>
-            <div className="flex items-center justify-center gap-2 mb-6">
-              {walletLoading ? (
-                <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-              ) : (
-                <h1 className="text-3xl font-bold text-gray-900">{formattedBalance}</h1>
-              )}
+      <div className="space-y-8 px-6">
+        <Card className="overflow-hidden rounded-[2rem] border-none bg-[#1E5CE5] p-0 shadow-sm">
+          <div className="rounded-[2rem] bg-white p-6 pb-4">
+            <div className="mb-6 text-center">
+              <p className="mb-1 text-sm text-gray-500">Wallet Balance</p>
+              <div className="mb-6 flex items-center justify-center gap-2">
+                {walletLoading ? (
+                  <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                ) : (
+                  <h1 className="text-4xl font-extrabold tracking-tight text-gray-900">{formattedBalance}</h1>
+                )}
+                <span className="rounded-full bg-[#EEF2FF] px-3 py-1 text-sm font-semibold text-[#1D4ED8]">4.00%</span>
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  className="h-12 flex-1 rounded-full bg-gray-900 font-semibold text-white hover:bg-gray-800"
+                  onClick={() => setIsFundDrawerOpen(true)}
+                >
+                  Fund Withdraw
+                </Button>
+                <Button variant="outline" className="h-12 flex-1 rounded-full border-gray-900 font-semibold text-gray-900">
+                  Send
+                </Button>
+              </div>
             </div>
-            <div className="flex gap-4">
-              <Button
-                className="flex-1 bg-gray-900 hover:bg-gray-800 text-white rounded-full h-12 font-medium"
-                onClick={() => setIsFundDrawerOpen(true)}
-              >
-                Fund / Withdraw
-              </Button>
-              <Button variant="outline" className="flex-1 rounded-full h-12 font-medium border-gray-300">
-                Send
-              </Button>
+          </div>
+
+          <div className="flex items-center justify-between px-5 py-5 text-white">
+            <div>
+              <p className="mb-1 text-sm text-blue-100">Get some Earning...</p>
+              <p className="text-lg font-semibold leading-tight">Check on your next advance</p>
             </div>
+            <ArrowRight className="h-8 w-8 text-white" />
           </div>
         </Card>
 
-        {/* Blue Banner */}
-        <div className="bg-blue-600 rounded-2xl p-5 text-white flex justify-between items-center shadow-lg shadow-blue-200">
-          <div>
-            <p className="text-blue-100 text-sm mb-1">Get some Earning....</p>
-            <p className="font-semibold text-lg">Check on your next advance</p>
-          </div>
-          <ArrowRight className="text-white w-6 h-6" />
-        </div>
-
-        {/* Quick Actions */}
         <div>
-          <h3 className="font-bold text-gray-900 mb-4">Quick Actions</h3>
+          <h3 className="mb-4 font-bold text-gray-900">Quick Actions</h3>
           <div className="grid grid-cols-4 gap-y-6">
-            <QuickAction icon={<Repeat className="w-6 h-6" />} label="Loan" />
-            <QuickAction icon={<Home className="w-6 h-6" />} label="Mortgage" />
-            <QuickAction icon={<Wallet className="w-6 h-6" />} label="Saving" />
-            <QuickAction icon={<ShoppingCart className="w-6 h-6" />} label="Shop" />
-            <QuickAction icon={<Plus className="w-6 h-6" />} label="Top Up" iconBg="bg-blue-600 text-white" />
-            <QuickAction icon={<Share className="w-6 h-6" />} label="Send" />
-            <QuickAction icon={<CreditCard className="w-6 h-6" />} label="Add card" />
-            <QuickAction icon={<FileText className="w-6 h-6" />} label="Orders" />
+            <QuickAction icon={<Repeat className="h-6 w-6" />} label="Loan" />
+            <QuickAction icon={<Home className="h-6 w-6" />} label="Mortgage" />
+            <QuickAction icon={<Wallet className="h-6 w-6" />} label="saving" />
+            <QuickAction icon={<ShoppingCart className="h-6 w-6" />} label="Shop" />
+            <QuickAction icon={<Plus className="h-6 w-6" />} label="Top Up" iconBg="bg-blue-600 text-white" />
+            <QuickAction icon={<Share className="h-6 w-6" />} label="Send" />
+            <QuickAction icon={<CreditCard className="h-6 w-6" />} label="Add card" />
+            <QuickAction icon={<FileText className="h-6 w-6" />} label="orders" />
           </div>
         </div>
 
-        {/* History */}
         <div>
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="font-bold text-gray-900 text-lg">History</h3>
-            <button className="text-blue-600 text-sm font-medium">See all</button>
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-lg font-bold text-gray-900">History</h3>
+            <Link href="/mobile/history" className="text-sm font-medium text-blue-600">
+              See all
+            </Link>
           </div>
-          {/* TODO: Wire to userWalletApi.getUserTransactions(userId) — see P3-006 */}
           <div className="space-y-4">
-            <div className="bg-white p-4 rounded-2xl text-center text-sm text-gray-400 shadow-sm">
-              No transaction history yet
-            </div>
+            <HistoryRow type="Receive" name="Charles Boss" amount="N10,000.00" time="12.00 pm" positive />
+            <HistoryRow type="Transfer" name="Chidi David" amount="N3000.00" time="12.00 pm" />
           </div>
         </div>
       </div>
@@ -118,13 +127,48 @@ export default function HomePage() {
   );
 }
 
-function QuickAction({ icon, label, iconBg = "bg-blue-50 text-blue-600" }: { icon: React.ReactNode, label: string, iconBg?: string }) {
+function QuickAction({
+  icon,
+  label,
+  iconBg = 'bg-blue-50 text-blue-600',
+}: {
+  icon: ReactNode;
+  label: string;
+  iconBg?: string;
+}) {
   return (
     <button className="flex flex-col items-center gap-2">
-      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${iconBg}`}>
-        {icon}
-      </div>
-      <span className="text-xs text-gray-600 font-medium">{label}</span>
+      <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${iconBg}`}>{icon}</div>
+      <span className="text-xs font-medium text-gray-800">{label}</span>
     </button>
+  );
+}
+
+function HistoryRow({
+  type,
+  name,
+  amount,
+  time,
+  positive = false,
+}: {
+  type: string;
+  name: string;
+  amount: string;
+  time: string;
+  positive?: boolean;
+}) {
+  return (
+    <div className="rounded-2xl bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-xs text-gray-400">{type}</p>
+          <p className="text-xl font-semibold text-gray-800">{name}</p>
+        </div>
+        <div className="text-right">
+          <p className={`text-xl font-semibold ${positive ? 'text-[#16A34A]' : 'text-[#DC2626]'}`}>{amount}</p>
+          <p className="text-xs text-gray-400">{time}</p>
+        </div>
+      </div>
+    </div>
   );
 }
