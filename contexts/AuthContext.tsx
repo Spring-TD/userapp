@@ -4,8 +4,6 @@ import { createContext, useEffect, type ReactNode } from "react"
 import { clearSecureTokens } from "@/lib/tokenManager"
 import { useAppDispatch, useAppSelector } from "@/store/hooks"
 import { loginThunk, loadUserFromTokenThunk, logoutThunk } from "@/store/authSlice"
-import { clearComplianceState } from "@/store/complianceSlice"
-import { clearSelectedMerchantApp } from "@/store/merchantAppsSlice"
 import type { AuthUser } from "@/types/auth"
 
 interface User {
@@ -57,8 +55,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     await clearSecureTokens()
-    dispatch(clearComplianceState())
-    dispatch(clearSelectedMerchantApp())
     await dispatch(logoutThunk())
   }
 
