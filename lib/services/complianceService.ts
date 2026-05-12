@@ -18,16 +18,16 @@ function decodeCandidateUserIdsFromToken(t: string | null): string[] {
     const decoded = JSON.parse(
       typeof atob === "function" ? atob(payload) : Buffer.from(payload, "base64").toString("utf8"),
     );
-    return (
-      decoded?.userId ||
-      decoded?.user_merchant_id ||
-      decoded?.userMerchantId ||
-      decoded?.merchantId ||
-      decoded?.sub ||
-      decoded?.id ||
-      decoded?._id ||
-      null
-    );
+    const candidates = [
+      decoded?.userId,
+      decoded?.user_merchant_id,
+      decoded?.userMerchantId,
+      decoded?.merchantId,
+      decoded?.sub,
+      decoded?.id,
+      decoded?._id,
+    ].filter((x): x is string => typeof x === "string" && x.length > 0);
+    return Array.from(new Set(candidates));
   } catch {
     return [];
   }

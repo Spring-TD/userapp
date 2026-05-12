@@ -69,8 +69,8 @@ function VerifyOtpContent() {
     if (access) {
       await setSecureTokens(access, refresh)
     }
-    toast.success('Email verified. You can sign in.');
-    router.push('/mobile-v2/auth/login');
+    toast.success('Email verified. Continue to start KYC.');
+    router.push('/mobile-v2/profile/kyc/create?from=registration');
   };
 
   const handleResend = async () => {

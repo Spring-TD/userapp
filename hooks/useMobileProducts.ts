@@ -30,6 +30,8 @@ interface UseMobileProductsOptions {
   type?: 'Loan' | 'Mortgage' | 'Savings' | 'Commodity';
   springAppId?: string; // Spring App ID to filter products
   autoFetch?: boolean;
+  /** When false, skips fetch until mobile v2 tenant is resolved (default: true). */
+  tenantReady?: boolean;
 }
 
 interface UseMobileProductsReturn {
@@ -44,7 +46,7 @@ interface UseMobileProductsReturn {
 const PRODUCT_MS_URL = process.env.NEXT_PUBLIC_PRODUCT_MS_URL || 'https://product-ms.fly.dev';
 
 export function useMobileProducts(options: UseMobileProductsOptions = {}): UseMobileProductsReturn {
-  const { type, springAppId, autoFetch = true } = options;
+  const { type, springAppId, autoFetch = true, tenantReady = true } = options;
 
   const [products, setProducts] = useState<MobileProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,7 +80,11 @@ export function useMobileProducts(options: UseMobileProductsOptions = {}): UseMo
       const data = await response.json();
 
       if (data.success) {
-        setProducts(data.data || []);
+        let list = data.data || [];
+        if (springAppId) {
+          list = list.filter((p: MobileProduct) => p.appId === springAppId);
+        }
+        setProducts(list);
       } else {
         throw new Error(data.error || 'Failed to fetch products');
       }
@@ -92,10 +98,10 @@ export function useMobileProducts(options: UseMobileProductsOptions = {}): UseMo
   }, [type, springAppId]);
 
   useEffect(() => {
-    if (autoFetch) {
+    if (autoFetch && tenantReady) {
       fetchProducts();
     }
-  }, [autoFetch, fetchProducts]);
+  }, [autoFetch, tenantReady, fetchProducts]);
 
   const getProductById = useCallback((id: string): MobileProduct | undefined => {
     return products.find(p => p.id === id);

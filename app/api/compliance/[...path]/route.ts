@@ -57,11 +57,10 @@ function getComplianceOrigin(): string {
   }
 }
 
-/** Build full URL: {origin}/api/v1/kyc/{...pathSegments} — v1 is never omitted. */
+/** Gateway: `{origin}/api/v1/kyc/{...pathSegments}` (modular + legacy KYC routes). */
 function buildComplianceUrl(pathSegments: string[]): string {
   const origin = getComplianceOrigin().replace(/\/+$/, "")
-  const pathParts = ["api", "v1", "kyc", ...pathSegments]
-  const path = "/" + pathParts.join("/")
+  const path = "/" + ["api", "v1", "kyc", ...pathSegments].join("/")
   return `${origin}${path}`
 }
 

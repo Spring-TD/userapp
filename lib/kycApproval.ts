@@ -41,8 +41,48 @@ export function extractKycStatusString(res: unknown): string | undefined {
   return pickStatus(res)
 }
 
-/** True when compliance status is approved (case-insensitive). */
+const LEGACY_PASS_STATUSES = new Set(["approved", "completed", "verified", "success"])
+
+/** Normalized status token from legacy GET /api/v1/kyc/status/:userId style payloads. */
+export function normalizedKycStatus(res: unknown): string {
+  return extractKycStatusString(res)?.trim().toLowerCase().replace(/\s+/g, "_") ?? ""
+}
+
+/** True when gateway user KYC is in a terminal success state (legacy status endpoint). */
 export function isKycStatusApproved(res: unknown): boolean {
-  const s = extractKycStatusString(res)?.trim().toLowerCase()
-  return s === "approved"
+  const s = normalizedKycStatus(res)
+  return LEGACY_PASS_STATUSES.has(s)
+}
+
+/** Same as {@link isKycStatusApproved} — explicit alias for routing copy. */
+export function isKycVerificationComplete(res: unknown): boolean {
+  return isKycStatusApproved(res)
+}
+
+/** localStorage flag when status API confirmed KYC complete (offline fallback if later requests fail). */
+export const MOBILE_USER_KYC_COMPLETE_KEY = "mobile_user_kyc_complete_v1"
+
+/** Extract modular poll status (GET …/kyc/modular/status/:verificationId). */
+export function extractModularStatusString(payload: unknown): string {
+  if (payload == null || typeof payload !== "object") return ""
+  const o = payload as Record<string, unknown>
+  const d = o.data
+  if (d != null && typeof d === "object") {
+    const inner = d as Record<string, unknown>
+    const dd = inner.data
+    if (dd != null && typeof dd === "object") {
+      const s = (dd as Record<string, unknown>).status
+      if (typeof s === "string") return s
+    }
+    const s2 = inner.status
+    if (typeof s2 === "string") return s2
+  }
+  const s = o.status
+  return typeof s === "string" ? s : ""
+}
+
+/** Terminal success for Fuspay modular status polling. */
+export function isModularVerificationSucceeded(payload: unknown): boolean {
+  const s = extractModularStatusString(payload).trim().toLowerCase().replace(/\s+/g, "_")
+  return LEGACY_PASS_STATUSES.has(s)
 }

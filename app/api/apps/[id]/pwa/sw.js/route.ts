@@ -25,6 +25,7 @@ export async function GET(
     const body = await response.arrayBuffer();
     const cacheControl = response.headers.get('cache-control');
     const etag = response.headers.get('etag');
+    const serviceWorkerAllowed = response.headers.get('service-worker-allowed');
 
     return new NextResponse(body, {
       status: response.status,
@@ -32,6 +33,7 @@ export async function GET(
         'Content-Type': contentType,
         ...(cacheControl && { 'Cache-Control': cacheControl }),
         ...(etag && { ETag: etag }),
+        ...(serviceWorkerAllowed && { 'Service-Worker-Allowed': serviceWorkerAllowed }),
       },
     });
   } catch (error) {

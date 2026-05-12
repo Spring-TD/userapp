@@ -154,7 +154,7 @@ export function ProductConfigAboutStep({
           <Button
             type="button"
             onClick={onAddType}
-            className="h-10 text-white hover:opacity-95"
+            className="h-10 self-end text-white hover:opacity-95"
             style={{ backgroundColor: accentColor }}
           >
             Add

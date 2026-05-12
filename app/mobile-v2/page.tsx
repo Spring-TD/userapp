@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { AnimatePresence } from 'framer-motion';
 import { V2SplashScreen, V2OnboardingView } from '@/components/mobile-templates';
 import { useMobileConfig } from '@/hooks/useMobileConfig';
+import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
 import { Loader2 } from 'lucide-react';
 
 function LoadingScreen() {
@@ -15,28 +16,44 @@ function LoadingScreen() {
     );
 }
 
+/** Resolves tenant (host subdomain, ?appId, ?subdomain, session) before loading config. */
 function MobileV2Content() {
+    const { appId, ready, error } = useMobileV2Tenant();
+
+    if (!ready) {
+        return <LoadingScreen />;
+    }
+
+    return <MobileV2Configured appId={appId ?? undefined} resolveNote={error} />;
+}
+
+function MobileV2Configured({
+    appId,
+    resolveNote,
+}: {
+    appId?: string;
+    resolveNote: string | null;
+}) {
     const [showSplash, setShowSplash] = useState(true);
     const router = useRouter();
-    const searchParams = useSearchParams();
-    
-    // Get appId from URL params (e.g., /mobile-v2?appId=xxx)
-    const appId = searchParams.get('appId') || undefined;
-    
-    // Fetch configuration from backend
+
     const { config, loading } = useMobileConfig({ appId });
 
     const handleOnboardingComplete = () => {
         router.push('/mobile-v2/auth/login');
     };
 
-    // Show loading state while fetching config
     if (loading || !config) {
         return <LoadingScreen />;
     }
 
     return (
         <>
+            {resolveNote ? (
+                <p className="sr-only" role="status">
+                    {resolveNote}
+                </p>
+            ) : null}
             <AnimatePresence>
                 {showSplash && (
                     <V2SplashScreen

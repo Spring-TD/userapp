@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import {
     ChevronLeft,
     User,
@@ -16,13 +17,34 @@ import {
     ChevronRight,
     BadgeCheck,
     Home,
-    Briefcase
+    Briefcase,
+    ScanFace
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useAppDispatch } from '@/store/hooks';
+import { logoutThunk } from '@/store/authSlice';
+import { toast } from 'sonner';
 
 export default function ProfilePage() {
+    const router = useRouter();
+    const dispatch = useAppDispatch();
     const [showLogoutModal, setShowLogoutModal] = useState(false);
+    const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+    const handleLogout = async () => {
+        try {
+            setIsLoggingOut(true);
+            await dispatch(logoutThunk()).unwrap();
+            toast.success('Logged out successfully.');
+            router.replace('/mobile-v2/auth/login');
+        } catch (error: any) {
+            toast.error(error?.message || 'Failed to logout. Please try again.');
+        } finally {
+            setIsLoggingOut(false);
+            setShowLogoutModal(false);
+        }
+    };
 
     return (
         <div className="flex flex-col h-full bg-[#FAFAFA] relative">
@@ -67,6 +89,15 @@ export default function ProfilePage() {
                             </Link>
                             <Link href="/mobile-v2/profile/edit">
                                 <SettingItem icon={<Phone className="w-5 h-5" />} label="Phone Number" last />
+                            </Link>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 className="text-sm font-bold text-[#1E293B] mb-3 ml-1">Identity Verification</h3>
+                        <div className="bg-white rounded-[24px] overflow-hidden shadow-sm border border-gray-100">
+                            <Link href="/mobile-v2/profile/kyc/create">
+                                <SettingItem icon={<ScanFace className="w-5 h-5" />} label="KYC Center" last />
                             </Link>
                         </div>
                     </div>
@@ -162,12 +193,12 @@ export default function ProfilePage() {
                             </Button>
                             <Button
                                 onClick={() => {
-                                    // Handle logout logic
-                                    setShowLogoutModal(false);
+                                    handleLogout();
                                 }}
+                                disabled={isLoggingOut}
                                 className="flex-1 h-12 rounded-full bg-[#EF4444] hover:bg-red-700 text-white font-semibold text-sm shadow-none"
                             >
-                                Yes, logout
+                                {isLoggingOut ? 'Logging out...' : 'Yes, logout'}
                             </Button>
                         </div>
                     </div>

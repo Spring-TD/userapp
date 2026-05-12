@@ -53,6 +53,7 @@ export default function LoginPage() {
       toast.error(res.payload ?? status ?? 'Sign in failed.');
       return;
     }
+
     toast.success('Signed in successfully.');
     router.push('/mobile-v2/home');
   };
@@ -64,7 +65,9 @@ export default function LoginPage() {
           <ChevronLeft className="h-6 w-6" />
         </Link>
         <h1 className="absolute left-1/2 -translate-x-1/2 text-lg font-semibold">Login</h1>
-        <div className="w-8" />
+        <Link href="/mobile-v2/auth/signup" className="text-sm font-semibold text-[#2563EB] hover:underline">
+          Register
+        </Link>
       </div>
 
       <div className="mb-10 text-center">
@@ -125,19 +128,10 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <div className="mb-4 mt-8 flex items-center gap-4">
-        <Link href="/mobile-v2/auth/signup" className="flex-1">
-          <Button
-            variant="secondary"
-            type="button"
-            className="h-14 w-full rounded-[20px] border-0 bg-[#E0E7FF] text-base font-medium text-[#4338CA] shadow-none hover:bg-[#C7D2FE]"
-          >
-            Register
-          </Button>
-        </Link>
+      <div className="mb-4 mt-8">
         <Button
           type="button"
-          className="h-14 flex-[2] rounded-[20px] bg-[#1E40AF] text-base font-medium text-white shadow-lg shadow-blue-900/20 hover:bg-[#1e3a8a]"
+          className="h-14 w-full rounded-[20px] bg-[#1E40AF] text-base font-medium text-white shadow-lg shadow-blue-900/20 hover:bg-[#1e3a8a]"
           disabled={loading}
           onClick={handleLogin}
         >

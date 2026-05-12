@@ -1,12 +1,20 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
+import { toast } from "sonner"
 import { Upload, X } from "lucide-react"
 import { Drawer } from "@/components/drawer"
 import { Button } from "@/components/ui/button"
 import { fileToBase64 } from "@/lib/fileUtils"
 import { fetchOptionLabels, fetchProductOptionLabels } from "@/lib/productOptions"
 import type { MortgageConfigurePrefetched } from "@/lib/productConfigurePrefetch"
+import {
+  isOtherSecuritySelected,
+  mergeSecurityRequirementDisplayOptions,
+  OTHER_SECURITY_CANONICAL_LABEL,
+  serializeSecurityRequirements,
+  splitStoredSecurityRequirements,
+} from "@/lib/securityRequirementOptions"
 import { ProductConfigAboutStep } from "@/components/drawers/product-config-about-step"
 import {
   DEFAULT_REPAYMENT_WORKFLOWS,
@@ -102,6 +110,11 @@ export default function ConfigureMortgageDrawer({
   const [triggerDurationOptions, setTriggerDurationOptions] = useState<string[]>(TRIGGER_DURATION_OPTIONS)
   const [repaymentWorkflowOptions, setRepaymentWorkflowOptions] = useState<string[]>([...DEFAULT_REPAYMENT_WORKFLOWS])
 
+  const mergedSecurityOptions = useMemo(
+    () => mergeSecurityRequirementDisplayOptions(securityOptions),
+    [securityOptions],
+  )
+
   const [name, setName] = useState(mortgageData?.name || "")
   const [tenure, setTenure] = useState("")
   const [description, setDescription] = useState(mortgageData?.description || "")
@@ -126,6 +139,7 @@ export default function ConfigureMortgageDrawer({
   const [equityRequirement, setEquityRequirement] = useState("")
 
   const [selectedSecurities, setSelectedSecurities] = useState<string[]>([])
+  const [securityOtherSpecification, setSecurityOtherSpecification] = useState("")
   const [documentName, setDocumentName] = useState("")
   const [documents, setDocuments] = useState<DocumentRequirementUpload[]>([])
   const [otherRequirementType, setOtherRequirementType] = useState("")
@@ -302,6 +316,16 @@ export default function ConfigureMortgageDrawer({
     return () => controller.abort()
   }, [isOpen])
 
+  useEffect(() => {
+    if (!isOpen || !mortgageData) return
+    const raw = Array.isArray(mortgageData.securityRequirements)
+      ? (mortgageData.securityRequirements as unknown[]).map((x) => String(x))
+      : []
+    const { toggles, otherSpecification } = splitStoredSecurityRequirements(raw)
+    setSelectedSecurities(toggles)
+    setSecurityOtherSpecification(otherSpecification)
+  }, [isOpen, mortgageData?.id, mortgageData?.productId, mortgageData?.securityRequirements])
+
   const revokePreviewUrl = useCallback((url: string | null) => {
     if (url) URL.revokeObjectURL(url)
   }, [])
@@ -320,6 +344,9 @@ export default function ConfigureMortgageDrawer({
   }
 
   const toggleSecurity = (option: string, checked: boolean) => {
+    if (!checked && option.trim().toLowerCase() === OTHER_SECURITY_CANONICAL_LABEL.toLowerCase()) {
+      setSecurityOtherSpecification("")
+    }
     setSelectedSecurities((prev) => {
       if (checked) return prev.includes(option) ? prev : [...prev, option]
       return prev.filter((item) => item !== option)
@@ -447,6 +474,16 @@ export default function ConfigureMortgageDrawer({
 
   const handleNext = async () => {
     if (step < STEPS.length) {
+      if (step === 3) {
+        if (!selectedSecurities.length) {
+          toast.error("Select at least one security requirement.")
+          return
+        }
+        if (isOtherSecuritySelected(selectedSecurities) && !securityOtherSpecification.trim()) {
+          toast.error('Describe the "Other" security requirement.')
+          return
+        }
+      }
       setStep((prev) => prev + 1)
         return
       }
@@ -519,7 +556,7 @@ export default function ConfigureMortgageDrawer({
       repaymentFrequency,
       acceptableNpa,
       equityRequirement,
-      securityRequirements: selectedSecurities,
+      securityRequirements: serializeSecurityRequirements(selectedSecurities, securityOtherSpecification),
       documentRequirements: documentsPayload,
       otherRequirements,
       contractId,
@@ -682,7 +719,7 @@ export default function ConfigureMortgageDrawer({
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700">Security Requirements</label>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {securityOptions.map((option) => (
+                {mergedSecurityOptions.map((option) => (
                   <ProductConfigToggle
                     key={option}
                     id={`mortgage-security-${option}`}
@@ -692,6 +729,14 @@ export default function ConfigureMortgageDrawer({
                   />
               ))}
             </div>
+            {isOtherSecuritySelected(selectedSecurities) ? (
+              <ProductConfigInput
+                label="Specify other security"
+                placeholder='Describe what "Other" means for this product'
+                value={securityOtherSpecification}
+                onChange={setSecurityOtherSpecification}
+              />
+            ) : null}
           </div>
 
             <div className="space-y-2 rounded-md border border-dashed border-[#cdbf8b] p-4">

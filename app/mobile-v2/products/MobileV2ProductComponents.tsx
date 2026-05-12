@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Calendar, Percent, Loader2, PackageOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useMobileProducts, MobileProduct } from '@/hooks/useMobileProducts';
+import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
 import { cn } from '@/lib/utils';
 
 // ─── Tab bar shared across all V2 product pages ───────────────────────────────
@@ -218,14 +219,17 @@ interface MobileV2ProductListProps {
 }
 
 export function MobileV2ProductList({ productType }: MobileV2ProductListProps) {
-    const springAppId = process.env.NEXT_PUBLIC_SPRING_APP_ID;
+    const { appId: tenantAppId, ready: tenantReady } = useMobileV2Tenant();
+    const springAppId = tenantAppId ?? process.env.NEXT_PUBLIC_SPRING_APP_ID;
     const { products, loading, error, getProductsByType } = useMobileProducts({
-        springAppId,
+        springAppId: springAppId || undefined,
         autoFetch: true,
+        tenantReady,
     });
 
     const filteredProducts = getProductsByType(productType);
 
+    if (!tenantReady) return <LoadingState />;
     if (loading) return <LoadingState />;
     if (filteredProducts.length === 0) return <EmptyState type={productType} />;
 

@@ -1,12 +1,20 @@
 "use client"
 
-import { useEffect, useState, type ChangeEvent, useRef } from "react"
+import { useEffect, useMemo, useState, type ChangeEvent, useRef } from "react"
+import { toast } from "sonner"
 import { Upload, X } from "lucide-react"
 import { Drawer } from "@/components/drawer"
 import { Button } from "@/components/ui/button"
 import { fileToBase64 } from "@/lib/fileUtils"
 import { fetchOptionLabels, fetchProductOptionLabels } from "@/lib/productOptions"
 import type { LoanConfigurePrefetched } from "@/lib/productConfigurePrefetch"
+import {
+  isOtherSecuritySelected,
+  mergeSecurityRequirementDisplayOptions,
+  OTHER_SECURITY_CANONICAL_LABEL,
+  serializeSecurityRequirements,
+  splitStoredSecurityRequirements,
+} from "@/lib/securityRequirementOptions"
 import { ProductConfigAboutStep } from "@/components/drawers/product-config-about-step"
 import {
   DEFAULT_REPAYMENT_WORKFLOWS,
@@ -73,6 +81,10 @@ export default function ConfigureLoanDrawer({
   const [otherRequirementOptions, setOtherRequirementOptions] = useState<string[]>([])
   const [contentTypeOptions, setContentTypeOptions] = useState<string[]>([])
   const [securityOptions, setSecurityOptions] = useState<string[]>([])
+  const mergedSecurityOptions = useMemo(
+    () => mergeSecurityRequirementDisplayOptions(securityOptions),
+    [securityOptions],
+  )
   const [feeTypeOptions, setFeeTypeOptions] = useState<string[]>([])
   const [penaltyTypeOptions, setPenaltyTypeOptions] = useState<string[]>([])
   const [repaymentWorkflowOptions, setRepaymentWorkflowOptions] = useState<string[]>([...DEFAULT_REPAYMENT_WORKFLOWS])
@@ -100,6 +112,7 @@ export default function ConfigureLoanDrawer({
   const [equityRequirement, setEquityRequirement] = useState("")
 
   const [selectedSecurities, setSelectedSecurities] = useState<string[]>([])
+  const [securityOtherSpecification, setSecurityOtherSpecification] = useState("")
   const [documentName, setDocumentName] = useState("")
   const [documents, setDocuments] = useState<DocumentRequirementUpload[]>([])
   const [otherRequirementType, setOtherRequirementType] = useState("")
@@ -220,6 +233,16 @@ export default function ConfigureLoanDrawer({
     loadOptions()
   }, [isOpen, prefetchedOptions])
 
+  useEffect(() => {
+    if (!isOpen || !loanData) return
+    const raw = Array.isArray(loanData.securityRequirements)
+      ? (loanData.securityRequirements as unknown[]).map((x) => String(x))
+      : []
+    const { toggles, otherSpecification } = splitStoredSecurityRequirements(raw)
+    setSelectedSecurities(toggles)
+    setSecurityOtherSpecification(otherSpecification)
+  }, [isOpen, loanData?.id, loanData?.productId, loanData?.securityRequirements])
+
   const addLoanType = () => {
     if (!loanTypeName.trim() || !loanTypeDescription.trim()) return
     setLoanTypes((prev) => [...prev, { name: loanTypeName.trim(), description: loanTypeDescription.trim() }])
@@ -228,6 +251,9 @@ export default function ConfigureLoanDrawer({
   }
 
   const toggleSecurity = (option: string, checked: boolean) => {
+    if (!checked && option.trim().toLowerCase() === OTHER_SECURITY_CANONICAL_LABEL.toLowerCase()) {
+      setSecurityOtherSpecification("")
+    }
     setSelectedSecurities((prev) => {
       if (checked) return prev.includes(option) ? prev : [...prev, option]
       return prev.filter((item) => item !== option)
@@ -288,6 +314,16 @@ export default function ConfigureLoanDrawer({
 
   const handleNext = async () => {
     if (step < STEPS.length) {
+      if (step === 3) {
+        if (!selectedSecurities.length) {
+          toast.error("Select at least one security requirement.")
+          return
+        }
+        if (isOtherSecuritySelected(selectedSecurities) && !securityOtherSpecification.trim()) {
+          toast.error('Describe the "Other" security requirement.')
+          return
+        }
+      }
       setStep((prev) => prev + 1)
       return
     }
@@ -331,7 +367,7 @@ export default function ConfigureLoanDrawer({
       repaymentFrequency,
       acceptableNpa,
       equityRequirement,
-      securityRequirements: selectedSecurities,
+      securityRequirements: serializeSecurityRequirements(selectedSecurities, securityOtherSpecification),
       documentRequirements: documentsPayload,
       otherRequirements,
       charges,
@@ -484,7 +520,7 @@ export default function ConfigureLoanDrawer({
           <div className="space-y-2">
             <label className="block text-sm font-medium text-gray-700">Security Requirements</label>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {securityOptions.map((option) => (
+              {mergedSecurityOptions.map((option) => (
                 <ProductConfigToggle
                   key={option}
                   id={`security-${option}`}
@@ -494,6 +530,14 @@ export default function ConfigureLoanDrawer({
                 />
               ))}
             </div>
+            {isOtherSecuritySelected(selectedSecurities) ? (
+              <ProductConfigInput
+                label="Specify other security"
+                placeholder='Describe what "Other" means for this product'
+                value={securityOtherSpecification}
+                onChange={setSecurityOtherSpecification}
+              />
+            ) : null}
           </div>
 
           <div className="space-y-2 rounded-md border border-dashed border-[#cdbf8b] p-4">
