@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { BACKEND } from "@/lib/endpoints"
+import { getPlataAuthApiBaseUrl } from "@/lib/plataAuthBaseUrl"
 
 export const dynamic = "force-dynamic"
-
-const AUTH_MS_URL = process.env.NEXT_PUBLIC_API_URL || "https://account-ms.fly.dev"
 
 /**
  * GET /api/v1/sessions
@@ -19,7 +18,7 @@ export async function GET(request: NextRequest) {
       request.headers.get("authorization") ||
       request.headers.get("Authorization") ||
       (cookieAccessToken ? `Bearer ${cookieAccessToken}` : null)
-    const url = `${AUTH_MS_URL.replace(/\/+$/, "")}${BACKEND.sessions.list}`
+    const url = `${getPlataAuthApiBaseUrl().replace(/\/+$/, "")}${BACKEND.sessions.list}`
 
     const response = await fetch(url, {
       method: "GET",

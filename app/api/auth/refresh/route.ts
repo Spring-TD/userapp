@@ -3,8 +3,7 @@ import { BACKEND } from '@/lib/endpoints';
 import axios from 'axios';
 import https from 'https';
 import dns from 'dns';
-
-const AUTH_SERVICE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://account-ms.fly.dev';
+import { getPlataAuthApiBaseUrl } from '@/lib/plataAuthBaseUrl';
 
 const agent = new https.Agent({
   keepAlive: true,
@@ -44,7 +43,7 @@ export async function POST(request: NextRequest) {
 
     // Call auth service to refresh tokens (IPv4 agent avoids intermittent ETIMEDOUT)
     const authResponse = await http.post(
-      `${AUTH_SERVICE_URL}${BACKEND.auth.refresh}`,
+      `${getPlataAuthApiBaseUrl()}${BACKEND.auth.refresh}`,
       { refreshToken },
       { headers: { 'Content-Type': 'application/json' } },
     );

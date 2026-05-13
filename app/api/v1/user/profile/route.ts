@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { BACKEND } from "@/lib/endpoints"
+import { getPlataAuthApiBaseUrl } from "@/lib/plataAuthBaseUrl"
 
 export const dynamic = "force-dynamic"
-
-const AUTH_MS_URL = process.env.NEXT_PUBLIC_API_URL || "https://account-ms.fly.dev"
 
 /**
  * GET /api/v1/user/profile
@@ -16,7 +15,7 @@ export async function GET(request: NextRequest) {
       request.headers.get("authorization") ||
       request.headers.get("Authorization") ||
       (cookieAccessToken ? `Bearer ${cookieAccessToken}` : null)
-    const url = `${AUTH_MS_URL.replace(/\/+$/, "")}${BACKEND.user.profile}`
+    const url = `${getPlataAuthApiBaseUrl().replace(/\/+$/, "")}${BACKEND.user.profile}`
 
     const response = await fetch(url, {
       method: "GET",
@@ -49,7 +48,7 @@ export async function PUT(request: NextRequest) {
       request.headers.get("authorization") ||
       request.headers.get("Authorization") ||
       (cookieAccessToken ? `Bearer ${cookieAccessToken}` : null)
-    const url = `${AUTH_MS_URL.replace(/\/+$/, "")}${BACKEND.user.updateProfile}`
+    const url = `${getPlataAuthApiBaseUrl().replace(/\/+$/, "")}${BACKEND.user.updateProfile}`
     const body = await request.json().catch(() => ({}))
 
     const response = await fetch(url, {

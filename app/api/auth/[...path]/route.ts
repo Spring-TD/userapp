@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import https from 'node:https';
 import axios from 'axios';
 import { BACKEND } from '@/lib/endpoints';
+import { getPlataAuthApiBaseUrl } from '@/lib/plataAuthBaseUrl';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,8 +14,7 @@ const httpsAgent = new https.Agent({
 
 // Origin only (no path). All backend paths in BACKEND already start with /api/v1/...
 function getBaseUrl() {
-  const url = process.env.NEXT_PUBLIC_API_URL || 'https://account-ms.fly.dev';
-  return url.replace(/\/+$/, '').replace(/\/(api\/v1?)?\/?$/, '');
+  return getPlataAuthApiBaseUrl();
 }
 
 function buildUrl(path: string) {

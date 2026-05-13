@@ -1,7 +1,6 @@
 import React from 'react';
 
 import { MobileV2TenantProvider } from '@/contexts/MobileV2TenantContext';
-import { StorefrontPwaInstall } from '@/components/mobile-v2/StorefrontPwaInstall';
 
 export default function MobileV2Layout({
     children,
@@ -18,7 +17,6 @@ export default function MobileV2Layout({
                     {/* Main Content Area */}
                     <div className="relative h-full w-full overflow-y-auto no-scrollbar bg-[#2563EB]">
                         {children}
-                        <StorefrontPwaInstall />
                     </div>
                 </div>
             </div>

@@ -1,9 +1,10 @@
-/**
- * Optional payload from Create App MS on subdomain resolve (`data.pwaInstall`).
- * Storefront uses same-origin proxies when URLs are absent.
- */
+
 export type StorefrontPwaInstallPayload = {
   manifestUrl?: string
+  serviceWorkerUrl?: string
+  pwaEntryUrl?: string
+  version?: string
+  /** Legacy / alternate field name */
   swJsUrl?: string
   name?: string
   description?: string

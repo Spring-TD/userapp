@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
+import { getApiBaseUrl } from "@/lib/apiBaseUrl"
+
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
@@ -40,12 +42,16 @@ function extractRoleFromBearer(authHeader: string | null): string {
   }
 }
 
+/**
+ * KYC/compliance upstream: optional dedicated host, else same as `NEXT_PUBLIC_API_URL` (`getApiBaseUrl`).
+ * Set `NEXT_PUBLIC_COMPLIANCE_API_URL` (or server-only `COMPLIANCE_API_URL`) only if compliance-ms
+ * is not the same origin as your main API.
+ */
 function getComplianceOrigin(): string {
   const raw =
-    process.env.COMPLIANCE_API_URL ||
-    process.env.NEXT_PUBLIC_COMPLIANCE_API_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    "https://account-ms.fly.dev"
+    process.env.COMPLIANCE_API_URL?.trim() ||
+    process.env.NEXT_PUBLIC_COMPLIANCE_API_URL?.trim() ||
+    getApiBaseUrl()
   const url = raw.replace(/\/+$/, "").trim()
   try {
     const withProtocol = url.startsWith("http") ? url : `https://${url}`

@@ -7,19 +7,7 @@ export const dynamic = "force-dynamic"
 
 const API_UPSTREAM_BASE = getApiUpstreamBase()
 
-/**
- * Public: resolve tenant slug (subdomain) → app id for mobile v2.
- *
- * Upstream URL (override with APPS_RESOLVE_SUBDOMAIN_PATH):
- *   GET {NEXT_PUBLIC_API_URL}/api/v1/apps/public/by-subdomain/{subdomain}
- *
- * Expected upstream JSON (any of):
- *   { "data": { "id": "...", "subdomain": "...", "pwaInstall": { ... } } }
- *   { "data": { "app": { "id": "...", "pwaInstall": { ... } } } }
- *   { "id": "..." }
- *
- * When present, `pwaInstall` is forwarded in our JSON `data` for storefront UI (name, icon, …).
- */
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ subdomain: string }> },

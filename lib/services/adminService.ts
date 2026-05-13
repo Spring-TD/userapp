@@ -1,22 +1,15 @@
 /**
- * Admin Service
- * Wraps Spring's account-ms and wallet-ms admin endpoints.
- *
- * Spring admin APIs live at:
- *   NEXT_PUBLIC_SPRING_ACCOUNT_SERVICE_URL → account-ms.fly.dev
- *   NEXT_PUBLIC_WALLET_SERVICE_URL → wallet-ms.fly.dev
- *   NEXT_PUBLIC_SPRING_PRODUCT_SERVICE_URL → product-ms.fly.dev
+ * Admin Service — all bases follow **User-App** `NEXT_PUBLIC_API_URL` (`getApiBaseUrl()`).
+ * If wallet/product admin routes live on other hosts in your deployment, route them via your API gateway
+ * or split envs in a future change; this app standardizes on one origin per build.
  */
 
-const ADMIN_ACCOUNT_BASE =
-    process.env.NEXT_PUBLIC_API_URL || 'https://account-ms.fly.dev';
-    process.env.NEXT_PUBLIC_API_URL || 'https://account-ms.fly.dev';
-const ADMIN_WALLET_BASE =
-    process.env.NEXT_PUBLIC_API_URL || 'https://account-ms.fly.dev';
-const ADMIN_PRODUCT_BASE =
-    process.env.NEXT_PUBLIC_API_URL || 'https://account-ms.fly.dev';
-
+import { getApiBaseUrl } from '@/lib/apiBaseUrl';
 import { getAccessToken } from '@/lib/cookieAuth';
+
+const ADMIN_ACCOUNT_BASE = getApiBaseUrl();
+const ADMIN_WALLET_BASE = getApiBaseUrl();
+const ADMIN_PRODUCT_BASE = getApiBaseUrl();
 
 const getHeaders = () => {
     const token = typeof window !== 'undefined' ? getAccessToken() : null;

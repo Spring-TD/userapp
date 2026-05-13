@@ -12,25 +12,21 @@
  * - Pricing calculations
  * - Billing checks
  * 
- * Backend: account-ms (https://account-ms.fly.dev)
+ * Backend: whatever origin is in **User-App** `NEXT_PUBLIC_API_URL` (see `lib/apiBaseUrl.ts`).
  * 
  * @created 2026-01-26
  */
 
 // =============================================================================
-// Account Service URL Configuration
-//
-// Spring App (/dashboard/merchant/) → uses NEXT_PUBLIC_SPRING_ACCOUNT_SERVICE_URL
-// Plata Product Builder (/dashboard/create-app/) → uses NEXT_PUBLIC_PLATA_ACCOUNT_SERVICE_URL
-//
-// accountService (default export) → Spring's account-ms (https://account-ms.fly.dev)
-// PLATA_ACCOUNT_API_BASE          → Plata's account-ms  (https://account-ms.fly.dev)
+// Account Service URL — **User-App** uses `NEXT_PUBLIC_API_URL` only (see `lib/apiBaseUrl.ts`).
+// Per-deployment examples: client-auth-ms (User-App), account-ms.fly.dev (Spring), account-ms-plata (Plata).
 // =============================================================================
 
-const ACCOUNT_API_BASE = process.env.NEXT_PUBLIC_SPRING_ACCOUNT_SERVICE_URL || 'https://account-ms.fly.dev';
-export const PLATA_ACCOUNT_API_BASE = process.env.NEXT_PUBLIC_PLATA_ACCOUNT_SERVICE_URL || 'https://account-ms.fly.dev';
-
+import { getApiBaseUrl } from '@/lib/apiBaseUrl';
 import { getAccessToken } from '@/lib/cookieAuth';
+
+const ACCOUNT_API_BASE = getApiBaseUrl();
+export const PLATA_ACCOUNT_API_BASE = getApiBaseUrl();
 
 // ============================================================================
 // Helper Functions

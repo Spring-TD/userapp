@@ -20,6 +20,8 @@ interface OnboardingViewProps {
   initialStep?: number;
   showSkipButton?: boolean;
   showSignInButton?: boolean;
+  /** e.g. PWA install control — shown top-left opposite Skip */
+  leadingSlot?: React.ReactNode;
 }
 
 export function V2OnboardingView({
@@ -35,6 +37,7 @@ export function V2OnboardingView({
   initialStep = 0,
   showSkipButton = true,
   showSignInButton = true,
+  leadingSlot,
 }: OnboardingViewProps) {
   const [currentStep, setCurrentStep] = useState(initialStep);
 
@@ -63,8 +66,10 @@ export function V2OnboardingView({
       {/* Top Section: Header & Image */}
       <div className="flex-1 flex flex-col relative z-10 w-full">
         {/* Header */}
-        <div className="flex justify-between items-center px-6 pt-12 pb-4 w-full">
-          <div className="w-12" />
+        <div className="flex justify-between items-center px-6 pt-12 pb-4 w-full min-h-[44px]">
+          <div className="flex min-w-0 flex-1 items-center justify-start pr-2 relative z-[100]">
+            {leadingSlot ?? <span className="inline-block w-12 shrink-0" aria-hidden />}
+          </div>
           {showSkipButton && (
             <button
               onClick={handleSkip}

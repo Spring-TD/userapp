@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { BACKEND } from '@/lib/endpoints';
+import { getPlataAuthApiBaseUrl } from '@/lib/plataAuthBaseUrl';
 
-const AUTH_SERVICE_URL = (process.env.NEXT_PUBLIC_API_URL || 'https://account-ms.fly.dev').replace(/\/+$/, '');
 const cookieOpts = (maxAge: number, httpOnly: boolean) => ({
   httpOnly,
   secure: process.env.NODE_ENV === 'production',
@@ -28,7 +28,7 @@ async function tryRefreshAndRespond(request: NextRequest): Promise<NextResponse 
   const refreshToken = request.cookies.get('refreshToken')?.value;
   if (!refreshToken) return null;
 
-  const res = await fetch(`${AUTH_SERVICE_URL}${BACKEND.auth.refresh}`, {
+  const res = await fetch(`${getPlataAuthApiBaseUrl()}${BACKEND.auth.refresh}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ refreshToken }),
@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate against auth service
-    const authResponse = await fetch(`${AUTH_SERVICE_URL}${BACKEND.auth.me}`, {
+    const authResponse = await fetch(`${getPlataAuthApiBaseUrl()}${BACKEND.auth.me}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${accessToken}`,

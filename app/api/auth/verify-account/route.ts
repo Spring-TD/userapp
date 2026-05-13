@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { BACKEND } from '@/lib/endpoints';
+import { getPlataAuthApiBaseUrl } from '@/lib/plataAuthBaseUrl';
 
 export const dynamic = 'force-dynamic';
-
-const AUTH_MS_URL = process.env.NEXT_PUBLIC_API_URL || 'https://account-ms.fly.dev';
 
 // POST - Proxy verify-account request to auth microservice
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
+        const base = getPlataAuthApiBaseUrl();
 
-        const response = await fetch(`${AUTH_MS_URL}${BACKEND.auth.verifyAccount}`, {
+        const response = await fetch(`${base}${BACKEND.auth.verifyAccount}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

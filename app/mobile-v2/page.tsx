@@ -4,6 +4,7 @@ import React, { useState, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence } from 'framer-motion';
 import { V2SplashScreen, V2OnboardingView } from '@/components/mobile-templates';
+import { StorefrontPwaInstall } from '@/components/mobile-v2/StorefrontPwaInstall';
 import { useMobileConfig } from '@/hooks/useMobileConfig';
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
 import { Loader2 } from 'lucide-react';
@@ -47,6 +48,8 @@ function MobileV2Configured({
         return <LoadingScreen />;
     }
 
+    const installAppId = appId ?? config.appId ?? undefined;
+
     return (
         <>
             {resolveNote ? (
@@ -77,6 +80,7 @@ function MobileV2Configured({
                     buttonTextColor={config.onboarding.buttonTextColor}
                     onComplete={handleOnboardingComplete}
                     onSkip={handleOnboardingComplete}
+                    leadingSlot={<StorefrontPwaInstall installAppId={installAppId} />}
                 />
             )}
         </>
