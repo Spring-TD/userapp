@@ -12,7 +12,7 @@ export interface ShareholderRow {
   status: "Successful" | "Failed" | "Pending"
 }
 
-/** In-memory merchant KYC survey (merchant dashboard forms — no localStorage). */
+
 export interface MerchantBusinessSurveyState {
   businessType: string
   userBase: string
