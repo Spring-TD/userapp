@@ -35,6 +35,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   if (key === 'resend-email-otp') return Auth.resendEmailOtp(request);
   if (key === 'password/forgot') return Auth.passwordForgot(request);
   if (key === 'password/reset') return Auth.passwordReset(request);
+  if (key === 'password/change/request-otp') return Auth.passwordChangeRequestOtp(request);
   if (key === 'logout') return Auth.logout(request);
   if (key === 'verify-token') return Auth.verifyTokenPost(request);
   return NextResponse.json({ error: 'Not found' }, { status: 404 });

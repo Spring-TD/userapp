@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 
 import { MobileV2TenantProvider } from '@/contexts/MobileV2TenantContext';
+import { MobileV2LayoutSkeleton } from '@/components/mobile-v2/data-skeletons';
 
 export default function MobileV2Layout({
     children,
@@ -8,6 +9,7 @@ export default function MobileV2Layout({
     children: React.ReactNode;
 }) {
     return (
+        <Suspense fallback={<MobileV2LayoutSkeleton />}>
         <MobileV2TenantProvider>
             <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
                 <div className="w-full max-w-[400px] h-[850px] bg-white rounded-[40px] shadow-2xl overflow-hidden relative border-8 border-gray-900 ring-1 ring-gray-900/5">
@@ -21,5 +23,6 @@ export default function MobileV2Layout({
                 </div>
             </div>
         </MobileV2TenantProvider>
+        </Suspense>
     );
 }

@@ -2,11 +2,12 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Calendar, Percent, Loader2, PackageOpen } from 'lucide-react';
+import { Calendar, Percent, PackageOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useMobileProducts, MobileProduct } from '@/hooks/useMobileProducts';
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
 import { cn } from '@/lib/utils';
+import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeletons';
 
 // ─── Tab bar shared across all V2 product pages ───────────────────────────────
 const ALL_TABS = ['Mortgage', 'Loan', 'Savings', 'Invest', 'Commodity'] as const;
@@ -27,6 +28,9 @@ const APPLY_ROUTES: Record<string, string> = {
     Commodity: '/mobile-v2/products/commodity/apply',
     Invest: '/mobile-v2/products/invest/apply',
 };
+
+const mortgageDetailHref = (productId: string) =>
+    `/mobile-v2/products/mortgage/${encodeURIComponent(productId)}`;
 
 // ─── Tab Bar ──────────────────────────────────────────────────────────────────
 export function MobileV2TabBar({ activeTab }: { activeTab: ProductTab }) {
@@ -51,28 +55,53 @@ export function MobileV2TabBar({ activeTab }: { activeTab: ProductTab }) {
 }
 
 // ─── Empty state ──────────────────────────────────────────────────────────────
-function EmptyState({ type }: { type: string }) {
+function EmptyState({
+    type,
+    fetchError,
+    tenantAppId,
+    tenantError,
+}: {
+    type: string
+    fetchError?: string | null
+    tenantAppId?: string | null
+    tenantError?: string | null
+}) {
     return (
-        <div className="flex flex-col items-center justify-center py-20 text-center px-6">
+        <div className="flex flex-col items-center justify-center py-16 text-center px-4">
             <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4">
                 <PackageOpen className="w-8 h-8 text-blue-400" />
             </div>
-            <h3 className="text-base font-bold text-[#1E293B] mb-2">No {type} Products Available</h3>
-            <p className="text-sm text-gray-500 leading-relaxed">
-                No {type.toLowerCase()} products are available from your financial institution yet. Check back soon.
+            <h3 className="text-base font-bold text-[#1E293B] mb-2">No {type} products yet</h3>
+            <p className="text-sm text-gray-500 leading-relaxed max-w-[280px]">
+                We couldn&apos;t find any active {type.toLowerCase()} products for this storefront. If you expect to see
+                products, confirm your Spring app has published products and that you&apos;re scoped to the right app.
             </p>
+            {(fetchError || tenantError) && (
+                <p className="mt-4 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900 max-w-[320px]">
+                    {fetchError && <span className="block font-medium">Request: {fetchError}</span>}
+                    {tenantError && <span className="mt-1 block font-medium">Tenant: {tenantError}</span>}
+                </p>
+            )}
+            {tenantAppId ? (
+                <p className="mt-3 text-[11px] text-gray-400 max-w-[300px]">
+                    Current app filter: <code className="rounded bg-gray-100 px-1">{tenantAppId}</code>. Try opening the
+                    app with <code className="rounded bg-gray-100 px-1">?appId=…</code> or set{' '}
+                    <code className="rounded bg-gray-100 px-1">NEXT_PUBLIC_SPRING_APP_ID</code> to match the app that owns
+                    the products.
+                </p>
+            ) : (
+                <p className="mt-3 text-[11px] text-gray-400 max-w-[300px]">
+                    Add <code className="rounded bg-gray-100 px-1">?appId=YOUR_SPRING_APP_ID</code> to the URL once, then
+                    reload — it&apos;s stored for this session.
+                </p>
+            )}
         </div>
     );
 }
 
-// ─── Loading state ────────────────────────────────────────────────────────────
+// ─── Loading state (skeleton) ────────────────────────────────────────────────
 function LoadingState() {
-    return (
-        <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <Loader2 className="w-8 h-8 animate-spin text-[#1E40AF]" />
-            <p className="text-sm text-gray-500">Loading products...</p>
-        </div>
-    );
+    return <MobileV2ProductListSkeleton />;
 }
 
 // ─── Loan Product Card ────────────────────────────────────────────────────────
@@ -128,26 +157,104 @@ export function LoanProductCard({ product }: { product: MobileProduct }) {
     );
 }
 
-// ─── Mortgage Product Card ─────────────────────────────────────────────────────
-export function MortgageProductCard({ product }: { product: MobileProduct }) {
-    const applyRoute = `${APPLY_ROUTES['Mortgage']}?productId=${product.id}`;
+// ─── Featured mortgage (carousel dots + Get Started → detail) ───────────────
+export function FeaturedMortgageCard({ product }: { product: MobileProduct }) {
+    const detailHref = mortgageDetailHref(product.id);
     const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=2070&auto=format&fit=crop';
+    const [slide, setSlide] = React.useState(0);
+    const price =
+        product.propertyValue != null
+            ? `NGN${product.propertyValue.toLocaleString('en-NG')}`
+            : product.referenceNumber
+              ? `Ref ${product.referenceNumber}`
+              : '';
 
     return (
-        <div className="bg-white rounded-[24px] p-3 shadow-sm border border-gray-100">
+        <div className="overflow-hidden rounded-[24px] bg-white shadow-md border border-gray-100">
             <div
-                className="relative w-full h-[140px] rounded-[20px] mb-4 overflow-hidden bg-gray-100"
+                className="relative h-[200px] w-full bg-gray-100"
+                style={{
+                    backgroundImage: `url(${product.image || DEFAULT_IMAGE})`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                }}
+            >
+                <span className="absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-[#1E40AF] shadow-sm">
+                    By AG Mortgage
+                </span>
+            </div>
+            <div className="p-4">
+                <div className="mb-1 flex items-start justify-between gap-2">
+                    <h3 className="line-clamp-1 text-base font-bold text-[#1E1B4B]">{product.name}</h3>
+                    {price ? <span className="shrink-0 text-sm font-bold text-[#1E1B4B]">{price}</span> : null}
+                </div>
+                <p className="mb-4 line-clamp-2 text-[11px] leading-relaxed text-gray-500">
+                    {product.description || 'Explore competitive rates and flexible repayment on this mortgage.'}
+                </p>
+                <div className="mb-4 flex gap-6 text-xs text-gray-700">
+                    <div className="flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5 text-[#2563EB]" />
+                        <span>{product.duration || '12 months'}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <Percent className="h-3.5 w-3.5 text-[#2563EB]" />
+                        <span>{product.interestRate || '3% p.a'}</span>
+                    </div>
+                </div>
+                <Link href={detailHref}>
+                    <Button className="h-11 w-full rounded-full bg-[#2E5AAC] text-sm font-semibold text-white hover:bg-[#265499]">
+                        Get Started
+                    </Button>
+                </Link>
+                <div className="mt-3 flex justify-center gap-1">
+                    {[0, 1, 2].map((i) => (
+                        <button
+                            key={i}
+                            type="button"
+                            aria-label={`Highlight ${i + 1}`}
+                            onClick={() => setSlide(i)}
+                            className={cn('h-1.5 rounded-full transition-all', i === slide ? 'w-5 bg-[#2E5AAC]' : 'w-1.5 bg-gray-300')}
+                        />
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── Mortgage Product Card ─────────────────────────────────────────────────────
+export function MortgageProductCard({ product, compact }: { product: MobileProduct; compact?: boolean }) {
+    const detailHref = mortgageDetailHref(product.id);
+    const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=2070&auto=format&fit=crop';
+    const imgH = compact ? 'h-[100px]' : 'h-[140px]';
+
+    return (
+        <div className="rounded-[20px] border border-gray-100 bg-white p-3 shadow-sm">
+            <div
+                className={cn('relative mb-3 w-full overflow-hidden rounded-[18px] bg-gray-100', imgH)}
                 style={{ backgroundImage: `url(${product.image || DEFAULT_IMAGE})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
             />
-            <div className="px-1 space-y-2">
-                <h3 className="text-sm font-bold text-[#1E1B4B]">{product.name}</h3>
-                <p className="text-[10px] text-gray-500 line-clamp-2">{product.description}</p>
-                {product.interestRate && (
-                    <div className="text-xs font-semibold text-[#1E40AF]">{product.interestRate} p.a.</div>
+            <div className="space-y-1.5 px-0.5">
+                <h3 className={cn('font-bold text-[#1E1B4B]', compact ? 'line-clamp-2 text-xs' : 'text-sm')}>{product.name}</h3>
+                {!compact && (
+                    <p className="line-clamp-2 text-[10px] text-gray-500">{product.description}</p>
                 )}
-                <Link href={applyRoute}>
-                    <Button className="w-full h-10 rounded-full bg-[#3B82F6] hover:bg-[#2563EB] text-white text-xs font-semibold mt-2">
-                        Apply for Mortgage
+                {product.propertyValue != null && (
+                    <div className="text-xs font-bold text-[#1E1B4B]">
+                        NGN{product.propertyValue.toLocaleString('en-NG')}
+                    </div>
+                )}
+                {product.interestRate && (
+                    <div className="text-[10px] font-semibold text-[#1E40AF]">{product.interestRate} p.a.</div>
+                )}
+                <Link href={detailHref}>
+                    <Button
+                        className={cn(
+                            'mt-1 w-full rounded-full bg-[#2E5AAC] font-semibold text-white hover:bg-[#265499]',
+                            compact ? 'h-9 text-[10px]' : 'h-10 text-xs',
+                        )}
+                    >
+                        {compact ? 'View' : 'Get Started'}
                     </Button>
                 </Link>
             </div>
@@ -219,7 +326,7 @@ interface MobileV2ProductListProps {
 }
 
 export function MobileV2ProductList({ productType }: MobileV2ProductListProps) {
-    const { appId: tenantAppId, ready: tenantReady } = useMobileV2Tenant();
+    const { appId: tenantAppId, ready: tenantReady, error: tenantError } = useMobileV2Tenant();
     const springAppId = tenantAppId ?? process.env.NEXT_PUBLIC_SPRING_APP_ID;
     const { products, loading, error, getProductsByType } = useMobileProducts({
         springAppId: springAppId || undefined,
@@ -231,7 +338,15 @@ export function MobileV2ProductList({ productType }: MobileV2ProductListProps) {
 
     if (!tenantReady) return <LoadingState />;
     if (loading) return <LoadingState />;
-    if (filteredProducts.length === 0) return <EmptyState type={productType} />;
+    if (filteredProducts.length === 0)
+        return (
+            <EmptyState
+                type={productType}
+                fetchError={error}
+                tenantAppId={springAppId ?? null}
+                tenantError={tenantError}
+            />
+        );
 
     if (productType === 'Loan') {
         return (
@@ -252,19 +367,32 @@ export function MobileV2ProductList({ productType }: MobileV2ProductListProps) {
     }
 
     if (productType === 'Mortgage') {
+        const [featured, ...hot] = filteredProducts;
         return (
-            <div className="space-y-4">
+            <div className="space-y-6">
                 <div className="flex items-center justify-between">
-                    <h2 className="font-bold text-[#1E293B]">Available Mortgages</h2>
-                    <button className="px-3 py-1.5 bg-[#1E40AF] text-white text-[10px] uppercase font-bold rounded-lg">
+                    <h2 className="font-bold text-[#1E293B]">Feature</h2>
+                    <Link
+                        href="/mobile-v2/products/mortgage/survey"
+                        className="rounded-lg bg-[#2E5AAC] px-3 py-1.5 text-[10px] font-bold uppercase text-white hover:bg-[#265499]"
+                    >
                         Check Eligibility
-                    </button>
+                    </Link>
                 </div>
-                <div className="grid grid-cols-1 gap-4">
-                    {filteredProducts.map((product) => (
-                        <MortgageProductCard key={product.id} product={product} />
-                    ))}
-                </div>
+                {featured ? <FeaturedMortgageCard product={featured} /> : null}
+
+                {hot.length > 0 ? (
+                    <div>
+                        <h2 className="mb-3 font-bold text-[#1E293B]">Hot Mortgage</h2>
+                        <div className="-mx-1 flex gap-3 overflow-x-auto pb-2 pl-1 pr-4 no-scrollbar">
+                            {hot.map((p) => (
+                                <div key={p.id} className="w-[200px] shrink-0">
+                                    <MortgageProductCard product={p} compact />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ) : null}
             </div>
         );
     }

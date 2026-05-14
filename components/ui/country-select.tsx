@@ -25,7 +25,7 @@ export function CountrySelect({
 
   return (
     <Select
-      value={value}
+      value={value || undefined}
       onValueChange={onValueChange}
       disabled={disabled || loading}
     >

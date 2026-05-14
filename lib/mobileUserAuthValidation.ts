@@ -17,9 +17,11 @@ export function validateNamePart(value: string, label: string): string | null {
   return null
 }
 
+/** ISO 3166-1 alpha-2 (Fuspay / client-auth expect uppercase codes like NG, KE). */
 export function validateCountry(country: string): string | null {
   const t = country.trim()
-  if (t.length < 2 || t.length > 100) return 'Country must be between 2 and 100 characters.'
+  if (!t) return 'Please select a country.'
+  if (!/^[A-Za-z]{2}$/.test(t)) return 'Country must be a two-letter code. Select a country from the list.'
   return null
 }
 

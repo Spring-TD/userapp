@@ -1,17 +1,36 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Eye, EyeOff, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { clearAuthError, loginThunk } from '@/store/authSlice';
 import { clearMobileClientAuthError } from '@/store/mobileClientAuthSlice';
+import { AuthRouteSkeleton } from '@/components/mobile-v2/data-skeletons';
 
-export default function LoginPage() {
+const DEFAULT_POST_LOGIN = '/mobile-v2/home';
+
+/** Same-origin relative path only — avoids open redirects from `?next=`. */
+function safeReturnPath(raw: string | null): string {
+  if (!raw) return DEFAULT_POST_LOGIN;
+  try {
+    const decoded = decodeURIComponent(raw.trim());
+    if (!decoded.startsWith('/') || decoded.startsWith('//')) return DEFAULT_POST_LOGIN;
+    if (decoded.includes('://')) return DEFAULT_POST_LOGIN;
+    if (decoded.startsWith('/api')) return DEFAULT_POST_LOGIN;
+    if (decoded.startsWith('/mobile-v2/auth')) return DEFAULT_POST_LOGIN;
+    return decoded;
+  } catch {
+    return DEFAULT_POST_LOGIN;
+  }
+}
+
+function LoginPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const dispatch = useAppDispatch();
   const { loading, error } = useAppSelector((s) => s.auth);
   const mobileErr = useAppSelector((s) => s.mobileClientAuth.error);
@@ -55,7 +74,7 @@ export default function LoginPage() {
     }
 
     toast.success('Signed in successfully.');
-    router.push('/mobile-v2/home');
+    router.push(safeReturnPath(searchParams.get('next')));
   };
 
   return (
@@ -139,5 +158,13 @@ export default function LoginPage() {
         </Button>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<AuthRouteSkeleton />}>
+      <LoginPageInner />
+    </Suspense>
   );
 }

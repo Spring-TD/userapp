@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { BACKEND } from "@/lib/endpoints"
+import { getApiBaseUrl } from "@/lib/apiBaseUrl"
 
 export const dynamic = "force-dynamic"
-
-const AUTH_MS_URL = process.env.NEXT_PUBLIC_API_URL || "https://account-ms.fly.dev"
 
 /**
  * PUT /api/v1/password/change — Bearer. Changes the authenticated user's password.
@@ -16,7 +15,7 @@ export async function PUT(request: NextRequest) {
     (cookieAccessToken ? `Bearer ${cookieAccessToken}` : null)
 
   try {
-    const url = `${AUTH_MS_URL.replace(/\/+$/, "")}${BACKEND.password.change}`
+    const url = `${getApiBaseUrl()}${BACKEND.password.change}`
     const body = await request.json().catch(() => ({}))
 
     const response = await fetch(url, {
