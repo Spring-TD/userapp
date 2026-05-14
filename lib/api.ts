@@ -66,8 +66,12 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig & { includeAuth
     } catch {
       /* ignore */
     }
-    const mid = process.env.NEXT_PUBLIC_USER_MERCHANT_ID?.trim()
-    if (mid) h["x-tenant-merchant-id"] = mid
+    try {
+      const mid = sessionStorage.getItem("mobile-v2-tenant-merchant-id")
+      if (mid) h["x-tenant-merchant-id"] = mid
+    } catch {
+      /* ignore */
+    }
   }
 
   return config

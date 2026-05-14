@@ -40,13 +40,6 @@ This repository is now focused on the **Mobile V2 user experience** (`/mobile-v2
 Set these in `.env`:
 
 - `NEXT_PUBLIC_API_URL` - client auth gateway base URL
-- `NEXT_PUBLIC_USER_MERCHANT_ID` - merchant id used as hidden signup field for mobile-v2 user registration
-
-Example:
-
-```env
-NEXT_PUBLIC_API_URL=https://client-auth-ms.fly.dev/
-NEXT_PUBLIC_USER_MERCHANT_ID=<merchant-id>
 ```
 
 ## Run Locally

@@ -7,6 +7,37 @@ export const dynamic = "force-dynamic"
 
 const API_UPSTREAM_BASE = getApiUpstreamBase()
 
+function asNonEmptyString(v: unknown): string | null {
+  if (typeof v === "string" && v.trim()) return v.trim()
+  if (v != null && typeof v !== "object" && String(v).trim()) return String(v).trim()
+  return null
+}
+
+/** Map create-app / account-ms app payload fields to retail `user_merchant_id` (sent as `x-tenant-merchant-id`). */
+function pickMerchantId(
+  app: Record<string, unknown> | null | undefined,
+  payload: Record<string, unknown> | null | undefined,
+  root: Record<string, unknown>,
+): string | null {
+  const merchantObj =
+    app?.merchant && typeof app.merchant === "object" ? (app.merchant as Record<string, unknown>) : null
+  const candidates: unknown[] = [
+    app?.user_merchant_id,
+    app?.userMerchantId,
+    app?.merchant_id,
+    app?.merchantId,
+    merchantObj?.id,
+    merchantObj?._id,
+    payload?.merchantId,
+    payload?.user_merchant_id,
+    root.merchantId,
+  ]
+  for (const c of candidates) {
+    const s = asNonEmptyString(c)
+    if (s) return s
+  }
+  return null
+}
 
 export async function GET(
   _request: NextRequest,
@@ -74,11 +105,14 @@ export async function GET(
           ? (app as { pwaInstall?: unknown }).pwaInstall
           : undefined
 
+    const merchantId = pickMerchantId(app, payload as Record<string, unknown> | null, data as Record<string, unknown>)
+
     return NextResponse.json({
       success: true,
       data: {
         appId,
         subdomain: (app?.subdomain as string | undefined) || subdomain,
+        ...(merchantId ? { merchantId } : {}),
         ...(pwaInstall != null && typeof pwaInstall === "object" ? { pwaInstall } : {}),
       },
     })
