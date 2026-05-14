@@ -28,10 +28,11 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // Filter by type if provided
+        // Filter by type if provided (backend may use MORTGAGE vs Mortgage, etc.)
         let products = data.data || [];
         if (type) {
-            products = products.filter((p: any) => p.type === type);
+            const want = String(type).toLowerCase();
+            products = products.filter((p: { type?: string }) => String(p?.type ?? '').toLowerCase() === want);
         }
 
         return NextResponse.json({ success: true, data: products });

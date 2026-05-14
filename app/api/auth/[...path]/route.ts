@@ -27,6 +27,15 @@ const axiosConfig = {
   validateStatus: () => true,
 };
 
+function forwardTenantHeaders(request: NextRequest): Record<string, string> {
+  const out: Record<string, string> = {}
+  const appId = request.headers.get('x-tenant-app-id')?.trim()
+  const merchantId = request.headers.get('x-tenant-merchant-id')?.trim()
+  if (appId) out['x-tenant-app-id'] = appId
+  if (merchantId) out['x-tenant-merchant-id'] = merchantId
+  return out
+}
+
 const cookieOpts = (maxAge: number) => ({
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
@@ -92,7 +101,11 @@ export class Auth {
   static async register(request: NextRequest) {
     try {
       const body = await request.json();
-      const res = await axios.post(buildUrl(BACKEND.registration.user), body, axiosConfig);
+      const tenant = forwardTenantHeaders(request);
+      const res = await axios.post(buildUrl(BACKEND.registration.user), body, {
+        ...axiosConfig,
+        headers: { ...(axiosConfig.headers as Record<string, string>), ...tenant },
+      });
       return NextResponse.json(res.data, { status: res.status });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Registration failed';
@@ -104,7 +117,11 @@ export class Auth {
   static async registerMerchant(request: NextRequest) {
     try {
       const body = await request.json();
-      const res = await axios.post(buildUrl(BACKEND.registration.merchant), body, axiosConfig);
+      const tenant = forwardTenantHeaders(request);
+      const res = await axios.post(buildUrl(BACKEND.registration.merchant), body, {
+        ...axiosConfig,
+        headers: { ...(axiosConfig.headers as Record<string, string>), ...tenant },
+      });
       return NextResponse.json(res.data, { status: res.status });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Registration failed';
@@ -312,6 +329,29 @@ export class Auth {
     }
   }
 
+  /** POST /api/v1/password/change/request-otp — Bearer. Sends OTP to email for password change. */
+  static async passwordChangeRequestOtp(request: NextRequest) {
+    try {
+      const authHeader = request.headers.get('Authorization');
+      const cookieToken = request.cookies.get('accessToken')?.value;
+      const bearer =
+        authHeader || (cookieToken ? `Bearer ${cookieToken}` : null);
+      if (!bearer) {
+        return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      }
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Authorization: bearer,
+      };
+      const res = await axios.post(buildUrl(BACKEND.password.changeRequestOtp), {}, { ...axiosConfig, headers });
+      return NextResponse.json(res.data, { status: res.status });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to request password change OTP';
+      console.error('[Auth] passwordChangeRequestOtp:', msg);
+      return NextResponse.json({ success: false, error: msg }, { status: 500 });
+    }
+  }
+
   static async logout(request: NextRequest) {
     const authHeader = request.headers.get('Authorization');
     const cookieToken = request.cookies.get('accessToken')?.value;
@@ -431,6 +471,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   if (key === 'resend-email-otp') return Auth.resendEmailOtp(request);
   if (key === 'password/forgot') return Auth.passwordForgot(request);
   if (key === 'password/reset') return Auth.passwordReset(request);
+  if (key === 'password/change/request-otp') return Auth.passwordChangeRequestOtp(request);
   if (key === 'logout') return Auth.logout(request);
   if (key === 'verify-token') return Auth.verifyTokenPost(request);
   return NextResponse.json({ error: 'Not found' }, { status: 404 });

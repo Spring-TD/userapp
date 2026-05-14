@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react"
+import { usePathname, useSearchParams } from "next/navigation"
 
 import { getTenantSubdomainFromHost } from "@/lib/mobileTenant/subdomain"
 import type { StorefrontPwaInstallPayload } from "@/lib/storefrontPwaTypes"
@@ -56,6 +57,10 @@ async function fetchTenantBySubdomain(slug: string): Promise<{
 }
 
 export function MobileV2TenantProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const searchKey = searchParams?.toString() ?? ""
+
   const [appId, setAppId] = useState<string | null>(null)
   const [tenantSubdomain, setTenantSubdomain] = useState<string | null>(null)
   const [pwaInstall, setPwaInstall] = useState<StorefrontPwaInstallPayload | null>(null)
@@ -87,7 +92,7 @@ export function MobileV2TenantProvider({ children }: { children: ReactNode }) {
       let nextSlug: string | null = null
 
       try {
-        const params = new URLSearchParams(window.location.search)
+        const params = new URLSearchParams(searchKey || window.location.search)
         const appIdParam = params.get("appId")?.trim() || null
         const subdomainParam = params.get("subdomain")?.trim().toLowerCase() || null
 
@@ -148,7 +153,7 @@ export function MobileV2TenantProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [pathname, searchKey])
 
   const value = useMemo(
     () => ({

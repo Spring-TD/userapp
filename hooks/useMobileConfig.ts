@@ -102,14 +102,13 @@ const DEFAULT_CONFIG: MobileAppConfig = {
 };
 
 /**
- * Hook to fetch mobile app configuration
- * 
- * Usage:
- * ```tsx
- * const { config, loading, error } = useMobileConfig({ appId: 'your-app-id' });
- * ```
- * 
- * If no appId is provided, it will try to get it from URL params or use defaults
+ * Hook to fetch mobile app configuration (splash, onboarding, theme).
+ *
+ * App id resolution: `MobileV2TenantContext` (`?appId`, `?subdomain`, host subdomain →
+ * `/api/apps/resolve-subdomain/:slug`, session storage, `NEXT_PUBLIC_SPRING_APP_ID`).
+ *
+ * Fetches **`GET /api/apps/[appId]/configuration/public`**, which proxies using **`NEXT_PUBLIC_API_URL`**
+ * (`getApiBaseUrl()` + `/api/v1/...` as implemented in that route).
  */
 export function useMobileConfig(options: UseMobileConfigOptions = {}): UseMobileConfigReturn {
   const [config, setConfig] = useState<MobileAppConfig | null>(null);

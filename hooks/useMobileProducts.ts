@@ -80,7 +80,10 @@ export function useMobileProducts(options: UseMobileProductsOptions = {}): UseMo
       const data = await response.json();
 
       if (data.success) {
-        let list = data.data || [];
+        let list = (data.data || []).map((p: Record<string, unknown>) => {
+          const id = String(p.id ?? p._id ?? '').trim();
+          return { ...p, id } as MobileProduct;
+        }).filter((p: MobileProduct) => Boolean(p.id));
         if (springAppId) {
           list = list.filter((p: MobileProduct) => p.appId === springAppId);
         }
@@ -108,7 +111,8 @@ export function useMobileProducts(options: UseMobileProductsOptions = {}): UseMo
   }, [products]);
 
   const getProductsByType = useCallback((productType: string): MobileProduct[] => {
-    return products.filter(p => p.type === productType);
+    const want = productType.toLowerCase();
+    return products.filter((p) => String(p.type ?? '').toLowerCase() === want);
   }, [products]);
 
   return {

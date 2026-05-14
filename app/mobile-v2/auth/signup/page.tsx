@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Eye, EyeOff, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { CountrySelect } from '@/components/ui/country-select';
 import { toast } from 'sonner';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import {
@@ -21,6 +22,7 @@ import {
   validateNamePart,
   validatePasswordForMobileUser,
 } from '@/lib/mobileUserAuthValidation';
+import { AuthRouteSkeleton } from '@/components/mobile-v2/data-skeletons';
 
 function SignupForm() {
   const router = useRouter();
@@ -33,6 +35,7 @@ function SignupForm() {
   const userMerchantId = merchantFromQuery || merchantFromEnv;
 
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -42,6 +45,7 @@ function SignupForm() {
   const [phone, setPhone] = useState('');
   const [country, setCountry] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
   useEffect(() => {
     if (error) {
@@ -64,6 +68,7 @@ function SignupForm() {
     if (c) next.country = c;
     const pw = validatePasswordForMobileUser(password);
     if (pw) next.password = pw;
+    if (confirmPassword !== password) next.confirm_password = 'Passwords do not match.';
     if (!termsAccepted) next.terms = 'Please accept the terms to continue.';
     setFieldErrors(next);
     return { ok: Object.keys(next).length === 0, errors: next };
@@ -93,7 +98,8 @@ function SignupForm() {
       last_name: lastName.trim(),
       email: email.trim().toLowerCase(),
       phone: phone.trim(),
-      country: country.trim(),
+      // Backend expects ISO alpha-2 (e.g. NG), same as Spring/Plata CountrySelect values uppercased.
+      country: country.trim().toUpperCase(),
       password,
     };
 
@@ -181,14 +187,18 @@ function SignupForm() {
           error={fieldErrors.phone}
           autoComplete="tel"
         />
-        <FloatingField
-          id="country"
-          label="Country"
-          value={country}
-          onChange={setCountry}
-          error={fieldErrors.country}
-          autoComplete="country-name"
-        />
+        <div className="space-y-1">
+          <label htmlFor="country_select" className="sr-only">
+            Country
+          </label>
+          <CountrySelect
+            value={country}
+            onValueChange={setCountry}
+            placeholder="Select country"
+            triggerClassName="h-14 w-full rounded-2xl border-0 bg-white px-4 text-base shadow-[0_2px_10px_rgba(0,0,0,0.03)] focus:ring-2 focus:ring-[#2563EB]/20"
+          />
+          {fieldErrors.country && <p className="text-xs text-red-600">{fieldErrors.country}</p>}
+        </div>
 
         <div className="relative group">
           <input
@@ -214,6 +224,34 @@ function SignupForm() {
             {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
           </button>
           {fieldErrors.password && <p className="mt-1 text-xs text-red-600">{fieldErrors.password}</p>}
+        </div>
+
+        <div className="relative group">
+          <input
+            type={showConfirmPassword ? 'text' : 'password'}
+            id="confirm_password"
+            placeholder=" "
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            className="peer h-14 w-full rounded-2xl border-0 bg-white px-4 pb-1 pt-4 text-base shadow-[0_2px_10px_rgba(0,0,0,0.03)] placeholder-transparent transition-all focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20"
+          />
+          <label
+            htmlFor="confirm_password"
+            className="pointer-events-none absolute left-4 top-1.5 text-[11px] font-medium text-gray-400 transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-base peer-focus:top-1.5 peer-focus:text-[11px] peer-focus:text-gray-400"
+          >
+            Confirm password
+          </label>
+          <button
+            type="button"
+            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-[#2563EB] transition-colors hover:text-[#1d4ed8]"
+          >
+            {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+          </button>
+          {fieldErrors.confirm_password && (
+            <p className="mt-1 text-xs text-red-600">{fieldErrors.confirm_password}</p>
+          )}
         </div>
 
         <div className="mt-6 flex items-start gap-3 px-1">
@@ -290,9 +328,7 @@ function FloatingField({
 export default function SignupPage() {
   return (
     <Suspense
-      fallback={
-        <div className="flex h-full items-center justify-center bg-[#FAFAFA] p-6 text-sm text-gray-500">Loading…</div>
-      }
+      fallback={<AuthRouteSkeleton />}
     >
       <SignupForm />
     </Suspense>

@@ -63,10 +63,30 @@ export const BACKEND = {
   password: {
     /** POST — Public. Sends a password-reset link or OTP to the given email. */
     forgot: "/api/v1/password/forgot",
-    /** POST — Public. Resets password using a valid reset token (from email link or OTP flow). */
+    /** POST — Public. Resets password using identifier + OTP + newPassword. */
     reset: "/api/v1/password/reset",
-    /** PUT — Bearer. Changes the authenticated user's password (requires current password). */
+    /** POST — Bearer. Sends OTP to the user's email for password change confirmation. */
+    changeRequestOtp: "/api/v1/password/change/request-otp",
+    /** PUT — Bearer. Changes password (currentPassword, code, newPassword). */
     change: "/api/v1/password/change",
+  },
+
+  /** FAQs (`/api/v1/faqs`) — per client-auth-ms */
+  faqs: {
+    list: "/api/v1/faqs",
+    byId: (id: string) => `/api/v1/faqs/${encodeURIComponent(id)}`,
+  },
+
+  /** Support contacts (`/api/v1/support-contacts`) */
+  supportContacts: {
+    list: "/api/v1/support-contacts",
+    byId: (id: string) => `/api/v1/support-contacts/${encodeURIComponent(id)}`,
+  },
+
+  /** Legal documents — terms & privacy (`/api/v1/legal-documents`) */
+  legalDocuments: {
+    list: "/api/v1/legal-documents",
+    byId: (id: string) => `/api/v1/legal-documents/${encodeURIComponent(id)}`,
   },
 
   /** User (`/api/v1/user`) — all Bearer */
@@ -280,6 +300,8 @@ export const BACKEND = {
 const AUTH_BASE = "/v1/auth"
 const USER_BASE = "/v1/user"
 const COMPLIANCE_BASE = "/compliance"
+/** Allowlisted proxy to client-auth-ms (`NEXT_PUBLIC_API_URL`) — see `app/api/v1/client-ms/[...path]/route.ts`. */
+const CLIENT_MS = "/v1/client-ms"
 
 export const ENDPOINTS = {
   auth: {
@@ -305,6 +327,8 @@ export const ENDPOINTS = {
       forgot: `${AUTH_BASE}/password/forgot`,
       reset: `${AUTH_BASE}/password/reset`,
       change: `${AUTH_BASE}/password/change`,
+      /** POST — Bearer. Same as `POST /api/v1/password/change/request-otp` on client-auth-ms. */
+      changeRequestOtp: `${AUTH_BASE}/password/change/request-otp`,
     },
     me: `${AUTH_BASE}/me`,
     logout: `${AUTH_BASE}/logout`,
@@ -313,6 +337,36 @@ export const ENDPOINTS = {
       list: "/sessions",
       byId: (sessionId: string) => `/sessions/${encodeURIComponent(sessionId)}`,
     },
+  },
+  /** Direct client-auth-ms shapes under `/api/v1/...` (FAQs, invitations, roles, registration forms, …). */
+  clientMs: {
+    registrationForms: `${CLIENT_MS}/registration/forms`,
+    registrationMerchant: `${CLIENT_MS}/registration/merchant`,
+    registrationUser: `${CLIENT_MS}/registration/user`,
+    registrationAdmin: `${CLIENT_MS}/registration/admin`,
+    faqs: `${CLIENT_MS}/faqs`,
+    faqById: (id: string) => `${CLIENT_MS}/faqs/${encodeURIComponent(id)}`,
+    supportContacts: `${CLIENT_MS}/support-contacts`,
+    supportContactById: (id: string) => `${CLIENT_MS}/support-contacts/${encodeURIComponent(id)}`,
+    legalDocuments: `${CLIENT_MS}/legal-documents`,
+    legalDocumentById: (id: string) => `${CLIENT_MS}/legal-documents/${encodeURIComponent(id)}`,
+    invitations: `${CLIENT_MS}/invitations`,
+    invitationValidate: (token: string) => `${CLIENT_MS}/invitations/validate/${encodeURIComponent(token)}`,
+    invitationAccept: `${CLIENT_MS}/invitations/accept`,
+    roles: `${CLIENT_MS}/roles`,
+    rolesPermissions: `${CLIENT_MS}/roles/permissions`,
+    sessions: `${CLIENT_MS}/sessions`,
+    sessionRevoke: (sessionId: string) => `${CLIENT_MS}/sessions/${encodeURIComponent(sessionId)}`,
+    userList: `${CLIENT_MS}/user/list`,
+    userProfile: `${CLIENT_MS}/user/profile`,
+    userDeactivate: `${CLIENT_MS}/user/deactivate`,
+    userEmail: `${CLIENT_MS}/user/email`,
+    userInfo: (userId: string) => `${CLIENT_MS}/user/info/${encodeURIComponent(userId)}`,
+    userVerifyInfo: (userId: string) => `${CLIENT_MS}/user/verify-info/${encodeURIComponent(userId)}`,
+    userSuspend: (userId: string) => `${CLIENT_MS}/user/suspend/${encodeURIComponent(userId)}`,
+    userActivate: (userId: string) => `${CLIENT_MS}/user/activate/${encodeURIComponent(userId)}`,
+    userStatus: (userId: string) => `${CLIENT_MS}/user/${encodeURIComponent(userId)}/status`,
+    authVerifyToken: `${CLIENT_MS}/auth/verify-token`,
   },
   user: {
     list: `${USER_BASE}/list`,

@@ -1,8 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import {
     Bell,
     ChevronRight,
@@ -18,12 +17,62 @@ import {
     FileText,
     Building2,
     Copy,
-    X
+    X,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { fetchAuthUserProfile, type AuthUserProfile } from '@/lib/userProfileClient';
+import { useWalletBalance } from '@/hooks/useWalletBalance';
+import { Skeleton } from '@/components/ui/skeleton';
+
+function profileAvatarUrl(user: AuthUserProfile | null): string | null {
+    if (!user) return null
+    const u = user as AuthUserProfile & { avatar_url?: string; profile_image?: string; image?: string }
+    const raw = u.avatar_url || u.profile_image || u.image
+    if (typeof raw === 'string' && /^https?:\/\//i.test(raw.trim())) return raw.trim()
+    return null
+}
+
+function displayNameFromProfile(user: AuthUserProfile | null): string {
+    if (!user) return ''
+    const first = (user.first_name || '').trim()
+    const last = (user.last_name || '').trim()
+    if (first && last) return `${first} ${last}`
+    if (first) return first
+    if (last) return last
+    return ''
+}
+
+function profileInitials(user: AuthUserProfile | null): string {
+    if (!user) return ''
+    const a = (user.first_name || '').trim()[0]
+    const b = (user.last_name || '').trim()[0]
+    const fromName = `${a || ''}${b || ''}`.toUpperCase()
+    return fromName ? fromName.slice(0, 2) : ''
+}
 
 export default function HomePage() {
     const [activeModal, setActiveModal] = useState<'none' | 'fund_options' | 'fund_bank' | 'account_details'>('none');
+    const [profile, setProfile] = useState<AuthUserProfile | null>(null);
+    const [profileLoading, setProfileLoading] = useState(true);
+    const { formattedBalance, loading: walletLoading, error: walletError } = useWalletBalance();
+
+    useEffect(() => {
+        let cancelled = false;
+        void (async () => {
+            const { user } = await fetchAuthUserProfile();
+            if (!cancelled) {
+                setProfile(user);
+                setProfileLoading(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    const displayGreetingName = useMemo(() => displayNameFromProfile(profile), [profile]);
+
+    const avatarSrc = profileAvatarUrl(profile);
+    const initials = profileInitials(profile);
 
     const closeModal = () => setActiveModal('none');
 
@@ -33,10 +82,29 @@ export default function HomePage() {
             <div className="px-6 pt-12 pb-4 flex items-center justify-between">
                 <div>
                     <h1 className="text-[19px] font-bold text-[#1E293B]">
-                        Hello <span className="text-[#1E1B4B]">John</span>
+                        Hello
+                        {profileLoading ? (
+                            <>
+                                {' '}
+                                <span className="text-[#1E1B4B] inline-flex items-center">
+                                    <Skeleton className="inline-block h-[1.15em] w-36 max-w-[55vw] rounded-md bg-gray-200/90" aria-hidden />
+                                </span>
+                            </>
+                        ) : displayGreetingName ? (
+                            <>
+                                {' '}
+                                <span className="text-[#1E1B4B] inline-flex items-center">{displayGreetingName}</span>
+                            </>
+                        ) : null}
                     </h1>
-                    <p className="text-gray-500 text-[13px]">
-                        Your finances are looking good
+                    <p className="text-gray-500 text-[13px] min-h-[1.25rem]">
+                        {profileLoading ? (
+                            <Skeleton className="mt-0.5 h-4 w-52 max-w-[70vw] rounded-md bg-gray-200/90" aria-hidden />
+                        ) : profile ? (
+                            'Your finances are looking good'
+                        ) : (
+                            'Sign in to personalise your home'
+                        )}
                     </p>
                 </div>
                 <button className="w-10 h-10 rounded-full bg-[#E0E7FF] flex items-center justify-center text-[#2563EB]">
@@ -55,15 +123,38 @@ export default function HomePage() {
                     <div className="relative z-10 flex flex-col items-center justify-center h-full text-white pt-4">
                         {/* Avatar in Card */}
                         <div className="w-12 h-12 rounded-full border-2 border-green-400/30 p-0.5 mb-3 bg-white/10 backdrop-blur-sm">
-                            <div className="relative w-full h-full rounded-full overflow-hidden">
-                                <Image src="/avatar-john.png" alt="User" fill className="object-cover" />
+                            <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-indigo-400 to-blue-800">
+                                {avatarSrc ? (
+                                    // eslint-disable-next-line @next/next/no-img-element -- optional remote URL from API
+                                    <img src={avatarSrc} alt="" className="h-full w-full object-cover" />
+                                ) : (
+                                    <span className="text-sm font-bold text-white flex items-center justify-center" aria-hidden>
+                                        {profileLoading ? (
+                                            <Skeleton className="h-8 w-8 shrink-0 rounded-full bg-white/30" aria-hidden />
+                                        ) : initials ? (
+                                            initials
+                                        ) : (
+                                            <User className="h-5 w-5 text-white/90" aria-hidden />
+                                        )}
+                                    </span>
+                                )}
                             </div>
                         </div>
 
                         <span className="text-sm font-medium text-blue-100 mb-1">Your available balance is</span>
-                        <h2 className="text-4xl font-bold mb-2">N20,983</h2>
-                        <p className="text-[11px] text-blue-200 bg-black/10 px-3 py-1 rounded-full backdrop-blur-md">
-                            By this time last month, you spent slightly higher (N22,719)
+                        <h2 className="text-4xl font-bold mb-2 min-h-[2.5rem] flex items-center justify-center gap-2">
+                            {walletLoading ? (
+                                <Skeleton className="h-10 w-40 max-w-[70vw] rounded-lg bg-white/25" aria-label="Loading balance" />
+                            ) : walletError ? (
+                                <span className="text-lg font-semibold text-blue-100">—</span>
+                            ) : (
+                                formattedBalance
+                            )}
+                        </h2>
+                        <p className="text-[11px] text-blue-200/90 px-2 text-center max-w-[280px]">
+                            {walletError
+                                ? 'Wallet balance appears after you sign in and your wallet is linked.'
+                                : 'Balance reflects your main wallet when available.'}
                         </p>
                     </div>
                 </div>
@@ -196,24 +287,25 @@ export default function HomePage() {
                         <div>
                             <label className="text-xs text-gray-400 block mb-1">Account Holder</label>
                             <div className="flex justify-between items-center">
-                                <span className="font-bold text-[#1E1B4B]">Chidi Vera</span>
-                                <Copy className="w-4 h-4 text-gray-400" />
+                                <span className="font-bold text-gray-500">—</span>
+                                <Copy className="w-4 h-4 text-gray-300 pointer-events-none" aria-hidden />
                             </div>
                         </div>
                         <div>
                             <label className="text-xs text-gray-400 block mb-1">Account Number</label>
                             <div className="flex justify-between items-center">
-                                <span className="font-bold text-[#1E1B4B]">1234567891</span>
-                                <Copy className="w-4 h-4 text-gray-400" />
+                                <span className="font-bold text-gray-500">—</span>
+                                <Copy className="w-4 h-4 text-gray-300 pointer-events-none" aria-hidden />
                             </div>
                         </div>
                         <div>
                             <label className="text-xs text-gray-400 block mb-1">Bank Name</label>
                             <div className="flex justify-between items-center">
-                                <span className="font-bold text-[#1E1B4B]">AG Mortgage Bank</span>
-                                <Copy className="w-4 h-4 text-gray-400" />
+                                <span className="font-bold text-gray-500">—</span>
+                                <Copy className="w-4 h-4 text-gray-300 pointer-events-none" aria-hidden />
                             </div>
                         </div>
+                        <p className="text-xs text-gray-500">Funding details will show here once your wallet exposes them.</p>
                     </div>
 
                     <div className="bg-[#FEF3C7] rounded-xl p-4 text-[#92400E] text-xs leading-relaxed">
@@ -239,22 +331,23 @@ export default function HomePage() {
                     <div className="space-y-6">
                         <div>
                             <label className="text-xs text-gray-400 block mb-1">Account Type</label>
-                            <h3 className="font-bold text-[#1E1B4B]">Savings Account</h3>
+                            <h3 className="font-bold text-gray-500">—</h3>
                         </div>
                         <div>
                             <label className="text-xs text-gray-400 block mb-1">Account Number</label>
                             <div className="flex justify-between items-center">
-                                <span className="font-bold text-[#1E1B4B]">7012345678</span>
-                                <Copy className="w-4 h-4 text-gray-400" />
+                                <span className="font-bold text-gray-500">—</span>
+                                <Copy className="w-4 h-4 text-gray-300 pointer-events-none" aria-hidden />
                             </div>
                         </div>
                         <div>
                             <label className="text-xs text-gray-400 block mb-1">Bank Name</label>
                             <div className="flex justify-between items-center">
-                                <span className="font-bold text-[#1E1B4B]">AG Mortgage Bank</span>
-                                <Copy className="w-4 h-4 text-gray-400" />
+                                <span className="font-bold text-gray-500">—</span>
+                                <Copy className="w-4 h-4 text-gray-300 pointer-events-none" aria-hidden />
                             </div>
                         </div>
+                        <p className="text-xs text-gray-500">Account details will show here when available from your profile.</p>
                     </div>
                 </div>
             )}

@@ -58,6 +58,18 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig & { includeAuth
     ;(config.headers as any).Authorization = `Bearer ${token}`
   }
 
+  if (typeof window !== "undefined" && config.headers) {
+    const h = config.headers as Record<string, string>
+    try {
+      const tid = sessionStorage.getItem("mobile-v2-tenant-app-id")
+      if (tid) h["x-tenant-app-id"] = tid
+    } catch {
+      /* ignore */
+    }
+    const mid = process.env.NEXT_PUBLIC_USER_MERCHANT_ID?.trim()
+    if (mid) h["x-tenant-merchant-id"] = mid
+  }
+
   return config
 })
 
