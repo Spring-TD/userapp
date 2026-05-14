@@ -2,7 +2,7 @@
 
 import React, { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -23,16 +23,13 @@ import {
   validatePasswordForMobileUser,
 } from '@/lib/mobileUserAuthValidation';
 import { AuthRouteSkeleton } from '@/components/mobile-v2/data-skeletons';
+import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
 
 function SignupForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const dispatch = useAppDispatch();
   const { loading, error } = useAppSelector((s) => s.mobileClientAuth);
-
-  const merchantFromEnv = process.env.NEXT_PUBLIC_USER_MERCHANT_ID?.trim() ?? '';
-  const merchantFromQuery = searchParams.get('merchant_id')?.trim() ?? '';
-  const userMerchantId = merchantFromQuery || merchantFromEnv;
+  const { ready: tenantReady, merchantId, error: tenantError } = useMobileV2Tenant();
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -56,7 +53,10 @@ function SignupForm() {
 
   const validateForm = (): { ok: boolean; errors: Record<string, string> } => {
     const next: Record<string, string> = {};
-    if (!userMerchantId) next.user_merchant_id = 'Missing merchant configuration. Open the app with ?merchant_id=… or set NEXT_PUBLIC_USER_MERCHANT_ID.';
+    if (tenantReady && !merchantId) {
+      next.user_merchant_id =
+        'This store could not be identified. Open the app from your tenant link (for example yourstore.tryspring.io), or add ?merchant_id=… to the URL for local testing.';
+    }
     const fn = validateNamePart(firstName, 'First name');
     if (fn) next.first_name = fn;
     const ln = validateNamePart(lastName, 'Last name');
@@ -93,7 +93,6 @@ function SignupForm() {
     }
 
     const payload: MobileUserRegistrationDto = {
-      user_merchant_id: userMerchantId,
       first_name: firstName.trim(),
       last_name: lastName.trim(),
       email: email.trim().toLowerCase(),
@@ -129,8 +128,6 @@ function SignupForm() {
 
   return (
     <div className="relative flex h-full flex-col bg-[#FAFAFA] p-6 pt-12 text-[#1E293B]">
-      <input type="hidden" name="user_merchant_id" value={userMerchantId} readOnly aria-hidden />
-
       <div className="mb-8 flex items-center justify-between">
         <Link href="/mobile-v2" className="-ml-2 rounded-full p-2 transition-colors hover:bg-black/5">
           <ChevronLeft className="h-6 w-6" />
@@ -147,10 +144,16 @@ function SignupForm() {
       </div>
 
       <div className="no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto pb-4">
-        {!userMerchantId && (
+        {!tenantReady && (
+          <p className="rounded-xl bg-slate-100 px-3 py-2 text-xs text-slate-700">Loading store configuration…</p>
+        )}
+        {tenantError && (
+          <p className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-900">{tenantError}</p>
+        )}
+        {tenantReady && !merchantId && !tenantError && (
           <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900">
-            Missing <code className="font-mono">merchant_id</code>. Add <code className="font-mono">?merchant_id=…</code> to the URL or set{' '}
-            <code className="font-mono">NEXT_PUBLIC_USER_MERCHANT_ID</code> in your environment.
+            Missing tenant. Use your merchant storefront link (subdomain), or add{' '}
+            <code className="font-mono">?merchant_id=…</code> for local testing.
           </p>
         )}
 
@@ -275,7 +278,7 @@ function SignupForm() {
         <Button
           type="button"
           className="h-14 w-full rounded-[20px] bg-[#1E40AF] text-base font-medium text-white shadow-lg shadow-blue-900/20 hover:bg-[#1e3a8a]"
-          disabled={loading}
+          disabled={loading || !tenantReady || !merchantId}
           onClick={handleRegister}
         >
           {loading ? 'Please wait…' : 'Register'}
