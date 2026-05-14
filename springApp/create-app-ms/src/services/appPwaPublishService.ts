@@ -3,7 +3,12 @@ import { AppModel } from '../models/appModel';
 import { AppPwaPublishModel } from '../models/appPwaPublishModel';
 import { AppPwaTemplateModel } from '../models/appPwaTemplateModel';
 import { AppPwaTemplate } from '../types/pwaTemplate';
-import { AppPwaPublish, PublishPwaRequest, RuntimeManifest } from '../types/pwaPublish';
+import {
+  AppPwaPublish,
+  PublicPwaInstallBundle,
+  PublishPwaRequest,
+  RuntimeManifest
+} from '../types/pwaPublish';
 import { buildRuntimeManifest, resolvePwaBaseUrl } from '../utils/pwaManifestBuilder';
 import {
   buildServiceWorkerMeta,
@@ -138,6 +143,27 @@ export class AppPwaPublishService {
       customDomainReady: readiness.customDomainReady,
       warnings: Array.from(new Set(statusWarnings)),
       errors: Array.from(new Set(statusErrors))
+    };
+  }
+
+  /**
+   * Absolute manifest / SW URLs for embedding on the merchant storefront.
+   * `pwaEntryUrl` is the app’s public site (from publish); artifact URLs use this API’s host.
+   */
+  async getPublicInstallBundle(
+    appId: string,
+    apiBaseUrl: string
+  ): Promise<PublicPwaInstallBundle | null> {
+    const latest = await AppPwaPublishModel.getLatestByAppId(appId);
+    if (!latest || latest.status !== 'published') {
+      return null;
+    }
+    const base = trimSlash(apiBaseUrl);
+    return {
+      manifestUrl: `${base}/api/v1/apps/${appId}/pwa/manifest.webmanifest`,
+      serviceWorkerUrl: `${base}/api/v1/apps/${appId}/pwa/sw.js`,
+      pwaEntryUrl: latest.artifactUrls.pwaEntryUrl,
+      version: latest.version
     };
   }
 

@@ -15,6 +15,9 @@ export interface IShareholderDocument extends Document {
   /** Bank Verification Number */
   bvn?: string;
   bankAccount?: string;
+  /** Nigeria bank code for IdentityPass bank verification */
+  bankCode?: string;
+  documentType?: string;
   ownershipPercentage: number;
   /** Ultimate Beneficial Owner (UBO) document – URL in DigitalOcean Spaces */
   uboDocumentUrl?: string;
@@ -53,6 +56,8 @@ const ShareholderSchema = new Schema<IShareholderDocument>(
     phoneNumber: { type: String },
     bvn: { type: String },
     bankAccount: { type: String },
+    bankCode: { type: String },
+    documentType: { type: String },
     ownershipPercentage: { type: Number, required: true },
     uboDocumentUrl: { type: String },
     uboDocumentFileName: { type: String },

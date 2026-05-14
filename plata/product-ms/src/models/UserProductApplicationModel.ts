@@ -1,9 +1,18 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 import type {
+  LoanWorkflowStatus,
   UserProductApplication,
   UserProductApplicationPayoutSplit
 } from '../types/userProductApplication';
 import { PRODUCT_DISCRIMINATORS } from '../utils/productType';
+
+const LOAN_WORKFLOW_STATUSES: LoanWorkflowStatus[] = [
+  'requested',
+  'under_review',
+  'approved',
+  'declined',
+  'blacklisted'
+];
 
 export interface IUserProductApplicationDocument
   extends Omit<UserProductApplication, 'id' | 'submittedAt' | 'signedAt' | 'createdAt'>,
@@ -51,6 +60,11 @@ const userProductApplicationSchema = new Schema<IUserProductApplicationDocument>
       enum: ['draft', 'submitted', 'signed', 'cancelled', 'withdrawn'],
       default: 'submitted'
     },
+    loanWorkflowStatus: {
+      type: String,
+      enum: LOAN_WORKFLOW_STATUSES,
+      index: true
+    },
     submittedAt: { type: Date, required: true, default: Date.now },
     signedAt: { type: Date },
     contractSnapshot: { type: Schema.Types.Mixed, required: true },
@@ -66,6 +80,7 @@ const userProductApplicationSchema = new Schema<IUserProductApplicationDocument>
 
 userProductApplicationSchema.index({ offeringMerchantId: 1, userId: 1, createdAt: -1 });
 userProductApplicationSchema.index({ globalProductId: 1, offeringMerchantId: 1 });
+userProductApplicationSchema.index({ merchantId: 1, productType: 1, loanWorkflowStatus: 1, createdAt: -1 });
 
 let UserProductApplicationModel: Model<IUserProductApplicationDocument>;
 if (mongoose.models.UserProductApplication) {
@@ -103,6 +118,13 @@ export function toUserProductApplication(
     globalProductReferenceNumber: raw.globalProductReferenceNumber as string | undefined,
     merchantProductId: raw.merchantProductId as string | undefined,
     status: raw.status as UserProductApplication['status'],
+    loanWorkflowStatus: (() => {
+      const s = raw.loanWorkflowStatus as LoanWorkflowStatus | undefined | null;
+      if (s) return s;
+      const pt = String(raw.productType ?? '');
+      if (pt === 'LOAN' || pt === 'MORTGAGE') return 'requested';
+      return undefined;
+    })(),
     submittedAt:
       raw.submittedAt instanceof Date
         ? raw.submittedAt.toISOString()

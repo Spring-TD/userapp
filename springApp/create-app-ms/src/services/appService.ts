@@ -75,6 +75,19 @@ export class AppService {
     return app;
   }
 
+  async getAppBySubdomain(subdomain: string): Promise<App | null> {
+    if (!subdomain) {
+      throw new ApiError(400, 'Subdomain is required');
+    }
+    const normalizedSubdomain = subdomain.trim().toLowerCase();
+    const err = validateSubdomain(normalizedSubdomain);
+    if (err) {
+      throw new ApiError(400, err);
+    }
+    const app = await AppModel.getAppBySubdomain(normalizedSubdomain);
+    return app;
+  }
+
   async getAppsByMerchantId(merchantId: string): Promise<App[]> {
     if (!merchantId) {
       throw new ApiError(400, 'Merchant ID is required');

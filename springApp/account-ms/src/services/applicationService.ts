@@ -1,6 +1,7 @@
 import mockDb, { Application } from '../utils/mockDb';
 import productService from './productService';
 import accountService from './accountService';
+import createAppService from './createAppService';
 
 export interface ApplyForProductInput {
     userId: string;
@@ -39,6 +40,11 @@ class ApplicationService {
             const requiresApproval = ['Loan', 'Mortgage'].includes(product.type);
 
             if (requiresApproval) {
+                const appInfo = await createAppService.getAppInfo(appId);
+                if (!appInfo) {
+                    throw new Error('App not found for product');
+                }
+
                 // Create Application
                 const application = await mockDb.createApplication({
                     userId: input.userId,
@@ -47,7 +53,9 @@ class ApplicationService {
                     productType: product.type,
                     amount: input.amount,
                     currency: input.currency,
-                    status: 'PENDING'
+                    status: 'PENDING',
+                    appId,
+                    merchantId: appInfo.merchantId
                 });
 
                 return {
@@ -151,18 +159,33 @@ class ApplicationService {
     }
 
     /**
-     * Get all applications (for admin)
+     * Get all applications (admin) or all for one merchant (merchant listing).
      */
-    async getAllApplications() {
+    async getAllApplications(merchantIdFilter?: string) {
+        if (merchantIdFilter) {
+            return await mockDb.getApplicationsByMerchantId(merchantIdFilter);
+        }
         return await mockDb.getAllApplications();
     }
 
     /**
-     * Get pending applications (for admin)
+     * Get pending applications, optionally scoped to a merchant.
      */
-    async getPendingApplications() {
-        const apps = await mockDb.getAllApplications();
+    async getPendingApplications(merchantIdFilter?: string) {
+        const apps = merchantIdFilter
+            ? await mockDb.getApplicationsByMerchantId(merchantIdFilter)
+            : await mockDb.getAllApplications();
         return apps.filter(a => a.status === 'PENDING');
+    }
+
+    /**
+     * Get blacklisted mortgage applications, optionally scoped to a merchant.
+     */
+    async getBlacklistedMortgageApplications(merchantIdFilter?: string) {
+        const apps = merchantIdFilter
+            ? await mockDb.getApplicationsByMerchantId(merchantIdFilter)
+            : await mockDb.getAllApplications();
+        return apps.filter(a => a.productType === 'Mortgage' && a.status === 'BLACKLISTED');
     }
 
     /**
@@ -185,6 +208,41 @@ class ApplicationService {
      */
     async getApplicationById(applicationId: string) {
         return await mockDb.getApplicationById(applicationId);
+    }
+
+    /**
+     * Blacklist a mortgage application.
+     */
+    async blacklistMortgageApplication(applicationId: string, reason: string, adminId: string) {
+        try {
+            const app = await mockDb.getApplicationById(applicationId);
+            if (!app) {
+                throw new Error('Application not found');
+            }
+
+            if (app.productType !== 'Mortgage') {
+                throw new Error('Only mortgage applications can be blacklisted');
+            }
+
+            if (app.status === 'APPROVED') {
+                throw new Error('Approved applications cannot be blacklisted');
+            }
+
+            if (app.status === 'BLACKLISTED') {
+                throw new Error('Application is already BLACKLISTED');
+            }
+
+            const updatedApp = await mockDb.updateApplicationStatus(applicationId, 'BLACKLISTED', reason);
+
+            return {
+                success: true,
+                message: 'Mortgage application blacklisted.',
+                data: updatedApp
+            };
+        } catch (error: any) {
+            console.error('Error blacklisting mortgage application:', error);
+            throw error;
+        }
     }
 }
 

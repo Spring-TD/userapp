@@ -1,13 +1,15 @@
 import { User, Merchant, UserType, AccountStatus, UserAccount, Role, Permission, CreateRoleRequest } from '../models/User';
 import { db as mockDb } from '../utils/mongoDatabase';
-import { hashPassword, comparePassword, verifyToken, generatePasswordResetToken } from '../utils/crypto';
+import { hashPassword, comparePassword } from '../utils/crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { RoleService } from './RoleService';
-import jwt from 'jsonwebtoken';
 import axios from 'axios';
 import { config } from '../config/environment';
 import notificationService, { SendNotificationResponse } from './NotificationService';
 import { SessionService } from './SessionService';
+import { fuspayModularService } from './FuspayModularService';
+import { complianceService } from './ComplianceService';
+import { provisionUserWalletAfterSignup, type ProvisionedUserWallet } from './WalletMsService';
 
 // Type for user response without password
 export type UserResponse = Omit<UserAccount, 'password'>;
@@ -114,8 +116,13 @@ export class AuthService {
   static async registerUser(userData: UserRegistrationData): Promise<{
     success: boolean;
     user?: UserResponse;
+    fuspayProfileCreated?: boolean;
+    fuspayUserId?: string;
+    fuspayUserRef?: string;
     verificationEmailSent?: boolean;
     verificationEmailError?: string;
+    wallet?: ProvisionedUserWallet;
+    walletProvisioningError?: string;
     error?: string;
   }> {
     try {
@@ -166,6 +173,69 @@ export class AuthService {
 
       const user = await mockDb.createUser(newUser as Omit<UserAccount, 'id' | 'created_at' | 'updated_at' | 'failed_login_attempts'>);
 
+      // For subdomain/tenant signup flows, create user profile on Fuspay immediately.
+      let fuspayProfileCreated = false;
+      let fuspayUserId: string | undefined;
+      let fuspayUserRef: string | undefined;
+      if (fuspayModularService.isEnabled()) {
+        const fuspayResult = await fuspayModularService.createUser({
+          email: user.email,
+          phone: user.phone || '',
+          country: user.country || 'NG',
+          userRef: user.id
+        });
+        if (!fuspayResult.success) {
+          await mockDb.deleteUser(user.id);
+          return {
+            success: false,
+            error: `User registration failed during Fuspay profile creation: ${fuspayResult.error || 'Unknown error'}`
+          };
+        }
+        fuspayProfileCreated = true;
+        fuspayUserId = (fuspayResult.data as any)?.customer_id;
+        fuspayUserRef = (fuspayResult.data as any)?.user_ref;
+      }
+
+      const complianceResult = await complianceService.createMinimalProfile({
+        userId: user.id,
+        userType: 'individual',
+        ...(fuspayUserId || fuspayUserRef
+          ? {
+              fuspay: {
+                customerId: fuspayUserId,
+                userRef: fuspayUserRef || user.id,
+                appId: config.fuspayModularAppId || undefined,
+                country: user.country || undefined,
+                email: user.email || undefined,
+                phone: user.phone || undefined
+              }
+            }
+          : {})
+      });
+      if (!complianceResult.success) {
+        await mockDb.deleteUser(user.id);
+        return {
+          success: false,
+          error: `User registration failed during compliance profile creation: ${complianceResult.error || 'Unknown error'}`
+        };
+      }
+
+      let wallet: ProvisionedUserWallet | undefined;
+      let walletProvisioningError: string | undefined;
+      if (user.user_merchant_id) {
+        const walletResult = await provisionUserWalletAfterSignup({
+          userId: user.id,
+          merchantId: user.user_merchant_id,
+          displayName: `${user.first_name} ${user.last_name}`.trim() || user.email
+        });
+        if (walletResult.success && walletResult.wallet) {
+          wallet = walletResult.wallet;
+        } else if (walletResult.error && walletResult.error !== 'Wallet provisioning is not configured') {
+          walletProvisioningError = walletResult.error;
+          console.error('User wallet provisioning failed after signup (user kept):', walletResult.error);
+        }
+      }
+
       // Send one-time verification code email via notifications-ms
       let verificationEmailSent = false;
       let verificationEmailError: string | undefined;
@@ -186,7 +256,12 @@ export class AuthService {
       return {
         success: true,
         user: userWithoutPassword,
+        fuspayProfileCreated,
+        ...(fuspayUserId ? { fuspayUserId } : {}),
+        ...(fuspayUserRef ? { fuspayUserRef } : {}),
         verificationEmailSent,
+        ...(wallet ? { wallet } : {}),
+        ...(walletProvisioningError ? { walletProvisioningError } : {})
       };
     } catch (error) {
       console.error('Error registering user:', error);
@@ -378,6 +453,40 @@ export class AuthService {
   }
 
   /**
+   * Sub-users (customers) for a merchant, excluding deactivated accounts.
+   */
+  static async getMerchantUsers(merchantId: string): Promise<{
+    success: boolean;
+    users?: (UserResponse & { roleName?: string })[];
+    error?: string;
+  }> {
+    try {
+      const users = await mockDb.findUsersByMerchantId(merchantId);
+      const activeUsers = users.filter((u) => u.status !== AccountStatus.DEACTIVATED);
+
+      const userResponses = await Promise.all(
+        activeUsers.map(async (user) => {
+          const { password, ...userResponse } = user;
+          let roleName: string | undefined;
+          if ('role_id' in user && user.role_id) {
+            const role = await mockDb.findRoleById(user.role_id);
+            if (role) roleName = role.name;
+          }
+          return { ...userResponse, roleName } as UserResponse & { roleName?: string };
+        })
+      );
+
+      return { success: true, users: userResponses };
+    } catch (error) {
+      console.error('Error getting merchant users:', error);
+      return {
+        success: false,
+        error: 'Internal server error while retrieving merchant users'
+      };
+    }
+  }
+
+  /**
    * Login user
    */
   static async login(
@@ -514,16 +623,12 @@ export class AuthService {
         };
       }
 
-      // Generate password reset token
-      const resetToken = generatePasswordResetToken({ userId: user.id, email: user.email, userType: user.user_type, userMerchantId: 'user_merchant_id' in user ? user.user_merchant_id : undefined });
-
-      // Send password reset email via notifications service
-      const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
-      const notificationResult = await notificationService.sendPasswordResetEmail(
-        user.email,
-        resetUrl,
-        `${user.first_name} ${user.last_name}`
-      );
+      // Password reset uses OTP sent via notifications service.
+      const notificationResult = await AuthService.generateOTP({
+        identifier: user.email,
+        channel: 'email',
+        purpose: 'password-reset'
+      });
 
       if (!notificationResult.success) {
         console.error('Failed to send password reset email:', notificationResult.error);
@@ -544,45 +649,35 @@ export class AuthService {
   }
 
   /**
-   * Reset password with token
+   * Reset password with email + OTP
    */
-  static async resetPassword(token: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+  static async resetPassword(email: string, code: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
     try {
-      // Verify the password reset token
-      let tokenData;
-      try {
-        const decoded = jwt.verify(token, config.jwt.secret) as any;
-
-        if (decoded.type !== 'password_reset') {
-          return {
-            success: false,
-            error: 'Invalid password reset token'
-          };
-        }
-
-        // We'll use the decoded payload as tokenData
-        tokenData = { valid: true, payload: decoded };
-      } catch (error) {
+      const identifier = email.toLowerCase();
+      const otp = await mockDb.findActiveOtp(identifier, 'password-reset');
+      if (!otp) {
         return {
           success: false,
-          error: 'Invalid or expired password reset token'
+          error: 'Invalid or expired password reset code'
         };
       }
 
-      // Find user by ID
-      const user = await mockDb.findUserById(tokenData.payload.userId);
+      const validCode = await comparePassword(code, otp.code);
+      if (!validCode) {
+        await mockDb.incrementOtpAttempts((otp as any)._id.toString());
+        return {
+          success: false,
+          error: 'Invalid password reset code'
+        };
+      }
+      await mockDb.markOtpVerified((otp as any)._id.toString());
+
+      // Find user by email
+      const user = await mockDb.findUserByEmail(identifier);
       if (!user) {
         return {
           success: false,
           error: 'User not found'
-        };
-      }
-
-      // Check if email matches
-      if (user.email !== tokenData.payload.email) {
-        return {
-          success: false,
-          error: 'Invalid password reset token'
         };
       }
 
@@ -616,6 +711,16 @@ export class AuthService {
 
       console.log(`Password reset successful for ${user.email}`);
 
+      try {
+        const userName = `${user.first_name} ${user.last_name}`.trim() || 'User';
+        const n = await notificationService.sendPasswordChangedConfirmation(user.email, userName);
+        if (!n.success) {
+          console.error('Failed to send password-changed confirmation email:', n.error);
+        }
+      } catch (e) {
+        console.error('Failed to send password-changed confirmation email:', e);
+      }
+
       return {
         success: true
       };
@@ -630,7 +735,7 @@ export class AuthService {
   /**
    * Change password
    */
-  static async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+  static async changePassword(userId: string, currentPassword: string, newPassword: string, code: string): Promise<{ success: boolean; error?: string }> {
     try {
       // Find user by ID
       const user = await mockDb.findUserById(userId);
@@ -658,6 +763,24 @@ export class AuthService {
         };
       }
 
+      const otp = await mockDb.findActiveOtp(user.email.toLowerCase(), 'password-change');
+      if (!otp) {
+        return {
+          success: false,
+          error: 'Invalid or expired password change code'
+        };
+      }
+
+      const validCode = await comparePassword(code, otp.code);
+      if (!validCode) {
+        await mockDb.incrementOtpAttempts((otp as any)._id.toString());
+        return {
+          success: false,
+          error: 'Invalid password change code'
+        };
+      }
+      await mockDb.markOtpVerified((otp as any)._id.toString());
+
       // Check if new password is different from current password
       const isSamePassword = await comparePassword(newPassword, user.password);
       if (isSamePassword) {
@@ -680,6 +803,16 @@ export class AuthService {
 
       console.log(`Password change successful for ${user.email}`);
 
+      try {
+        const userName = `${user.first_name} ${user.last_name}`.trim() || 'User';
+        const n = await notificationService.sendPasswordChangedConfirmation(user.email, userName);
+        if (!n.success) {
+          console.error('Failed to send password-changed confirmation email:', n.error);
+        }
+      } catch (e) {
+        console.error('Failed to send password-changed confirmation email:', e);
+      }
+
       return {
         success: true
       };
@@ -688,6 +821,35 @@ export class AuthService {
         success: false,
         error: 'Internal server error during password change'
       };
+    }
+  }
+
+  /**
+   * Send OTP for authenticated password change confirmation.
+   */
+  static async requestPasswordChangeOtp(userId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const user = await mockDb.findUserById(userId);
+      if (!user) {
+        return { success: false, error: 'User not found' };
+      }
+      if (user.status !== AccountStatus.ACTIVE) {
+        return { success: false, error: 'Account is not active' };
+      }
+
+      const notificationResult = await AuthService.generateOTP({
+        identifier: user.email,
+        channel: 'email',
+        purpose: 'password-change'
+      });
+
+      if (!notificationResult.success) {
+        return { success: false, error: notificationResult.error || 'Failed to send OTP' };
+      }
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: 'Internal server error during password change OTP request' };
     }
   }
 
@@ -862,7 +1024,7 @@ export class AuthService {
   /**
    * Generate OTP: store in DB and send via notifications-ms.
    */
-  static async generateOTP(request: { identifier: string; channel: 'email' | 'sms'; purpose: 'verification' | 'password-reset' | 'login' }): Promise<{ success: boolean; reference?: string; expiresIn?: number; error?: string }> {
+  static async generateOTP(request: { identifier: string; channel: 'email' | 'sms'; purpose: 'verification' | 'password-reset' | 'password-change' | 'login' }): Promise<{ success: boolean; reference?: string; expiresIn?: number; error?: string }> {
     try {
       const { identifier, channel, purpose } = request;
       const code = Math.floor(100000 + Math.random() * 900000).toString();
@@ -914,7 +1076,7 @@ export class AuthService {
     try {
       const { identifier, code } = request;
       const idLower = identifier.toLowerCase();
-      const purposes: Array<'verification' | 'password-reset' | 'login'> = ['verification', 'password-reset', 'login'];
+      const purposes: Array<'verification' | 'password-reset' | 'password-change' | 'login'> = ['verification', 'password-reset', 'password-change', 'login'];
 
       for (const purpose of purposes) {
         const otp = await mockDb.findActiveOtp(idLower, purpose);
@@ -953,7 +1115,7 @@ export class AuthService {
    * Resend OTP: generate a new OTP, store it, and send via email/SMS.
    * For email verification, uses the same path as signup (sendVerificationOtpEmail) so behaviour matches exactly.
    */
-  static async resendOTP(request: { identifier: string; channel: 'email' | 'sms'; purpose: 'verification' | 'password-reset' | 'login' }): Promise<{ success: boolean; reference?: string; expiresIn?: number; error?: string }> {
+  static async resendOTP(request: { identifier: string; channel: 'email' | 'sms'; purpose: 'verification' | 'password-reset' | 'password-change' | 'login' }): Promise<{ success: boolean; reference?: string; expiresIn?: number; error?: string }> {
     try {
       const { identifier, channel, purpose } = request;
       if (!identifier || !channel || !purpose) {

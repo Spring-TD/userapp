@@ -1,7 +1,7 @@
 import { NotificationModel, toNotification } from '../models/NotificationModel';
 import type { INotificationDocument } from '../models/NotificationModel';
 import { INotification } from '../models/Notification';
-import { NotificationStatus } from '../types/notification';
+import { NotificationChannel, NotificationStatus } from '../types/notification';
 
 export const notificationDbMongo = {
   async createNotification(notificationData: Omit<INotification, 'id' | 'createdAt' | 'updatedAt'>): Promise<INotification> {
@@ -15,8 +15,12 @@ export const notificationDbMongo = {
     return toNotification(doc as INotificationDocument);
   },
 
-  async findNotificationsByRecipient(recipient: string): Promise<INotification[]> {
-    const docs = await NotificationModel.find({ recipient }).sort({ createdAt: -1 }).lean();
+  async findNotificationsByRecipient(recipient: string, channel?: NotificationChannel): Promise<INotification[]> {
+    const filter: Record<string, unknown> = { recipient };
+    if (channel) {
+      filter.channel = channel;
+    }
+    const docs = await NotificationModel.find(filter).sort({ createdAt: -1 }).lean();
     return docs.map((d) => toNotification(d as INotificationDocument));
   },
 

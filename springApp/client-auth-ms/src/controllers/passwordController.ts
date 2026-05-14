@@ -27,17 +27,24 @@ export class PasswordController {
 
   static async reset(req: Request, res: Response): Promise<void> {
     try {
-      const { token, newPassword } = req.body;
+      const body = req.body || {};
+      const identifier = body.identifier ?? body.email;
+      const code = body.code ?? body.otp ?? body.verificationCode;
+      const { newPassword } = body;
 
-      if (!token || !newPassword) {
+      if (!identifier || !code || !newPassword) {
         res.status(400).json({
           success: false,
-          error: 'Token and new password are required'
+          error: 'Email, OTP code, and new password are required'
         });
         return;
       }
 
-      const result = await AuthService.resetPassword(token, newPassword);
+      const result = await AuthService.resetPassword(
+        String(identifier).trim(),
+        String(code).trim(),
+        String(newPassword)
+      );
       res.status(result.success ? 200 : 400).json(result);
     } catch (error) {
       console.error('Error in resetPassword:', error);
@@ -59,20 +66,43 @@ export class PasswordController {
         return;
       }
 
-      const { currentPassword, newPassword } = req.body;
+      const body = req.body || {};
+      const { currentPassword, newPassword } = body;
+      const code = body.code ?? body.otp ?? body.verificationCode;
 
-      if (!currentPassword || !newPassword) {
+      if (!currentPassword || !newPassword || !code) {
         res.status(400).json({
           success: false,
-          error: 'Current password and new password are required'
+          error: 'Current password, OTP code, and new password are required'
         });
         return;
       }
 
-      const result = await AuthService.changePassword(req.user.userId, currentPassword, newPassword);
+      const result = await AuthService.changePassword(req.user.userId, currentPassword, newPassword, String(code).trim());
       res.status(result.success ? 200 : 400).json(result);
     } catch (error) {
       console.error('Error in changePassword:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  }
+
+  static async requestChangeOtp(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      const result = await AuthService.requestPasswordChangeOtp(req.user.userId);
+      res.status(result.success ? 200 : 400).json(result);
+    } catch (error) {
+      console.error('Error in requestChangeOtp:', error);
       res.status(500).json({
         success: false,
         error: 'Internal server error'

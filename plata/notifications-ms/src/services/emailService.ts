@@ -67,7 +67,7 @@ export class EmailService {
 
     try {
       const body = {
-        from: { email: fromEmail, name: 'SpringTD' },
+        from: { email: fromEmail, name: 'Plata' },
         to: [{ email: options.to }],
         subject: options.subject,
         text: options.text || (options.html ? options.html.replace(/<[^>]*>/g, '').trim() : ''),

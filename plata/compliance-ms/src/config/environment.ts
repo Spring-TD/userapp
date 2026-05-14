@@ -107,6 +107,12 @@ export const KYC_REVIEW_NOTIFICATIONS_TEMPLATE_DELIMITER_UNESCAPE_ALL_REGEX_GLOB
 export const KYC_REVIEW_NOTIFICATIONS_TEMPLATE_DELIMITER_UNESCAPE_ALL_REGEX_GLOBAL_PROPERTY_ESCAPES_REGEX_HAS_INDICES = process.env.KYC_REVIEW_NOTIFICATIONS_TEMPLATE_DELIMITER_UNESCAPE_ALL_REGEX_GLOBAL_PROPERTY_ESCAPES_REGEX_HAS_INDICES === 'true';
 export const KYC_REVIEW_NOTIFICATIONS_TEMPLATE_DELIMITER_UNESCAPE_ALL_REGEX_GLOBAL_PROPERTY_ESCAPES_REGEX_UNICODE_EXTENDED = process.env.KYC_REVIEW_NOTIFICATIONS_TEMPLATE_DELIMITER_UNESCAPE_ALL_REGEX_GLOBAL_PROPERTY_ESCAPES_REGEX_UNICODE_EXTENDED === 'true';
 
+// Service URLs used for KYC/compliance email notifications.
+// These are optional in configuration; defaults are used for local/dev.
+export const SERVICE_AUTH_URL = process.env.SERVICE_AUTH_URL || 'http://service-auth-ms:3000';
+export const SERVICE_AUTH_INTERNAL_TOKEN = process.env.SERVICE_AUTH_INTERNAL_TOKEN || 'internal-dev-token';
+export const NOTIFICATIONS_SERVICE_URL = process.env.NOTIFICATIONS_SERVICE_URL || 'http://notifications-ms:4009';
+
 // Export CAC API environment variables (optional)
 export const CAC_API_URL = process.env.CAC_API_URL as string | undefined;
 export const CAC_API_KEY = process.env.CAC_API_KEY as string | undefined;
@@ -122,6 +128,10 @@ export const REDIS_PASSWORD = process.env.REDIS_PASSWORD as string | undefined;
 export const PREMBLY_API_KEY = process.env.PREMBLY_API_KEY as string | undefined;
 export const PREMBLY_API_SECRET = process.env.PREMBLY_API_SECRET as string | undefined;
 export const PREMBLY_BASE_URL = process.env.PREMBLY_BASE_URL as string | undefined;
+/** IdentityPass endpoints require `app-id` + `x-api-key` (secret key). */
+export const PREMBLY_APP_ID = process.env.PREMBLY_APP_ID as string | undefined;
+/** Optional fallback when the UI sends `bankAccount` without `bankCode` (Nigeria numeric bank code). */
+export const PREMBLY_DEFAULT_BANK_CODE = process.env.PREMBLY_DEFAULT_BANK_CODE as string | undefined;
 
 // DigitalOcean Spaces (optional; used for KYC document uploads when configured)
 export const DO_SPACES_REGION = process.env.DO_SPACES_REGION as string | undefined;

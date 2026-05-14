@@ -21,6 +21,7 @@ import {
   CURRENCY_OPTIONS,
   COLLATERAL_TYPE_OPTIONS,
   PROPERTY_TYPE_OPTIONS,
+  MORTGAGE_FACILITY_OPTIONS,
   LOAN_SECURITY_REQUIREMENT_OPTIONS,
   COMMODITY_SECURITY_REQUIREMENT_OPTIONS,
   MORTGAGE_SECURITY_REQUIREMENT_OPTIONS,
@@ -28,6 +29,7 @@ import {
   COMMODITY_TENURE_OPTIONS,
   INVESTMENT_TRADING_CYCLE_OPTIONS,
   INVESTMENT_TENURE_OPTIONS,
+  INVESTMENT_TYPE_OPTIONS,
   SAVINGS_TENURE_OPTIONS,
   SAVINGS_REPAYMENT_CYCLE_OPTIONS,
   SAVINGS_TYPE_OPTIONS
@@ -339,6 +341,21 @@ export class ConfigurationController {
     }
   };
 
+  getMortgageFacilityOptions = async (_req: Request, res: Response): Promise<void> => {
+    try {
+      res.json({
+        success: true,
+        data: MORTGAGE_FACILITY_OPTIONS
+      });
+    } catch (error) {
+      console.error('Error in getMortgageFacilityOptions controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  };
+
   getCommodityTradingCycleOptions = async (_req: Request, res: Response): Promise<void> => {
     try {
       res.json({
@@ -392,6 +409,21 @@ export class ConfigurationController {
       });
     } catch (error) {
       console.error('Error in getInvestmentTenureOptions controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  };
+
+  getInvestmentTypeOptions = async (_req: Request, res: Response): Promise<void> => {
+    try {
+      res.json({
+        success: true,
+        data: INVESTMENT_TYPE_OPTIONS
+      });
+    } catch (error) {
+      console.error('Error in getInvestmentTypeOptions controller:', error);
       res.status(500).json({
         success: false,
         error: 'Internal server error'

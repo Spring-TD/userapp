@@ -46,8 +46,15 @@ export const LOAN_MORATORIUM_TYPE_OPTIONS: Array<{ value: LoanMoratoriumType; la
 // Loan tenure unit (used in loanTenure and mortgage configs)
 export type LoanTenureUnit = 'year' | 'month' | 'week' | 'day';
 
+export type LoanTenureOption = {
+  value: number | 'custom';
+  unit: LoanTenureUnit;
+  label: string;
+  allowManualEntry?: boolean;
+};
+
 // Available loan tenure options for frontend (value + unit for dropdowns; months-only product admin list)
-export const LOAN_TENURE_OPTIONS: Array<{ value: number; unit: LoanTenureUnit; label: string }> = [
+export const LOAN_TENURE_OPTIONS: LoanTenureOption[] = [
   { value: 3, unit: 'month', label: '3 months' },
   { value: 6, unit: 'month', label: '6 months' },
   { value: 12, unit: 'month', label: '12 months' },
@@ -55,14 +62,16 @@ export const LOAN_TENURE_OPTIONS: Array<{ value: number; unit: LoanTenureUnit; l
   { value: 36, unit: 'month', label: '36 months' },
   { value: 48, unit: 'month', label: '48 months' },
   { value: 60, unit: 'month', label: '60 months' },
-  { value: 72, unit: 'month', label: '72 months' }
+  { value: 72, unit: 'month', label: '72 months' },
+  { value: 'custom', unit: 'month', label: 'Custom', allowManualEntry: true }
 ];
 
 // Repayment cycle options
-export type RepaymentCycle = 'Monthly' | 'Quarterly' | 'Bi-annually' | 'Annually';
+export type RepaymentCycle = 'Daily' | 'Monthly' | 'Quarterly' | 'Bi-annually' | 'Annually';
 
 // Available repayment cycle options for frontend
 export const REPAYMENT_CYCLE_OPTIONS: Array<{ value: RepaymentCycle; label: string }> = [
+  { value: 'Daily', label: 'Daily' },
   { value: 'Monthly', label: 'Monthly' },
   { value: 'Quarterly', label: 'Quarterly' },
   { value: 'Bi-annually', label: 'Bi-annually' },
@@ -166,7 +175,7 @@ export const LOAN_ACCEPTABLE_NPA_OPTIONS: Array<{ value: AcceptableNpaDays; labe
 ];
 
 /** LOAN / MORTGAGE — `requirements.otherRequirements[].contentType` (Requirements → Other requirements). */
-export type LoanOtherRequirementContentType = 'information' | 'document_upload';
+export type LoanOtherRequirementContentType = 'document_upload' | 'document_template';
 
 /** LOAN / MORTGAGE — `requirements.otherRequirements[].requirementType` suggested dropdown values. */
 export type LoanOtherRequirementType =
@@ -195,13 +204,13 @@ export const LOAN_OTHER_REQUIREMENT_TYPE_OPTIONS: Array<{
   { value: 'other', label: 'Other' }
 ];
 
-/** Applicant UI: `document_upload` → file upload; `information` → text field(s). See README (loan other requirement content type). */
+/** Applicant UI: `document_upload` and `document_template` behaviors are defined by the consuming app flow. */
 export const LOAN_OTHER_REQUIREMENT_CONTENT_TYPE_OPTIONS: Array<{
   value: LoanOtherRequirementContentType;
   label: string;
 }> = [
-  { value: 'information', label: 'Information' },
-  { value: 'document_upload', label: 'Document upload' }
+  { value: 'document_upload', label: 'Document upload' },
+  { value: 'document_template', label: 'Document template' }
 ];
 
 /**
@@ -260,6 +269,26 @@ export const PROPERTY_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'Office Complex', label: 'Office Complex' },
   { value: 'Others', label: 'Others' }
 ];
+
+/** MORTGAGE — Properties tab per-property facilities (`properties[].facilities[]`). */
+export const MORTGAGE_FACILITY_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'solar_energy_system', label: 'Solar energy system' },
+  { value: 'reliable_water_supply', label: 'Reliable water supply' },
+  { value: 'gated_estate', label: 'Gated estate' },
+  { value: 'security_24_7', label: '24/7 security' },
+  { value: 'cctv_surveillance', label: 'CCTV surveillance' },
+  { value: 'estate_park_playground', label: 'Estate park/ playground' },
+  { value: 'estate_gym', label: 'Estate gym' },
+  { value: 'outdoor_pool', label: 'Outdoor pool' },
+  { value: 'car_garage', label: 'Car garage' },
+  { value: 'estate_waste_management', label: 'Estate Waste management' },
+  { value: 'boys_quarter', label: 'Boys quarter' },
+  { value: 'gateman_quarter', label: 'Gateman quarter' },
+  { value: 'indoor_cinema', label: 'Indoor Cinema' },
+  { value: 'custom', label: 'Custom' }
+];
+
+export const MORTGAGE_FACILITY_VALUES = MORTGAGE_FACILITY_OPTIONS.map((o) => o.value);
 
 // Security requirement options per product type (for frontend dropdowns/radio)
 export type LoanSecurityRequirement = 'Guarantor' | 'Collateral' | 'None';
@@ -556,6 +585,14 @@ export const COMMODITY_TENURE_OPTIONS: CommodityTenureOption[] = [
 // Investment: same trading cycle / tenure option sets as Commodity (parallel endpoints for frontend)
 export const INVESTMENT_TRADING_CYCLE_OPTIONS = COMMODITY_TRADING_CYCLE_OPTIONS;
 export const INVESTMENT_TENURE_OPTIONS = COMMODITY_TENURE_OPTIONS;
+
+/** INVESTMENT — Structure tab `investmentType` dropdown options. */
+export type InvestmentStructureType = 'lump_sum' | 'unit_based';
+
+export const INVESTMENT_TYPE_OPTIONS: Array<{ value: InvestmentStructureType; label: string }> = [
+  { value: 'lump_sum', label: 'Lump sum' },
+  { value: 'unit_based', label: 'Unit based' }
+];
 
 // Configuration for Commodity products
 export interface CommodityProductConfiguration extends BaseProductConfiguration {

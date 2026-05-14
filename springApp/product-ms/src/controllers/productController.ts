@@ -3,6 +3,9 @@ import { ProductService } from '../services/productService';
 import { CreateProductRequest, UpdateProductRequest, SelectProductTypeRequest, CreateProductAfterTypeRequest } from '../types/product';
 import { ApiError } from '../middleware/errorHandler';
 import { validateInput, createProductSchema, updateProductSchema, selectProductTypeSchema, createProductAfterTypeSchema } from '../utils/validation';
+import { parseSubMerchantActivationContext } from '../types/subMerchantActivation';
+import { getAccessTokenUser } from '../utils/gatewayUser';
+import { sendProductConfigurationNotification } from '../services/notificationHelper';
 
 interface TypedRequest<T> extends Request {
   body: T;
@@ -280,7 +283,8 @@ export class ProductController {
   toggleProductActivation = async (req: Request, res: Response): Promise<void> => {
     try {
       const { appId, productId } = req.params;
-      const { activate } = req.body;
+      const body = req.body as Record<string, unknown>;
+      const activateRaw = body.activate;
 
       if (!appId) {
         throw new ApiError(400, 'App ID is required');
@@ -290,14 +294,44 @@ export class ProductController {
         throw new ApiError(400, 'Product ID is required');
       }
       
-      if (activate === undefined) {
-        throw new ApiError(400, 'Activate flag is required');
+      if (activateRaw !== true && activateRaw !== false) {
+        throw new ApiError(400, 'Activate flag is required and must be a boolean');
+      }
+      const activate = activateRaw;
+
+      const appIdTrim = appId.trim();
+      const productIdTrim = productId.trim();
+      if (appIdTrim.length < 1 || appIdTrim.length > 100) {
+        throw new ApiError(400, 'App ID must be between 1 and 100 characters');
+      }
+      if (productIdTrim.length < 1 || productIdTrim.length > 100) {
+        throw new ApiError(400, 'Product ID must be between 1 and 100 characters');
       }
 
-      const product = await this.productService.toggleProductActivation(appId, productId, activate);
+      const activationContext =
+        activate === true ? parseSubMerchantActivationContext(body) : undefined;
+
+      const product = await this.productService.toggleProductActivation(
+        appIdTrim,
+        productIdTrim,
+        activate,
+        activationContext
+      );
 
       if (!product) {
         throw new ApiError(500, 'Failed to toggle product activation');
+      }
+
+      const gatewayUser = getAccessTokenUser(req);
+      if (gatewayUser) {
+        void sendProductConfigurationNotification({
+          userId: gatewayUser.userId,
+          email: gatewayUser.email,
+          productId: productIdTrim,
+          productType: String(product.type),
+          appId: appIdTrim,
+          action: activate ? 'activated' : 'deactivated'
+        });
       }
 
       res.json({
@@ -340,6 +374,18 @@ export class ProductController {
 
       if (!updatedConfig) {
         throw new ApiError(404, 'App product not found');
+      }
+
+      const gatewayUser = getAccessTokenUser(req);
+      if (gatewayUser) {
+        void sendProductConfigurationNotification({
+          userId: gatewayUser.userId,
+          email: gatewayUser.email,
+          productId: updatedConfig.id,
+          productType: String(updatedConfig.type),
+          appId: updatedConfig.appId,
+          action: 'updated'
+        });
       }
 
       res.json({

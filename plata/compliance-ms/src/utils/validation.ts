@@ -48,7 +48,7 @@ export const individualKYCSubmissionSchema = Joi.object({
   }).optional()
 });
 
-// Business Document validation schema for the 7 required documents
+// Business Document row (used on submit and on PUT /business/documents)
 export const businessDocumentSchema = Joi.object({
   type: Joi.string().valid(...Object.values(BusinessDocumentType)).required(),
   fileName: Joi.string().required(),
@@ -92,6 +92,8 @@ export const businessKYCSubmissionSchema = Joi.object({
       phoneNumber: Joi.string().min(10).max(20).optional(),
       bvn: Joi.string().min(11).max(11).optional(), // BVN is 11 digits in Nigeria
       bankAccount: Joi.string().min(10).max(20).optional(),
+      bankCode: Joi.string().min(2).max(10).optional(),
+      documentType: Joi.string().max(80).optional(),
       ownershipPercentage: Joi.number().min(0).max(100).required(),
       submittedAt: Joi.date().optional(),       
       uboDocument: Joi.object({
@@ -109,22 +111,27 @@ export const businessKYCSubmissionSchema = Joi.object({
         uploadDate: Joi.date().required()
       }).required(),
       status: Joi.string().valid(...Object.values(KYCStatus)).required(), // Status must be one of the KYCStatus values
-      // Enhanced kyc field for liveness test link
+      // Populated by backend: IdentityPass (BVN / bank / document) or legacy liveness
       kyc: Joi.object({
-        url: Joi.string().uri().required(), // The URL for the liveness test
-        expiresAt: Joi.date().required(), // When the link expires
-        status: Joi.string().valid('pending', 'active', 'expired', 'completed', 'failed').required(), // Current status of the link
-        providerReference: Joi.string().optional(), // Reference ID from the 3rd party provider
+        url: Joi.alternatives().try(Joi.string().uri(), Joi.string().allow('')).required(),
+        expiresAt: Joi.date().required(),
+        status: Joi.string().valid('pending', 'active', 'expired', 'completed', 'failed').required(),
+        providerReference: Joi.string().optional(),
+        flow: Joi.string().valid('identitypass').optional(),
+        verificationKind: Joi.string().valid('bvn', 'bank_account', 'document').optional(),
+        premlyVerificationStatus: Joi.string().optional(),
+        message: Joi.string().allow('').optional(),
         result: Joi.object({
           success: Joi.boolean().required(),
           score: Joi.number().min(0).max(100).optional(),
           details: Joi.string().optional(),
           completedAt: Joi.date().optional()
         }).optional()
-      }).required() // Make the kyc field required
+      }).optional()
     }).required()
   ).min(1).required(),
-  businessDocuments: Joi.array().items(businessDocumentSchema).min(7).required(), // Must have all 7 business document types
+  /** Partial or empty: merchant may upload remaining types later via `PUT /api/v1/kyc/business/documents`. */
+  businessDocuments: Joi.array().items(businessDocumentSchema).default([]),
   riskAssessment: Joi.object({
     annualTurnover: Joi.number().min(0).required(),
     expectedTransactionVolume: Joi.number().min(0).required(),
@@ -132,6 +139,11 @@ export const businessKYCSubmissionSchema = Joi.object({
     sanctionListCheck: Joi.boolean().required(),
     adverseMediaCheck: Joi.boolean().required()
   }).required()
+});
+
+/** Upsert one or more business documents (authenticated merchant). */
+export const businessDocumentsUpsertSchema = Joi.object({
+  businessDocuments: Joi.array().items(businessDocumentSchema).min(1).required()
 });
 
 // Generic KYC submission validation schema (for backward compatibility)
@@ -230,24 +242,7 @@ export const validateBusinessKYCSubmission = (data: any) => {
     });
     return { error };
   }
-  
-  // Validate that all 8 required business document types are present
-  const documentTypes = value.businessDocuments.map((doc: any) => doc.type);
-  const requiredDocumentTypes = Object.values(BusinessDocumentType);
-  
-  const missingDocuments = requiredDocumentTypes.filter(type => 
-    !documentTypes.includes(type)
-  );
-  
-  if (missingDocuments.length > 0) {
-    logger.warn('Business KYC missing required business documents', { missingDocuments });
-    return { 
-      error: { 
-        message: `Missing required business documents: ${missingDocuments.join(', ')}` 
-      } 
-    };
-  }
-  
+
   // Validate shareholder ownership total
   const totalOwnership = value.shareholders.reduce(
     (sum: number, shareholder: any) => sum + shareholder.ownershipPercentage, 

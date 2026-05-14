@@ -52,3 +52,11 @@ export interface PublishPwaRequest {
   publishMode?: 'apply-and-publish';
 }
 
+/** Public storefront hints when a PWA has been published (no auth). */
+export interface PublicPwaInstallBundle {
+  manifestUrl: string;
+  serviceWorkerUrl: string;
+  pwaEntryUrl: string;
+  version: string;
+}
+

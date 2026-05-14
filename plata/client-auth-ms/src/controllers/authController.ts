@@ -149,21 +149,26 @@ export class AuthController {
 
   static async getMe(req: Request, res: Response): Promise<void> {
     try {
-      const token = req.headers.authorization?.replace('Bearer ', '');
-
-      if (!token) {
+      if (!req.user) {
         res.status(401).json({
           success: false,
-          error: 'Authorization token is required'
+          error: 'Authentication required'
         });
         return;
       }
 
-      // In a real implementation, you would verify the token and return user info
-      // For now, just return an error indicating it's not implemented
-      res.status(401).json({
-        success: false,
-        error: 'Get me functionality not fully implemented in this simplified version'
+      const user = await AuthService.getUserById(req.user.userId);
+      if (!user) {
+        res.status(404).json({
+          success: false,
+          error: 'User not found'
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: { user }
       });
     } catch (error) {
       console.error('Error in getMe:', error);
@@ -186,12 +191,33 @@ export class AuthController {
         return;
       }
 
-      // In a real implementation, you would verify the token
-      // For now, just return success indicating the token is valid
+      const verification = verifyToken(token, 'access');
+      if (!verification.valid || !verification.payload) {
+        res.status(401).json({
+          success: false,
+          error: verification.error || 'Invalid or expired token'
+        });
+        return;
+      }
+
+      const userProfile = await AuthService.getUserById(verification.payload.userId);
+
       res.status(200).json({
         success: true,
-        message: 'Token verification not fully implemented in this simplified version',
-        data: { valid: true }
+        message: 'Token is valid',
+        data: {
+          valid: true,
+          user: {
+            userId: verification.payload.userId,
+            email: verification.payload.email,
+            firstName: userProfile?.first_name,
+            lastName: userProfile?.last_name,
+            userType: verification.payload.userType,
+            merchantId: verification.payload.userMerchantId,
+            userMerchantId: verification.payload.userMerchantId,
+            sessionId: verification.payload.sessionId,
+          }
+        }
       });
     } catch (error) {
       console.error('Error in verifyToken:', error);

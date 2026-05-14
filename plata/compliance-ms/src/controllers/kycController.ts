@@ -11,6 +11,27 @@ import * as spacesService from '../services/spacesService';
 import { v4 as uuidv4 } from 'uuid';
 import { businessSurveyUpdateSchema, businessInfoUpdateSchema } from '../utils/validation';
 
+/** Accepts a raw array, `{ shareholders: [...] }`, or GET-style `{ success, data: [...] }`. */
+function parseBeneficialOwnersPayload(body: unknown): { ok: true; shareholders: any[] } | { ok: false; error: string } {
+  if (Array.isArray(body)) {
+    return { ok: true, shareholders: body };
+  }
+  if (body && typeof body === 'object') {
+    const o = body as { shareholders?: unknown; data?: unknown; success?: unknown };
+    if (Array.isArray(o.shareholders)) {
+      return { ok: true, shareholders: o.shareholders };
+    }
+    if (o.success === true && Array.isArray(o.data)) {
+      return { ok: true, shareholders: o.data };
+    }
+  }
+  return {
+    ok: false,
+    error:
+      'Request body must be a JSON array of shareholders, or { "shareholders": [...] }, or { "success": true, "data": [...] }'
+  };
+}
+
 // Enhanced KYC controller with separated individual and business methods
 export class KYCController {
   // Submit Individual KYC
@@ -37,6 +58,23 @@ export class KYCController {
       });
       
       return res.status(201).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** Upsert one or more business documents (add or replace by type); use after partial submit. */
+  static async upsertBusinessDocuments(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        return res.status(401).json({ success: false, error: 'Authentication required' });
+      }
+      const result = await kycService.upsertBusinessDocumentsForMerchant(userId, req.body);
+      if (!result.success) {
+        return res.status(400).json({ success: false, error: result.error });
+      }
+      return res.status(200).json({ success: true, data: result.data });
     } catch (error) {
       next(error);
     }
@@ -821,22 +859,27 @@ export class KYCController {
           error: 'User ID is required'
         });
       }
-      
-      const result = await kycService.updateShareholders(userId, req.body);
-      
+
+      const parsed = parseBeneficialOwnersPayload(req.body);
+      if (!parsed.ok) {
+        return res.status(400).json({ success: false, error: parsed.error });
+      }
+
+      const result = await kycService.updateShareholders(userId, parsed.shareholders);
+
       if (!result.success) {
         logger.warn('Shareholders update failed', {
           userId,
           error: result.error
         });
-        
+
         return res.status(400).json(result);
       }
-      
+
       logger.info('Shareholders updated successfully', {
         userId
       });
-      
+
       return res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -1867,15 +1910,20 @@ export class KYCController {
           error: 'Merchant ID is required'
         });
       }
-      
-      const result = await kycService.updateShareholders(merchantId, req.body);
-      
+
+      const parsed = parseBeneficialOwnersPayload(req.body);
+      if (!parsed.ok) {
+        return res.status(400).json({ success: false, error: parsed.error });
+      }
+
+      const result = await kycService.updateShareholders(merchantId, parsed.shareholders);
+
       if (!result.success) {
         return res.status(400).json(result);
       }
-      
+
       logger.info('Shareholder data updated successfully', { merchantId });
-      
+
       return res.status(200).json(result);
     } catch (error) {
       next(error);

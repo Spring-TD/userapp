@@ -4,6 +4,7 @@ import { config } from '../config/environment';
 const purposeLabel: Record<string, string> = {
   verification: 'Verification',
   'password-reset': 'Password Reset',
+  'password-change': 'Password Change',
   login: 'Login',
 };
 
@@ -122,6 +123,16 @@ export class NotificationService {
     };
 
     return this.sendNotification(request);
+  }
+
+  /** Confirmation email after password was changed or reset (not the OTP email). */
+  async sendPasswordChangedConfirmation(email: string, userName: string): Promise<SendNotificationResponse> {
+    return this.sendNotification({
+      channel: 'email',
+      recipient: email,
+      template: 'password-change',
+      data: { userName },
+    });
   }
 }
 

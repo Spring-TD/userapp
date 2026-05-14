@@ -31,6 +31,7 @@ Deployment URL: https://client-auth-ms-plata.fly.dev/
 - **✅ Administrative Operations**: User suspension and activation
 - **✅ CORS Support**: Configured for frontend integration
 - **✅ Health Check**: Service monitoring endpoint
+- **✅ Notifications integration**: Calls **notifications-ms** for OTP/verification emails and for **email + in-app** events (e.g. successful merchant registration template `merchant-registered`, account deactivation template `merchant-account-status`) via `POST /api/v1/notifications/send-dual`
 
 ## Authentication: Public vs Protected Endpoints
 
@@ -116,7 +117,7 @@ All 44 endpoints with short descriptions:
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/v1/registration/forms` | Returns form schemas (fields, labels, validation) for merchant, user, and admin registration. |
-| POST | `/api/v1/registration/merchant` | Registers a new merchant account; sends verification OTP email. |
+| POST | `/api/v1/registration/merchant` | Registers a new merchant account; sends verification OTP email and **email + in-app** notification (template `merchant-registered`) via notifications-ms. |
 | POST | `/api/v1/registration/user` | Registers a new user account; sends verification OTP email. |
 | POST | `/api/v1/registration/admin` | Registers a new admin account. |
 
@@ -153,7 +154,7 @@ All 44 endpoints with short descriptions:
 | PUT | `/api/v1/user/profile` | Updates the authenticated user's profile (e.g. name, phone). |
 | PUT | `/api/v1/user/email` | Updates the user's email (may send a new verification email). |
 | PUT | `/api/v1/user/:userId/status` | Updates a user's status (e.g. active/suspended) by a merchant or admin. |
-| POST | `/api/v1/user/deactivate` | Deactivates the authenticated user's account. |
+| POST | `/api/v1/user/deactivate` | Deactivates the authenticated user's account; sends **email + in-app** notification (template `merchant-account-status`, action `deactivated`). |
 | PUT | `/api/v1/user/callbacks` | Updates callback URLs for the authenticated merchant/user. |
 | GET | `/api/v1/user/info/:userId` | Returns detailed info for a user (admin). |
 | POST | `/api/v1/user/verify-info/:userId` | Marks or updates verification info for a user (admin). |
@@ -609,7 +610,7 @@ Revokes a specific session, logging out the user on that device. Users can only 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
 | `SERVICE_AUTH_URL` | string | `http://localhost:3000` | Base URL for service-auth-ms communication |
-| `NOTIFICATIONS_SERVICE_URL` | string | `http://localhost:4009` (dev) | Base URL for notifications-ms (verification emails, OTP) |
+| `NOTIFICATIONS_SERVICE_URL` | string | `http://localhost:4009` (dev); production often `https://notifications-ms-plata.fly.dev` or your deployed URL | Base URL for notifications-ms: OTP/verification/password flows use `POST /api/v1/notifications/send`; merchant welcome and account deactivation use `POST /api/v1/notifications/send-dual` (see `src/services/NotificationService.ts`) |
 
 ### Security & CORS
 | Variable | Type | Default | Description |

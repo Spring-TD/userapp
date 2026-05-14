@@ -1,13 +1,43 @@
 import { Request, Response } from 'express';
 import notificationService from '../services/notificationService';
-import { SendNotificationRequest } from '../types/notification';
+import { SendEmailAndInAppRequest, SendNotificationRequest } from '../types/notification';
 import { ApiError } from '../middleware/errorHandler';
 
 export class NotificationController {
   /**
-   * Send notification
-   * POST /api/v1/notifications/send
+   * POST /api/v1/notifications/send-dual
+   * Same template + data as email and in-app (user inbox by userId).
    */
+  async sendEmailAndInApp(req: Request, res: Response): Promise<void> {
+    try {
+      const request: SendEmailAndInAppRequest = req.body;
+      const result = await notificationService.sendEmailAndInApp(request);
+
+      res.status(200).json({
+        success: result.success,
+        data: {
+          inApp: result.inApp,
+          email: result.email
+        },
+        error: result.error
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+        return;
+      }
+
+      console.error('Error in sendEmailAndInApp controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  }
+
   async sendNotification(req: Request, res: Response): Promise<void> {
     try {
       const request: SendNotificationRequest = req.body;
@@ -104,12 +134,13 @@ export class NotificationController {
       const { recipient } = req.params;
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = parseInt(req.query.offset as string) || 0;
+      const channel = req.query.channel as 'email' | 'sms' | 'in_app' | undefined;
 
       if (!recipient) {
         throw new ApiError(400, 'Recipient is required');
       }
 
-      const result = await notificationService.getUserNotifications(recipient, limit, offset);
+      const result = await notificationService.getUserNotifications(recipient, limit, offset, channel);
 
       res.json({
         success: true,
@@ -120,7 +151,12 @@ export class NotificationController {
             template: n.template,
             status: n.status,
             createdAt: n.createdAt,
-            sentAt: n.sentAt
+            sentAt: n.sentAt,
+            ...(n.channel === 'in_app'
+              ? {
+                  data: n.data
+                }
+              : {})
           })),
           total: result.total,
           limit,

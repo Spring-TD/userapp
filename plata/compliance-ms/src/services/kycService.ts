@@ -15,12 +15,25 @@ import {
 } from '../types/kycTypes';
 import { logger } from '../utils/logger';
 import { auditLogger } from '../utils/audit';
+import axios from 'axios';
+import { 
+  KYC_NOTIFICATIONS_ENABLED,
+  KYC_NOTIFICATIONS_CHANNELS,
+  SERVICE_AUTH_URL,
+  SERVICE_AUTH_INTERNAL_TOKEN,
+  NOTIFICATIONS_SERVICE_URL,
+  PREMBLY_DEFAULT_BANK_CODE
+} from '../config/environment';
 import { KYCProfileModelMongo as MockKYCProfileModel, KYCDocumentModelMongo as MockKYCDocumentModel } from '../utils/kycProfileMongo';
 import { BusinessInfoModel } from '../models/BusinessInfoModel';
 import { BusinessSurveyModel } from '../models/BusinessSurveyModel';
 import { BusinessDocumentModel } from '../models/BusinessDocumentModel';
 import { ShareholderModel } from '../models/ShareholderModel';
-import { BusinessDocumentType, BUSINESS_DOCUMENT_DISPLAY_NAMES } from '../types/kycTypes';
+import {
+  BusinessDocumentType,
+  BUSINESS_DOCUMENT_DISPLAY_NAMES,
+  BusinessDocumentData
+} from '../types/kycTypes';
 
 /** Map API shareholder shape to ShareholderModel document (document URLs stored in DO Spaces) */
 function shareholderToDoc(userId: string, s: any): Record<string, unknown> {
@@ -31,6 +44,8 @@ function shareholderToDoc(userId: string, s: any): Record<string, unknown> {
     phoneNumber: s.phoneNumber,
     bvn: s.bvn,
     bankAccount: s.bankAccount,
+    bankCode: s.bankCode,
+    documentType: s.documentType,
     ownershipPercentage: s.ownershipPercentage,
     uboDocumentUrl: s.uboDocument?.fileUrl,
     uboDocumentFileName: s.uboDocument?.fileName,
@@ -55,6 +70,8 @@ function docToShareholder(d: any): any {
     phoneNumber: d.phoneNumber,
     bvn: d.bvn,
     bankAccount: d.bankAccount,
+    bankCode: d.bankCode,
+    documentType: d.documentType,
     ownershipPercentage: d.ownershipPercentage,
     uboDocument: d.uboDocumentUrl
       ? {
@@ -80,13 +97,273 @@ function docToShareholder(d: any): any {
 import { 
   validateKYCSubmission, 
   validateIndividualKYCSubmission,
-  validateBusinessKYCSubmission
+  validateBusinessKYCSubmission,
+  businessDocumentsUpsertSchema
 } from '../utils/validation';
 import { cacService, CACVerificationResult } from './cacService';
-import { premblyService, PremblyIndividualKYCRequest, PremblyBusinessKYCRequest } from './premblyService';
+import {
+  premblyService,
+  PremblyIndividualKYCRequest,
+  PremblyBusinessKYCRequest,
+  IdentityPassVerificationResult
+} from './premblyService';
 
 // Service class for KYC operations
 export class KYCService {
+  private buildShareholderKycPublicBase(): string {
+    return (
+      process.env.KYC_PUBLIC_BASE_URL ||
+      process.env.PUBLIC_BASE_URL ||
+      process.env.COMPLIANCE_BASE_URL ||
+      `http://localhost:${process.env.PORT || '4003'}`
+    ).replace(/\/$/, '');
+  }
+
+  /** Fallback URL when Prembly does not return a redirect (still a valid absolute URL for clients). */
+  private buildShareholderIdentityPassFallbackUrl(reference: string): string {
+    const base = this.buildShareholderKycPublicBase();
+    return `${base}/kyc/shareholder-identitypass?reference=${encodeURIComponent(reference)}`;
+  }
+
+  private mapIdentityPassToKycStatus(
+    result: IdentityPassVerificationResult
+  ): 'pending' | 'completed' | 'failed' {
+    if (!result.ok) {
+      return 'failed';
+    }
+    const s = (result.premlyStatus || '').toString().toLowerCase();
+    if (['success', 'verified', 'completed'].includes(s)) {
+      return 'completed';
+    }
+    if (['failed', 'fail', 'rejected', 'error'].includes(s)) {
+      return 'failed';
+    }
+    return 'pending';
+  }
+
+  /**
+   * Starts Prembly **IdentityPass** for the shareholder (BVN, bank account, or document).
+   * Priority: BVN → bank account (+ bank code) → UBO / bank statement URL. Liveness is not used.
+   */
+  private async ensureShareholderKycLink(userId: string, shareholder: any): Promise<any> {
+    if (shareholder?.kyc?.url) {
+      return shareholder;
+    }
+
+    const bvnDigits =
+      typeof shareholder.bvn === 'string' ? shareholder.bvn.replace(/\D/g, '') : '';
+    const bankAccount =
+      typeof shareholder.bankAccount === 'string' ? shareholder.bankAccount.trim() : '';
+    const bankCodeRaw =
+      typeof shareholder.bankCode === 'string' ? shareholder.bankCode.replace(/\D/g, '') : '';
+    const bankCode = bankCodeRaw || (PREMBLY_DEFAULT_BANK_CODE || '').replace(/\D/g, '') || '';
+    const uboUrl =
+      typeof shareholder.uboDocument?.fileUrl === 'string'
+        ? shareholder.uboDocument.fileUrl.trim()
+        : '';
+    const stmtUrl =
+      shareholder.bankStatement &&
+      typeof shareholder.bankStatement.fileUrl === 'string'
+        ? shareholder.bankStatement.fileUrl.trim()
+        : '';
+
+    let verificationKind: 'bvn' | 'bank_account' | 'document';
+    let result: IdentityPassVerificationResult;
+
+    if (bvnDigits.length === 11) {
+      verificationKind = 'bvn';
+      if (premblyService.isIdentityPassConfigured()) {
+        result = await premblyService.identityPassVerifyBvn(bvnDigits);
+      } else {
+        result = premblyService.mockIdentityPassResult('bvn');
+      }
+    } else if (bankAccount) {
+      verificationKind = 'bank_account';
+      if (!bankCode) {
+        return {
+          ...shareholder,
+          kyc: {
+            url: '',
+            expiresAt: new Date(),
+            status: 'failed' as const,
+            flow: 'identitypass' as const,
+            verificationKind: 'bank_account',
+            message:
+              'bankCode is required for bank account verification (or set PREMBLY_DEFAULT_BANK_CODE server-side).'
+          }
+        };
+      }
+      if (premblyService.isIdentityPassConfigured()) {
+        result = await premblyService.identityPassVerifyBankAccount(bankAccount, bankCode);
+      } else {
+        result = premblyService.mockIdentityPassResult('bank_account');
+      }
+    } else if (uboUrl || stmtUrl) {
+      verificationKind = 'document';
+      const docUrl = uboUrl || stmtUrl;
+      const extra: Record<string, string> = {};
+      if (typeof shareholder.documentType === 'string' && shareholder.documentType.trim()) {
+        extra.doc_type = shareholder.documentType.trim();
+      }
+      if (premblyService.isIdentityPassConfigured()) {
+        result = await premblyService.identityPassVerifyDocument(docUrl, extra);
+      } else {
+        result = premblyService.mockIdentityPassResult('document');
+      }
+    } else {
+      return {
+        ...shareholder,
+        kyc: {
+          url: '',
+          expiresAt: new Date(),
+          status: 'failed' as const,
+          flow: 'identitypass' as const,
+          message:
+            'Provide a valid 11-digit BVN, bank account with bank code, or upload a UBO or bank statement document for IdentityPass verification.'
+        }
+      };
+    }
+
+    const reference =
+      result.reference || `local-${randomUUID()}`;
+    const url =
+      result.redirectUrl || this.buildShareholderIdentityPassFallbackUrl(reference);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const status = this.mapIdentityPassToKycStatus(result);
+
+    return {
+      ...shareholder,
+      kyc: {
+        url,
+        expiresAt,
+        status,
+        providerReference: reference,
+        flow: 'identitypass',
+        verificationKind,
+        premlyVerificationStatus: result.premlyStatus,
+        message: result.message
+      }
+    };
+  }
+
+  private isKycEmailEnabled(): boolean {
+    if (!KYC_NOTIFICATIONS_ENABLED) return false;
+    const channels = (KYC_NOTIFICATIONS_CHANNELS || '')
+      .split(',')
+      .map((c) => c.trim().toLowerCase())
+      .filter(Boolean);
+    return channels.includes('email');
+  }
+
+  private async getMerchantContact(userId: string): Promise<{ email: string; userName: string } | null> {
+    try {
+      const url = `${SERVICE_AUTH_URL}/internal/api/v1/users/${userId}/contact`;
+      const response = await axios.get(url, {
+        headers: { 'X-Internal-Token': SERVICE_AUTH_INTERNAL_TOKEN },
+        timeout: 5000
+      });
+
+      type ServiceAuthContactResponse = {
+        success: boolean;
+        data?: {
+          email?: string;
+          userName?: string;
+        };
+      };
+
+      const payload = response.data as ServiceAuthContactResponse;
+      if (!payload?.success || !payload?.data?.email) return null;
+
+      return {
+        email: payload.data.email,
+        userName: payload.data.userName || payload.data.email
+      };
+    } catch (error) {
+      logger.error('Failed to fetch merchant contact for KYC email', {
+        userId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      return null;
+    }
+  }
+
+  private async sendKycStatusEmail(args: {
+    userId: string;
+    userType: UserType;
+    previousStatus?: KYCStatus;
+    newStatus: KYCStatus;
+    reviewDate: Date;
+    reviewReason?: string;
+  }): Promise<void> {
+    // Only email merchants.
+    if (args.userType !== UserType.MERCHANT) return;
+
+    // Only send on transitions (or initial create, where previousStatus is undefined).
+    if (args.previousStatus !== undefined && args.previousStatus === args.newStatus) return;
+
+    if (!this.isKycEmailEnabled()) return;
+
+    const contact = await this.getMerchantContact(args.userId);
+    if (!contact) return;
+
+    const incompleteStatuses = new Set<KYCStatus>([
+      KYCStatus.FAILED,
+      KYCStatus.REJECTED,
+      KYCStatus.IN_PROGRESS
+    ]);
+
+    if (incompleteStatuses.has(args.newStatus)) {
+      try {
+        await axios.post(
+          `${NOTIFICATIONS_SERVICE_URL}/api/v1/notifications/send-dual`,
+          {
+            userId: args.userId,
+            email: contact.email,
+            template: 'compliance-incomplete',
+            data: {
+              merchantName: contact.userName,
+              summary: args.reviewReason || `Compliance status: ${args.newStatus}`,
+              detail: ''
+            }
+          },
+          { timeout: 10000 }
+        );
+      } catch (error) {
+        logger.error('Failed to send compliance-incomplete notification', {
+          userId: args.userId,
+          newStatus: args.newStatus,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+      return;
+    }
+
+    const emailUrl = `${NOTIFICATIONS_SERVICE_URL}/api/v1/notifications/send`;
+    try {
+      await axios.post(
+        emailUrl,
+        {
+          channel: 'email',
+          recipient: contact.email,
+          template: 'kyc-status-updated',
+          data: {
+            userName: contact.userName,
+            status: args.newStatus,
+            reviewDate: args.reviewDate.toISOString(),
+            reviewReason: args.reviewReason ?? ''
+          }
+        },
+        { timeout: 5000 }
+      );
+    } catch (error) {
+      logger.error('Failed to send KYC status email', {
+        userId: args.userId,
+        newStatus: args.newStatus,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
   // Submit individual KYC for verification
   async submitIndividualKYC(data: IndividualKYCSubmissionRequest, userId?: string): Promise<{
     success: boolean;
@@ -180,107 +457,83 @@ export class KYCService {
       submittedAt: Date | undefined;
       documents: any[];
       shareholderCount: number;
+      shareholders?: any[];
     };
     error?: any;
   }> {
     try {
-      const { error } = validateBusinessKYCSubmission(data);
-      
-      if (error) {
+      const validation = validateBusinessKYCSubmission(data);
+
+      if (validation.error) {
+        const err = validation.error as any;
         return {
           success: false,
-          error: error.message || (error as any).details?.[0]?.message || 'Validation error'
+          error: err.message || err.details?.[0]?.message || 'Validation error'
         };
       }
 
-      // Guard: ensure required arrays exist so we return a clear error instead of throwing
-      if (!Array.isArray(data.businessDocuments) || data.businessDocuments.length < 7) {
-        return {
-          success: false,
-          error: 'businessDocuments is required and must contain all 7 document types (COI, Articles of Association, Shareholder list, Proof of Address, Bank Statement, AML Policy, Data & Privacy Policy).'
-        };
-      }
-      if (!Array.isArray(data.shareholders) || data.shareholders.length === 0) {
-        return {
-          success: false,
-          error: 'At least one shareholder is required.'
-        };
-      }
-      if (!data.businessInfo) {
-        return { success: false, error: 'businessInfo is required.' };
-      }
-      if (!data.businessSurvey) {
-        return { success: false, error: 'businessSurvey is required (businessType, country, businessModel, monthlyProcessedVolume).' };
-      }
-      if (!data.riskAssessment) {
-        return { success: false, error: 'riskAssessment is required.' };
-      }
+      const value = validation.value as BusinessKYCSubmissionRequest;
+      const businessDocuments = value.businessDocuments ?? [];
 
       // Calculate risk level based on business factors
-      const riskLevel = this.calculateBusinessRiskLevel(data);
-      
-      // Documents are submitted as PENDING and require admin approval before Prembly verification
-      // Admin must review and approve documents first, then Prembly verification can proceed
-      logger.info('Business KYC submitted - documents require admin approval before Prembly verification', {
-        userId: data.userId,
-        documentCount: data.businessDocuments.length
-      });
-      
-      for (const doc of data.businessDocuments) {
-        const documentType = doc.type as BusinessDocumentType;
-        await BusinessDocumentModel.findOneAndUpdate(
-          { userId: data.userId, documentType },
-          {
-            userId: data.userId,
-            documentType,
-            displayName: BUSINESS_DOCUMENT_DISPLAY_NAMES[documentType] ?? documentType,
-            fileUrl: doc.fileUrl,
-            fileName: doc.fileName,
-            fileType: doc.fileType,
-            fileSize: doc.fileSize,
-            uploadedAt: doc.uploadedAt ?? new Date(),
-            status: KYCStatus.PENDING,
-          },
-          { upsert: true, new: true }
-        );
-      }
+      const riskLevel = this.calculateBusinessRiskLevel(value);
 
-      for (const s of data.shareholders) {
-        await ShareholderModel.create(shareholderToDoc(data.userId, s));
+      // Documents are submitted as PENDING and require admin approval before Prembly verification
+      logger.info('Business KYC submitted - documents require admin approval before Prembly verification', {
+        userId: value.userId,
+        documentCount: businessDocuments.length
+      });
+
+      await this.upsertBusinessDocumentRows(value.userId, businessDocuments);
+
+      const shareholdersWithKyc: any[] = [];
+      for (const s of value.shareholders) {
+        const shareholderWithKyc = await this.ensureShareholderKycLink(value.userId, s);
+        shareholdersWithKyc.push(shareholderWithKyc);
+        await ShareholderModel.create(shareholderToDoc(value.userId, shareholderWithKyc));
       }
 
       const kycProfileData: any = {
-        userId: data.userId,
-        userType: data.userType,
+        userId: value.userId,
+        userType: value.userType,
         documents: [],
         status: KYCStatus.PENDING,
         submittedAt: new Date(),
         shareholders: [], // Shareholders are stored in shareholders collection
-        riskAssessment: data.riskAssessment,
+        riskAssessment: value.riskAssessment,
         riskLevel,
         workflowStatus: ComplianceWorkflowStatus.INITIAL_SCREENING
       };
 
       await BusinessInfoModel.findOneAndUpdate(
-        { userId: data.userId },
-        { userId: data.userId, ...data.businessInfo },
+        { userId: value.userId },
+        { userId: value.userId, ...value.businessInfo },
         { upsert: true, new: true }
       );
       await BusinessSurveyModel.findOneAndUpdate(
-        { userId: data.userId },
-        { userId: data.userId, ...data.businessSurvey },
+        { userId: value.userId },
+        { userId: value.userId, ...value.businessSurvey },
         { upsert: true, new: true }
       );
 
       // Upsert KYC profile: update if one exists for this userId (unique index), otherwise create
-      const existingProfile = await MockKYCProfileModel.findOne({ userId: data.userId });
+      const existingProfile = await MockKYCProfileModel.findOne({ userId: value.userId });
+      const previousStatus = existingProfile?.status as KYCStatus | undefined;
       const result = existingProfile
         ? await MockKYCProfileModel.findByIdAndUpdate(existingProfile._id, kycProfileData, { new: true })
         : await MockKYCProfileModel.save(kycProfileData);
       if (!result) {
         return { success: false, error: 'Failed to save or update KYC profile.' };
       }
-      const savedBusinessDocs = await BusinessDocumentModel.find({ userId: data.userId }).lean();
+
+      await this.sendKycStatusEmail({
+        userId: result.userId,
+        userType: result.userType,
+        previousStatus,
+        newStatus: result.status as KYCStatus,
+        reviewDate: result.submittedAt ?? new Date()
+      });
+      const savedBusinessDocs = await BusinessDocumentModel.find({ userId: value.userId }).lean();
       const documentsResponse = savedBusinessDocs.map((d: any) => ({
         _id: d._id?.toString?.(),
         type: d.documentType,
@@ -293,23 +546,21 @@ export class KYCService {
       }));
 
       logger.info('Business KYC submitted successfully', {
-        userId: data.userId,
-        industry: data.businessInfo?.industry,
+        userId: value.userId,
+        industry: value.businessInfo?.industry,
         riskLevel,
-        documentCount: data.businessDocuments?.length,
-        // Changed from beneficialOwnerCount to shareholderCount
-        shareholderCount: data.shareholders?.length
+        documentCount: businessDocuments.length,
+        shareholderCount: value.shareholders?.length
       });
-      
-      auditLogger('BUSINESS_KYC_SUBMISSION', data.userId, {
-        industry: data.businessInfo?.industry,
+
+      auditLogger('BUSINESS_KYC_SUBMISSION', value.userId, {
+        industry: value.businessInfo?.industry,
         riskLevel,
-        documentCount: data.businessDocuments?.length,
-        // Changed from beneficialOwnerCount to shareholderCount
-        shareholderCount: data.shareholders?.length,
-        highRiskJurisdiction: data.riskAssessment?.highRiskJurisdiction
+        documentCount: businessDocuments.length,
+        shareholderCount: value.shareholders?.length,
+        highRiskJurisdiction: value.riskAssessment?.highRiskJurisdiction
       });
-      
+
       return {
         success: true,
         message: 'Business KYC submitted successfully for processing',
@@ -319,7 +570,8 @@ export class KYCService {
           riskLevel,
           submittedAt: result.submittedAt,
           documents: documentsResponse,
-          shareholderCount: data.shareholders?.length
+          shareholderCount: value.shareholders?.length,
+          shareholders: shareholdersWithKyc
         }
       };
     } catch (error) {
@@ -330,6 +582,70 @@ export class KYCService {
         success: false,
         error: `Error submitting business KYC: ${message}`
       };
+    }
+  }
+
+  /** Persist or replace business document rows (one per document type per user). */
+  private async upsertBusinessDocumentRows(userId: string, businessDocuments: BusinessDocumentData[]): Promise<void> {
+    for (const doc of businessDocuments) {
+      const documentType = doc.type as BusinessDocumentType;
+      await BusinessDocumentModel.findOneAndUpdate(
+        { userId, documentType },
+        {
+          userId,
+          documentType,
+          displayName: BUSINESS_DOCUMENT_DISPLAY_NAMES[documentType] ?? documentType,
+          fileUrl: doc.fileUrl,
+          fileName: doc.fileName,
+          fileType: doc.fileType,
+          fileSize: doc.fileSize,
+          uploadedAt: doc.uploadedAt ?? new Date(),
+          status: KYCStatus.PENDING
+        },
+        { upsert: true, new: true }
+      );
+    }
+  }
+
+  /**
+   * Add or replace uploaded business documents after initial submit (same upsert rules as submit).
+   * Body: `{ "businessDocuments": [ { type, fileName, fileType, fileUrl, fileSize, uploadedAt, status }, ... ] }` (≥1 row).
+   */
+  async upsertBusinessDocumentsForMerchant(
+    userId: string,
+    body: { businessDocuments: BusinessDocumentData[] }
+  ): Promise<{ success: boolean; error?: string; data?: { updated: number; documents: any[] } }> {
+    try {
+      if (!userId) {
+        return { success: false, error: 'User ID is required' };
+      }
+      const { error, value } = businessDocumentsUpsertSchema.validate(body, { abortEarly: false });
+      if (error) {
+        return {
+          success: false,
+          error: error.details.map((d) => d.message).join(', ') || 'Validation error'
+        };
+      }
+      await this.upsertBusinessDocumentRows(userId, value.businessDocuments);
+      const saved = await BusinessDocumentModel.find({ userId }).lean();
+      const documentsResponse = saved.map((d: any) => ({
+        _id: d._id?.toString?.(),
+        type: d.documentType,
+        fileName: d.fileName,
+        fileType: d.fileType,
+        fileSize: d.fileSize,
+        uploadDate: d.uploadedAt,
+        status: d.status,
+        fileUrl: d.fileUrl
+      }));
+      return {
+        success: true,
+        data: { updated: value.businessDocuments.length, documents: documentsResponse }
+      };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Unknown error';
+      logger.error('Error upserting business documents', { error: message, userId });
+      return { success: false, error: message };
     }
   }
 
@@ -448,7 +764,7 @@ export class KYCService {
             status: KYCStatus.PENDING
           }));
         } else if ('businessDocuments' in data) {
-          documents = (data as BusinessKYCSubmissionRequest).businessDocuments.map((doc: any) => ({
+          documents = ((data as BusinessKYCSubmissionRequest).businessDocuments ?? []).map((doc: any) => ({
             type: doc.type as unknown as DocumentType,
             fileName: doc.fileName,
             fileType: doc.fileType,
@@ -465,15 +781,27 @@ export class KYCService {
           status: KYCStatus.PENDING,
           submittedAt: new Date()
         };
+
+        const previousStatus = data.userType === UserType.MERCHANT
+          ? (await MockKYCProfileModel.findOne({ userId: data.userId }))?.status as KYCStatus | undefined
+          : undefined;
         
         const result = await MockKYCProfileModel.save(kycProfileData);
+
+        await this.sendKycStatusEmail({
+          userId: result.userId,
+          userType: result.userType,
+          previousStatus,
+          newStatus: result.status as KYCStatus,
+          reviewDate: result.submittedAt ?? new Date()
+        });
         
         // Get document count safely
         let documentCount = 0;
         if ('documents' in data) {
           documentCount = (data as KYCSubmissionRequest).documents.length;
         } else if ('businessDocuments' in data) {
-          documentCount = (data as BusinessKYCSubmissionRequest).businessDocuments.length;
+          documentCount = (data as BusinessKYCSubmissionRequest).businessDocuments?.length ?? 0;
         }
         
         logger.info('KYC submitted successfully', {
@@ -860,9 +1188,14 @@ export class KYCService {
   async updateShareholders(userId: string, shareholders: any[]): Promise<{
     success: boolean;
     message?: string;
+    data?: any[];
     error?: string;
   }> {
     try {
+      if (!Array.isArray(shareholders)) {
+        return { success: false, error: 'Shareholders must be an array' };
+      }
+
       const kycProfile: any = await MockKYCProfileModel.findOne({ userId });
       if (!kycProfile) {
         return { success: false, error: 'No KYC profile found for this user' };
@@ -870,11 +1203,24 @@ export class KYCService {
       if (kycProfile.userType !== UserType.MERCHANT) {
         return { success: false, error: 'User is not a business customer' };
       }
+      if (kycProfile.isBlocked === true) {
+        return { success: false, error: 'Account is blocked; beneficial ownership cannot be updated' };
+      }
+      // Allowed at any KYC stage (e.g. approved/completed) so merchants can add or replace UBOs later.
+      const shareholdersWithKyc: any[] = [];
+      for (const shareholder of shareholders) {
+        shareholdersWithKyc.push(await this.ensureShareholderKycLink(userId, shareholder));
+      }
+
       await ShareholderModel.deleteMany({ userId });
       if (shareholders.length > 0) {
-        await ShareholderModel.insertMany(shareholders.map((s) => shareholderToDoc(userId, s)));
+        await ShareholderModel.insertMany(shareholdersWithKyc.map((s) => shareholderToDoc(userId, s)));
       }
-      return { success: true, message: 'Shareholders updated successfully' };
+      return {
+        success: true,
+        message: 'Shareholders updated successfully',
+        data: shareholdersWithKyc
+      };
     } catch (error) {
       return { success: false, error: 'Error updating shareholders' };
     }
@@ -1151,6 +1497,14 @@ export class KYCService {
       };
       
       const result = await MockKYCProfileModel.save(profileData);
+
+      await this.sendKycStatusEmail({
+        userId: result.userId,
+        userType: result.userType,
+        previousStatus: undefined,
+        newStatus: result.status as KYCStatus,
+        reviewDate: result.submittedAt ?? new Date()
+      });
       
       return {
         success: true,
@@ -1616,6 +1970,8 @@ export class KYCService {
         };
       }
 
+      const previousStatus = userProfile.status as KYCStatus;
+
       // Update the profile status
       const updatedProfile = await MockKYCProfileModel.findByIdAndUpdate(
         userProfile._id,
@@ -1636,6 +1992,15 @@ export class KYCService {
           error: 'Failed to update user profile'
         };
       }
+
+      await this.sendKycStatusEmail({
+        userId: updatedProfile.userId,
+        userType: updatedProfile.userType,
+        previousStatus,
+        newStatus: updatedProfile.status as KYCStatus,
+        reviewDate: updatedProfile.reviewDate ?? new Date(),
+        reviewReason: updatedProfile.rejectionReason ?? note ?? ''
+      });
 
       // Log the action
       logger.info('User profile reviewed', {
@@ -1993,6 +2358,10 @@ export class KYCService {
     error?: string;
   }> {
     try {
+      // Load previous status so we only send on actual transitions.
+      const existingProfile: any = await MockKYCProfileModel.findById(kycId);
+      const previousStatus = existingProfile?.status as KYCStatus | undefined;
+
       const updatedProfile = await MockKYCProfileModel.findByIdAndUpdate(
         kycId,
         {
@@ -2011,6 +2380,15 @@ export class KYCService {
           error: 'KYC profile not found'
         };
       }
+
+      await this.sendKycStatusEmail({
+        userId: updatedProfile.userId,
+        userType: updatedProfile.userType,
+        previousStatus,
+        newStatus: updatedProfile.status as KYCStatus,
+        reviewDate: updatedProfile.reviewDate ?? new Date(),
+        reviewReason: updatedProfile.rejectionReason ?? rejectionReason
+      });
       
       auditLogger('KYC_REVIEW', reviewedBy || 'anonymous', {
         kycId,

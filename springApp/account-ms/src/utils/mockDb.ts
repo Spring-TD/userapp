@@ -21,8 +21,13 @@ export interface Application {
   productType: string;
   amount: number;
   currency: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'BLACKLISTED';
   rejectionReason?: string;
+  blacklistReason?: string;
+  /** Owning Spring app (product.appId); set on new applications */
+  appId?: string;
+  /** Merchant that owns the app; set on new applications for scoped listing */
+  merchantId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -107,13 +112,16 @@ class MockDatabase {
   }
 
   // Update application status
-  async updateApplicationStatus(id: string, status: 'APPROVED' | 'REJECTED', reason?: string): Promise<Application | null> {
+  async updateApplicationStatus(id: string, status: 'APPROVED' | 'REJECTED' | 'BLACKLISTED', reason?: string): Promise<Application | null> {
     const appIndex = this.applications.findIndex(a => a.id === id);
     if (appIndex === -1) return null;
 
     this.applications[appIndex].status = status;
-    if (reason) {
+    if (reason && status === 'REJECTED') {
       this.applications[appIndex].rejectionReason = reason;
+    }
+    if (reason && status === 'BLACKLISTED') {
+      this.applications[appIndex].blacklistReason = reason;
     }
     this.applications[appIndex].updatedAt = new Date();
 
@@ -123,6 +131,10 @@ class MockDatabase {
   // Get all applications (for admin)
   async getAllApplications(): Promise<Application[]> {
     return this.applications;
+  }
+
+  async getApplicationsByMerchantId(merchantId: string): Promise<Application[]> {
+    return this.applications.filter((a) => a.merchantId === merchantId);
   }
 }
 

@@ -13,7 +13,7 @@ async function testAutoProvisioning() {
     const result = await WalletService.createMerchantWallet({
       merchantId: 'merchant_123',
       name: 'Test Treasury Wallet',
-      currency: 'USD',
+      currency: 'NGN',
       merchantWalletType: MerchantWalletType.TREASURY
     });
 

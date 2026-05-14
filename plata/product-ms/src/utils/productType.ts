@@ -41,6 +41,23 @@ export function normalizeProductType(type: string): ProductDiscriminator {
   throw new Error(`Invalid product type: ${type}`);
 }
 
+/**
+ * Map a stored `Product.type` (or aggregate `_id`) to a discriminator.
+ * Returns null for unrecognized values (unlike `coerceStoredProductType`, which falls back to LOAN).
+ */
+export function discriminatorFromStoredType(
+  raw: string | null | undefined
+): ProductDiscriminator | null {
+  if (raw == null || String(raw).trim() === '') {
+    return null;
+  }
+  const u = String(raw).trim();
+  if ((PRODUCT_DISCRIMINATORS as readonly string[]).includes(u)) {
+    return u as ProductDiscriminator;
+  }
+  return LEGACY_TYPE_MAP[u] ?? null;
+}
+
 /** Used when reading documents that may still use legacy `type` strings. */
 export function coerceStoredProductType(type: string): ProductDiscriminator {
   if ((PRODUCT_DISCRIMINATORS as readonly string[]).includes(type)) {

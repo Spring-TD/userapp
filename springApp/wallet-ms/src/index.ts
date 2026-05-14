@@ -8,6 +8,7 @@ import swaggerUi from 'swagger-ui-express';
 import { config } from './config/environment';
 import swaggerSpec from './config/swagger';
 import { walletRoutes } from './routes/walletRoutes';
+import { internalWalletRoutes } from './routes/internalWalletRoutes';
 import { transactionRoutes } from './routes/transactionRoutes';
 import { errorHandler } from './middleware/errorHandler';
 
@@ -70,6 +71,7 @@ app.get('/health', (req, res) => {
 
 // API routes
 app.use('/api/v1/wallets', walletRoutes);
+app.use('/api/v1/internal/wallets', internalWalletRoutes);
 app.use('/api/v1/transactions', transactionRoutes);
 
 // 404 handler

@@ -15,6 +15,9 @@ import { verifyEmailRoutes } from './routes/verifyEmailRoutes';
 import { roleRoutes } from './routes/roleRoutes';
 import { invitationRoutes } from './routes/invitationRoutes';
 import { sessionRoutes } from './routes/sessionRoutes';
+import { faqRoutes } from './routes/faqRoutes';
+import { supportContactRoutes } from './routes/supportContactRoutes';
+import { legalDocumentRoutes } from './routes/legalDocumentRoutes';
 import { connectDb } from './config/db';
 
 const app = express();
@@ -44,6 +47,9 @@ app.get('/', (_req, res) => {
       user: '/api/v1/user',
       roles: '/api/v1/roles',
       invitations: '/api/v1/invitations',
+      faqs: '/api/v1/faqs',
+      supportContacts: '/api/v1/support-contacts',
+      legalDocuments: '/api/v1/legal-documents',
       verifyEmail: '/verify-email'
     },
     timestamp: new Date().toISOString()
@@ -73,6 +79,9 @@ app.use('/api/v1/user', userRoutes);
 app.use('/api/v1/roles', roleRoutes);
 app.use('/api/v1/invitations', invitationRoutes);
 app.use('/api/v1/sessions', sessionRoutes);
+app.use('/api/v1/faqs', faqRoutes);
+app.use('/api/v1/support-contacts', supportContactRoutes);
+app.use('/api/v1/legal-documents', legalDocumentRoutes);
 app.use('/verify-email', verifyEmailRoutes);
 
 // Error handling middleware

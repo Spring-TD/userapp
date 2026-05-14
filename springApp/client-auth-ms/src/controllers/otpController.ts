@@ -66,20 +66,20 @@ export class OTPController {
         return;
       }
       const validChannels = ['email', 'sms'];
-      const validPurposes = ['verification', 'password-reset', 'login'];
+      const validPurposes = ['verification', 'password-reset', 'password-change', 'login'];
       if (!validChannels.includes(channel)) {
         res.status(400).json({ success: false, error: 'Channel must be "email" or "sms".' });
         return;
       }
       if (!validPurposes.includes(purpose)) {
-        res.status(400).json({ success: false, error: 'Purpose must be "verification", "password-reset", or "login".' });
+        res.status(400).json({ success: false, error: 'Purpose must be "verification", "password-reset", "password-change", or "login".' });
         return;
       }
 
       const result = await AuthService.resendOTP({
         identifier: String(identifier).trim(),
         channel: channel as 'email' | 'sms',
-        purpose: purpose as 'verification' | 'password-reset' | 'login'
+        purpose: purpose as 'verification' | 'password-reset' | 'password-change' | 'login'
       });
       res.status(result.success ? 200 : 400).json(result);
     } catch (error) {

@@ -9,6 +9,8 @@ import axios from 'axios';
 import { config } from '../config/environment';
 import { ProductModel, toProduct } from '../models/ProductModel';
 import { normalizeProductType } from '../utils/productType';
+import { ApiError } from '../middleware/errorHandler';
+import type { SubMerchantActivationContext } from '../types/subMerchantActivation';
 
 export class ProductService {
   private toNumeric(value: unknown): number {
@@ -169,6 +171,52 @@ export class ProductService {
       console.error(context, error.response?.data ?? error.message);
     } else {
       console.error(context, error);
+    }
+  }
+
+  private resolveCatalogProductId(product: Product, pathProductId: string): string {
+    const upstream = product.upstreamProductId?.trim();
+    return upstream && upstream.length > 0 ? upstream : pathProductId;
+  }
+
+  private async postPlataSubMerchantActivation(
+    appId: string,
+    catalogProductId: string,
+    product: Product,
+    ctx: SubMerchantActivationContext
+  ): Promise<void> {
+    const url = `${config.plataAccountServiceUrl}/api/v1/products/sub-merchant-activations`;
+    const productName = ctx.productName ?? product.name;
+    const payload: Record<string, unknown> = {
+      appId,
+      productId: catalogProductId,
+      merchantId: ctx.merchantId,
+      merchantName: ctx.merchantName,
+      subMerchant: ctx.subMerchant,
+      status: 'active'
+    };
+    if (productName && String(productName).trim().length > 0) {
+      payload.productName = String(productName).trim();
+    }
+
+    try {
+      await axios.post(url, payload, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.getUpstreamAuthHeaders()
+        }
+      });
+    } catch (error) {
+      this.logUpstreamError('Plata sub-merchant-activation failed:', error);
+      if (axios.isAxiosError(error)) {
+        const data = error.response?.data as Record<string, unknown> | undefined;
+        const msg =
+          (typeof data?.message === 'string' && data.message) ||
+          (typeof data?.error === 'string' && data.error) ||
+          error.message;
+        throw new ApiError(502, `Upstream activation failed: ${msg}`);
+      }
+      throw new ApiError(502, 'Upstream activation failed');
     }
   }
 
@@ -380,16 +428,46 @@ export class ProductService {
   }
 
   // Activating clones the upstream product into the local products collection for that app.
-  async toggleProductActivation(appId: string, productId: string, activate: boolean): Promise<Product | null> {
+  // When turning on from inactive, notifies Plata via POST .../sub-merchant-activations (rollback on failure).
+  async toggleProductActivation(
+    appId: string,
+    productId: string,
+    activate: boolean,
+    activationContext?: SubMerchantActivationContext
+  ): Promise<Product | null> {
+    if (activate && !activationContext) {
+      throw new ApiError(
+        400,
+        'merchantId, merchantName, and subMerchant are required when activating a product'
+      );
+    }
+
     const localProduct = await this.getMerchantProductConfiguration(appId, productId);
 
     if (localProduct) {
+      const previousIsActive = localProduct.isActive;
       const updated = await ProductModel.findByIdAndUpdate(
         localProduct.id,
         { $set: { isActive: activate, updatedAt: new Date().toISOString() } },
         { new: true }
       );
-      return updated ? toProduct(updated) : null;
+      const product = updated ? toProduct(updated) : null;
+      if (!product) {
+        return null;
+      }
+
+      if (activate && activationContext && !previousIsActive) {
+        const catalogProductId = this.resolveCatalogProductId(product, productId);
+        try {
+          await this.postPlataSubMerchantActivation(appId, catalogProductId, product, activationContext);
+        } catch (err) {
+          await ProductModel.findByIdAndUpdate(localProduct.id, {
+            $set: { isActive: false, updatedAt: new Date().toISOString() }
+          });
+          throw err;
+        }
+      }
+      return product;
     }
 
     if (!activate) {
@@ -401,8 +479,18 @@ export class ProductService {
       return null;
     }
 
-    const created = await ProductModel.create(this.buildLocalProductPayload(upstreamProduct, appId, true));
-    return toProduct(created);
+       const created = await ProductModel.create(this.buildLocalProductPayload(upstreamProduct, appId, true));
+    const product = toProduct(created);
+
+    const catalogProductId = this.resolveCatalogProductId(product, productId);
+    try {
+      await this.postPlataSubMerchantActivation(appId, catalogProductId, product, activationContext!);
+    } catch (err) {
+      await ProductModel.deleteOne({ _id: created._id });
+      throw err;
+    }
+
+    return product;
   }
 
   // Updates the locally persisted app product document with Plata-shaped fields.

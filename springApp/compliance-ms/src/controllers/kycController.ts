@@ -3,11 +3,23 @@ import { Request, Response, NextFunction } from 'express';
 import { kycService } from '../services/kycService';
 import { logger } from '../utils/logger';
 import { auditLogger } from '../utils/audit';
-import { KYCStatus, UserType, RiskLevel, BusinessType, ComplianceWorkflowStatus, BUSINESS_TYPE_OPTIONS, INDUSTRY_TYPE_OPTIONS, BUSINESS_MODEL_OPTIONS } from '../types/kycTypes';
+import {
+  KYCStatus,
+  UserType,
+  RiskLevel,
+  BusinessType,
+  ComplianceWorkflowStatus,
+  BUSINESS_TYPE_OPTIONS,
+  INDUSTRY_TYPE_OPTIONS,
+  BUSINESS_MODEL_OPTIONS
+} from '../types/kycTypes';
+import { timingSafeEqual } from 'crypto';
 import { livenessService } from '../services/livenessService';
 import { amlVerificationService, AMLVerificationResult } from '../services/amlVerificationService';
 import { sanctionsService, SanctionsCheckRequest } from '../services/sanctionsService';
 import * as spacesService from '../services/spacesService';
+import { fuspayModularKycService } from '../services/fuspayModularKycService';
+import { KYCProfileModel } from '../models/KYCProfileModel';
 import { v4 as uuidv4 } from 'uuid';
 import { businessSurveyUpdateSchema, businessInfoUpdateSchema } from '../utils/validation';
 
@@ -45,7 +57,7 @@ export class KYCController {
   // Submit Business KYC
   static async submitBusinessKYC(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await kycService.submitBusinessKYC(req.body, req.user?.userId);
+      const result = await kycService.submitBusinessKYC(req.body, req.user?.userId, req.user?.token);
       
       if (!result.success) {
         logger.warn('Business KYC submission failed', {
@@ -67,6 +79,361 @@ export class KYCController {
       });
       
       return res.status(201).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Create Fuspay modular verification session for a customer
+  static async createFuspayVerification(req: Request, res: Response, next: NextFunction) {
+    try {
+      const body = req.body || {};
+      const country = body.country as string | undefined;
+      const tenantAppIdHeader = req.headers['x-tenant-app-id'];
+      const tenantAppId = Array.isArray(tenantAppIdHeader) ? tenantAppIdHeader[0] : tenantAppIdHeader;
+      const resolvedBranding =
+        body.branding ||
+        (await fuspayModularKycService.getBrandingForApp(
+          typeof tenantAppId === 'string' && tenantAppId.trim().length > 0 ? tenantAppId.trim() : undefined
+        ));
+      let fuspayUserId =
+        (body.user_id as string | undefined) ||
+        (body.customer_id as string | undefined);
+
+      const jwtUserId = req.user?.userId;
+      if (!fuspayUserId) {
+        if (!jwtUserId) {
+          return res.status(401).json({ success: false, error: 'Authentication required' });
+        }
+        const profile = await KYCProfileModel.findOne({ userId: jwtUserId }).lean();
+        fuspayUserId = (profile as any)?.fuspay?.customerId;
+      }
+
+      if (!fuspayUserId) {
+        return res.status(400).json({
+          success: false,
+          error:
+            'Fuspay user id missing: pass user_id (Create User id) or ensure fuspay.customerId exists on your KYC profile'
+        });
+      }
+
+      const kyc_type = (body.kyc_type as string | undefined) || 'individual';
+
+      let result;
+      const usesCustomerPayload =
+        Boolean(body.customer_id) ||
+        Boolean(body.callback) ||
+        Boolean(body.redirect) ||
+        Boolean(country);
+
+      if (usesCustomerPayload) {
+        result = await fuspayModularKycService.createVerification({
+          customer_id: fuspayUserId,
+          ...(country ? { country } : {}),
+          callback: body.callback,
+          redirect: body.redirect,
+          ...(resolvedBranding ? { branding: resolvedBranding } : {}),
+          individual_checks: body.individual_checks,
+          business_checks: body.business_checks,
+          aml_checks: body.aml_checks,
+          additional_fields: body.additional_fields
+        });
+      } else {
+        result = await fuspayModularKycService.createVerification({
+          user_id: fuspayUserId,
+          kyc_type,
+          callback: body.callback as string | undefined,
+          redirect: body.redirect as string | undefined,
+          ...(resolvedBranding ? { branding: resolvedBranding } : {})
+        });
+      }
+
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+
+      const data = result.data as Record<string, unknown> | undefined;
+      const verificationId = data?.verification_id as string | undefined;
+      const verificationUrl = data?.verification_url as string | undefined;
+
+      if (jwtUserId && verificationId) {
+        await KYCProfileModel.updateOne(
+          { userId: jwtUserId },
+          {
+            $set: {
+              'fuspay.customerId': fuspayUserId,
+              'fuspay.verification.verificationId': verificationId,
+              'fuspay.verification.verificationUrl': verificationUrl,
+              'fuspay.verification.reference': data?.reference,
+              'fuspay.verification.status': data?.status,
+              'fuspay.verification.totalChecks': data?.total_checks,
+              'fuspay.verification.lastSyncedAt': new Date()
+            }
+          }
+        );
+      }
+
+      return res.status(201).json({
+        ...result,
+        verification_url: verificationUrl,
+        verification_id: verificationId
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** Fuspay/Payonus webhook — no JWT; optional `FUSPAY_MODULAR_WEBHOOK_SECRET` via header `x-fuspay-webhook-secret`. */
+  static async handleFuspayModularWebhook(req: Request, res: Response, next: NextFunction) {
+    try {
+      const secret = process.env.FUSPAY_MODULAR_WEBHOOK_SECRET?.trim();
+      if (secret) {
+        const headerSecret =
+          (req.headers['x-fuspay-webhook-secret'] as string | undefined)?.trim() ||
+          (req.headers['x-webhook-secret'] as string | undefined)?.trim();
+        let authorized = false;
+        if (headerSecret) {
+          try {
+            const a = Buffer.from(headerSecret, 'utf8');
+            const b = Buffer.from(secret, 'utf8');
+            authorized = a.length === b.length && timingSafeEqual(a, b);
+          } catch {
+            authorized = false;
+          }
+        }
+        if (!authorized) {
+          return res.status(401).json({ success: false, error: 'Unauthorized' });
+        }
+      }
+
+      const payload = (req.body || {}) as Record<string, unknown>;
+      const nested =
+        payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data)
+          ? (payload.data as Record<string, unknown>)
+          : {};
+
+      const fuspayUserIdRaw =
+        nested.user_id ||
+        nested.customer_id ||
+        nested.customerId ||
+        payload.user_id ||
+        payload.customer_id;
+      const fuspayUserId =
+        typeof fuspayUserIdRaw === 'string' ? fuspayUserIdRaw : fuspayUserIdRaw != null ? String(fuspayUserIdRaw) : '';
+
+      const verificationIdRaw =
+        nested.verification_id ||
+        nested.verificationId ||
+        nested.id ||
+        payload.verification_id ||
+        payload.verificationId;
+      const verificationId =
+        typeof verificationIdRaw === 'string'
+          ? verificationIdRaw
+          : verificationIdRaw != null
+            ? String(verificationIdRaw)
+            : '';
+
+      const rawStatusStr = (
+        nested.status ||
+        nested.overall_status ||
+        nested.overallStatus ||
+        nested.kyc_status ||
+        payload.status ||
+        ''
+      ).toString()
+        .toLowerCase();
+
+      const approvedHints = ['approved', 'completed', 'complete', 'verified', 'success'];
+      const rejectedHints = ['rejected', 'failed', 'declined'];
+
+      let newProfileStatus: KYCStatus | undefined;
+      if (approvedHints.some((h) => rawStatusStr.includes(h))) {
+        newProfileStatus = KYCStatus.APPROVED;
+      } else if (rejectedHints.some((h) => rawStatusStr.includes(h))) {
+        newProfileStatus = KYCStatus.REJECTED;
+      }
+
+      const setDoc: Record<string, unknown> = {
+        'fuspay.verification.lastSyncedAt': new Date()
+      };
+      if (verificationId) {
+        setDoc['fuspay.verification.verificationId'] = verificationId;
+      }
+      if (rawStatusStr) {
+        setDoc['fuspay.verification.status'] = rawStatusStr;
+      }
+      if (newProfileStatus) {
+        setDoc.status = newProfileStatus;
+        if (newProfileStatus === KYCStatus.APPROVED) {
+          setDoc.completedAt = new Date();
+        }
+      }
+
+      let matched = 0;
+      let modified = 0;
+
+      if (fuspayUserId) {
+        const one = await KYCProfileModel.updateOne({ 'fuspay.customerId': fuspayUserId }, { $set: setDoc });
+        matched = one.matchedCount;
+        modified = one.modifiedCount ?? 0;
+      }
+
+      if (!matched && verificationId) {
+        const two = await KYCProfileModel.updateOne(
+          { 'fuspay.verification.verificationId': verificationId },
+          { $set: setDoc }
+        );
+        matched = two.matchedCount;
+        modified = two.modifiedCount ?? 0;
+      }
+
+      if (!fuspayUserId && !verificationId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Webhook payload must include user/customer id or verification id'
+        });
+      }
+
+      logger.info('Fuspay modular webhook processed', {
+        fuspayUserId: fuspayUserId || undefined,
+        verificationId: verificationId || undefined,
+        rawStatusStr,
+        profileStatus: newProfileStatus,
+        matched
+      });
+
+      return res.status(200).json({ success: true, matched, modified });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Submit a verification check payload to Fuspay modular endpoint
+  static async submitFuspayVerification(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { verificationId } = req.params;
+      if (!verificationId) {
+        return res.status(400).json({
+          success: false,
+          error: 'verificationId is required'
+        });
+      }
+
+      const result = await fuspayModularKycService.submitVerification(verificationId, req.body || {});
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+      return res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Get Fuspay modular verification status
+  static async getFuspayVerificationStatus(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { verificationId } = req.params;
+      if (!verificationId) {
+        return res.status(400).json({
+          success: false,
+          error: 'verificationId is required'
+        });
+      }
+
+      const result = await fuspayModularKycService.getVerificationStatus(verificationId);
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+
+      const userId = req.user?.userId;
+      if (userId && result.data) {
+        await KYCProfileModel.updateOne(
+          { userId, 'fuspay.verification.verificationId': verificationId },
+          {
+            $set: {
+              'fuspay.verification.status': (result.data as any)?.status,
+              'fuspay.verification.overallStatus': (result.data as any)?.overall_status,
+              'fuspay.verification.completedChecks': (result.data as any)?.completed_checks,
+              'fuspay.verification.totalChecks': (result.data as any)?.total_checks,
+              'fuspay.verification.lastSyncedAt': new Date()
+            }
+          }
+        );
+      }
+
+      return res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Ask Fuspay to complete verification when checks are done
+  static async completeFuspayVerification(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { verificationId } = req.params;
+      if (!verificationId) {
+        return res.status(400).json({
+          success: false,
+          error: 'verificationId is required'
+        });
+      }
+
+      const result = await fuspayModularKycService.completeVerification(verificationId);
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+      return res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Get saved Fuspay modular verification details for the authenticated user
+  static async getMyFuspayVerification(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+      }
+
+      const profile = await KYCProfileModel.findOne({ userId }).lean();
+      if (!profile) {
+        return res.status(404).json({
+          success: false,
+          error: 'No KYC profile found for this user'
+        });
+      }
+
+      const fuspay = (profile as any)?.fuspay;
+      const verification = fuspay?.verification;
+      const verificationId = verification?.verificationId as string | undefined;
+      const verificationUrl = verification?.verificationUrl as string | undefined;
+
+      if (!verificationId && !verificationUrl) {
+        return res.status(404).json({
+          success: false,
+          error: 'No saved Fuspay modular verification found for this user'
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          customerId: fuspay?.customerId,
+          verificationId,
+          verificationUrl,
+          reference: verification?.reference,
+          status: verification?.status,
+          overallStatus: verification?.overallStatus,
+          completedChecks: verification?.completedChecks,
+          totalChecks: verification?.totalChecks,
+          lastSyncedAt: verification?.lastSyncedAt
+        }
+      });
     } catch (error) {
       next(error);
     }
@@ -104,13 +471,13 @@ export class KYCController {
   static async createMinimalKYCProfile(req: Request, res: Response, next: NextFunction) {
     try {
       const { userId } = req.params;
-      const { userType } = req.body;
+      const { userType, fuspay } = req.body;
       
       // For service-to-service requests, use the service as the requester
       // For user requests, use the authenticated user ID as the requester
       const requesterId = req.service ? 'service' : req.user?.userId;
       
-      const result = await kycService.createMinimalKYCProfile(userId, userType, requesterId);
+      const result = await kycService.createMinimalKYCProfile(userId, userType, requesterId, fuspay);
       
       if (!result.success) {
         logger.warn('Failed to create minimal KYC profile', {

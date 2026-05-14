@@ -15,6 +15,7 @@ import { verifyEmailRoutes } from './routes/verifyEmailRoutes';
 import { roleRoutes } from './routes/roleRoutes';
 import { invitationRoutes } from './routes/invitationRoutes';
 import { sessionRoutes } from './routes/sessionRoutes';
+import { internalIdentityRoutes } from './routes/internalIdentityRoutes';
 import { connectDb } from './config/db';
 
 const app = express();
@@ -44,7 +45,8 @@ app.get('/', (_req, res) => {
       user: '/api/v1/user',
       roles: '/api/v1/roles',
       invitations: '/api/v1/invitations',
-      verifyEmail: '/verify-email'
+      verifyEmail: '/verify-email',
+      internalIdentity: '/internal/api/v1/external-users'
     },
     timestamp: new Date().toISOString()
   });
@@ -74,6 +76,7 @@ app.use('/api/v1/roles', roleRoutes);
 app.use('/api/v1/invitations', invitationRoutes);
 app.use('/api/v1/sessions', sessionRoutes);
 app.use('/verify-email', verifyEmailRoutes);
+app.use('/internal/api/v1/external-users', internalIdentityRoutes);
 
 // Error handling middleware
 app.use(notFoundHandler);
@@ -86,7 +89,7 @@ async function start() {
   const server = app.listen(port, host, () => {
     console.log(`🚀 Client Auth Microservice running on ${host}:${port}`);
     console.log(`📱 Environment: ${config.nodeEnv}`);
-    console.log(`🔗 Service Auth URL: ${config.serviceAuthUrl} (timeout ${config.serviceAuthHttpTimeoutMs}ms)`);
+    console.log(`🔗 Service Auth URL: ${config.serviceAuthUrl}`);
   });
 
   try {

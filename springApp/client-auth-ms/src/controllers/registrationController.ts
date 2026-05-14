@@ -45,7 +45,13 @@ export class RegistrationController {
 
   static async registerUser(req: TypedRequest<UserRegistrationForm>, res: Response): Promise<void> {
     try {
-      const { error, value } = validateForm<UserRegistrationForm>(userRegistrationSchema, req.body);
+      const tenantMerchantId = (req.headers['x-tenant-merchant-id'] as string | undefined)?.trim();
+      const payload: UserRegistrationForm = {
+        ...req.body,
+        user_merchant_id: req.body.user_merchant_id || tenantMerchantId || ''
+      };
+
+      const { error, value } = validateForm<UserRegistrationForm>(userRegistrationSchema, payload);
 
       if (error) {
         res.status(400).json({

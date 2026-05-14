@@ -36,6 +36,7 @@ app.get('/', (_req, res) => {
     endpoints: {
       health: '/health',
       apps: '/api/v1/apps',
+      resolveAppBySubdomain: '/api/v1/apps/resolve/:subdomain',
       appPwaTemplates: '/api/v1/apps/:appId/pwa-templates',
       appPwaTemplateLogoUpload:
         '/api/v1/apps/:appId/pwa-templates/:templateId/assets/logo',
@@ -45,6 +46,7 @@ app.get('/', (_req, res) => {
         '/api/v1/apps/:appId/pwa-templates/:templateId/onboarding/screens/:screenIndex/image',
       appPwaPublish: '/api/v1/apps/:appId/pwa/publish',
       appPwaStatus: '/api/v1/apps/:appId/pwa/status',
+      appPwaDiagnostics: '/api/v1/apps/:appId/pwa/diagnostics',
       appPwaManifest: '/api/v1/apps/:appId/pwa/manifest.webmanifest',
       appPwaServiceWorker: '/api/v1/apps/:appId/pwa/sw.js',
       appManifestUpload: '/api/v1/apps/:id/manifests',

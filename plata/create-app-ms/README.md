@@ -21,6 +21,7 @@ Deployment URL: https://create-app-ms.fly.dev/
 - Special endpoints requiring API key authentication for advanced operations
 - **Authentication required for app creation** - Merchant ID is extracted from authenticated user context
 - **Merchant app visibility fully enforced** - merchants can only view apps they own
+- **Notifications** — After a successful app create, this service calls **notifications-ms** (`POST /api/v1/notifications/send-dual`, template `app-created`) using the authenticated user’s id and email. Set `NOTIFICATIONS_SERVICE_URL` in production.
 
 ## API Endpoints
 
@@ -44,6 +45,8 @@ Creates a new application and automatically creates merchant wallets for it (TRE
 
 **Response:**
 Returns the created application with auto-generated ID and timestamps, along with merchant wallet creation information.
+
+**Notifications:** On success, an **email + in-app** notification is sent via notifications-ms (template `app-created`). Failures are logged only and do not fail the HTTP response.
 
 ### Get All Apps
 ```
@@ -527,7 +530,7 @@ Requires JWT authentication. Retrieves merchant wallets for the specified app (`
 
 ### Special Endpoints (Require API Key Authentication)
 
-All special endpoints require both `X-Special-Key` and `X-Public-Key` headers to be provided for authentication.
+All special endpoints require both `PLATA_SECRET_KEY` and `PLATA_PUBLIC_KEY` headers to be provided for authentication.
 
 #### 1. Get all Apps
 ```
@@ -740,13 +743,13 @@ Merchant visibility enforcement:
 
 Special endpoints require two headers for authentication:
 - `X-Special-Key`: The special API key
-- `X-Public-Key`: The public key
+- `PLATA_PUBLIC_KEY`: The public key
 
 Example:
 ```bash
 curl -X GET "http://localhost:3002/api/v1/special/apps" \
   -H "X-Special-Key: your-special-api-key-here" \
-  -H "X-Public-Key: your-public-key-here"
+  -H "PLATA_PUBLIC_KEY: your-public-key-here"
 ```
 
 ## Environment Variables
@@ -756,6 +759,7 @@ curl -X GET "http://localhost:3002/api/v1/special/apps" \
 - `SERVICE_AUTH_URL`: URL for the Service Authentication Microservice
 - `PRODUCT_SERVICE_URL`: URL for the Product Microservice
 - `WALLET_SERVICE_URL`: URL for the Wallet Microservice
+- `NOTIFICATIONS_SERVICE_URL`: Base URL for notifications-ms (default: `http://localhost:4009` in development; in production set to your deployed notifications app, e.g. `https://notifications-ms-plata.fly.dev`)
 - `SPECIAL_API_KEY`: Special API key for authenticating special endpoints
 - `PUBLIC_KEY`: Public key for authenticating special endpoints
 - `JWT_SECRET`: Secret key for JWT token verification

@@ -6,7 +6,7 @@ const RETRY_DELAY_MS = 2000;
 
 export const connectToDatabase = async (): Promise<void> => {
     if (!config.mongoUri) {
-        console.error('MONGODB_URI environment variable is not defined. Set it in .env or use mongodb://localhost:27017/<dbname> if MongoDB runs locally.');
+        console.error('Mongo connection environment variable is not defined. Set MONGODB_URI or MONGO_URI, or use mongodb://localhost:27017/<dbname> if MongoDB runs locally.');
         process.exit(1);
     }
 
@@ -26,7 +26,7 @@ export const connectToDatabase = async (): Promise<void> => {
             console.error(`MongoDB connection attempt ${attempt}/${MAX_RETRIES} failed:`, (error as Error).message);
             if (attempt === MAX_RETRIES) {
                 console.error(
-                    'Cannot connect to MongoDB. Ensure MongoDB is running (e.g. local install, Docker, or set MONGODB_URI to a MongoDB Atlas connection string).'
+                    'Cannot connect to MongoDB. Ensure MongoDB is running (e.g. local install, Docker, or set MONGODB_URI/MONGO_URI to a MongoDB Atlas connection string).'
                 );
                 process.exit(1);
             }

@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 import type { Product } from '../types/product';
 import { coerceStoredProductType, PRODUCT_DISCRIMINATORS } from '../utils/productType';
+import { computeProductConfigCalculations } from '../utils/productConfigCalculations';
 
 export interface IProductDocument extends Omit<Product, 'id'>, Document {
   _id: mongoose.Types.ObjectId;
@@ -82,6 +83,7 @@ const loanOtherRequirementItemSchema = new Schema(
     /** `GET /options/loan-other-requirement-content-type` values. */
     contentType: { type: String },
     description: { type: String },
+    templateFileUrl: { type: String },
     uploadRequired: { type: Boolean }
   },
   { _id: false }
@@ -180,7 +182,11 @@ const mortgagePropertyItemSchema = new Schema(
     propertyType: { type: String },
     value: { type: Schema.Types.Mixed },
     location: { type: String },
-    previewAssetUrl: { type: String }
+    propertyDescription: { type: String },
+    facilities: { type: [String], default: undefined },
+    customFacilities: { type: [String], default: undefined },
+    imageUrls: { type: [String], default: undefined },
+    videoUrl: { type: String }
   },
   { _id: false }
 );
@@ -324,7 +330,7 @@ export function toProduct(doc: IProductDocument | Record<string, unknown>): Prod
   const raw = o as Record<string, unknown>;
   const typeRaw = String(raw.type ?? '');
 
-  return {
+  const product: Product = {
     id: (raw._id ?? (doc as IProductDocument)?._id)?.toString?.() ?? '',
     referenceNumber: raw.referenceNumber as string,
     name: raw.name as string,
@@ -374,4 +380,7 @@ export function toProduct(doc: IProductDocument | Record<string, unknown>): Prod
         ? (raw.commodityPrices as Product['commodityPrices'])
         : undefined
   };
+
+  product.calculatedConfig = computeProductConfigCalculations(product);
+  return product;
 }

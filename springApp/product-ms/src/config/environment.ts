@@ -42,6 +42,10 @@ interface EnvironmentConfig {
   mongoUri: string;
   corsOrigins: string[];
   logLevel: string;
+  /** Same secret client-auth-ms uses to sign access tokens (for optional Bearer on this service). */
+  jwtSecret: string;
+  /** notifications-ms base URL (send-dual). */
+  notificationsServiceUrl: string;
   /**
    * Plata account-ms / gateway base URL from `PLATA_ACCOUNT_SERVICE_URL` (or fallbacks).
    * Use with `/api/v1/products`, `/api/v1/products/:id`, etc.
@@ -64,6 +68,10 @@ export const config: EnvironmentConfig = {
   mongoUri: process.env.MONGODB_URI || process.env.DATABASE_URL || 'mongodb://localhost:27017/product_ms',
   corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:4001'],
   logLevel: process.env.LOG_LEVEL || 'info',
+  jwtSecret: process.env.JWT_SECRET || 'fallback-secret-key-for-development-purposes-only',
+  notificationsServiceUrl:
+    process.env.NOTIFICATIONS_SERVICE_URL ||
+    (process.env.NODE_ENV === 'production' ? 'https://springtd-notifications-ms.fly.dev' : 'http://localhost:4009'),
   plataAccountServiceUrl: upstreamProductCatalogBaseUrl,
   serverProductServiceUrl: upstreamProductCatalogBaseUrl,
   plataPublicKey: process.env.PLATA_PUBLIC_KEY || '',

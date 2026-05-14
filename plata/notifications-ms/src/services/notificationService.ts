@@ -3,19 +3,71 @@ import { notificationDbMongo as mockDb } from '../utils/notificationDbMongo';
 import emailService from './emailService';
 import smsService from './smsService';
 import templateService from './templateService';
-import { SendNotificationRequest, NotificationResponse, NotificationStatus } from '../types/notification';
+import {
+  SendNotificationRequest,
+  NotificationResponse,
+  SendEmailAndInAppRequest,
+  SendEmailAndInAppResponse,
+  NotificationChannel
+} from '../types/notification';
 import { ApiError } from '../middleware/errorHandler';
 
 export class NotificationService {
   /**
-   * Send notification
+   * Send in-app notification: persists rendered title/body; no external provider.
+   */
+  private async sendInApp(request: SendNotificationRequest): Promise<NotificationResponse> {
+    const notification = await mockDb.createNotification({
+      channel: 'in_app',
+      recipient: request.recipient,
+      template: request.template,
+      data: request.data,
+      status: 'pending',
+      retryCount: 0
+    });
+
+    try {
+      const payload = templateService.getInAppPayload(request.template, request.data);
+      const mergedData = {
+        ...request.data,
+        inAppTitle: payload.title,
+        inAppBody: payload.body
+      };
+      await mockDb.updateNotification(notification.id, {
+        data: mergedData,
+        status: 'sent',
+        sentAt: new Date()
+      });
+      return {
+        success: true,
+        id: notification.id,
+        message: 'In-app notification saved'
+      };
+    } catch (err: any) {
+      await mockDb.updateNotification(notification.id, {
+        status: 'failed',
+        error: err.message || 'Failed to render in-app template',
+        retryCount: notification.retryCount + 1
+      });
+      return {
+        success: false,
+        id: notification.id,
+        error: err.message || 'Failed to save in-app notification'
+      };
+    }
+  }
+
+  /**
+   * Send notification (email, sms, or in_app).
    */
   async send(request: SendNotificationRequest): Promise<NotificationResponse> {
     try {
-      // 1. Validate request
       this.validateRequest(request);
 
-      // 2. Create notification record (status: 'pending')
+      if (request.channel === 'in_app') {
+        return await this.sendInApp(request);
+      }
+
       const notification = await mockDb.createNotification({
         channel: request.channel,
         recipient: request.recipient,
@@ -25,7 +77,6 @@ export class NotificationService {
         retryCount: 0
       });
 
-      // 3. Load and render template
       let renderedContent: { html?: string; text?: string; message?: string };
       let subject: string | undefined;
 
@@ -43,7 +94,6 @@ export class NotificationService {
         };
       }
 
-      // 4. Send via appropriate channel
       let success = false;
       let error: string | undefined;
 
@@ -68,7 +118,6 @@ export class NotificationService {
           });
         }
 
-        // 5. Update record status
         if (success) {
           await mockDb.updateNotification(notification.id, {
             status: 'sent',
@@ -90,7 +139,6 @@ export class NotificationService {
         });
       }
 
-      // 6. Return response
       if (success) {
         return {
           success: true,
@@ -113,8 +161,44 @@ export class NotificationService {
   }
 
   /**
-   * Get notification status
+   * Send the same template + data as email and in-app (recipient user id for inbox).
    */
+  async sendEmailAndInApp(request: SendEmailAndInAppRequest): Promise<SendEmailAndInAppResponse> {
+    const base = {
+      template: request.template,
+      data: request.data,
+      priority: request.priority
+    };
+
+    const inAppResult = await this.send({
+      channel: 'in_app',
+      recipient: request.userId,
+      ...base
+    });
+
+    const emailResult = await this.send({
+      channel: 'email',
+      recipient: request.email,
+      ...base
+    });
+
+    const success = !!(inAppResult.success && emailResult.success);
+    return {
+      success,
+      inApp: {
+        success: !!inAppResult.success,
+        id: inAppResult.id,
+        error: inAppResult.error
+      },
+      email: {
+        success: !!emailResult.success,
+        id: emailResult.id,
+        error: emailResult.error
+      },
+      error: success ? undefined : 'One or both deliveries failed; see inApp and email details'
+    };
+  }
+
   async getNotificationStatus(id: string): Promise<INotification | null> {
     try {
       const notification = await mockDb.findNotificationById(id);
@@ -124,15 +208,17 @@ export class NotificationService {
     }
   }
 
-  /**
-   * Get user notifications
-   */
-  async getUserNotifications(recipient: string, limit: number = 50, offset: number = 0): Promise<{
+  async getUserNotifications(
+    recipient: string,
+    limit: number = 50,
+    offset: number = 0,
+    channel?: NotificationChannel
+  ): Promise<{
     notifications: INotification[];
     total: number;
   }> {
     try {
-      const allNotifications = await mockDb.findNotificationsByRecipient(recipient);
+      const allNotifications = await mockDb.findNotificationsByRecipient(recipient, channel);
       const total = allNotifications.length;
       const notifications = allNotifications.slice(offset, offset + limit);
 
@@ -142,9 +228,6 @@ export class NotificationService {
     }
   }
 
-  /**
-   * Get all notifications (admin)
-   */
   async getAllNotifications(limit: number = 50, offset: number = 0): Promise<{
     notifications: INotification[];
     total: number;
@@ -160,19 +243,15 @@ export class NotificationService {
     }
   }
 
-  /**
-   * Validate notification request
-   */
   private validateRequest(request: SendNotificationRequest): void {
-    if (!request.channel || !['email', 'sms'].includes(request.channel)) {
-      throw new ApiError(400, 'Invalid channel. Must be "email" or "sms"');
+    if (!request.channel || !['email', 'sms', 'in_app'].includes(request.channel)) {
+      throw new ApiError(400, 'Invalid channel. Must be "email", "sms", or "in_app"');
     }
 
     if (!request.recipient || request.recipient.trim() === '') {
       throw new ApiError(400, 'Recipient is required');
     }
 
-    // Basic email validation
     if (request.channel === 'email') {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(request.recipient)) {
@@ -180,11 +259,17 @@ export class NotificationService {
       }
     }
 
-    // Basic phone validation (simple check)
     if (request.channel === 'sms') {
       const phoneRegex = /^\+?[1-9]\d{1,14}$/;
       if (!phoneRegex.test(request.recipient.replace(/[\s-]/g, ''))) {
         throw new ApiError(400, 'Invalid phone number');
+      }
+    }
+
+    if (request.channel === 'in_app') {
+      const id = request.recipient.trim();
+      if (id.length < 1 || id.length > 256) {
+        throw new ApiError(400, 'Invalid in-app recipient (user id)');
       }
     }
 
@@ -199,4 +284,3 @@ export class NotificationService {
 }
 
 export default new NotificationService();
-

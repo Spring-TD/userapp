@@ -11,9 +11,13 @@ const options: swaggerJsdoc.Options = {
     info: {
       title: 'Notifications Microservice API',
       version: '1.0.0',
-      description: 'Email and SMS notification APIs',
+      description: 'Email, SMS, in-app inbox, and dual (email + in-app) notification APIs for SpringTD',
     },
-    servers: [{ url: 'http://localhost:3008', description: 'Development' }],
+    servers: [
+      { url: 'http://localhost:3009', description: 'Docker Compose / Fly internal port' },
+      { url: 'http://localhost:4009', description: 'Local dev default when PORT unset' },
+    ],
+    tags: [{ name: 'Notifications', description: 'Send and query notifications' }],
     components: {
       securitySchemes: {
         bearerAuth: {

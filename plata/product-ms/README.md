@@ -5,10 +5,10 @@ This microservice handles product creation and management for the SpringTD platf
 
 ### Data model (current)
 - **Products collection** (`products`) with **Mongoose discriminators**; the stored **`type`** field is the discriminator key.
-- **User application snapshots** (`user_product_applications`): written when an end user applies via a merchant offering. **`merchantId` / `merchantName`** = product creator; **`offeringMerchantId` / `offeringMerchantName`** = merchant that enabled the product. Holds **`contractSnapshot`** (frozen global + merchant terms), **`payoutSplit`** (creator vs offering merchant, basis points per revenue line), **`productType`**, **`globalProductId`**, optional **`merchantProductId`**, **`status`**, **`snapshotVersion`**, optional **`snapshotHash`**. Timestamps: **`createdAt`** only (no **`updatedAt`** — treat updates as new versions or a separate workflow). **HTTP:** `POST /api/v1/products/applications` (create snapshot; validates **`globalProductId`** exists and **`productType`** matches the global product), `GET /api/v1/products/applications` (list; **requires** at least one of `appId`, `userId`, `offeringMerchantId`, `merchantId`, `globalProductId`; optional `productType`, `status`, `limit`, `skip`), `GET /api/v1/products/applications/:applicationId` (single). Model: `UserProductApplicationModel` (`src/models/UserProductApplicationModel.ts`).
+- **User application snapshots** (`user_product_applications`): written when an end user applies via a merchant offering. **`merchantId` / `merchantName`** = product creator; **`offeringMerchantId` / `offeringMerchantName`** = merchant that enabled the product. Holds **`contractSnapshot`** (frozen global + merchant terms), **`payoutSplit`** (creator vs offering merchant, basis points per revenue line), **`productType`**, **`globalProductId`**, optional **`merchantProductId`**, **`status`** (application lifecycle: draft / submitted / signed / cancelled / withdrawn), **`loanWorkflowStatus`** (LOAN and MORTGAGE only: `requested` \| `under_review` \| `approved` \| `declined` \| `blacklisted`; set to `requested` on create; older documents without the field are treated as `requested` in API responses and in the “requested” list filter), **`snapshotVersion`**, optional **`snapshotHash`**. Timestamps: **`createdAt`** only (no **`updatedAt`** on the document). **HTTP (unauthenticated unless noted):** `POST /api/v1/products/applications`, `GET /api/v1/products/applications`, `GET /api/v1/products/applications/:applicationId`. **Loan workflow (JWT, creator only):** `GET /api/v1/products/applications/me/loan-workflow`, `PATCH /api/v1/products/applications/:applicationId/loan-workflow` — see [Loan workflow (originating merchant)](#loan-workflow-originating-merchant). Model: `UserProductApplicationModel` (`src/models/UserProductApplicationModel.ts`).
 - **Canonical `type` values:** `LOAN`, `MORTGAGE`, `SAVINGS`, `INVESTMENT`, `COMMODITY`. Requests may still send legacy Title Case (`Loan`, `Savings`, …); the API normalizes to the canonical value before save.
 - **Base fields (all products):** `referenceNumber`, `name`, `description`, `isActive`, `type`, `subType`, `appId`, `status` (`complete` | `incomplete`), `createdAt`, `updatedAt`, optional `metadata`.
-- **LOAN / MORTGAGE shared tabs:** `about` (tenure; **LOAN:** `loanTypes[]`; **MORTGAGE:** `mortgageTypes[]` — each `{ name, description }`; `previewAssetUrl`), `structure` (interest, **`allowMoratorium`** toggle, `moratorium` payload when allowed, repayment workflow, amounts, schedules, NPA, equity rule), `requirements` (security toggles, documents, other requirements, AirSign fields), `feesAndCharges` (fees list, charge toggles, late repayment penalties). **MORTGAGE** also has `properties[]` (name, property type, value, location, preview URL) and top-level `equityContribution`, `propertyValue`. Downstream loan engines should treat moratorium as **off** unless `structure.allowMoratorium === true`, then read `structure.moratorium` (and/or product tenure options).
+- **LOAN / MORTGAGE shared tabs:** `about` (tenure; **LOAN:** `loanTypes[]`; **MORTGAGE:** `mortgageTypes[]` — each `{ name, description }`; `previewAssetUrl`), `structure` (interest, **`allowMoratorium`** toggle, `moratorium` payload when allowed, repayment workflow, amounts, schedules, NPA, equity rule), `requirements` (security toggles, documents, other requirements, AirSign fields), `feesAndCharges` (fees list, charge toggles, late repayment penalties). **MORTGAGE** also has `properties[]` (`name`, `propertyType`, `value`, `location`, `propertyDescription`, `facilities[]`, `customFacilities[]`, `imageUrls[]`, `videoUrl`) and top-level `equityContribution`, `propertyValue`. Downstream loan engines should treat moratorium as **off** unless `structure.allowMoratorium === true`, then read `structure.moratorium` (and/or product tenure options).
 - **SAVINGS:** `about` (`duration`, `savingsTypes[]`, `previewAssetUrl`), `structure` (interest rate/method, **`savingsType`** from `GET /options/savings-type` — Fixed Savings vs Flexible Savings, withdrawal flexibility, `savingsAmount` min/max, terms & conditions text, AirSign/contract fields), `feesAndCharges` (fees list; **forceful withdrawal:** `chargeForForcefulWithdrawal` toggle, then `forcefulWithdrawalPenalties[]` with **`name`**, **`penaltyType`** from `GET /options/penalty-type` — Flat vs Percent, **`value`**). No embedded `config` on the SAVINGS discriminator.
 - **Partial updates:** `PUT` deep-merges `structure`, `about`, `requirements`, `feesAndCharges`, `config`, and `metadata`. **`properties`** (MORTGAGE) is replaced in full when sent. Other **arrays** inside merged objects follow `deepMerge` (replaced when provided at that key).
 - **Existing databases:** migrate old documents so `type` uses the canonical enum and add `isActive` if missing. Remove any legacy **`configuration`** field if present; the API no longer reads or writes it. **SAVINGS** products that used the old discriminator `config` (`compoundingFrequency`, etc.) should be migrated into `about` / `structure` / `feesAndCharges` or the data will not appear in the new schema.
@@ -29,18 +29,41 @@ fly secrets set \
   MONGODB_URI="your-mongodb-connection-string" \
   NODE_ENV=production \
   CORS_ORIGINS="https://your-frontend.com,https://app.your-frontend.com" \
-  LOG_LEVEL=info
+  LOG_LEVEL=info \
+  CLIENT_AUTH_URL="https://your-client-auth-ms.internal-or-public-url" \
+  CREATE_APP_SERVICE_URL="https://your-create-app-ms.internal-or-public-url" \
+  NOTIFICATIONS_SERVICE_URL="https://your-notifications-ms.internal-or-public-url"
 ```
 
 **PowerShell (one line):**
 
 ```powershell
-fly secrets set MONGODB_URI="your-uri" NODE_ENV=production CORS_ORIGINS="https://your-app.com" LOG_LEVEL=info
+fly secrets set MONGODB_URI="your-uri" NODE_ENV=production CORS_ORIGINS="https://your-app.com" LOG_LEVEL=info CLIENT_AUTH_URL="https://your-client-auth-url" CREATE_APP_SERVICE_URL="https://your-create-app-url" NOTIFICATIONS_SERVICE_URL="https://your-notifications-ms-url"
 ```
 
-3. Add any extra keys the same way (e.g. `JWT_SECRET`, `DO_SPACES_*`) once your code reads them in `environment.ts`.
+3. Add any extra keys the same way (e.g. `JWT_SECRET`, `DO_SPACES_*`, `NOTIFICATIONS_SERVICE_URL`) once your code reads them in `environment.ts`.
 4. Redeploy so machines pick up new secrets: `fly deploy`
 5. List what’s set (values hidden): `fly secrets list`
+
+### Email and in-app notifications (optional)
+
+Product-ms can notify merchants via **notifications-ms** when **`notifyRecipient`** is present on the request body:
+
+- **`POST /api/v1/products`** (and flows that end in a full product create): include optional `notifyRecipient`:
+  ```json
+  "notifyRecipient": {
+    "userId": "<Mongo user id>",
+    "email": "merchant@example.com",
+    "merchantName": "Acme Ltd"
+  }
+  ```
+  On success, sends template **`product-created`** (email + in-app).
+
+- **`PUT` (update product)** — same optional `notifyRecipient`. If **`isActive`** changes after the update, sends template **`merchant-product-status`** with `statusLabel` **`live`** or **`deactivated`**.
+
+If `notifyRecipient` is omitted, no notification is sent (backward compatible).
+
+Local default for `NOTIFICATIONS_SERVICE_URL` is `http://localhost:4009` when unset; set it explicitly in production.
 
 **Notes**
 
@@ -154,10 +177,13 @@ All keys except `name`, `description`, `type`, and `appId` are optional. Use **`
 
 **Product types (discriminators):**
 - **LOAN** — borrowing; nested LOAN shape above
-- **MORTGAGE** — same tabbed shape as LOAN plus **`about.mortgageTypes[]`** (instead of `loanTypes[]` for mortgage-specific lines), `properties[]`, and `equityContribution`, `propertyValue`
+- **MORTGAGE** — same tabbed shape as LOAN plus **`about.mortgageTypes[]`** (instead of `loanTypes[]` for mortgage-specific lines), `properties[]` (including per-property facilities, custom facilities, and multiple image URLs), and `equityContribution`, `propertyValue`
 - **SAVINGS** — `about`, `structure`, `feesAndCharges` (three admin tabs; see data model above)
 - **COMMODITY** — `about` (`duration`, `commodityTypes[]`, `previewAssetUrl`), `structure` (yield method, offer yield toggle/value, `unitAmount`, withdrawal flexibility, min quantity / max amount, terms, moratorium, AirSign on Structure tab), `feesAndCharges` (fees, forceful withdrawal penalties), `commodityPrices[]` (`price`, `date`, `source`); optional legacy `price` / `minimumQuantity` / `unitOfMeasure` / `config`
-- **INVESTMENT** — `about` (name/description live on the product; tab fields: `duration`, `investmentTypes[]`, `previewAssetUrl`), `structure` (ROI, interest method, investment type, withdrawal flexibility, investment amount min/max, terms, unit purchase toggle, moratorium, unit amount), `feesAndCharges` (fees, forceful withdrawal penalties, optional AirSign: `contractId`, `airSignSecretKey`, `airSignUid`)
+- **INVESTMENT** — `about` (name/description live on the product; tab fields: `duration`, `investmentTypes[]`, `previewAssetUrl`), `structure` (ROI, interest method, **`investmentType`** dropdown, withdrawal flexibility, investment amount min/max, terms, unit purchase toggle, moratorium, conditional unit amount), `feesAndCharges` (fees, forceful withdrawal penalties, optional AirSign: `contractId`, `airSignSecretKey`, `airSignUid`)
+  - **`structure.investmentType`** values: **`lump_sum`** or **`unit_based`**.
+  - **`lump_sum`**: do **not** send `structure.unitAmount`; use `structure.investmentAmount.min/max` only.
+  - **`unit_based`**: `structure.unitAmount` is allowed (for per-unit setup) plus optional `structure.investmentAmount.min/max`.
 
 **Response:**
 ```json
@@ -244,10 +270,359 @@ Retrieves all products.
 
 **Endpoint:** `GET /api/v1/products`
 
+### Loan workflow (originating merchant)
+
+Underwriting states for **LOAN** and **MORTGAGE** user applications are stored as **`loanWorkflowStatus`** on the snapshot. Only the **originating product merchant** (`merchantId` on the application — the creator of the global product) may list or update these states. The **offering** merchant (`offeringMerchantId`) is rejected unless they are the same account.
+
+**Auth:** `Authorization: Bearer <access_token>` from client-auth (merchant user). Product-ms verifies the token by calling **`POST {CLIENT_AUTH_URL}/api/v1/auth/verify-token`** (see `src/config/environment.ts` and `.env.example`). Set **`CLIENT_AUTH_URL`** (or **`SERVICE_AUTH_URL`**) in production so product-ms can reach client-auth-ms.
+
+**List (dashboard tabs):** omit `loanWorkflowStatus` to return all LOAN/MORTGAGE applications for the authenticated creator; or filter by tab.
+
+**Endpoint:** `GET /api/v1/products/applications/me/loan-workflow`
+
+**Query parameters (optional):**
+
+| Parameter | Values |
+|-----------|--------|
+| `loanWorkflowStatus` | `requested`, `under_review`, `approved`, `declined`, `blacklisted` |
+| `limit` | 1–100 (default 50) |
+| `skip` | default 0 |
+
+For **`requested`**, the service includes rows where `loanWorkflowStatus` is missing (legacy data).
+
+**Update status (e.g. action menu):**
+
+**Endpoint:** `PATCH /api/v1/products/applications/:applicationId/loan-workflow`
+
+**Request body:**
+```json
+{
+  "loanWorkflowStatus": "under_review"
+}
+```
+
+**Responses:** `403` if the JWT merchant is not `merchantId` on the snapshot; `400` if the application is not LOAN/MORTGAGE; `404` if the id is invalid or not found.
+
+Through the API gateway, paths are the same under **`/api/v1/products/...`**.
+
 ### Get Products by App ID
 Retrieves all products associated with a specific app ID.
 
 **Endpoint:** `GET /api/v1/products/app/:appId`
+
+### Product Overview (dashboard aggregates)
+Single endpoint for dashboard headline + category cards.
+
+**Endpoint:** `GET /api/v1/products/app/:appId/product-overview`
+
+**Auth:** `Authorization: Bearer <access_token>` (merchant creator).
+
+#### Headline semantics (`data.headline`)
+
+- `requestedAmount`: LOAN + MORTGAGE principal in requested pipeline (`requested`, `under_review`, plus legacy missing `loanWorkflowStatus`).
+- `approvedAmount`: LOAN + MORTGAGE principal with `loanWorkflowStatus = approved`.
+- `totalTransactions`: canonical source only — create-app-ms `GET /api/v1/apps/:id/transaction-stats`, computed as `totalCreditAmount + totalDebitAmount`.
+- `totalSavings`: sum of SAVINGS + INVESTMENT deposit/balance values from `contractSnapshot`.
+- `totalInterest`: sum of SAVINGS + INVESTMENT cumulative interest paid values from `contractSnapshot`.
+
+#### Category semantics (`data.byCategory[]`)
+
+`configuredProductCount` is the total number of products created for that app + type (`products` collection), and `customerCount` is distinct `userId` count in `user_product_applications` for that app + type.
+
+- **LOAN / MORTGAGE**
+  - `capitalAmount` = requested/under_review principal
+  - `issuedAmount` = approved principal
+  - `repaymentAmount` = repayments on approved applications
+- **SAVINGS / INVESTMENT**
+  - `capitalAmount` = deposits / current balances
+  - `issuedAmount` = cumulative interest paid to savers/investors
+  - `repaymentAmount` = cumulative withdrawals
+- **COMMODITY**
+  - `inventoryAmount` = inventory value held
+  - `salesAmount` = gross sales income
+  - `repaymentAmount` = COGS (cost of goods sold)
+
+#### Frontend field mapping
+
+Use this mapping for the current dashboard UI labels.
+
+| UI label | API field |
+|---|---|
+| Requested | `data.headline.requestedAmount` |
+| Approved | `data.headline.approvedAmount` |
+| Total Transactions | `data.headline.totalTransactions` |
+| Total Savings | `data.headline.totalSavings` |
+| Total Interest | `data.headline.totalInterest` |
+| Mortgage / Loan / Saving / Investment / Commodity card count | `data.byCategory[i].configuredProductCount` (match by `type`) |
+| Customers (all cards) | `data.byCategory[i].customerCount` |
+| Capital (loan/mortgage) | `data.byCategory[i].capitalAmount` |
+| Issued (loan/mortgage) | `data.byCategory[i].issuedAmount` |
+| Repayment (loan/mortgage) | `data.byCategory[i].repaymentAmount` |
+| Deposits (savings/investment) | `data.byCategory[i].capitalAmount` |
+| Interest Paid (savings/investment) | `data.byCategory[i].issuedAmount` |
+| Withdrawals (savings/investment) | `data.byCategory[i].repaymentAmount` |
+| Inventory (commodity) | `data.byCategory[i].inventoryAmount` |
+| Sales (commodity) | `data.byCategory[i].salesAmount` |
+| Cost of Goods Sold (COGS, commodity) | `data.byCategory[i].repaymentAmount` |
+
+#### Example response (trimmed)
+
+```json
+{
+  "success": true,
+  "data": {
+    "schemaVersion": 1,
+    "generatedAt": "2026-04-09T10:00:00.000Z",
+    "appId": "app-123",
+    "headline": {
+      "requestedAmount": 5000000,
+      "approvedAmount": 4000000,
+      "lendingApplicationsRequestedCount": 12,
+      "lendingApplicationsApprovedCount": 8,
+      "totalTransactions": 4000000,
+      "totalSavings": 4000000,
+      "totalInterest": 1200000
+    },
+    "byCategory": [
+      {
+        "type": "MORTGAGE",
+        "configuredProductCount": 3,
+        "applicationCount": 25,
+        "customerCount": 20,
+        "capitalAmount": 12233000,
+        "issuedAmount": 12023300,
+        "repaymentAmount": 10233300,
+        "inventoryAmount": 0,
+        "salesAmount": 0
+      }
+    ]
+  }
+}
+```
+
+### Product overview by type (drill-down table)
+
+Use this when a merchant clicks a **category card** on the General Info / product overview screen (e.g. “Loan Products”). It returns one **table row per configured product** of that type for the app, with the same money semantics as the aggregated card for that `type`.
+
+**Endpoint:** `GET /api/v1/products/app/:appId/product-overview/by-type/:productType`
+
+**Auth:** Same as the overview — `Authorization: Bearer <access_token>` (merchant creator). Reuse the token you already send to `product-overview`.
+
+**Path parameters**
+
+| Parameter | Description |
+|-----------|-------------|
+| `appId` | Same app id as the dashboard (`data.appId` from the overview response, or your route param). |
+| `productType` | One of: `LOAN`, `MORTGAGE`, `SAVINGS`, `INVESTMENT`, `COMMODITY`. Legacy UI labels are accepted where `normalizeProductType` maps them (e.g. `Loan` → `LOAN`). |
+
+**When to call**
+
+1. Load the dashboard with `GET .../product-overview` (unchanged).
+2. On card click, read the card’s discriminator (`byCategory[i].type`) and request:
+   `GET .../product-overview/by-type/${encodeURIComponent(type)}` with the same `appId` and `Authorization` header.
+
+**Response shape** (`200`, `success: true`)
+
+| Field | Meaning |
+|-------|---------|
+| `data.schemaVersion` | `1` — bump handled on the frontend if we ship breaking changes. |
+| `data.generatedAt` | ISO timestamp. |
+| `data.appId` | Echo of the app. |
+| `data.type` | Same discriminator you passed. |
+| `data.products` | Array of rows (one per product in `products` collection for this app + type). |
+| `data.totals` | Footer / summary numbers (see below). |
+
+**Each `data.products[]` row**
+
+| Field | Meaning |
+|-------|---------|
+| `productId` | Product `_id` (string). Use for deep links to product detail if needed. |
+| `referenceNumber` | Merchant reference. |
+| `name` | Product name (rows are sorted by name). |
+| `customerCount` | Distinct applicants (`userId`) for **this product only**. |
+| `applicationCount` | Count of applications linked to this product (`globalProductId`). |
+
+Money fields follow the **same rules as `byCategory`** for that `type`:
+
+- **LOAN / MORTGAGE:** `capitalAmount` (requested / under-review principal), `issuedAmount` (approved principal), `repaymentAmount` (repaid on approved). `inventoryAmount` and `salesAmount` are `0`.
+- **SAVINGS / INVESTMENT:** `capitalAmount` (deposits / balances), `issuedAmount` (interest paid), `repaymentAmount` (withdrawals). `inventoryAmount` and `salesAmount` are `0`.
+- **COMMODITY:** `inventoryAmount`, `salesAmount`, `repaymentAmount` (COGS). `capitalAmount` and `issuedAmount` are `0`.
+
+**`data.totals`**
+
+| Field | Meaning |
+|-------|---------|
+| `distinctCustomerCount` | Distinct `userId` across **all** applications of this `type` for the app (use for a “total unique customers” footer — do **not** sum row `customerCount`s for this; one user can apply to multiple products). |
+| `applicationCount` | Sum of row `applicationCount`s. |
+| `capitalAmount`, `issuedAmount`, `repaymentAmount`, `inventoryAmount`, `salesAmount` | Sums of the corresponding row fields. |
+
+**Errors**
+
+| Status | When |
+|--------|------|
+| `400` | Missing `appId` or invalid / unknown `productType`. |
+| `401` | Missing or invalid Bearer token. |
+| `403` | Authenticated user is not allowed as merchant creator for this operation. |
+
+**Example: loan products table** (`GET .../product-overview/by-type/LOAN`)
+
+```json
+{
+  "success": true,
+  "data": {
+    "schemaVersion": 1,
+    "generatedAt": "2026-04-13T12:00:00.000Z",
+    "appId": "app-123",
+    "type": "LOAN",
+    "products": [
+      {
+        "productId": "674a1b2c3d4e5f6789012345",
+        "referenceNumber": "LN-001",
+        "name": "SME Working Capital",
+        "customerCount": 12,
+        "applicationCount": 18,
+        "capitalAmount": 5000000,
+        "issuedAmount": 3200000,
+        "repaymentAmount": 800000,
+        "inventoryAmount": 0,
+        "salesAmount": 0
+      }
+    ],
+    "totals": {
+      "distinctCustomerCount": 12,
+      "applicationCount": 18,
+      "capitalAmount": 5000000,
+      "issuedAmount": 3200000,
+      "repaymentAmount": 800000,
+      "inventoryAmount": 0,
+      "salesAmount": 0
+    }
+  }
+}
+```
+
+**Frontend table columns (suggested)**
+
+| Card / `type` | Columns from each `products[]` row |
+|---------------|-----------------------------------|
+| LOAN, MORTGAGE | Name (or reference), Customers → `customerCount`, Capital → `capitalAmount`, Issued → `issuedAmount`, Repayment → `repaymentAmount` |
+| SAVINGS, INVESTMENT | Name, Customers → `customerCount`, Deposits → `capitalAmount`, Interest paid → `issuedAmount`, Withdrawals → `repaymentAmount` |
+| COMMODITY | Name, Customers → `customerCount`, Inventory → `inventoryAmount`, Sales → `salesAmount`, COGS → `repaymentAmount` |
+
+Through the API gateway, paths stay under **`/api/v1/products/...`**.
+
+### Sub-merchant activation (gateway PK/SK flow)
+
+External integrator services should call this through the API gateway.
+
+**Endpoint:** `POST /api/v1/products/sub-merchant-activations`
+
+**Headers (required at gateway):**
+- `PLATA_PUBLIC_KEY`
+- `PLATA_SECRET_KEY`
+- `Content-Type: application/json`
+
+**Request Body:**
+```json
+{
+  "appId": "app_123",
+  "productId": "product_abc",
+  "productName": "Optional product snapshot",
+  "merchantId": "merchant_parent_1",
+  "merchantName": "Parent Merchant Name",
+  "subMerchant": {
+    "id": "subm_1001",
+    "name": "Sub Merchant",
+    "email": "submerchant@example.com",
+    "phone": "+2348012345678"
+  },
+  "status": "active",
+  "complianceStatus": "completed",
+  "complianceDocuments": [
+    {
+      "url": "https://integrator.example.com/files/kyc.pdf",
+      "name": "KYC pack",
+      "uploadedAt": "2026-04-15T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+Set `status` to `deactivated` when turned off. Storage is scoped by `plataMerchantId + appId + productId + merchantId + subMerchantId`.
+
+**Compliance (optional):** Integrators report whether the **sub-merchant** has finished compliance on **their** platform and optionally a list of **compliance document** references for the Plata merchant UI.
+
+- `complianceStatus`: `not_started` \| `pending` \| `completed` (defaults to `not_started` if omitted on first write).
+- `complianceDocuments`: up to 50 items; each requires `url` (HTTPS URL or other locator string); optional `name`, `uploadedAt` (ISO 8601).
+
+When `complianceStatus` and/or `complianceDocuments` are sent, they are **synced to every activation row** for the same `appId`, `merchantId`, and `subMerchant.id` (all catalog products), so dashboard aggregates stay consistent.
+
+The JSON response for this endpoint includes `complianceStatus` and `complianceDocuments` on the saved activation document.
+
+### Sub-merchant external-user usage start (gateway PK/SK flow)
+
+External integrator services should call this through the API gateway.
+
+**Endpoint:** `POST /api/v1/products/sub-merchant-usage-events`
+
+**Headers (required at gateway):**
+- `PLATA_PUBLIC_KEY`
+- `PLATA_SECRET_KEY`
+- `Content-Type: application/json`
+
+**Request Body:**
+```json
+{
+  "appId": "app_123",
+  "productId": "product_abc",
+  "productName": "Optional product snapshot",
+  "merchantId": "merchant_parent_1",
+  "merchantName": "Parent Merchant Name",
+  "subMerchant": {
+    "id": "subm_1001",
+    "name": "Sub Merchant",
+    "email": "submerchant@example.com",
+    "phone": "+2348012345678"
+  },
+  "externalUser": {
+    "id": "user_7788",
+    "name": "Jane Doe",
+    "email": "jane@example.com",
+    "phone": "+2348099991111"
+  },
+  "startedAt": "2026-04-15T12:00:00.000Z"
+}
+```
+
+`startedAt` is optional (defaults to current server time). Product-ms stores source-of-truth usage data and mirrors an identity projection to `client-auth-ms` via internal endpoint (`/internal/api/v1/external-users/usage-events`) using internal token auth.
+
+
+### Sub-merchant dashboards (merchant UI, JWT)
+
+Plata merchant users (product creator) read aggregated sub-merchant data for an app. **Auth:** `Authorization: Bearer <access_token>` (same pattern as `product-overview` — product-ms verifies via client-auth).
+
+**Merchant dashboard** — one aggregated row per sub-merchant (activation + usage metrics).
+
+**Endpoint:** `GET /api/v1/products/sub-merchants/merchant-dashboard`  
+**Handler:** `subMerchantProductActivationController.getMerchantDashboard` (`router.get` in `productRoutes.ts`).
+
+**Query:** `appId` (required). Optional: `status` (`active` \| `deactivated`), `search`, `limit` (1–100, default `20`), `skip` (default `0`).
+
+**Response (`data.items[]`):** Each row includes sub-merchant identity, catalog activation rollup (`status`, `activeProductsCount`, `products[]`, …), plus integrator compliance:
+
+- `complianceStatus` — `not_started` \| `pending` \| `completed` (whether the sub-merchant completed compliance on the integrator’s platform).
+- `complianceDocuments` — array of `{ url, name?, uploadedAt? }` for **View uploads** / compliance document links in the merchant UI.
+
+**Customers dashboard** — rows for external users (usage events) under sub-merchants for the authenticated merchant’s app.
+
+**Endpoint:** `GET /api/v1/products/sub-merchants/customers-dashboard`  
+**Handler:** `subMerchantProductUsageEventController.getCustomerDashboard` (`router.get` in `productRoutes.ts`).
+
+**Query:** `appId` (required). Optional: `subMerchantId`, `search`, `limit` (1–100, default `20`), `skip` (default `0`).
+
+**Response (`data.items[]`):** Same usage-event fields as before, plus **`complianceStatus`** and **`complianceDocuments`** for the row’s `subMerchantId` (resolved from sub-merchant activations so the Customers tab can show compliance without an extra call).
+
+Through the API gateway, paths stay under **`/api/v1/products/...`**.
 
 ### Check Product Action
 Determines what action is allowed for a product based on its status.
@@ -365,6 +740,7 @@ Retrieves how **often** repayments fall due (cadence) for Loan and Mortgage prod
 {
   "success": true,
   "data": [
+    { "value": "Daily", "label": "Daily" },
     { "value": "Monthly", "label": "Monthly" },
     { "value": "Quarterly", "label": "Quarterly" },
     { "value": "Bi-annually", "label": "Bi-annually" },
@@ -429,7 +805,7 @@ Retrieves **acceptable non-performing asset (NPA)** thresholds (days past due be
 ```
 
 ### Get Loan Other Requirement Content Type Options
-Retrieves the **Content type** dropdown for LOAN / MORTGAGE **Requirements** → **Other requirements** (`requirements.otherRequirements[].contentType`). Each row may also include **`description`**, **`requirementType`**, and **`uploadRequired`** (free-form / boolean; not covered by this endpoint).
+Retrieves the **Content type** dropdown for LOAN / MORTGAGE **Requirements** → **Other requirements** (`requirements.otherRequirements[].contentType`). Each row may also include **`description`**, **`requirementType`**, **`uploadRequired`**, and **`templateFileUrl`**.
 
 **Endpoint:** `GET /api/v1/products/options/loan-other-requirement-content-type` (legacy: `GET /api/v1/configurations/options/loan-other-requirement-content-type`)
 
@@ -438,8 +814,8 @@ Retrieves the **Content type** dropdown for LOAN / MORTGAGE **Requirements** →
 {
   "success": true,
   "data": [
-    { "value": "information", "label": "Information" },
-    { "value": "document_upload", "label": "Document upload" }
+    { "value": "document_upload", "label": "Document upload" },
+    { "value": "document_template", "label": "Document template" }
   ]
 }
 ```
@@ -447,10 +823,10 @@ Retrieves the **Content type** dropdown for LOAN / MORTGAGE **Requirements** →
 **How `contentType` drives UI (product admin and loan applicants)**  
 Product-ms only **persists** each row on `requirements.otherRequirements[]`; it does not render forms. Implementations should behave as follows:
 
-- **`document_upload`** — **Applicant** (loan application): show a **file upload** control for the document described in **`description`** (and use **`requirementType`** as the short label / title for the row, e.g. “Account Statement”). Respect **`uploadRequired`** when deciding if the upload is mandatory. The **merchant** configures the requirement text here; the applicant’s completed file is stored by your **loan / application** service, not on the product document.
-- **`information`** — **Applicant**: show **text inputs** (single or multiple fields, depending on your app design) so they can type and submit the requested information; use **`description`** as the prompt / instructions. Again, captured answers belong on the application side.
+- **`document_upload`** — **Applicant** (loan application): show a **file upload** control for the document described in **`description`** (and use **`requirementType`** as the short label / title for the row, e.g. “Account Statement”). **`description` is required when `contentType` is `document_upload`**. Respect **`uploadRequired`** when deciding if the upload is mandatory. The **merchant** configures the requirement text here; the applicant’s completed file is stored by your **loan / application** service, not on the product document.
+- **`document_template`** — **Applicant**: show a template-driven document flow. **`templateFileUrl` is required when `contentType` is `document_template`** and should point to the uploaded template file that applicants download, fill, and submit during application.
 
-**Merchant product builder:** The admin form should **react to `contentType`**: after the merchant chooses **Document upload**, show configuration aimed at defining what the applicant must upload (title / **`requirementType`**, **`description`**, **`uploadRequired`**). After they choose **Information**, show configuration for typed answers (**`description`** as the prompt; add more fields in your UI if you need multiple prompts—only **`description`** is stored on the product today). Optionally default or require **`uploadRequired`: `true`** when **`contentType`** is **`document_upload`** and a file is mandatory.
+**Merchant product builder:** The admin form should **react to `contentType`**: after the merchant chooses **Document upload**, show configuration aimed at defining what the applicant must upload (title / **`requirementType`**, **`description`**, **`uploadRequired`**). After they choose **Document template**, require template upload and persist the returned URL/key as **`templateFileUrl`** on the `otherRequirements` row.
 
 ### Get Loan Tenure Options
 Retrieves the available loan tenure options (value, unit, label) for Loan and Mortgage product configuration dropdowns.
@@ -469,11 +845,13 @@ Retrieves the available loan tenure options (value, unit, label) for Loan and Mo
     { "value": 36, "unit": "month", "label": "36 months" },
     { "value": 48, "unit": "month", "label": "48 months" },
     { "value": 60, "unit": "month", "label": "60 months" },
-    { "value": 72, "unit": "month", "label": "72 months" }
+    { "value": 72, "unit": "month", "label": "72 months" },
+    { "value": "custom", "unit": "month", "label": "Custom", "allowManualEntry": true }
   ]
 }
 ```
-Use each item’s `value` and `unit` in LOAN `about.tenure` or `structure` (however your admin maps tenure).
+Use each item’s `value` and `unit` in LOAN `about.tenure` or `structure` (however your admin maps tenure).  
+When `value` is `"custom"` and `allowManualEntry` is `true`, the frontend should prompt for a user-defined tenure value that is not restricted to the preset dropdown list.
 
 ### Get Interest Method Options
 Retrieves the **Interest method** dropdown for LOAN / MORTGAGE **Structure** (`structure.interestMethod`). This is separate from **amortization** (`structure.amortizationSchedule`).
@@ -631,6 +1009,33 @@ Retrieves the available collateral type options for Loan product configuration (
 ```
 Use the `value` when modeling collateral inside LOAN `requirements` / `structure` as your product design requires.
 
+### Get Mortgage Facility Options
+Retrieves **Mortgage Facilities** choices for the **MORTGAGE** Properties tab. Persist selected values on each property entry at **`properties[].facilities`** as a string array. Values from this endpoint are suggested defaults; custom values are also accepted. Use **`properties[].customFacilities`** for free-text facility entries from "Add custom facility". Options are defined in `src/types/productConfiguration.ts` (`MORTGAGE_FACILITY_OPTIONS`).
+
+**Endpoint:** `GET /api/v1/products/options/mortgage-facilities`
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    { "value": "solar_energy_system", "label": "Solar energy system" },
+    { "value": "reliable_water_supply", "label": "Reliable water supply" },
+    { "value": "gated_estate", "label": "Gated estate" },
+    { "value": "security_24_7", "label": "24/7 security" },
+    { "value": "cctv_surveillance", "label": "CCTV surveillance" },
+    { "value": "estate_park_playground", "label": "Estate park/ playground" },
+    { "value": "estate_gym", "label": "Estate gym" },
+    { "value": "outdoor_pool", "label": "Outdoor pool" },
+    { "value": "car_garage", "label": "Car garage" },
+    { "value": "estate_waste_management", "label": "Estate Waste management" },
+    { "value": "boys_quarter", "label": "Boys quarter" },
+    { "value": "gateman_quarter", "label": "Gateman quarter" },
+    { "value": "indoor_cinema", "label": "Indoor Cinema" }
+  ]
+}
+```
+
 ### Get Commodity Trading Cycle Options
 Retrieves the available trading cycle options for **Commodity** product configuration dropdowns.
 
@@ -682,6 +1087,26 @@ Same option set as commodity tenure; use for **Investment** configuration dropdo
 **Endpoint:** `GET /api/v1/products/options/investment-tenure`
 
 **Response:** Same shape as commodity tenure (3, 6, 12, 24 months, Open-ended).
+
+### Get Investment Type Options
+Returns allowed values for **Investment** Structure **Investment Type** (`structure.investmentType`).
+
+**Endpoint:** `GET /api/v1/products/options/investment-type`
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    { "value": "lump_sum", "label": "Lump sum" },
+    { "value": "unit_based", "label": "Unit based" }
+  ]
+}
+```
+
+**Frontend mapping rule (important):**
+- If user selects **Lump sum** (`lump_sum`), do not send `structure.unitAmount`.
+- If user selects **Unit based** (`unit_based`), you may send `structure.unitAmount` (for example `{ "amount": 1000, "minQuantity": 5 }`).
 
 ### Get Savings Type Options
 Returns **Fixed Savings** vs **Flexible Savings** for **SAVINGS** **Structure** (`structure.savingsType`).
@@ -894,7 +1319,7 @@ curl -X PUT http://localhost:3005/api/v1/products/product-id-123 \
   }'
 ```
 
-To partially update a **MORTGAGE** product — use **`about.mortgageTypes[]`** for multiple mortgage types (name + description per row):
+To partially update a **MORTGAGE** product — use **`about.mortgageTypes[]`** for multiple mortgage types (name + description per row). Property details/facilities are stored per item inside **`properties[]`**:
 
 ```bash
 curl -X PUT http://localhost:3005/api/v1/products/mortgage-product-id \
@@ -907,7 +1332,23 @@ curl -X PUT http://localhost:3005/api/v1/products/mortgage-product-id \
         { "name": "Commercial", "description": "Owner-occupied commercial property" }
       ],
       "previewAssetUrl": "https://cdn.example.com/mortgage-preview.pdf"
-    }
+    },
+    "properties": [
+      {
+        "name": "Sunset Estate Block A",
+        "propertyType": "3 bedroom flat bungalow",
+        "value": 75000000,
+        "location": "Lagos, Nigeria",
+        "propertyDescription": "Three-bedroom detached bungalow with guest parking and fitted kitchen.",
+        "facilities": ["solar_energy_system", "gated_estate", "cctv_surveillance"],
+        "customFacilities": ["EV charging point", "Smart door lock"],
+        "imageUrls": [
+          "https://cdn.example.com/mortgage/property-1/front-view.jpg",
+          "https://cdn.example.com/mortgage/property-1/living-room.jpg"
+        ],
+        "videoUrl": "https://www.youtube.com/watch?v=example"
+      }
+    ]
   }'
 ```
 

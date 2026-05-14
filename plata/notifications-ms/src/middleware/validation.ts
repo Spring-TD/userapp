@@ -19,8 +19,16 @@ export const validate = (schema: Joi.ObjectSchema) => {
 };
 
 export const sendNotificationSchema = Joi.object({
-  channel: Joi.string().valid('email', 'sms').required(),
+  channel: Joi.string().valid('email', 'sms', 'in_app').required(),
   recipient: Joi.string().required(),
+  template: Joi.string().required(),
+  data: Joi.object().required(),
+  priority: Joi.string().valid('high', 'normal', 'low').optional()
+});
+
+export const sendEmailAndInAppSchema = Joi.object({
+  userId: Joi.string().required(),
+  email: Joi.string().email().required(),
   template: Joi.string().required(),
   data: Joi.object().required(),
   priority: Joi.string().valid('high', 'normal', 'low').optional()

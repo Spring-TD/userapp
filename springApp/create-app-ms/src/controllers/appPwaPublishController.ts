@@ -4,6 +4,7 @@ import { AppService } from '../services/appService';
 import { AppPwaPublishService } from '../services/appPwaPublishService';
 import { PublishPwaRequest } from '../types/pwaPublish';
 import { App } from '../types/app';
+import { tryGetApiBaseUrl } from '../utils/requestBaseUrl';
 
 declare const console: any;
 
@@ -40,15 +41,11 @@ export class AppPwaPublishController {
   }
 
   private getApiBaseUrl(req: Request): string {
-    const forwardedProto = req.headers['x-forwarded-proto'];
-    const proto = Array.isArray(forwardedProto)
-      ? forwardedProto[0]
-      : forwardedProto || req.protocol;
-    const host = req.get('host');
-    if (!host) {
+    const base = tryGetApiBaseUrl(req);
+    if (!base) {
       throw new ApiError(400, 'Unable to resolve request host');
     }
-    return `${proto}://${host}`;
+    return base;
   }
 
   publish = async (req: Request, res: Response): Promise<void> => {
@@ -81,6 +78,48 @@ export class AppPwaPublishController {
       res.json({ success: true, data });
     } catch (error) {
       this.handleError(res, error, 'get PWA publish status');
+    }
+  };
+
+  diagnostics = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { appId } = req.params;
+      if (!appId) {
+        throw new ApiError(400, 'App ID is required');
+      }
+      await this.loadAppOrThrow(appId, req);
+      const status = await this.publishService.getStatus(appId);
+      const baseUrl = this.getApiBaseUrl(req);
+      const manifestUrl = `${baseUrl}/api/v1/apps/${appId}/pwa/manifest.webmanifest`;
+      const serviceWorkerUrl = `${baseUrl}/api/v1/apps/${appId}/pwa/sw.js`;
+      const servedOverHttps = /^https:\/\//i.test(baseUrl);
+
+      res.json({
+        success: true,
+        data: {
+          appId,
+          checks: {
+            servedOverHttps,
+            manifestReady: status.manifestReady,
+            serviceWorkerReady: status.serviceWorkerReady,
+            iconsReady: status.iconsReady,
+            customDomainReady: status.customDomainReady
+          },
+          isInstallableCandidate:
+            servedOverHttps &&
+            status.manifestReady &&
+            status.serviceWorkerReady &&
+            status.iconsReady,
+          artifactUrls: {
+            manifestUrl,
+            serviceWorkerUrl
+          },
+          warnings: status.warnings,
+          errors: status.errors
+        }
+      });
+    } catch (error) {
+      this.handleError(res, error, 'get PWA diagnostics');
     }
   };
 

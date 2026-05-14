@@ -12,6 +12,8 @@ export interface Config {
   jwtExpiresIn: string;
   /** Max request body size for JSON (e.g. '10mb') */
   requestBodyLimit: string;
+  /** Shared secret for POST /api/v1/internal/wallets/* (e.g. client-auth-ms signup). Header: X-Internal-Token */
+  walletInternalToken: string;
 }
 
 export const config: Config = {
@@ -26,4 +28,5 @@ export const config: Config = {
   jwtSecret: process.env.JWT_SECRET || 'wallet-service-secret-key',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1h',
   requestBodyLimit: process.env.REQUEST_BODY_LIMIT || '10mb',
+  walletInternalToken: (process.env.WALLET_INTERNAL_TOKEN || '').trim()
 };

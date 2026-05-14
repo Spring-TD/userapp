@@ -13,21 +13,49 @@
  *         description: User list
  * /api/v1/user/profile:
  *   get:
- *     summary: Get profile
+ *     summary: Get profile (fintech profile page — same as GET /api/v1/auth/me)
  *     tags: [User]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: User profile
+ *         description: User profile without password
+ *       401:
+ *         description: Authentication required
+ *       404:
+ *         description: User not found
  *   put:
- *     summary: Update profile
+ *     summary: Update profile (partial; account must be active)
  *     tags: [User]
  *     security:
  *       - bearerAuth: []
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               first_name:
+ *                 type: string
+ *                 minLength: 2
+ *                 maxLength: 50
+ *               last_name:
+ *                 type: string
+ *                 minLength: 2
+ *                 maxLength: 50
+ *               phone:
+ *                 type: string
+ *                 description: E.164-style international format
+ *               country:
+ *                 type: string
+ *                 minLength: 2
+ *                 maxLength: 100
  *     responses:
  *       200:
  *         description: Profile updated
+ *       400:
+ *         description: Validation or inactive account
  * /api/v1/user/email:
  *   put:
  *     summary: Update email

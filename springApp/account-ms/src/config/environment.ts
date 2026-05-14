@@ -17,6 +17,12 @@ interface EnvironmentConfig {
   productServiceUrl: string;
   paymentServiceUrl: string;
   notificationServiceUrl: string;
+  platformBaseDomain: string;
+  platformSubdomainPrefix: string;
+  reservedSubdomains: string[];
+  tenantResolverTimeoutMs: number;
+  /** Must match client-auth-ms JWT_SECRET for Bearer merchant tokens */
+  jwtSecret: string;
 }
 
 export const config: EnvironmentConfig = {
@@ -34,4 +40,12 @@ export const config: EnvironmentConfig = {
   productServiceUrl: process.env.PRODUCT_SERVICE_URL || 'http://localhost:4005',
   paymentServiceUrl: process.env.PAYMENT_SERVICE_URL || 'http://localhost:4007',
   notificationServiceUrl: process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4009',
+  platformBaseDomain: (process.env.PLATFORM_BASE_DOMAIN || 'tryspring.io').replace(/^\.+|\.+$/g, ''),
+  platformSubdomainPrefix: (process.env.PLATFORM_SUBDOMAIN_PREFIX || 'www').trim().replace(/\.+/g, ''),
+  reservedSubdomains: (process.env.RESERVED_SUBDOMAINS || 'www,api,admin,docs')
+    .split(',')
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean),
+  tenantResolverTimeoutMs: parseInt(process.env.TENANT_RESOLVER_TIMEOUT_MS || '5000', 10),
+  jwtSecret: process.env.JWT_SECRET || 'fallback-secret-key-for-development-purposes-only'
 };

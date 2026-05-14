@@ -5,7 +5,10 @@ import type { IWalletDocument } from '../models/WalletModel';
 export async function createWallet(doc: {
   walletType: 'MERCHANT' | 'USER';
   merchantId: string;
+  complianceShareholderUserId?: string;
   appId?: string;
+  appName?: string;
+  payonusSubaccountCode?: string;
   name: string;
   currency: string;
   merchantWalletType?: MerchantWalletType;
@@ -14,7 +17,12 @@ export async function createWallet(doc: {
   const created = await WalletModel.create({
     walletType: doc.walletType,
     merchantId: doc.merchantId,
+    ...(doc.complianceShareholderUserId ? { complianceShareholderUserId: doc.complianceShareholderUserId } : {}),
     ...(doc.walletType === 'MERCHANT' && doc.appId ? { appId: doc.appId } : {}),
+    ...(doc.walletType === 'MERCHANT' && doc.appName ? { appName: doc.appName } : {}),
+    ...(doc.walletType === 'MERCHANT' && doc.payonusSubaccountCode
+      ? { payonusSubaccountCode: doc.payonusSubaccountCode }
+      : {}),
     name: doc.name,
     currency: doc.currency,
     mainBalance: 0,
@@ -27,6 +35,12 @@ export async function createWallet(doc: {
 
 export async function getWalletById(walletId: string): Promise<Wallet | null> {
   const doc = await WalletModel.findById(walletId).lean();
+  if (!doc) return null;
+  return toWallet(doc as IWalletDocument);
+}
+
+export async function getWalletByPayonusAccountNumber(accountNumber: string): Promise<Wallet | null> {
+  const doc = await WalletModel.findOne({ payonusNubanAccountNumber: accountNumber }).lean();
   if (!doc) return null;
   return toWallet(doc as IWalletDocument);
 }
@@ -85,4 +99,46 @@ export async function updateWallet(
 export async function findAllWallets(): Promise<Wallet[]> {
   const docs = await WalletModel.find({}).lean();
   return docs.map((d) => toWallet(d as IWalletDocument));
+}
+
+export type PayonusNubanPatchFields = {
+  payonusNubanAccountNumber?: string;
+  payonusNubanBankName?: string;
+  payonusNubanBankCode?: string;
+  payonusNubanProviderReference?: string;
+  payonusNubanAccountType?: 'static' | 'reserved' | 'dynamic';
+  payonusNubanProvisionStatus?: 'active' | 'failed';
+  /** Pass `null` to clear a previous error after a successful reprovision */
+  payonusNubanProvisionError?: string | null;
+  payonusNubanProvisionedAt?: Date | null;
+};
+
+export async function patchWalletPayonusNuban(
+  walletId: string,
+  patch: PayonusNubanPatchFields
+): Promise<Wallet | null> {
+  const $set: Record<string, unknown> = {};
+  const $unset: Record<string, string> = {};
+
+  (Object.entries(patch) as [keyof PayonusNubanPatchFields, PayonusNubanPatchFields[keyof PayonusNubanPatchFields]][]).forEach(
+    ([key, val]) => {
+      if (val === null) {
+        $unset[String(key)] = '';
+      } else if (val !== undefined) {
+        $set[String(key)] = val;
+      }
+    }
+  );
+
+  const op: Record<string, unknown> = {};
+  if (Object.keys($set).length) op.$set = $set;
+  if (Object.keys($unset).length) op.$unset = $unset;
+  if (!Object.keys(op).length) {
+    const doc = await WalletModel.findById(walletId).lean();
+    return doc ? toWallet(doc as IWalletDocument) : null;
+  }
+
+  const doc = await WalletModel.findByIdAndUpdate(walletId, op, { new: true }).lean();
+  if (!doc) return null;
+  return toWallet(doc as IWalletDocument);
 }

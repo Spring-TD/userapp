@@ -5,6 +5,7 @@ import { ApiError } from '../middleware/errorHandler';
 import { WalletService } from '../services/walletService';
 import { TransactionService } from '../services/transactionService';
 import { DriveService } from '../services/driveService';
+import { sendAppCreatedNotification } from '../services/notificationHelper';
 
 // Extend Request interface to include user data
 interface AuthenticatedRequest extends Request {
@@ -38,6 +39,13 @@ export class AppController {
     return req.user?.userMerchantId || req.user?.userId;
   }
 
+  private getRequestMerchantIds(req: Request): string[] {
+    const ids = [req.user?.userMerchantId, req.user?.userId].filter(
+      (id): id is string => Boolean(id)
+    );
+    return Array.from(new Set(ids));
+  }
+
   private assertMerchantOwnsApp(req: Request, app: App): void {
     if (!this.isMerchantUser(req)) {
       return;
@@ -67,9 +75,10 @@ export class AppController {
         throw new ApiError(401, 'Authentication required');
       }
       
-      // For merchants, use their merchant ID; for admins, allow specifying merchant ID in request
-      const merchantId = req.user.userType === 'MERCHANT' 
-        ? req.user.userMerchantId || req.user.userId 
+      // For merchants, always resolve merchantId from auth context (case-insensitive role check).
+      // This keeps create/list ownership consistent when token userType casing varies.
+      const merchantId = this.isMerchantUser(req)
+        ? this.getRequestMerchantId(req)
         : appData.merchantId || req.user.userId;
 
       if (!merchantId) {
@@ -91,7 +100,15 @@ export class AppController {
       if (!merchantWalletsResult.success) {
         console.error(`Failed to create merchant wallets for app ${app.id}:`, merchantWalletsResult.error);
       }
-      
+
+      void sendAppCreatedNotification({
+        userId: req.user.userId,
+        email: req.user.email,
+        appName: app.name,
+        merchantName: merchantId,
+        detail: ''
+      });
+
       res.status(201).json({
         success: true,
         message: 'App created successfully',
@@ -426,8 +443,8 @@ export class AppController {
     try {
       let apps = await this.appService.getAllApps();
       if (this.isMerchantUser(req)) {
-        const merchantId = this.getRequestMerchantId(req);
-        apps = apps.filter((app) => app.merchantId === merchantId);
+        const merchantIds = this.getRequestMerchantIds(req);
+        apps = apps.filter((app) => merchantIds.includes(app.merchantId));
       }
 
       res.json({

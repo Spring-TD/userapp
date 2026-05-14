@@ -88,6 +88,8 @@ npm start
 
 ### Mortgage Services
 - `POST /api/v1/mortgages/apply` - Apply for a mortgage
+- `GET /api/v1/mortgages/blacklisted` - Get blacklisted mortgage applications (Admin or merchant-scoped)
+- `POST /api/v1/mortgages/:id/blacklist` - Blacklist a mortgage application (Admin)
 - `GET /api/v1/mortgages/:id` - Get mortgage details (application)
 - `GET /api/v1/mortgages/user/:userId` - Get all user's mortgages
 
@@ -186,6 +188,22 @@ Without valid headers (or when IP is not whitelisted), the gateway returns `401`
 | API Authentication (Login) | POST   | `https://account-ms.fly.dev/api/v1/auth/login`            |
 | Create Merchant Account    | POST   | `https://account-ms.fly.dev/api/v1/registration/merchant` |
 | Create Merchant Customer   | POST   | `https://account-ms.fly.dev/api/v1/registration/user`     |
+
+Authentication and registration routes above are proxied to `client-auth-ms`. Full request/response examples: `springApp/client-auth-ms/README.md`.
+
+---
+
+## **👤 User profile & account settings (via gateway)**
+
+All endpoints require `Authorization: Bearer <jwt-token>` unless noted. Replace the host with your gateway URL (e.g. local `http://localhost:4008`).
+
+| Function            | Method | API Endpoint                                                       | Notes |
+| ------------------- | ------ | ------------------------------------------------------------------ | ----- |
+| Get profile         | GET    | `https://account-ms.fly.dev/api/v1/user/profile`                   | — |
+| Update profile      | PUT    | `https://account-ms.fly.dev/api/v1/user/profile`                   | Optional: `first_name`, `last_name`, `phone`, `country` |
+| Update email        | PUT    | `https://account-ms.fly.dev/api/v1/user/email`                     | Body: `newEmail`, `confirmEmail`, `currentPassword` |
+| Change password     | PUT    | `https://account-ms.fly.dev/api/v1/password/change`                | Body: `currentPassword`, `newPassword` |
+| Deactivate account  | POST   | `https://account-ms.fly.dev/api/v1/user/deactivate`                | No body |
 
 ---
 

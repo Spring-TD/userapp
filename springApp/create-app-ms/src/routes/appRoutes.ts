@@ -390,10 +390,10 @@ const pwaAssetUpload = multer({
 
 const router = Router();
 const appService = new AppService();
-const appController = new AppController(appService);
+const appPwaPublishService = new AppPwaPublishService();
+const appController = new AppController(appService, appPwaPublishService);
 const pwaTemplateService = new AppPwaTemplateService();
 const appPwaTemplateController = new AppPwaTemplateController(appService, pwaTemplateService);
-const appPwaPublishService = new AppPwaPublishService();
 const appPwaPublishController = new AppPwaPublishController(appService, appPwaPublishService);
 
 // Create a new app - now requires authentication
@@ -401,6 +401,17 @@ router.post('/', authenticate, merchantOnly, appController.createApp);
 
 // Get all apps
 router.get('/', authenticate, merchantOnly, appController.getAllApps);
+
+// Resolve app by subdomain (public/internal use for host-based routing)
+router.get('/resolve/:subdomain', appController.resolveAppBySubdomain);
+
+// Merchant product dashboard (activated product — overview payload)
+router.get(
+  '/:appId/products/:productId/overview',
+  authenticate,
+  merchantOnly,
+  appController.getProductOverview
+);
 
 // Get app by ID
 router.get('/:id', authenticate, merchantOnly, appController.getAppById);
@@ -449,13 +460,10 @@ router.patch(
 // PWA runtime publish/status/artifacts
 router.post('/:appId/pwa/publish', authenticate, merchantOnly, appPwaPublishController.publish);
 router.get('/:appId/pwa/status', authenticate, merchantOnly, appPwaPublishController.status);
-router.get(
-  '/:appId/pwa/manifest.webmanifest',
-  authenticate,
-  merchantOnly,
-  appPwaPublishController.manifest
-);
-router.get('/:appId/pwa/sw.js', authenticate, merchantOnly, appPwaPublishController.serviceWorker);
+router.get('/:appId/pwa/diagnostics', authenticate, merchantOnly, appPwaPublishController.diagnostics);
+// Public runtime artifacts required by browsers for PWA installability.
+router.get('/:appId/pwa/manifest.webmanifest', appPwaPublishController.manifest);
+router.get('/:appId/pwa/sw.js', appPwaPublishController.serviceWorker);
 
 router.post(
   '/:appId/pwa-templates/:templateId/assets/logo',

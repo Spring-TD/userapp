@@ -4,7 +4,7 @@ export interface OtpDocument extends Document {
   identifier: string;   // email or phone number
   code: string;          // bcrypt-hashed 6-digit code
   channel: 'email' | 'sms';
-  purpose: 'verification' | 'password-reset' | 'login';
+  purpose: 'verification' | 'password-reset' | 'password-change' | 'login';
   expiresAt: Date;
   attempts: number;      // verification attempt counter
   verified: boolean;
@@ -17,7 +17,7 @@ const otpSchema = new Schema<OtpDocument>(
     identifier: { type: String, required: true, lowercase: true, trim: true },
     code: { type: String, required: true },
     channel: { type: String, enum: ['email', 'sms'], required: true },
-    purpose: { type: String, enum: ['verification', 'password-reset', 'login'], required: true },
+    purpose: { type: String, enum: ['verification', 'password-reset', 'password-change', 'login'], required: true },
     expiresAt: { type: Date, required: true },
     attempts: { type: Number, default: 0 },
     verified: { type: Boolean, default: false },

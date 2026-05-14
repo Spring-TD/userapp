@@ -4,14 +4,14 @@
  * @openapi
  * /api/v1/password/forgot:
  *   post:
- *     summary: Forgot password
+ *     summary: Send password reset OTP
  *     tags: [Password]
  *     responses:
  *       200:
- *         description: Reset email sent
+ *         description: Password reset OTP sent
  * /api/v1/password/reset:
  *   post:
- *     summary: Reset password
+ *     summary: Reset password with OTP
  *     tags: [Password]
  *     responses:
  *       200:

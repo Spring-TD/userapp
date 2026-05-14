@@ -91,6 +91,24 @@ export class TemplateService {
   }
 
   /**
+   * In-app title + body from `{name}.in-app.json`: { "title": "...", "body": "..." } with {{placeholders}}.
+   */
+  getInAppPayload(templateName: string, data: TemplateData): { title: string; body: string } {
+    const jsonPath = path.join(this.templatesDir, `${templateName}.in-app.json`);
+    if (!fs.existsSync(jsonPath)) {
+      throw new Error(`In-app template not found: ${jsonPath}`);
+    }
+    const raw = JSON.parse(fs.readFileSync(jsonPath, 'utf-8')) as { title?: string; body?: string };
+    if (raw.title === undefined || raw.body === undefined) {
+      throw new Error(`In-app template ${templateName} must include "title" and "body"`);
+    }
+    return {
+      title: this.renderTemplate(String(raw.title), data),
+      body: this.renderTemplate(String(raw.body), data)
+    };
+  }
+
+  /**
    * Get email subject from template or default
    */
   getEmailSubject(templateName: string, data: TemplateData): string {
@@ -107,15 +125,22 @@ export class TemplateService {
     const defaultSubjects: Record<string, string> = {
       'email-verification': 'Verify Your Email Address',
       'password-reset': 'Password Reset Request',
-      'otp': 'Your SpringTD Verification Code',
+      'otp': 'Your Plata Verification Code',
       'contract-submission': 'Contract Submitted Successfully',
       'kyc-approved': 'KYC Verification Approved',
-      'kyc-rejected': 'KYC Verification Status Update'
+      'kyc-rejected': 'KYC Verification Status Update',
+      'app-created': 'App created successfully',
+      'product-created': 'Product created successfully',
+      'merchant-registered': 'New merchant registered',
+      'compliance-incomplete': 'Compliance incomplete',
+      'withdrawal-alert': 'Withdrawal alert',
+      'support-ticket-new': 'New support ticket',
+      'merchant-account-status': 'Merchant account update',
+      'merchant-product-status': 'Product status update'
     };
 
-    return defaultSubjects[templateName] || 'Notification from SpringTD';
+    return defaultSubjects[templateName] || 'Notification from Plata';
   }
 }
 
 export default new TemplateService();
-

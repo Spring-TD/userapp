@@ -1,0 +1,4 @@
+{
+  "title": "App created",
+  "body": "{{appName}} was created successfully for {{merchantName}}."
+}

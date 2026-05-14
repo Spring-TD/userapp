@@ -6,12 +6,12 @@ import { ApiError } from './errorHandler';
  * Middleware to authenticate requests with special API key and public key
  * Expects headers:
  * - X-Special-Key: The special API key
- * - X-Public-Key: The public key
+ * - PLATA_PUBLIC_KEY: The public key
  */
 export const apiKeyAuth = (req: Request, res: Response, next: NextFunction): void => {
   try {
     const specialKey = req.headers['x-special-key'];
-    const publicKey = req.headers['x-public-key'];
+    const publicKey = req.headers['plata_public_key'];
 
     // Check if both keys are provided
     if (!specialKey || !publicKey) {

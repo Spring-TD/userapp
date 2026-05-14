@@ -2,7 +2,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { logger } from '../utils/logger';
-import { UserType } from '../types/kycTypes';
 
 // Extend the Request type to include service information
 declare global {
@@ -32,12 +31,8 @@ export const authenticateService = (req: Request, res: Response, next: NextFunct
     // Extract token
     const token = authHeader.split(' ')[1];
     
-    // For now, we'll implement a simple check for service credentials
-    // In a production environment, this would validate against the SAMS service
+    // Legacy static service token support
     if (token.startsWith('sams_')) {
-      // This is a service credential
-      // In a real implementation, we would validate this against SAMS
-      // For now, we'll just attach a mock service object
       req.service = {
         serviceId: 'mock-service-id',
         serviceName: 'auth-service',
@@ -50,6 +45,28 @@ export const authenticateService = (req: Request, res: Response, next: NextFunct
         serviceName: req.service.serviceName
       });
       
+      return next();
+    }
+
+    // JWT-based service token support (signed with shared JWT_SECRET)
+    const secret = process.env.JWT_SECRET || 'default-secret-key';
+    const decoded = jwt.verify(token, secret) as {
+      type?: string;
+      serviceId?: string;
+      serviceName?: string;
+      permissions?: string[];
+    };
+    if (decoded?.type === 'service' && decoded.serviceId) {
+      req.service = {
+        serviceId: decoded.serviceId,
+        serviceName: decoded.serviceName || decoded.serviceId,
+        permissions: Array.isArray(decoded.permissions) ? decoded.permissions : ['read', 'write'],
+        token
+      };
+      logger.info('JWT service authentication successful', {
+        serviceId: req.service.serviceId,
+        serviceName: req.service.serviceName
+      });
       return next();
     }
     

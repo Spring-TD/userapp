@@ -1,0 +1,4 @@
+{
+  "title": "Withdrawal alert",
+  "body": "{{amount}} {{currency}} — ref {{reference}} ({{merchantName}})"
+}

@@ -13,11 +13,43 @@
   ],
   "components": {
     "schemas": {
+      "SubMerchantTogglePayload": {
+        "type": "object",
+        "required": ["id", "name", "email", "phone"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "email": { "type": "string", "format": "email", "maxLength": 320 },
+          "phone": { "type": "string", "minLength": 3, "maxLength": 40 }
+        }
+      },
       "ToggleActivationRequest": {
         "type": "object",
         "required": ["activate"],
         "properties": {
-          "activate": { "type": "boolean", "description": "True to activate, false to deactivate" }
+          "activate": { "type": "boolean", "description": "True to activate, false to deactivate" },
+          "merchantId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Required when activate is true; forwarded to Plata sub-merchant-activations"
+          },
+          "merchantName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Required when activate is true"
+          },
+          "productName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "Optional; defaults to product name from catalog/local document"
+          },
+          "subMerchant": {
+            "allOf": [{ "$ref": "#/components/schemas/SubMerchantTogglePayload" }],
+            "description": "Required when activate is true; the merchant turning the product on"
+          }
         }
       },
       "MerchantProductConfigRequest": {
@@ -132,7 +164,11 @@
             }
           }
         },
-        "responses": { "200": { "description": "Activation toggled" } }
+        "responses": {
+          "200": { "description": "Activation toggled" },
+          "400": { "description": "Validation error" },
+          "502": { "description": "Plata sub-merchant-activation failed (local changes rolled back when applicable)" }
+        }
       }
     },
     "/api/v1/products/{id}": {

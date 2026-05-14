@@ -1,11 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
 import { WalletService } from '../services';
+import { payonusWebhookConfig } from '../config/payonusWebhook';
+import { WebhookEventModel } from '../models/WebhookEventModel';
 import { logger } from '../utils/logger';
 import { validateInput, fundingCallbackSchema } from '../utils/validation';
 import { MerchantWalletType } from '../models/Wallet';
 
 // Define interfaces for the validated data
 interface FundingCallbackData {
+  id?: string;
+  type?: string;
   walletId?: string; // Optional if userId + merchantId provided
   userId?: string; // For user wallet funding (alternative to walletId)
   amount: number;
@@ -19,11 +24,117 @@ interface FundingCallbackData {
   merchantId?: string; // For merchant wallet funding OR identifying user wallet
   appId?: string; // Optional app scope for merchant wallet funding
   merchantWalletType?: MerchantWalletType; // For merchant wallet funding
+  onusReference?: string; // PayOnUs transaction reference
+  paymentChannel?: string; // PayOnUs payment channel
+  paymentStatus?: string; // PayOnUs status field
+  transactionAmount?: number;
+  businessId?: string; // PayOnUs business identifier
+  merchantReference?: string; // Merchant-side reference from PayOnUs payload
+  accountNumber?: string; // Origin/destination account from PayOnUs payload
+  virtual_account_number?: string; // Common webhook account number field
+  hash?: string; // Signature from PayOnUs header (or body fallback)
 }
 
 // In-memory store for processed transactions (prevent duplicates)
 // In production, use Redis or database
 const processedTransactions = new Set<string>();
+
+function readHeaderValue(req: Request, name: string): string | undefined {
+  const value = req.header(name);
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : undefined;
+}
+
+function mapPaymentStatus(status?: string): string {
+  const normalized = (status || '').trim().toUpperCase();
+  if (normalized === 'SUCCESSFUL' || normalized === 'SUCCESS') return 'SUCCESS';
+  if (normalized === 'COMPLETED') return 'COMPLETED';
+  if (normalized === 'FAILED') return 'FAILED';
+  if (normalized === 'CANCELLED') return 'CANCELLED';
+  return 'PENDING';
+}
+
+function mapPaymentMethod(channel?: string): string {
+  const normalized = (channel || '').trim().toUpperCase();
+  if (normalized === 'CARD') return 'CARD';
+  if (normalized.includes('BANK')) return 'BANK_TRANSFER';
+  if (normalized.includes('WALLET')) return 'WALLET';
+  return 'OTHER';
+}
+
+function normalizeFundingCallback(data: FundingCallbackData): FundingCallbackData {
+  const transactionId = data.transactionId || data.onusReference || data.id;
+  if (!transactionId) return data;
+
+  const amount =
+    typeof data.amount === 'number'
+      ? data.amount
+      : typeof data.transactionAmount === 'number'
+        ? data.transactionAmount
+        : Number(data.transactionAmount || 0);
+
+  return {
+    ...data,
+    transactionId,
+    amount,
+    currency: data.currency || 'NGN',
+    status: data.status || mapPaymentStatus(data.paymentStatus),
+    paymentMethod: data.paymentMethod || mapPaymentMethod(data.paymentChannel),
+    providerReference: data.providerReference || data.onusReference,
+    merchantId: data.merchantId || data.businessId,
+    merchantWalletType: data.merchantWalletType || payonusWebhookConfig.defaultMerchantWalletType,
+    description:
+      data.description ||
+      `PayOnUs ${data.type || 'transaction'} (${data.paymentStatus || data.status || 'PENDING'})`,
+    accountNumber: data.accountNumber || data.virtual_account_number,
+    hash: data.hash
+  };
+}
+
+async function enrichCallbackFromVirtualAccount(callbackData: FundingCallbackData): Promise<FundingCallbackData> {
+  const accountNumber = (callbackData.accountNumber || '').trim();
+  if (!accountNumber) return callbackData;
+  if (callbackData.walletId || callbackData.userId || callbackData.merchantId) return callbackData;
+
+  const walletLookup = await WalletService.getWalletByPayonusAccountNumber(accountNumber);
+  if (!walletLookup.success || !walletLookup.wallet) return callbackData;
+
+  const wallet = walletLookup.wallet;
+  if (wallet.walletType === 'MERCHANT') {
+    return {
+      ...callbackData,
+      walletId: wallet.id,
+      merchantId: wallet.merchantId,
+      appId: wallet.appId,
+      merchantWalletType: wallet.merchantWalletType
+    };
+  }
+
+  return {
+    ...callbackData,
+    walletId: wallet.id,
+    userId: wallet.userId,
+    merchantId: wallet.merchantId
+  };
+}
+
+function verifyPayonusWebhookSignature(payload: FundingCallbackData, incomingHash?: string): boolean {
+  if (!payonusWebhookConfig.enabled) return true;
+  if (!payonusWebhookConfig.verificationKey) return !payonusWebhookConfig.enforceSignature;
+  if (!incomingHash) return !payonusWebhookConfig.enforceSignature;
+
+  const accountNumber = payload.accountNumber || '';
+  const onusReference = payload.onusReference || payload.transactionId || '';
+  const paymentStatus = payload.paymentStatus || payload.status || '';
+  const verificationString = `${accountNumber}${onusReference}${paymentStatus}${payonusWebhookConfig.verificationKey}`;
+  const computedHash = crypto.createHash('sha256').update(verificationString, 'utf8').digest('hex');
+
+  const provided = incomingHash.toLowerCase();
+  const computed = computedHash.toLowerCase();
+  if (provided.length !== computed.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(computed, 'utf8'), Buffer.from(provided, 'utf8'));
+}
 
 export class FundingController {
   /**
@@ -33,10 +144,29 @@ export class FundingController {
    */
   static async handleFundingCallback(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const callbackData = req.body;
+      const callbackData = await enrichCallbackFromVirtualAccount(
+        normalizeFundingCallback(req.body as FundingCallbackData)
+      );
+      const incomingHash = readHeaderValue(req, 'hash') || callbackData.hash;
+
+      const hasPayonusSignatureContext =
+        Boolean(callbackData.onusReference || callbackData.paymentStatus || callbackData.businessId);
+      if (hasPayonusSignatureContext && !verifyPayonusWebhookSignature(callbackData, incomingHash)) {
+        logger.warn('Rejected PayOnUs webhook: invalid signature', {
+          transactionId: callbackData.transactionId,
+          onusReference: callbackData.onusReference,
+          businessId: callbackData.businessId
+        });
+        res.status(401).json({
+          success: false,
+          error: 'Invalid webhook signature'
+        });
+        return;
+      }
       
       logger.info('Received funding callback', {
         transactionId: callbackData.transactionId,
+        onusReference: callbackData.onusReference,
         walletId: callbackData.walletId,
         userId: callbackData.userId,
         merchantId: callbackData.merchantId,
@@ -56,9 +186,53 @@ export class FundingController {
         });
         return;
       }
-      
-      const { walletId, userId, amount, transactionId, status, description, providerReference, merchantId, appId, merchantWalletType } = value!;
-      
+
+      const {
+        walletId,
+        userId,
+        amount,
+        transactionId,
+        status,
+        description,
+        providerReference,
+        merchantId,
+        appId,
+        merchantWalletType,
+        onusReference
+      } = value!;
+
+      const duplicateFilter = onusReference
+        ? { provider: 'payonus', onusReference }
+        : { provider: 'payonus', transactionId };
+
+      const alreadySeenEvent = await WebhookEventModel.findOne(duplicateFilter).lean();
+      if (alreadySeenEvent && alreadySeenEvent.status === 'processed') {
+        logger.warn('Duplicate webhook callback received', {
+          transactionId,
+          onusReference
+        });
+        res.status(200).json({
+          success: true,
+          message: 'Transaction already processed',
+          duplicate: true
+        });
+        return;
+      }
+
+      await WebhookEventModel.findOneAndUpdate(
+        duplicateFilter,
+        {
+          $setOnInsert: {
+            provider: 'payonus',
+            transactionId,
+            onusReference,
+            status: 'received',
+            payload: req.body as Record<string, unknown>
+          }
+        },
+        { upsert: true, new: true }
+      );
+
       // Check for duplicate transaction
       if (processedTransactions.has(transactionId)) {
         logger.warn('Duplicate funding callback received', {
@@ -75,7 +249,7 @@ export class FundingController {
         });
         return;
       }
-      
+
       // Verify the callback is for a successful transaction
       if (status !== 'SUCCESS' && status !== 'COMPLETED') {
         logger.info('Funding callback received for non-successful transaction', {
@@ -87,6 +261,10 @@ export class FundingController {
           success: true,
           message: 'Callback received but transaction not successful'
         });
+        await WebhookEventModel.updateOne(
+          duplicateFilter,
+          { $set: { status: 'processed', processedAt: new Date() } }
+        );
         return;
       }
       
@@ -139,6 +317,10 @@ export class FundingController {
         
         // Mark transaction as processed
         processedTransactions.add(transactionId);
+        await WebhookEventModel.updateOne(
+          duplicateFilter,
+          { $set: { status: 'processed', processedAt: new Date() } }
+        );
         
         logger.info('Merchant wallet balance updated from funding callback', {
           walletId: merchantWalletResult.wallet.id,
@@ -234,6 +416,10 @@ export class FundingController {
         
         // Mark transaction as processed
         processedTransactions.add(transactionId);
+        await WebhookEventModel.updateOne(
+          duplicateFilter,
+          { $set: { status: 'processed', processedAt: new Date() } }
+        );
         
         logger.info('User wallet balance updated from funding callback', {
           walletId: userWalletResult.wallet.id,
@@ -301,6 +487,10 @@ export class FundingController {
       
       // Mark transaction as processed
       processedTransactions.add(transactionId);
+      await WebhookEventModel.updateOne(
+        duplicateFilter,
+        { $set: { status: 'processed', processedAt: new Date() } }
+      );
       
       logger.info('Wallet balance updated from funding callback', {
         walletId,
@@ -327,6 +517,19 @@ export class FundingController {
         error: error instanceof Error ? error.message : 'Unknown error',
         body: req.body
       });
+      const body = req.body as FundingCallbackData;
+      const fallbackTransactionId = body?.transactionId || body?.onusReference;
+      if (fallbackTransactionId) {
+        await WebhookEventModel.updateOne(
+          { provider: 'payonus', transactionId: fallbackTransactionId },
+          {
+            $set: {
+              status: 'failed',
+              error: error instanceof Error ? error.message : 'Unknown error'
+            }
+          }
+        );
+      }
       
       next(error);
     }

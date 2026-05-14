@@ -7,8 +7,9 @@ export interface IApplication extends Document {
     productType: string;
     amount: number;
     currency: string;
-    status: 'PENDING' | 'APPROVED' | 'REJECTED';
+    status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'BLACKLISTED';
     rejectionReason?: string;
+    blacklistReason?: string;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -22,11 +23,12 @@ const ApplicationSchema: Schema = new Schema({
     currency: { type: String, required: true },
     status: {
         type: String,
-        enum: ['PENDING', 'APPROVED', 'REJECTED'],
+        enum: ['PENDING', 'APPROVED', 'REJECTED', 'BLACKLISTED'],
         default: 'PENDING',
         index: true
     },
     rejectionReason: { type: String },
+    blacklistReason: { type: String },
 }, {
     timestamps: true
 });

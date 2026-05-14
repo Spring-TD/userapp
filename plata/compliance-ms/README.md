@@ -28,13 +28,24 @@ Failure to configure these correctly will result in 502 Bad Gateway errors or au
 - Risk assessment and scoring
 - Document management and validation
 - Compliance workflow management
-- Shareholder liveness testing
+- Shareholder verification (Prembly **IdentityPass**: BVN, bank account, or document — not liveness)
 - Administrative compliance management
 - API-based compliance checking
 - **CAC Certificate Verification** - Verify business registration with the Nigerian Corporate Affairs Commission (via Prembly API)
 - **AML Document Verification** - Verify business documents using Prembly API only (no other AML providers)
 - **Sanctions List Checking** - Check individuals and businesses against international sanctions lists (via Prembly API)
 - **Prembly Integration** - Comprehensive identity verification and compliance platform integration
+
+### SpringTD fork (`springApp/compliance-ms`)
+
+That codebase optionally integrates **Fuspay Modular KYC** (merchant user creation via Modular API before business KYC persist). Configuration and behaviour are documented in **`springApp/compliance-ms/README.md`** under **Fuspay Modular KYC setup** and `.env.example` there — not enabled in this `plata` tree unless ported.
+
+### Notifications (notifications-ms)
+
+When **`KYC_NOTIFICATIONS_ENABLED`** is enabled and **`NOTIFICATIONS_SERVICE_URL`** points at notifications-ms (see `src/config/environment.ts`):
+
+- For **merchants**, status transitions to **`failed`**, **`rejected`**, or **`in_progress`** trigger **`POST /api/v1/notifications/send-dual`** with template **`compliance-incomplete`** (email + in-app). The legacy single-channel **`kyc-status-updated`** email is **not** sent for those statuses (avoids duplicate emails).
+- Other status transitions continue to use **`POST /api/v1/notifications/send`** with template **`kyc-status-updated`** (email only).
 
 ## Technology Stack
 
@@ -46,7 +57,7 @@ Failure to configure these correctly will result in 502 Bad Gateway errors or au
 - **Testing**: Jest + Supertest
 - **Security**: helmet, CORS, express-rate-limit
 - **Logging**: Winston
-- **Verification Provider**: Prembly API (KYC, AML, CAC, Sanctions, Liveness)
+- **Verification Provider**: Prembly API (KYC, AML, CAC, Sanctions, Liveness for non-shareholder flows; shareholders use IdentityPass)
 
 ## Critical Deployment Configuration
 
@@ -234,8 +245,8 @@ The frontend **never talks to DigitalOcean Spaces directly**. All document stora
 | `shareholders[].bvn` | No | string, 11 chars |
 | `shareholders[].bankAccount` | No | string, 10–20 |
 | `shareholders[].uboDocument` | No | `{ fileName, fileType, fileSize (max 5MB), fileUrl, uploadDate }` |
-| `businessDocuments` | Yes | array, **exactly 8** items (one per type below) |
-| `businessDocuments[].type` | Yes | All 7 types must appear (min 8 items): `certificate_of_incorporation`, `articles_of_association`, `list_of_shareholders`, `proof_of_address`, `bank_statement`, `aml_policies`, `data_privacy_policy` |
+| `businessDocuments` | No | array (default **empty**). **Partial upload is allowed** on submit; merchants may add the rest later via **`PUT /api/v1/kyc/business/documents`**. Each item’s `type` must be one of: `certificate_of_incorporation`, `articles_of_association`, `list_of_shareholders`, `proof_of_address`, `bank_statement`, `aml_policies`, `data_privacy_policy`, `director_identification`, `operating_license` |
+| `businessDocuments[].type` | Yes (per row) | one of the enum values above |
 | `businessDocuments[].fileName` | Yes | string |
 | `businessDocuments[].fileType` | Yes | `"application/pdf"` |
 | `businessDocuments[].fileSize` | Yes | number, max 5MB |
@@ -244,7 +255,7 @@ The frontend **never talks to DigitalOcean Spaces directly**. All document stora
 | `businessDocuments[].status` | Yes | one of: `low`, `medium`, `high`, `very_high` (risk level; see validation) |
 | `riskAssessment` | Yes | `{ annualTurnover, expectedTransactionVolume (≥0), highRiskJurisdiction, sanctionListCheck, adverseMediaCheck }` |
 
-**Required business document types (all 8):** `certificate_of_incorporation`, `articles_of_association`, `list_of_shareholders`, `proof_of_address`, `bank_statement`, `aml_policies`, `data_privacy_policy`. (If the codebase adds more enum values, all must be sent.)
+**Business document types (enum):** `certificate_of_incorporation`, `articles_of_association`, `list_of_shareholders`, `proof_of_address`, `bank_statement`, `aml_policies`, `data_privacy_policy`, `director_identification`, `operating_license`. Submit may include **any subset**; use **`PUT /api/v1/kyc/business/documents`** with one or more rows to upsert files later (same `type` + metadata shape as submit).
 
 **Backend response (frontend):**
 - **Success (201):** `{ "success": true, "data": { "kycId": "<id>", "userId": "<id>", "status": "PENDING", "riskLevel": "<level>", "shareholderCount": <n>, "submittedAt": "<ISO date>" } }`
@@ -275,6 +286,29 @@ The frontend **never talks to DigitalOcean Spaces directly**. All document stora
   **Backend response (frontend):**
   - **Success (200):** `{ "success": true, "data": { "id"|"_id", "type", "fileName", "fileType", "fileSize", "fileUrl", "uploadedAt", "status", ... } }`
   - **Error (404):** `{ "success": false, "error": "Document not found" }` or `"No KYC profile found for this user"`
+
+- **Upsert business documents (partial follow-up) — `PUT /api/v1/kyc/business/documents`**  
+  Add or replace one or more business documents **by type** (same upsert rules as submit: one row per `type` per merchant). Request body:
+
+  ```json
+  {
+    "businessDocuments": [
+      {
+        "type": "director_identification",
+        "fileName": "directors.pdf",
+        "fileType": "application/pdf",
+        "fileSize": 1024000,
+        "fileUrl": "https://…",
+        "uploadedAt": "2026-04-12T12:00:00.000Z",
+        "status": "pending"
+      }
+    ]
+  }
+  ```
+
+  **Response (200):** `{ "success": true, "data": { "updated": <n>, "documents": [ … all stored business docs for merchant … ] } }`  
+  **Errors (400):** validation (e.g. empty `businessDocuments`, invalid `type`, non-PDF).  
+  Requires authenticated **merchant** JWT (same as other `/kyc/business/*` routes).
 
 ### Business dropdown options (for frontend forms)
 
@@ -675,12 +709,7 @@ Submit KYC information for a business customer to create a KYC order.
         "fileUrl": "https://example.com/bank_statement.pdf",
         "uploadDate": "2025-01-10T09:00:00.000Z"
       },
-      "status": "pending",
-      "kyc": {
-        "url": "https://liveness-test.example.com/test-123",
-        "expiresAt": "2025-01-15T09:00:00.000Z",
-        "status": "pending"
-      }
+      "status": "pending"
     }
   ],
   "businessDocuments": [
@@ -702,7 +731,7 @@ Submit KYC information for a business customer to create a KYC order.
   }
 }
 ```
-**Note:** `businessDescription` is required (10–500 chars). All 8 business document types must be present (validation requires min 8 items; types: `certificate_of_incorporation`, `articles_of_association`, `list_of_shareholders`, `proof_of_address`, `bank_statement`, `aml_policies`, `data_privacy_policy`). `businessDocuments[].status` is validated as a risk level: `low`, `medium`, `high`, or `very_high`. Shareholder `kyc.url` is the liveness test link; total ownership must be ≤ 100%.
+**Note:** `businessDescription` is required (10–500 chars). **`businessDocuments` is optional** (may be omitted or `[]`); any subset of document types may be sent on submit, and the rest added via **`PUT /api/v1/kyc/business/documents`**. Allowed `type` values include `director_identification` and `operating_license`. `businessDocuments[].status` uses **`KYCStatus`** values (e.g. `pending`, …), not risk labels. On submit, each shareholder gets **`kyc`** from Prembly **IdentityPass** (BVN if 11 digits, else bank account + `bankCode`, else UBO / bank statement URL as document). `kyc.url` is Prembly’s redirect when provided, otherwise a public-base fallback (`KYC_PUBLIC_BASE_URL` / `PUBLIC_BASE_URL`). Configure **`PREMBLY_APP_ID`** and use **`PREMBLY_API_SECRET`** as the IdentityPass `x-api-key` (see Prembly docs). Optional: **`PREMBLY_DEFAULT_BANK_CODE`** if the UI omits `bankCode`. Total ownership must be ≤ 100%.
 
 **Success Response (201 Created):**
 ```json
@@ -1155,7 +1184,7 @@ Retrieves the shareholders (beneficial owners) for the given merchant. The authe
       },
       "status": "pending",
       "kyc": {
-        "url": "https://liveness-test.example.com/test-123",
+        "url": "https://example.com/kyc/shareholder-identitypass?reference=abc123",
         "expiresAt": "2025-01-15T09:00:00.000Z",
         "status": "pending"
       }
@@ -1274,6 +1303,8 @@ Updates the business survey data for a merchant user.
 
 Updates the shareholders (beneficial owners) for the authenticated merchant. Request body is the **full array** of shareholders (replaces existing list). Use this to add new shareholders by appending to the list returned from `GET /api/v1/kyc/business/:merchantId/beneficial-owners`.
 
+**After KYC is completed or approved:** This endpoint still works. Merchants may add or replace beneficial owners at any time (unless the account is **blocked** by compliance). Always send the **complete** current list: fetch with GET, append or edit entries, then PUT. The service also accepts `{ "shareholders": [...] }` or a GET-shaped envelope `{ "success": true, "data": [...] }` if you paste from list responses.
+
 **Authentication**: Requires valid JWT token for business customers
 
 **Request Body:** Array of shareholder objects. Each object supports:
@@ -1284,11 +1315,13 @@ Updates the shareholders (beneficial owners) for the authenticated merchant. Req
 | `ownershipPercentage` | Yes | number, 0–100 (total across all shareholders ≤ 100) |
 | `bankStatement` | Yes | `{ fileName, fileType, fileSize (max 5MB), fileUrl, uploadDate }` — PDF, upload first and send URL |
 | `status` | Yes | e.g. `pending`, `approved`, `rejected` |
-| `kyc` | Yes | `{ url, expiresAt, status }` — liveness test link |
+| `kyc` | No | Usually omitted; backend sets IdentityPass result (`url`, `expiresAt`, `status`, `flow`, `verificationKind`, …) |
 | `email` | No | string, email |
 | `phoneNumber` | No | string, 10–20 |
-| `bvn` | No | string, 11 chars (Bank Verification Number) |
-| `bankAccount` | No | string, 10–20 |
+| `bvn` | No | string, 11 chars (Bank Verification Number) — triggers `/identitypass/verification/bvn` |
+| `bankAccount` | No | string, 10–20 — use with `bankCode` for `/identitypass/verification/bank_account` |
+| `bankCode` | No | Digits (e.g. Nigeria bank code) — required with `bankAccount` unless `PREMBLY_DEFAULT_BANK_CODE` is set |
+| `documentType` | No | Optional Prembly `doc_type` for document verification |
 | `uboDocument` | No | Ultimate Beneficial Owner doc: `{ fileName, fileType, fileSize (max 5MB), fileUrl, uploadDate }` — PDF |
 
 **Example:**
@@ -1315,12 +1348,26 @@ Updates the shareholders (beneficial owners) for the authenticated merchant. Req
       "fileUrl": "https://example.com/bank_statement.pdf",
       "uploadDate": "2025-01-10T09:00:00.000Z"
     },
-    "status": "pending",
-    "kyc": {
-      "url": "https://liveness-test.example.com/test-123",
-      "expiresAt": "2025-01-15T09:00:00.000Z",
-      "status": "pending"
-    }
+    "status": "pending"
+  }
+]
+```
+
+*(Omit `kyc` on input; the response includes generated `kyc` from IdentityPass.)*
+
+```json
+[
+  {
+    "fullName": "John Doe",
+    "ownershipPercentage": 60,
+    "bankStatement": {
+      "fileName": "bank_statement.pdf",
+      "fileType": "application/pdf",
+      "fileSize": 102400,
+      "fileUrl": "https://example.com/bank_statement.pdf",
+      "uploadDate": "2025-01-10T09:00:00.000Z"
+    },
+    "status": "pending"
   }
 ]
 ```
@@ -1389,7 +1436,7 @@ Retrieves enhanced due diligence information for high-risk business customers.
         },
         "status": "pending",
         "kyc": {
-          "url": "https://liveness-test.example.com/test-123",
+          "url": "https://example.com/kyc/shareholder-identitypass?reference=abc123",
           "expiresAt": "2025-01-15T09:00:00.000Z",
           "status": "pending"
         }
@@ -1460,7 +1507,7 @@ Retrieves corporate structure information for corporation and LLC business types
         },
         "status": "pending",
         "kyc": {
-          "url": "https://liveness-test.example.com/test-123",
+          "url": "https://example.com/kyc/shareholder-identitypass?reference=abc123",
           "expiresAt": "2025-01-15T09:00:00.000Z",
           "status": "pending"
         }

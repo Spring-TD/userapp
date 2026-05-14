@@ -51,7 +51,7 @@ export interface ProductStructure {
   /** INVESTMENT — Structure tab */
   returnsOnInvestment?: number | string;
   /** Structure dropdown (distinct from `about.investmentTypes[]` line items) */
-  investmentType?: string;
+  investmentType?: 'lump_sum' | 'unit_based';
   investmentAmount?: { min?: number; max?: number };
   investmentTermsAndCondition?: string;
   enableUnitInvestmentPurchase?: boolean;
@@ -98,16 +98,20 @@ export interface LoanRequirements {
   };
   documentsToDownload?: Array<{ name: string; fileUrl?: string }>;
   /**
-   * Extra rules shown during loan apply. **`contentType`** controls applicant UI: `document_upload` → file upload
-   * for this requirement; `information` → text field(s). Answers/files are stored by the application service, not here.
+   * Extra rules shown during loan apply. **`contentType`** controls applicant UI and now supports
+   * `document_upload` and `document_template`. Answers/files are stored by the application service, not here.
    */
   otherRequirements?: Array<{
     /** Short label for the row (e.g. “Account Statement”). */
     requirementType?: string;
-    /** `GET /options/loan-other-requirement-content-type` — `information` | `document_upload`. */
+    /** `GET /options/loan-other-requirement-content-type` — `document_upload` | `document_template`. */
     contentType?: string;
-    /** Instructions or constraints (e.g. “Minimum of 6 months”) shown to the applicant. */
+    /** Instructions/description shown to the applicant (required when `contentType` is `document_upload`). */
     description?: string;
+    /**
+     * For `document_template`: uploaded template file URL/storage key that applicants can download, fill, and submit.
+     */
+    templateFileUrl?: string;
     /** For `document_upload`: if true, applicant must attach a file. */
     uploadRequired?: boolean;
   }>;
@@ -171,7 +175,17 @@ export interface MortgageProperty {
   propertyType?: string;
   value?: number | string;
   location?: string;
-  previewAssetUrl?: string;
+  propertyDescription?: string;
+  /**
+   * Property facilities selected by the frontend. Suggested values are available from
+   * `GET /api/v1/products/options/mortgage-facilities`, but custom values are allowed.
+   */
+  facilities?: string[];
+  /** Free-text facilities entered via "Add custom facility". */
+  customFacilities?: string[];
+  /** One or more uploaded property image URLs/storage keys. */
+  imageUrls?: string[];
+  videoUrl?: string;
 }
 
 /** COMMODITY optional legacy/extra blob — prefer typed `about` / `structure` / `feesAndCharges` / `commodityPrices`. */
@@ -180,6 +194,58 @@ export interface ProductTypeConfig {
   lockInPeriodDays?: number;
   minBalance?: number;
   [key: string]: unknown;
+}
+
+export interface ProductAmountProjection {
+  principal: number;
+  projectedInterestOrYield: number;
+  projectedTotalValue: number;
+  projectedPeriodicPayment?: number;
+}
+
+export interface ProductConfigCalculations {
+  basis: {
+    type: ProductDiscriminator;
+    tenureMonths?: number;
+    annualRatePercent?: number;
+    repaymentFrequency?: string;
+  };
+  projections?: {
+    minimum?: ProductAmountProjection;
+    maximum?: ProductAmountProjection;
+  };
+  fees?: {
+    minimum?: number;
+    maximum?: number;
+  };
+  mortgage?: {
+    equityContributionPercent?: number;
+    propertyValue?: number;
+    estimatedDownPayment?: number;
+    estimatedFinancedAmount?: number;
+  };
+  savings?: {
+    savingsType?: string;
+    withdrawalFlexibility?: string;
+  };
+  investment?: {
+    unitPrice?: number;
+    minimumUnits?: number;
+    minimumTicketSize?: number;
+  };
+  commodity?: {
+    unitPrice?: number;
+    minimumQuantity?: number;
+    estimatedMinimumNotional?: number;
+    offerYieldPercent?: number;
+    projectedUnitPriceWithYield?: number;
+    recentPrice?: number;
+    averageHistoricalPrice?: number;
+    lowestHistoricalPrice?: number;
+    highestHistoricalPrice?: number;
+    projectedGrossMarginPerUnit?: number;
+    projectedGrossMarginPercent?: number;
+  };
 }
 
 export interface Product {
@@ -211,6 +277,15 @@ export interface Product {
   unitOfMeasure?: string;
   /** COMMODITY — Commodity Price tab */
   commodityPrices?: CommodityPriceEntry[];
+  /** Derived configuration math engine output (computed at read time). */
+  calculatedConfig?: ProductConfigCalculations;
+}
+
+/** Optional: when set, product-ms sends email + in-app (notifications-ms send-dual) after create/update. */
+export interface ProductNotifyRecipient {
+  userId: string;
+  email: string;
+  merchantName?: string;
 }
 
 export interface CreateProductRequest {
@@ -228,6 +303,7 @@ export interface CreateProductRequest {
   properties?: MortgageProperty[];
   config?: ProductTypeConfig;
   commodityPrices?: CommodityPriceEntry[];
+  notifyRecipient?: ProductNotifyRecipient;
 }
 
 export interface UpdateProductRequest {
@@ -250,6 +326,7 @@ export interface UpdateProductRequest {
   minimumQuantity?: number;
   unitOfMeasure?: string;
   commodityPrices?: CommodityPriceEntry[];
+  notifyRecipient?: ProductNotifyRecipient;
 }
 
 export interface ProductResponse {

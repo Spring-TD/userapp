@@ -13,12 +13,13 @@ Deployment URL: https://walletms-2026.fly.dev/
 - Transaction history
 - 3rd Party API Integration
 - External Funding Callbacks
+- Optional **Payonus** virtual **NUBAN** provisioning for wallets whose currency matches `PAYONUS_NUBAN_CURRENCIES` (default **NGN**): **dynamic** virtual accounts for each merchant wallet (Treasury, Operation, KYC), **reserved** accounts for user wallets when using the documented fixed-account API path
 
 ## API Endpoints
 
 ### Merchant Wallets
-- `POST /api/v1/wallets/merchant` - Create merchant wallet
-- `POST /api/v1/wallets/merchant/all` - Create all merchant wallets (Treasury, Operation, KYC)
+- `POST /api/v1/wallets/merchant` - Create merchant wallet (optional body: `appId`, `appName`, `payonusSubaccountCode`, `complianceShareholderUserId`, plus `name`, `currency`, `merchantWalletType`)
+- `POST /api/v1/wallets/merchant/all` - Create all merchant wallets (Treasury, Operation, KYC). Body may include `currency`, `appId`, `appName`, `payonusSubaccountCode`, `complianceShareholderUserId` (defaults shareholder id from JWT when omitted)
 - `GET /api/v1/wallets/merchant/:merchantId/type/:walletType` - Get specific merchant wallet by type
 - `GET /api/v1/wallets/merchant/:merchantId/all` - Get all merchant wallets
 - `PUT /api/v1/wallets/merchant/balance` - Update merchant wallet balance
@@ -41,7 +42,7 @@ Deployment URL: https://walletms-2026.fly.dev/
 - `POST /api/v1/wallets/treasury/debit-merchant` - Debit the merchant's own Treasury Wallet
 
 ### User Wallets
-- `POST /api/v1/wallets/user` - Create user wallet
+- `POST /api/v1/wallets/user` - Create user wallet (requires **Bearer** JWT; user must be `userType` user with `merchantId`)
 - `GET /api/v1/wallets/user/:userId` - Get user wallet
 - `PUT /api/v1/wallets/user/:userId/balance` - Update user wallet balance
 - `GET /api/v1/wallets/user/:userId/transactions` - Get user wallet transactions with filtering options (by date range and type)
@@ -49,12 +50,19 @@ Deployment URL: https://walletms-2026.fly.dev/
 - `POST /api/v1/wallets/user/:userId/api-call` - Make a 3rd party API call from user wallet
 - `GET /api/v1/wallets/merchant/:merchantId/users` - Get all user wallets for a merchant
 
+### Internal (service-to-service)
+
+Used by **client-auth-ms** after retail user signup so a wallet can be created **before** the user has a session JWT.
+
+- `POST /api/v1/internal/wallets/user` — Create user wallet + Payonus flow. **Header:** `X-Internal-Token: <WALLET_INTERNAL_TOKEN>` (must match wallet-ms env). **Body:** `userId`, `merchantId`, optional `name`, `currency`, `complianceShareholderUserId` (defaults to `userId`). Returns same shape as `POST /api/v1/wallets/user`. If `WALLET_INTERNAL_TOKEN` is unset on wallet-ms, this route responds **503**.
+
 ### Funding Callbacks
 - `POST /api/v1/wallets/funding/callback` - Webhook endpoint for funding notifications from payment providers
-  - **Supports merchant wallet funding**: Use `merchantId` + `merchantWalletType` (TREASURY, OPERATION, or KYC)
+  - **Supports merchant wallet funding**: Use `merchantId` + `merchantWalletType` (TREASURY, OPERATION, or KYC). For **app-scoped** merchant wallets, include **`appId`** so the correct Treasury / Operation / KYC row is resolved.
   - **Supports user wallet funding (by walletId)**: Use `walletId`
-  - **Supports user wallet funding (by user)**: Use `userId` + `merchantId` (NEW!)
-  - **Transaction deduplication**: Prevents duplicate processing using `transactionId`
+  - **Supports user wallet funding (by user)**: Use `userId` + `merchantId`
+  - **PayOnUs / virtual account**: If the body includes **`accountNumber`** or **`virtual_account_number`** and no wallet identifiers yet, the service looks up the wallet by stored Payonus NUBAN and fills `walletId`, `merchantId`, `appId` (merchant), and `merchantWalletType` as appropriate. Normalizes common PayOnUs fields (`onusReference`, `paymentStatus`, `transactionAmount`, `businessId`, etc.). Verifies the **`hash`** header (or body `hash`) when `PAYONUS_WEBHOOK_*` is configured.
+  - **Transaction deduplication**: In-memory dedupe uses **`onusReference`** when present, otherwise **`transactionId`**
   - `GET /api/v1/wallets/funding/status/:transactionId` - Check funding status manually
 
 #### Funding Callback Usage Examples
@@ -165,7 +173,7 @@ Response:
 Only `SUCCESS` or `COMPLETED` status will credit the wallet. Other statuses (`PENDING`, `FAILED`, `CANCELLED`) are acknowledged but don't update the balance.
 
 **Idempotency:**
-The system prevents duplicate funding by tracking `transactionId`. Retrying with the same transaction ID returns:
+The system prevents duplicate funding by tracking `onusReference` (PayOnUs) when present, otherwise `transactionId`. Retrying with the same key returns:
 ```json
 {
   "success": true,
@@ -206,6 +214,49 @@ Response:
 }
 ```
 
+## Payonus virtual NUBAN
+
+When `PAYONUS_NUBAN_ENABLED` is set to a truthy value (`true`, `1`, `yes`) and `PAYONUS_BASE_URL` plus credentials are set, the service calls PayOnUs after each successful **merchant** or **user** wallet create.
+
+| Wallet | Payonus flow | Stored `virtualNuban.accountType` |
+|--------|----------------|-----------------------------------|
+| Merchant (Treasury, Operation, KYC) | Dynamic virtual account (`POST /api/v1/virtual-accounts/dynamic`) | `dynamic` |
+| User | Reserved virtual NUBAN via documented fixed-account path (default `POST /api/v1/virtual-accounts/fixed-account`) | `reserved` |
+
+Provisioning runs only when the wallet **currency** is listed in `PAYONUS_NUBAN_CURRENCIES` (default **`NGN`**). If PayOnUs returns an error or no account number, the wallet row still exists; responses include `virtualNuban` with `provisionStatus: "failed"` and `provisionError`.
+
+**BVN for fixed-account (user) flows:** Prefer **`COMPLIANCE_SERVICE_URL`** + **`COMPLIANCE_WALLET_INTERNAL_TOKEN`** so wallet-ms can load the first shareholder BVN from compliance-ms (`/api/v1/kyc/internal/payonus/first-shareholder-bvn/:userId`). Alternatively set **`PAYONUS_VA_BVN`**, or for sandbox only **`PAYONUS_VA_USE_TEST_PLACEHOLDERS=true`**.
+
+**Merchant wallet metadata:** Optional fields on create (or on `POST /api/v1/wallets/merchant/all` body) include **`appName`**, **`payonusSubaccountCode`**, and **`complianceShareholderUserId`** (defaults to the authenticated JWT `userId` when omitted). These support labeling and BVN resolution for the merchant owner.
+
+### Environment variables
+
+See **`.env.example`** for a full template. Commonly used:
+
+| Variable | Description |
+|----------|-------------|
+| `WALLET_INTERNAL_TOKEN` | Shared secret for `POST /api/v1/internal/wallets/user`; caller sends `X-Internal-Token`. **Same value** as **client-auth-ms** `WALLET_INTERNAL_TOKEN`. If unset, internal wallet routes are disabled (**503**). |
+| `PAYONUS_NUBAN_ENABLED` | Turn integration on or off |
+| `PAYONUS_BASE_URL` | API base URL (no trailing slash), e.g. PayOnUs core or API host |
+| `PAYONUS_OAUTH_BASE_URL` | Optional OAuth host when it differs from `PAYONUS_BASE_URL` |
+| `PAYONUS_API_KEY` / `PAYONUS_SECRET_KEY` | Credential for `bearer` / `api-key`, or OAuth id fallback |
+| `PAYONUS_AUTH_MODE` | `bearer` (default), `api-key`, `basic`, or `oauth` |
+| `PAYONUS_CLIENT_ID` / `PAYONUS_CLIENT_SECRET` | OAuth `apiClientId` / `apiClientSecret` when `authMode=oauth` |
+| `PAYONUS_TOKEN_PATH` | OAuth token path (default `/api/v1/access-token`) |
+| `PAYONUS_MERCHANT_NUBAN_PATH` / `PAYONUS_USER_NUBAN_PATH` | Relative paths for fixed-account style creates (defaults documented above) |
+| `PAYONUS_VA_BUSINESS_ID` | PayOnUs Business ID (required for dynamic merchant VA and fixed-account bodies) |
+| `PAYONUS_VA_DOB` | DOB for fixed-account payload (default `1990-01-01`) |
+| `PAYONUS_VA_NOTIFICATION_URL` / `PAYONUS_VA_CALLBACK_URL` | Callback / notification URLs for dynamic VA |
+| `PAYONUS_NUBAN_CURRENCIES` | Comma-separated ISO codes (default `NGN`) |
+| `PAYONUS_VA_USE_TEST_PLACEHOLDERS` | Sandbox-only BVN placeholder when unset |
+| `COMPLIANCE_SERVICE_URL` | compliance-ms base URL for internal BVN lookup |
+| `COMPLIANCE_WALLET_INTERNAL_TOKEN` | Sent as `X-Internal-Token` to compliance-ms |
+| `PAYONUS_WEBHOOK_VERIFICATION_KEY` | Validates webhook `hash` (see `src/config/payonusWebhook.ts`) |
+| `PAYONUS_WEBHOOK_ENFORCE_SIGNATURE` | Reject webhooks with missing/invalid hash when `true` |
+| `PAYONUS_DEFAULT_MERCHANT_WALLET_TYPE` | Fallback `merchantWalletType` when normalizing PayOnUs payloads |
+
+Implementation: `src/config/payonusNuban.ts`, `src/services/payonusNubanClient.ts`, `src/services/payonusNubanProvisioning.ts`, `src/config/payonusWebhook.ts`, `src/middleware/internalWalletAuth.ts`, `src/routes/internalWalletRoutes.ts`.
+
 ## Wallet Ledger Structure
 
 The wallet implements a dual balance system:
@@ -221,6 +272,10 @@ This structure ensures that funds are reserved when a user authorizes a transact
 ```typescript
 interface MerchantWallet extends BaseWallet {
   merchantId: string;
+  complianceShareholderUserId?: string; // JWT userId for compliance / BVN lookup
+  appId?: string;
+  appName?: string;
+  payonusSubaccountCode?: string;
   walletType: 'MERCHANT';
   merchantWalletType: MerchantWalletType; // TREASURY, OPERATION, or KYC
   name: string;
@@ -232,6 +287,7 @@ interface MerchantWallet extends BaseWallet {
 interface UserWallet extends BaseWallet {
   userId: string;
   merchantId: string;
+  complianceShareholderUserId?: string;
   walletType: 'USER';
   name: string;
 }
@@ -241,12 +297,23 @@ interface UserWallet extends BaseWallet {
 ```typescript
 interface BaseWallet {
   id: string;
+  balance: number; // alias for mainBalance
   mainBalance: number;
   ledgerBalance: number;
   currency: string;
   createdAt: Date;
   updatedAt: Date;
   status: WalletStatus;
+  virtualNuban?: {
+    accountType: 'static' | 'reserved' | 'dynamic';
+    provisionStatus: 'active' | 'failed';
+    accountNumber?: string;
+    bankName?: string;
+    bankCode?: string;
+    providerReference?: string;
+    provisionError?: string;
+    provisionedAt?: Date;
+  };
 }
 ```
 
@@ -336,7 +403,7 @@ Make a 3rd party API call from a user wallet. The specified amount will be debit
 
 ### POST `/api/v1/wallets/funding/callback`
 
-Webhook endpoint for funding notifications from payment providers. This endpoint will be called by external payment providers when a funding transaction is completed.
+Webhook endpoint for funding notifications from payment providers. This endpoint will be called by external payment providers when a funding transaction is completed. For **PayOnUs**, send normalized fields (`accountNumber` / `virtual_account_number`, `onusReference`, `paymentStatus`, `hash` header, etc.); see **Funding Callbacks** and **Payonus virtual NUBAN** above.
 
 **Request Body:**
 ```
@@ -389,7 +456,7 @@ Webhook endpoint for funding notifications from payment providers. This endpoint
    npm install
    ```
 
-2. Configure environment variables (copy .env.example to .env and modify)
+2. Configure environment variables (copy `.env.example` to `.env` and modify). For retail signup wallets from **client-auth-ms**, set **`WALLET_INTERNAL_TOKEN`** to the same value on both services.
 
 3. Run development server:
    ```bash
@@ -407,6 +474,8 @@ Webhook endpoint for funding notifications from payment providers. This endpoint
    ```
 
 ## Testing
+
+`src/__tests__/walletService.test.ts` exercises the service against **MongoDB** (`MONGODB_URI` must be reachable). To avoid calling PayOnUs during local runs, keep **`PAYONUS_NUBAN_ENABLED`** unset or `false`.
 
 Run user wallet feature tests:
 ```bash

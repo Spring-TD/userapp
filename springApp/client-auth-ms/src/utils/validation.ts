@@ -1,4 +1,5 @@
 import Joi from 'joi';
+import { LegalDocumentType } from '../models/LegalDocumentModel';
 
 const emailSchema = Joi.string().email().required().messages({
   'string.email': 'Please enter a valid email address',
@@ -136,6 +137,56 @@ export const userProfileUpdateSchema = Joi.object({
   phone: optionalPhoneSchema,
   country: optionalCountrySchema
 }).optional();
+
+export const faqCreateSchema = Joi.object({
+  question: Joi.string().trim().min(1).max(500).required(),
+  answer: Joi.string().trim().min(1).max(50000).required(),
+  sort_order: Joi.number().integer().min(0).optional(),
+  is_published: Joi.boolean().optional(),
+});
+
+export const faqUpdateSchema = Joi.object({
+  question: Joi.string().trim().min(1).max(500).optional(),
+  answer: Joi.string().trim().min(1).max(50000).optional(),
+  sort_order: Joi.number().integer().min(0).optional(),
+  is_published: Joi.boolean().optional(),
+}).min(1);
+
+export const supportContactCreateSchema = Joi.object({
+  title: Joi.string().trim().min(1).max(200).required(),
+  link_url: Joi.string().trim().min(1).max(2000).required(),
+  icon_type: Joi.string().trim().max(64).allow('').optional(),
+  sort_order: Joi.number().integer().min(0).optional(),
+  is_published: Joi.boolean().optional(),
+});
+
+export const supportContactUpdateSchema = Joi.object({
+  title: Joi.string().trim().min(1).max(200).optional(),
+  link_url: Joi.string().trim().min(1).max(2000).optional(),
+  icon_type: Joi.string().trim().max(64).allow('').optional(),
+  sort_order: Joi.number().integer().min(0).optional(),
+  is_published: Joi.boolean().optional(),
+}).min(1);
+
+export const legalDocumentCreateSchema = Joi.object({
+  document_type: Joi.string()
+    .valid(...Object.values(LegalDocumentType))
+    .required(),
+  title: Joi.string().trim().min(1).max(250).required(),
+  effective_date: Joi.date().iso().required(),
+  content: Joi.string().trim().min(1).max(100000).required(),
+  sort_order: Joi.number().integer().min(0).optional(),
+  is_published: Joi.boolean().optional(),
+});
+
+export const legalDocumentUpdateSchema = Joi.object({
+  document_type: Joi.string().valid(...Object.values(LegalDocumentType)).optional(),
+  title: Joi.string().trim().min(1).max(250).optional(),
+  effective_date: Joi.date().iso().optional(),
+  content: Joi.string().trim().min(1).max(100000).optional(),
+  sort_order: Joi.number().integer().min(0).optional(),
+  is_published: Joi.boolean().optional(),
+}).min(1);
 
 export const validateForm = <T>(schema: Joi.ObjectSchema, data: any): { error?: string; value?: T } => {
   const { error, value } = schema.validate(data, { 

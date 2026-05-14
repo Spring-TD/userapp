@@ -17,7 +17,13 @@ import {
   isSpacesConfigured,
   uploadToSpaces,
   validateProductImageUpload,
+  validateDocumentTemplateUpload,
 } from '../services/spacesService';
+import { getProductOverviewByTypeForApp, getProductOverviewForApp } from '../services/productOverviewService';
+import {
+  sendProductCreatedNotification,
+  sendProductStatusNotification
+} from '../services/notificationHelper';
 
 interface TypedRequest<T> extends Request {
   body: T;
@@ -154,7 +160,12 @@ export class ProductController {
         throw new ApiError(500, 'Validation returned no value');
       }
 
-      const product = await this.productService.createProduct(value);
+      const { notifyRecipient, ...createPayload } = value;
+      const product = await this.productService.createProduct(createPayload);
+
+      if (notifyRecipient) {
+        void sendProductCreatedNotification(notifyRecipient, product.name);
+      }
 
       res.status(201).json({
         success: true,
@@ -249,10 +260,25 @@ export class ProductController {
         throw new ApiError(500, 'Validation returned no value');
       }
 
-      const product = await this.productService.updateProduct(id, value);
+      const { notifyRecipient, ...updatePayload } = value;
+
+      const existing = await this.productService.getProductById(id);
+      if (!existing) {
+        throw new ApiError(404, 'Product not found');
+      }
+
+      const product = await this.productService.updateProduct(id, updatePayload);
 
       if (!product) {
         throw new ApiError(404, 'Product not found');
+      }
+
+      if (notifyRecipient && existing.isActive !== product.isActive) {
+        void sendProductStatusNotification(
+          notifyRecipient,
+          product.name,
+          product.isActive ? 'live' : 'deactivated'
+        );
       }
 
       res.json({
@@ -336,6 +362,80 @@ export class ProductController {
       }
 
       console.error('Error in getProductsByAppId controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  };
+
+  /** GET /api/v1/products/app/:appId/product-overview — JWT merchant; aggregate dashboard summary */
+  getProductOverview = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { appId } = req.params;
+
+      if (!appId?.trim()) {
+        throw new ApiError(400, 'App ID is required');
+      }
+
+      const authHeader = req.headers.authorization;
+      const data = await getProductOverviewForApp(appId.trim(), {
+        bearerToken: typeof authHeader === 'string' ? authHeader : undefined
+      });
+
+      res.json({
+        success: true,
+        data
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+        return;
+      }
+
+      console.error('Error in getProductOverview controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  };
+
+  /** GET /api/v1/products/app/:appId/product-overview/by-type/:productType — per-product table for one category */
+  getProductOverviewByType = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { appId, productType } = req.params;
+
+      if (!appId?.trim()) {
+        throw new ApiError(400, 'App ID is required');
+      }
+
+      let type;
+      try {
+        type = normalizeProductType(String(productType ?? ''));
+      } catch {
+        throw new ApiError(400, 'Invalid product type');
+      }
+
+      const data = await getProductOverviewByTypeForApp(appId.trim(), type);
+
+      res.json({
+        success: true,
+        data
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+        return;
+      }
+
+      console.error('Error in getProductOverviewByType controller:', error);
       res.status(500).json({
         success: false,
         error: 'Internal server error'
@@ -503,6 +603,67 @@ export class ProductController {
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Error in uploadProductImage controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error',
+      });
+    }
+  };
+
+  /**
+   * Upload a loan/mortgage document template to DigitalOcean Spaces.
+   * Expects multipart/form-data with a single file field named "file".
+   * Returns { success, url, key } where url should be stored as `requirements.otherRequirements[].templateFileUrl`.
+   */
+  // `any` for file to avoid hard dependency on @types/multer in strict Request type
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  uploadDocumentTemplate = async (req: Request & { file?: any }, res: Response): Promise<void> => {
+    try {
+      if (!req.file || !req.file.buffer) {
+        res.status(400).json({
+          success: false,
+          error: 'No file uploaded. Send a single file in the "file" field.',
+        });
+        return;
+      }
+
+      if (!isSpacesConfigured()) {
+        res.status(503).json({
+          success: false,
+          error: 'Document template upload is not configured (Spaces).',
+        });
+        return;
+      }
+
+      const mimeType =
+        req.file.mimetype || (req.file as any).mimeType || 'application/octet-stream';
+      const fileSize = req.file.size ?? req.file.buffer.length;
+      const validation = validateDocumentTemplateUpload(mimeType, fileSize);
+      if (!validation.valid) {
+        res.status(400).json({
+          success: false,
+          error: validation.error,
+        });
+        return;
+      }
+
+      const extMatch = req.file.originalname?.match(/\.[a-zA-Z0-9]+$/);
+      const ext = extMatch?.[0] || '.bin';
+      const appId = (req.body?.appId as string | undefined) || 'generic';
+      const key = `products/${appId}/templates/${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}${ext}`;
+
+      const result = await uploadToSpaces(req.file.buffer, key, mimeType);
+
+      res.status(200).json({
+        success: true,
+        url: result.url,
+        key: result.key,
+      });
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Error in uploadDocumentTemplate controller:', error);
       res.status(500).json({
         success: false,
         error: 'Internal server error',

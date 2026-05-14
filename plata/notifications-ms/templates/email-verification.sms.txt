@@ -1,2 +1,2 @@
-Hello {{userName}}! Please verify your email by visiting: {{verificationUrl}} - SpringTD
+Hello {{userName}}! Please verify your email by visiting: {{verificationUrl}} - Plata
 

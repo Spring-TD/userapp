@@ -5,6 +5,7 @@ interface ITransactionDocument extends Omit<Transaction, 'id'>, Document { }
 
 const TransactionSchema = new Schema<ITransactionDocument>({
     appId: { type: String, required: true, index: true },
+    productId: { type: String, required: false, index: true },
     amount: { type: Number, required: true },
     currency: { type: String, required: true },
     type: { type: String, enum: ['credit', 'debit'], required: true },

@@ -46,7 +46,7 @@ export interface RefreshTokenRequest {
 export interface OTPGenerateRequest {
   identifier: string;
   channel: 'email' | 'sms';
-  purpose: 'verification' | 'password-reset' | 'login';
+  purpose: 'verification' | 'password-reset' | 'password-change' | 'login';
 }
 
 export interface OTPVerifyRequest {
@@ -57,7 +57,7 @@ export interface OTPVerifyRequest {
 export interface OTPResendRequest {
   identifier: string;
   channel: 'email' | 'sms';
-  purpose: 'verification' | 'password-reset' | 'login';
+  purpose: 'verification' | 'password-reset' | 'password-change' | 'login';
 }
 
 // ===== PASSWORD TYPES =====
@@ -66,13 +66,15 @@ export interface ForgotPasswordRequest {
 }
 
 export interface ResetPasswordRequest {
-  token: string;
-  password: string;
+  identifier: string;
+  code: string;
+  newPassword: string;
 }
 
 export interface ChangePasswordRequest {
   currentPassword: string;
   newPassword: string;
+  code: string;
 }
 
 // ===== USER TYPES =====

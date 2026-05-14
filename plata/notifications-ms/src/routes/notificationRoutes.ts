@@ -99,9 +99,16 @@
 
 import { Router } from 'express';
 import notificationController from '../controllers/notificationController';
-import { validate, sendNotificationSchema } from '../middleware/validation';
+import { validate, sendNotificationSchema, sendEmailAndInAppSchema } from '../middleware/validation';
 
 const router = Router();
+
+// Email + in-app (same template)
+router.post(
+  '/send-dual',
+  validate(sendEmailAndInAppSchema),
+  notificationController.sendEmailAndInApp.bind(notificationController)
+);
 
 // Send notification
 router.post('/send', validate(sendNotificationSchema), notificationController.sendNotification.bind(notificationController));

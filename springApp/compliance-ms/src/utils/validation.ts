@@ -63,6 +63,12 @@ export const businessDocumentSchema = Joi.object({
 export const businessKYCSubmissionSchema = Joi.object({
   userId: Joi.string().required(),
   userType: Joi.string().valid(UserType.MERCHANT).required(),
+  modularKycUser: Joi.object({
+    email: Joi.string().email().optional(),
+    phone: Joi.string().min(8).max(20).optional(),
+    country: Joi.string().trim().length(2).uppercase().optional(),
+    userRef: Joi.string().min(3).max(120).optional()
+  }).optional(),
   businessInfo: Joi.object({
     companyName: Joi.string().min(2).max(100).required(),
     industry: Joi.string().valid(...INDUSTRY_TYPE_OPTIONS).required(),

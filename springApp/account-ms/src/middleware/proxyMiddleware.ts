@@ -1,6 +1,7 @@
 import { Express } from 'express';
 import { createProxyMiddleware, Options } from 'http-proxy-middleware';
 import { config } from '../config/environment';
+import { TenantRequest } from '../types/tenant';
 
 export const setupProxies = (app: Express) => {
     // Helper to create proxy options
@@ -13,18 +14,29 @@ export const setupProxies = (app: Express) => {
         pathRewrite: pathPrefix
             ? { '^/': `${pathPrefix}/` }
             : {},
+        on: {
+            proxyReq: (proxyReq, req) => {
+                const tenant = (req as TenantRequest).tenant;
+                if (!tenant) {
+                    return;
+                }
+                proxyReq.setHeader('x-tenant-app-id', tenant.appId);
+                proxyReq.setHeader('x-tenant-merchant-id', tenant.merchantId);
+                proxyReq.setHeader('x-tenant-subdomain', tenant.subdomain);
+            }
+        },
         // We don't need on: proxyReq here if we mount this BEFORE body-parser
     });
 
     // Product Service Proxy
     app.use(
         '/api/v1/products',
-        createProxyMiddleware(createOptions(config.productServiceUrl))
+        createProxyMiddleware(createOptions(config.productServiceUrl, '/api/v1/products'))
     );
 
     app.use(
         '/api/v1/configurations',
-        createProxyMiddleware(createOptions(config.productServiceUrl))
+        createProxyMiddleware(createOptions(config.productServiceUrl, '/api/v1/configurations'))
     );
 
     // Compliance Service Proxy
@@ -94,6 +106,18 @@ export const setupProxies = (app: Express) => {
     app.use(
         '/api/v1/user',
         createProxyMiddleware(createOptions(clientAuthTarget, '/api/v1/user'))
+    );
+    app.use(
+        '/api/v1/faqs',
+        createProxyMiddleware(createOptions(clientAuthTarget, '/api/v1/faqs'))
+    );
+    app.use(
+        '/api/v1/support-contacts',
+        createProxyMiddleware(createOptions(clientAuthTarget, '/api/v1/support-contacts'))
+    );
+    app.use(
+        '/api/v1/legal-documents',
+        createProxyMiddleware(createOptions(clientAuthTarget, '/api/v1/legal-documents'))
     );
     app.use('/verify-email', createProxyMiddleware(createOptions(clientAuthTarget)));
 };

@@ -25,7 +25,7 @@ describe('WalletService', () => {
               name: 'TREASURY Wallet for App app-123',
               mainBalance: 0,
               ledgerBalance: 0,
-              currency: 'USD',
+              currency: 'NGN',
               status: 'ACTIVE',
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString()
@@ -44,7 +44,7 @@ describe('WalletService', () => {
         'http://localhost:3004/api/v1/wallets/merchant',
         {
           name: 'TREASURY Wallet for App app-123',
-          currency: 'USD',
+          currency: 'NGN',
           merchantWalletType: 'TREASURY'
         },
         {
@@ -84,7 +84,7 @@ describe('WalletService', () => {
                 name: 'Treasury Wallet',
                 mainBalance: 0,
                 ledgerBalance: 0,
-                currency: 'USD',
+                currency: 'NGN',
                 status: 'ACTIVE',
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
@@ -97,7 +97,7 @@ describe('WalletService', () => {
                 name: 'Operation Wallet',
                 mainBalance: 0,
                 ledgerBalance: 0,
-                currency: 'USD',
+                currency: 'NGN',
                 status: 'ACTIVE',
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
@@ -110,7 +110,7 @@ describe('WalletService', () => {
                 name: 'KYC Wallet',
                 mainBalance: 0,
                 ledgerBalance: 0,
-                currency: 'USD',
+                currency: 'NGN',
                 status: 'ACTIVE',
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
@@ -129,7 +129,8 @@ describe('WalletService', () => {
       expect(mockAxios.post).toHaveBeenCalledWith(
         'http://localhost:3004/api/v1/wallets/merchant/all',
         {
-          currency: 'USD'
+          currency: 'NGN',
+          appId: 'app-123'
         },
         {
           headers: {

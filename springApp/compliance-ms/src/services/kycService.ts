@@ -84,6 +84,8 @@ import {
 } from '../utils/validation';
 import { cacService, CACVerificationResult } from './cacService';
 import { premblyService, PremblyIndividualKYCRequest, PremblyBusinessKYCRequest } from './premblyService';
+import { fuspayModularKycService } from './fuspayModularKycService';
+import { clientAuthService } from './clientAuthService';
 
 // Service class for KYC operations
 export class KYCService {
@@ -170,7 +172,7 @@ export class KYCService {
   }
 
   // Submit business KYC for verification
-  async submitBusinessKYC(data: BusinessKYCSubmissionRequest, userId?: string): Promise<{
+  async submitBusinessKYC(data: BusinessKYCSubmissionRequest, userId?: string, authToken?: string): Promise<{
     success: boolean;
     message?: string;
     data?: {
@@ -216,6 +218,63 @@ export class KYCService {
         return { success: false, error: 'riskAssessment is required.' };
       }
 
+      let fuspayCustomerId: string | undefined;
+      let fuspayUserRef: string | undefined;
+      let fuspayAppId: string | undefined;
+      let fuspayCountry: string | undefined;
+      let fuspayEmail: string | undefined;
+      let fuspayPhone: string | undefined;
+
+      if (fuspayModularKycService.isEnabled()) {
+        const clientAuthProfile = await clientAuthService.getCurrentUserProfile(authToken);
+        const preferredUser = data.modularKycUser;
+        const primaryShareholder = Array.isArray(data.shareholders) ? data.shareholders[0] : undefined;
+        const email = preferredUser?.email || clientAuthProfile.data?.email || primaryShareholder?.email;
+        const phone = preferredUser?.phone || clientAuthProfile.data?.phone || primaryShareholder?.phoneNumber;
+        const country = preferredUser?.country || clientAuthProfile.data?.country || data.businessSurvey?.country;
+        // user_ref: Fuspay expects our stable id for this person — canonical client-auth user id from JWT, then body.userId for service-style calls.
+        const explicitRef =
+          typeof preferredUser?.userRef === 'string' && preferredUser.userRef.trim().length > 0
+            ? preferredUser.userRef.trim()
+            : undefined;
+        const userRef = explicitRef || userId || data.userId;
+
+        if (!email || !phone || !country) {
+          return {
+            success: false,
+            error: 'Fuspay modular KYC is enabled, but email/phone/country were not resolved from client-auth-ms profile or fallback KYC payload.'
+          };
+        }
+        if (!userRef) {
+          return {
+            success: false,
+            error:
+              'Fuspay modular KYC is enabled, but user_ref could not be resolved. Submit with an authenticated client-auth user token (JWT userId) or include body.userId / modularKycUser.userRef.'
+          };
+        }
+
+        const fuspayResult = await fuspayModularKycService.createUser({
+          email,
+          phone,
+          country,
+          userRef
+        });
+
+        if (!fuspayResult.success) {
+          return {
+            success: false,
+            error: `Fuspay modular user creation failed: ${fuspayResult.error || 'Unknown error'}`
+          };
+        }
+
+        fuspayCustomerId = (fuspayResult.data as any)?.customer_id;
+        fuspayUserRef = userRef;
+        fuspayAppId = process.env.FUSPAY_MODULAR_APP_ID || undefined;
+        fuspayCountry = country;
+        fuspayEmail = email;
+        fuspayPhone = phone;
+      }
+
       // Calculate risk level based on business factors
       const riskLevel = this.calculateBusinessRiskLevel(data);
       
@@ -258,7 +317,19 @@ export class KYCService {
         shareholders: [], // Shareholders are stored in shareholders collection
         riskAssessment: data.riskAssessment,
         riskLevel,
-        workflowStatus: ComplianceWorkflowStatus.INITIAL_SCREENING
+        workflowStatus: ComplianceWorkflowStatus.INITIAL_SCREENING,
+        ...(fuspayCustomerId || fuspayUserRef
+          ? {
+              fuspay: {
+                customerId: fuspayCustomerId,
+                userRef: fuspayUserRef,
+                appId: fuspayAppId,
+                country: fuspayCountry,
+                email: fuspayEmail,
+                phone: fuspayPhone,
+              }
+            }
+          : {})
       };
 
       await BusinessInfoModel.findOneAndUpdate(
@@ -1119,7 +1190,12 @@ export class KYCService {
   }
 
   // Create a minimal KYC profile for a user
-  async createMinimalKYCProfile(userId: string, userType: UserType, createdBy?: string): Promise<{
+  async createMinimalKYCProfile(
+    userId: string,
+    userType: UserType,
+    createdBy?: string,
+    fuspay?: KYCProfile['fuspay']
+  ): Promise<{
     success: boolean;
     message?: string;
     data?: {
@@ -1147,7 +1223,8 @@ export class KYCService {
         userType,
         documents: [],
         status: KYCStatus.PENDING,
-        submittedAt: new Date()
+        submittedAt: new Date(),
+        ...(fuspay ? { fuspay } : {})
       };
       
       const result = await MockKYCProfileModel.save(profileData);

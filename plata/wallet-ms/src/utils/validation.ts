@@ -90,7 +90,9 @@ export const createMerchantWalletSchema = Joi.object({
   name: nameSchema,
   currency: currencySchema,
   merchantWalletType: merchantWalletTypeSchema.required(),
-  appId: merchantIdSchema
+  appId: merchantIdSchema,
+  appName: Joi.string().min(1).max(120).optional(),
+  payonusSubaccountCode: Joi.string().min(1).max(120).optional()
 });
 
 export const createUserWalletSchema = Joi.object({
@@ -166,6 +168,8 @@ export const userApiCallSchema = Joi.object({
 
 // Funding callback validation schema
 export const fundingCallbackSchema = Joi.object({
+  id: Joi.string().optional(),
+  type: Joi.string().optional(),
   walletId: walletIdSchema, // Optional if userId + merchantId provided
   userId: Joi.string().min(1).max(100).optional().messages({
     'string.min': 'User ID must not be empty',
@@ -179,7 +183,16 @@ export const fundingCallbackSchema = Joi.object({
   description: descriptionSchema,
   providerReference: Joi.string().optional(),
   signature: Joi.string().optional(),
+  hash: Joi.string().optional(),
   merchantId: merchantIdSchema,
+  businessId: Joi.string().optional(),
+  onusReference: Joi.string().optional(),
+  paymentChannel: Joi.string().optional(),
+  paymentStatus: Joi.string().optional(),
+  transactionAmount: Joi.number().optional(),
+  merchantReference: Joi.string().optional(),
+  accountNumber: Joi.string().optional(),
+  virtual_account_number: Joi.string().optional(),
   appId: merchantIdSchema,
   merchantWalletType: merchantWalletTypeSchema
 });

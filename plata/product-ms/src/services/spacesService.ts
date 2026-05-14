@@ -156,6 +156,50 @@ export function validateProductImageUpload(
   return { valid: true };
 }
 
+/**
+ * Allowed MIME types for document template uploads (loan/mortgage requirement templates).
+ * Matches: PDF, DOC, DOCX.
+ */
+export const ALLOWED_DOCUMENT_TEMPLATE_MIME_TYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+] as const;
+
+const ALLOWED_DOCUMENT_TEMPLATE_MIME_SET = new Set<string>(ALLOWED_DOCUMENT_TEMPLATE_MIME_TYPES);
+
+/** Human-readable list for API error messages */
+export const ALLOWED_DOCUMENT_TEMPLATE_FORMATS_LABEL = 'PDF, DOC, DOCX';
+
+const DEFAULT_TEMPLATE_MAX_SIZE_BYTES = 10 * 1024 * 1024;
+
+export function getMaxTemplateUploadSizeBytes(): number {
+  const mb = process.env.PRODUCT_TEMPLATE_MAX_SIZE_MB
+    ? parseInt(process.env.PRODUCT_TEMPLATE_MAX_SIZE_MB, 10)
+    : 10;
+  return (Number.isFinite(mb) && mb > 0 ? mb : 10) * 1024 * 1024;
+}
+
+export function validateDocumentTemplateUpload(
+  mimeType: string,
+  fileSize: number,
+): { valid: boolean; error?: string } {
+  if (!ALLOWED_DOCUMENT_TEMPLATE_MIME_SET.has(mimeType)) {
+    return {
+      valid: false,
+      error: `Invalid file type. Allowed formats: ${ALLOWED_DOCUMENT_TEMPLATE_FORMATS_LABEL}`,
+    };
+  }
+  const maxBytes = getMaxTemplateUploadSizeBytes() || DEFAULT_TEMPLATE_MAX_SIZE_BYTES;
+  if (fileSize > maxBytes) {
+    return {
+      valid: false,
+      error: `File size must not exceed ${maxBytes / (1024 * 1024)}MB`,
+    };
+  }
+  return { valid: true };
+}
+
 export function isSpacesConfigured(): boolean {
   return !!(region && endpoint && bucket && accessKeyId && secretAccessKey);
 }
@@ -165,8 +209,11 @@ export default {
   deleteFromSpaces,
   getPublicUrl,
   validateProductImageUpload,
+  validateDocumentTemplateUpload,
   isSpacesConfigured,
   ALLOWED_PRODUCT_IMAGE_MIME_TYPES,
   getMaxUploadSizeBytes,
+  ALLOWED_DOCUMENT_TEMPLATE_MIME_TYPES,
+  getMaxTemplateUploadSizeBytes,
 };
 

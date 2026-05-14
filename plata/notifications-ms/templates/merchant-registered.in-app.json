@@ -1,0 +1,4 @@
+{
+  "title": "New merchant",
+  "body": "{{merchantName}} has been registered ({{email}})."
+}

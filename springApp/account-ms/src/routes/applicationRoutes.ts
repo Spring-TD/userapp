@@ -1,6 +1,6 @@
 import express from 'express';
 import applicationController from '../controllers/applicationController';
-import { requireAdmin } from '../middleware/authMiddleware';
+import { requireAdmin, requireAdminOrMerchantApplicationList } from '../middleware/authMiddleware';
 
 const router = express.Router();
 
@@ -13,11 +13,11 @@ router.post('/:id/approve', requireAdmin, applicationController.approveApplicati
 // Admin: Reject application
 router.post('/:id/reject', requireAdmin, applicationController.rejectApplication);
 
-// Admin: Get all applications
-router.get('/', requireAdmin, applicationController.getAllApplications);
+// Admin (x-admin-id) or merchant (Bearer JWT): list applications
+router.get('/', requireAdminOrMerchantApplicationList, applicationController.getAllApplications);
 
-// Admin: Get pending applications
-router.get('/pending', requireAdmin, applicationController.getPendingApplications);
+// Admin or merchant: pending applications (merchant-scoped)
+router.get('/pending', requireAdminOrMerchantApplicationList, applicationController.getPendingApplications);
 
 // Get user applications
 router.get('/user/:userId', applicationController.getUserApplications);

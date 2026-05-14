@@ -53,7 +53,7 @@ export const PREDEFINED_PRODUCT_TYPES = PRODUCT_DISCRIMINATORS;
 // Subtype options per discriminator
 export const PRODUCT_SUBTYPE_OPTIONS: Record<string, string[]> = {
   LOAN: ['Personal Loan', 'Business Loan', 'Mortgage', 'Auto Loan'],
-  MORTGAGE: ['Fixed Rate Mortgage', 'Adjustable Rate Mortgage', 'FHA Loan', 'VA Loan'],
+  MORTGAGE: ['Fixed Rate Mortgage', 'Adjustable Rate Mortgage', 'Interest only'],
   SAVINGS: ['Fixed Deposit', 'Regular Savings', 'Target Savings', 'Group Savings'],
   COMMODITY: ['Agricultural Commodity', 'Energy Commodity', 'Metal Commodity', 'Precious Metal'],
   INVESTMENT: ['Agricultural Commodity', 'Energy Commodity', 'Metal Commodity', 'Precious Metal']
@@ -96,7 +96,9 @@ const structureSchema = Joi.object({
   airSignSecretKey: Joi.string().allow('').optional(),
   airSignUid: Joi.string().allow('').optional(),
   returnsOnInvestment: Joi.alternatives().try(Joi.number(), Joi.string()).optional(),
-  investmentType: Joi.string().allow('').optional(),
+  investmentType: Joi.string()
+    .valid('', 'lump_sum', 'unit_based', 'Lump sum', 'Unit based', 'lumpsum', 'unitbased')
+    .optional(),
   investmentAmount: Joi.object({
     min: Joi.number().optional(),
     max: Joi.number().optional()
@@ -119,7 +121,41 @@ const structureSchema = Joi.object({
   minQuantityPurchase: Joi.number().optional(),
   maxAmount: Joi.number().optional(),
   commodityTermsAndCondition: Joi.string().allow('').optional()
-}).optional();
+})
+  .custom((value, helpers) => {
+    if (!value || typeof value !== 'object') {
+      return value;
+    }
+
+    const structure = value as {
+      investmentType?: string;
+      unitAmount?: unknown;
+    };
+
+    const rawType = (structure.investmentType ?? '').toString().trim().toLowerCase();
+    const normalizedType =
+      rawType === 'lump_sum' || rawType === 'lump sum' || rawType === 'lumpsum'
+        ? 'lump_sum'
+        : rawType === 'unit_based' || rawType === 'unit based' || rawType === 'unitbased'
+          ? 'unit_based'
+          : rawType;
+
+    if (normalizedType !== 'lump_sum' && normalizedType !== 'unit_based') {
+      return value;
+    }
+
+    if (normalizedType === 'lump_sum' && structure.unitAmount !== undefined) {
+      return helpers.error('any.invalid', {
+        message: 'unitAmount is not allowed when structure.investmentType is lump_sum'
+      });
+    }
+
+    return {
+      ...structure,
+      investmentType: normalizedType
+    };
+  }, 'investment type conditional structure rules')
+  .optional();
 
 const aboutListItemSchema = Joi.object({
   name: Joi.string().required(),
@@ -161,8 +197,29 @@ const loanRequirementsSchema = Joi.object({
     .items(
       Joi.object({
         requirementType: Joi.string().allow('').optional(),
-        contentType: Joi.string().allow('').optional(),
-        description: Joi.string().allow('').optional(),
+        contentType: Joi.string()
+          .valid('', 'document_upload', 'document_template')
+          .optional(),
+        description: Joi.when('contentType', {
+          is: 'document_upload',
+          then: Joi.string().trim().min(1).required().messages({
+            'any.required':
+              'description is required when contentType is document_upload',
+            'string.empty':
+              'description is required when contentType is document_upload'
+          }),
+          otherwise: Joi.string().allow('').optional()
+        }),
+        templateFileUrl: Joi.when('contentType', {
+          is: 'document_template',
+          then: Joi.string().trim().min(1).required().messages({
+            'any.required':
+              'templateFileUrl is required when contentType is document_template',
+            'string.empty':
+              'templateFileUrl is required when contentType is document_template'
+          }),
+          otherwise: Joi.string().allow('').optional()
+        }),
         uploadRequired: Joi.boolean().optional()
       })
     )
@@ -209,7 +266,11 @@ const mortgagePropertiesSchema = Joi.array()
       propertyType: Joi.string().allow('').optional(),
       value: Joi.alternatives().try(Joi.number(), Joi.string()).optional(),
       location: Joi.string().allow('').optional(),
-      previewAssetUrl: Joi.string().allow('').optional()
+      propertyDescription: Joi.string().allow('').optional(),
+      facilities: Joi.array().items(Joi.string().allow('').optional()).optional(),
+      customFacilities: Joi.array().items(Joi.string().allow('').optional()).optional(),
+      imageUrls: Joi.array().items(Joi.string().allow('').optional()).optional(),
+      videoUrl: Joi.string().allow('').optional()
     })
   )
   .optional();
@@ -225,6 +286,12 @@ const commodityPricesSchema = Joi.array()
   .optional();
 
 const configSchema = Joi.object().unknown(true).optional();
+
+const notifyRecipientSchema = Joi.object({
+  userId: Joi.string().required(),
+  email: Joi.string().email().required(),
+  merchantName: Joi.string().max(200).optional()
+}).optional();
 
 // Product creation validation schema
 export const createProductSchema = Joi.object({
@@ -256,7 +323,8 @@ export const createProductSchema = Joi.object({
   feesAndCharges: loanFeesAndChargesSchema,
   properties: mortgagePropertiesSchema,
   commodityPrices: commodityPricesSchema,
-  config: configSchema
+  config: configSchema,
+  notifyRecipient: notifyRecipientSchema
 });
 
 // Product update validation schema
@@ -298,7 +366,8 @@ export const updateProductSchema = Joi.object({
   feesAndCharges: loanFeesAndChargesSchema,
   properties: mortgagePropertiesSchema,
   commodityPrices: commodityPricesSchema,
-  config: configSchema
+  config: configSchema,
+  notifyRecipient: notifyRecipientSchema
 });
 
 // Product type selection validation schema
@@ -336,6 +405,14 @@ const userApplicationStatusJoi = Joi.string().valid(
   'signed',
   'cancelled',
   'withdrawn'
+);
+
+export const loanWorkflowStatusJoi = Joi.string().valid(
+  'requested',
+  'under_review',
+  'approved',
+  'declined',
+  'blacklisted'
 );
 
 const revenueLineSplitLineJoi = Joi.object({
@@ -393,3 +470,81 @@ export const listUserProductApplicationsQuerySchema = Joi.object({
     'object.missing':
       'Provide at least one of appId, userId, offeringMerchantId, merchantId, or globalProductId'
   });
+
+/** GET /api/v1/products/applications/me/loan-workflow (JWT: originating product merchant only) */
+export const listLoanWorkflowQuerySchema = Joi.object({
+  loanWorkflowStatus: loanWorkflowStatusJoi.optional(),
+  limit: Joi.number().integer().min(1).max(100).default(50),
+  skip: Joi.number().integer().min(0).default(0)
+});
+
+/** PATCH /api/v1/products/applications/:applicationId/loan-workflow */
+export const patchLoanWorkflowBodySchema = Joi.object({
+  loanWorkflowStatus: loanWorkflowStatusJoi.required()
+});
+
+const subMerchantComplianceDocumentSchema = Joi.object({
+  url: Joi.string().trim().min(1).max(2048).required(),
+  name: Joi.string().trim().min(1).max(300).optional(),
+  uploadedAt: Joi.string().isoDate().optional()
+});
+
+/** POST /api/v1/products/sub-merchant-activations (gateway + PLATA keys only) */
+export const subMerchantProductActivationBodySchema = Joi.object({
+  appId: Joi.string().min(1).max(100).required(),
+  productId: Joi.string().min(1).max(100).required(),
+  productName: Joi.string().trim().min(1).max(300).optional(),
+  /** Merchant id (your platform) — parent of subMerchant */
+  merchantId: Joi.string().trim().min(1).max(200).required(),
+  merchantName: Joi.string().trim().min(1).max(200).required(),
+  subMerchant: Joi.object({
+    id: Joi.string().trim().min(1).max(200).required(),
+    name: Joi.string().trim().min(1).max(200).required(),
+    email: Joi.string().trim().email().max(320).required(),
+    phone: Joi.string().trim().min(3).max(40).required()
+  }).required(),
+  status: Joi.string().valid('active', 'deactivated').required(),
+  /** Integrator-reported compliance on their platform (synced across all product activations for this sub-merchant). */
+  complianceStatus: Joi.string().valid('not_started', 'pending', 'completed').optional(),
+  complianceDocuments: Joi.array().items(subMerchantComplianceDocumentSchema).max(50).optional()
+});
+
+/** POST /api/v1/products/sub-merchant-usage-events (gateway + PLATA keys only) */
+export const subMerchantProductUsageEventBodySchema = Joi.object({
+  appId: Joi.string().min(1).max(100).required(),
+  productId: Joi.string().min(1).max(100).required(),
+  productName: Joi.string().trim().min(1).max(300).optional(),
+  merchantId: Joi.string().trim().min(1).max(200).required(),
+  merchantName: Joi.string().trim().min(1).max(200).required(),
+  subMerchant: Joi.object({
+    id: Joi.string().trim().min(1).max(200).required(),
+    name: Joi.string().trim().min(1).max(200).required(),
+    email: Joi.string().trim().email().max(320).required(),
+    phone: Joi.string().trim().min(3).max(40).required()
+  }).required(),
+  externalUser: Joi.object({
+    id: Joi.string().trim().min(1).max(200).required(),
+    name: Joi.string().trim().min(1).max(200).required(),
+    email: Joi.string().trim().email().max(320).required(),
+    phone: Joi.string().trim().min(3).max(40).required()
+  }).required(),
+  startedAt: Joi.string().isoDate().optional()
+});
+
+/** GET /api/v1/products/sub-merchants/merchant-dashboard (JWT merchant creator) */
+export const listSubMerchantMerchantDashboardQuerySchema = Joi.object({
+  appId: Joi.string().trim().min(1).max(100).required(),
+  status: Joi.string().valid('active', 'deactivated').optional(),
+  search: Joi.string().trim().min(1).max(120).optional(),
+  limit: Joi.number().integer().min(1).max(100).default(20),
+  skip: Joi.number().integer().min(0).default(0)
+});
+
+/** GET /api/v1/products/sub-merchants/customers-dashboard (JWT merchant creator) */
+export const listSubMerchantCustomersDashboardQuerySchema = Joi.object({
+  appId: Joi.string().trim().min(1).max(100).required(),
+  subMerchantId: Joi.string().trim().min(1).max(200).optional(),
+  search: Joi.string().trim().min(1).max(120).optional(),
+  limit: Joi.number().integer().min(1).max(100).default(20),
+  skip: Joi.number().integer().min(0).default(0)
+});

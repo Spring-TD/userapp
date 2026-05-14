@@ -1,11 +1,20 @@
 import { Request, Response } from 'express';
 import { buildDefaultAppUrl } from '../config/environment';
 import { AppService } from '../services/appService';
+import { AppPwaPublishService } from '../services/appPwaPublishService';
 import { App, CreateAppRequest, UpdateAppRequest, TransactionQueryParams, DriveDocumentQueryParams } from '../types/app';
 import { ApiError } from '../middleware/errorHandler';
 import { WalletService } from '../services/walletService';
 import { TransactionService } from '../services/transactionService';
 import { DriveService } from '../services/driveService';
+import {
+  sendAppCreatedNotification,
+  sendAppDeactivatedNotification,
+  sendAppReactivatedNotification
+} from '../services/notificationHelper';
+import { buildProductOverview } from '../services/productOverviewService';
+import { assertLikelyMongoObjectId } from '../utils/mongoObjectId';
+import { tryGetApiBaseUrl } from '../utils/requestBaseUrl';
 
 declare const console: any;
 
@@ -32,11 +41,10 @@ interface TypedRequest<T> extends Request {
 }
 
 export class AppController {
-  private appService: AppService;
-
-  constructor(appService: AppService) {
-    this.appService = appService;
-  }
+  constructor(
+    private readonly appService: AppService,
+    private readonly pwaPublishService: AppPwaPublishService
+  ) {}
 
   private isMerchantUser(req: Request): boolean {
     const userType = (req.user?.userType || '').toLowerCase();
@@ -98,8 +106,16 @@ export class AppController {
       const app = await this.appService.createApp(appDataWithMerchantId);
       const authHeader = req.headers.authorization;
 
+      void sendAppCreatedNotification({
+        userId: req.user.userId,
+        email: req.user.email,
+        appName: app.name,
+        merchantName: merchantId,
+        detail: app.subdomain ? `Default URL: ${buildDefaultAppUrl(app.subdomain)}` : ''
+      });
+
       // Create merchant internal wallets for this app (TREASURY, OPERATION, KYC)
-      const merchantWalletsResult = await WalletService.createAllMerchantWallets(app.id, authHeader);
+      const merchantWalletsResult = await WalletService.createAllMerchantWallets(app.id, authHeader, app.name);
       // App creation succeeds even if wallet provisioning fails; handle retries separately.
       if (!merchantWalletsResult.success) {
         console.error(`Failed to create merchant wallets for app ${app.id}:`, merchantWalletsResult.error);
@@ -164,6 +180,54 @@ export class AppController {
       }
       
       console.error('Error in getAppById controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  };
+
+  resolveAppBySubdomain = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { subdomain } = req.params;
+      if (!subdomain) {
+        throw new ApiError(400, 'Subdomain is required');
+      }
+
+      const app = await this.appService.getAppBySubdomain(subdomain);
+      if (!app) {
+        throw new ApiError(404, 'App not found');
+      }
+      if (app.status === 'suspended') {
+        throw new ApiError(410, 'App is suspended');
+      }
+
+      const apiBase = tryGetApiBaseUrl(req);
+      const pwaInstall = apiBase
+        ? await this.pwaPublishService.getPublicInstallBundle(app.id, apiBase)
+        : null;
+
+      res.json({
+        success: true,
+        data: {
+          id: app.id,
+          merchantId: app.merchantId,
+          subdomain: app.subdomain,
+          status: app.status,
+          defaultAppUrl: app.subdomain ? buildDefaultAppUrl(app.subdomain) : undefined,
+          ...(pwaInstall ? { pwaInstall } : {})
+        }
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+        return;
+      }
+
+      console.error('Error in resolveAppBySubdomain controller:', error);
       res.status(500).json({
         success: false,
         error: 'Internal server error'
@@ -241,7 +305,7 @@ export class AppController {
     }
   };
 
-  deleteApp = async (req: Request, res: Response): Promise<void> => {
+  deleteApp = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
       
@@ -249,10 +313,25 @@ export class AppController {
         throw new ApiError(400, 'App ID is required');
       }
 
+      const existing = await this.appService.getAppById(id);
+      if (!existing) {
+        throw new ApiError(404, 'App not found');
+      }
+
       const deleted = await this.appService.deleteApp(id);
       
       if (!deleted) {
         throw new ApiError(404, 'App not found');
+      }
+
+      if (req.user?.userId && req.user?.email) {
+        void sendAppDeactivatedNotification({
+          userId: req.user.userId,
+          email: req.user.email,
+          appName: existing.name,
+          merchantName: existing.merchantId,
+          action: 'deleted'
+        });
       }
 
       res.json({
@@ -303,6 +382,24 @@ export class AppController {
       }
 
       const updatedApp = await this.appService.updateAppStatus(id, status);
+      if (updatedApp && req.user.userId && req.user.email) {
+        if (status === 'suspended') {
+          void sendAppDeactivatedNotification({
+            userId: req.user.userId,
+            email: req.user.email,
+            appName: updatedApp.name,
+            merchantName: updatedApp.merchantId,
+            action: 'suspended'
+          });
+        } else {
+          void sendAppReactivatedNotification({
+            userId: req.user.userId,
+            email: req.user.email,
+            appName: updatedApp.name,
+            merchantName: updatedApp.merchantId
+          });
+        }
+      }
       res.json({
         success: true,
         message: `App ${status} successfully`,
@@ -618,8 +715,9 @@ export class AppController {
         type,
         status,
         startDate,
-        endDate
-      } = req.query as any;
+        endDate,
+        productId
+      } = req.query as Record<string, unknown>;
 
       if (!id) {
         throw new ApiError(400, 'App ID is required');
@@ -634,12 +732,17 @@ export class AppController {
 
       // Prepare query parameters
       const queryParams: TransactionQueryParams = {};
-      if (page) queryParams.page = parseInt(page);
-      if (limit) queryParams.limit = parseInt(limit);
-      if (type) queryParams.type = type as 'credit' | 'debit';
-      if (status) queryParams.status = status as 'pending' | 'completed' | 'failed' | 'cancelled';
-      if (startDate) queryParams.startDate = startDate as string;
-      if (endDate) queryParams.endDate = endDate as string;
+      if (page !== undefined && page !== '') queryParams.page = parseInt(String(page), 10);
+      if (limit !== undefined && limit !== '') queryParams.limit = parseInt(String(limit), 10);
+      if (typeof type === 'string') queryParams.type = type as 'credit' | 'debit';
+      if (typeof status === 'string') {
+        queryParams.status = status as 'pending' | 'completed' | 'failed' | 'cancelled';
+      }
+      if (typeof startDate === 'string') queryParams.startDate = startDate;
+      if (typeof endDate === 'string') queryParams.endDate = endDate;
+      if (typeof productId === 'string' && productId.trim()) {
+        queryParams.productId = productId.trim();
+      }
 
       const transactions = await TransactionService.getTransactionsByAppId(id, queryParams);
 
@@ -695,6 +798,73 @@ export class AppController {
       }
       
       console.error('Error in getTransactionStats controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  };
+
+  /**
+   * Merchant dashboard: consolidated payload for one activated product (config + applications + scoped transactions).
+   */
+  getProductOverview = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { appId, productId } = req.params;
+      const txPageRaw = req.query.transactionPage ?? req.query.txPage;
+      const txLimitRaw = req.query.transactionLimit ?? req.query.txLimit;
+      const transactionPage =
+        txPageRaw !== undefined ? Number.parseInt(String(txPageRaw), 10) : undefined;
+      const transactionLimit =
+        txLimitRaw !== undefined ? Number.parseInt(String(txLimitRaw), 10) : undefined;
+
+      if (!appId?.trim()) {
+        throw new ApiError(400, 'App ID is required');
+      }
+      if (!productId?.trim()) {
+        throw new ApiError(400, 'Product ID is required');
+      }
+
+      assertLikelyMongoObjectId(appId.trim(), 'App ID');
+      assertLikelyMongoObjectId(productId.trim(), 'Product ID');
+
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        throw new ApiError(401, 'Bearer token required');
+      }
+
+      const app = await this.appService.getAppById(appId.trim());
+      if (!app) {
+        throw new ApiError(404, 'App not found');
+      }
+      this.assertMerchantOwnsApp(req, app);
+
+      const adminHdr = req.headers['x-admin-id'];
+      const adminId = Array.isArray(adminHdr) ? adminHdr[0] : adminHdr;
+
+      const overview = await buildProductOverview({
+        appId: appId.trim(),
+        productIdPath: productId.trim(),
+        authorization: authHeader,
+        adminId: adminId?.trim() || undefined,
+        transactionPage: Number.isFinite(transactionPage) ? transactionPage : undefined,
+        transactionLimit: Number.isFinite(transactionLimit) ? transactionLimit : undefined
+      });
+
+      res.json({
+        success: true,
+        data: overview
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+        return;
+      }
+
+      console.error('Error in getProductOverview controller:', error);
       res.status(500).json({
         success: false,
         error: 'Internal server error'

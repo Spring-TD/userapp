@@ -7,6 +7,8 @@ interface Config {
   port: number;
   nodeEnv: string;
   serviceAuthUrl: string;
+  /** springApp account-ms (gateway local routes); used for merchant-scoped applications listing */
+  accountServiceUrl: string;
   productServiceUrl: string;
   walletServiceUrl: string;
   specialApiKey: string;
@@ -29,8 +31,14 @@ interface Config {
   pwaAssetMaxBytes: number;
   /** Hostname only, e.g. springtd.com — used for default app URLs `{subdomain}.{appPlatformBaseDomain}`. */
   appPlatformBaseDomain: string;
+  /** Optional host prefix before subdomain, e.g. `www` => `{prefix}.{subdomain}.{domain}`. */
+  appSubdomainPrefix: string;
   /** URL scheme for default app URLs (usually https). */
   appUrlScheme: string;
+  /** Base URL for notifications-ms (email + in-app via send-dual). */
+  notificationsServiceUrl: string;
+  /** Wallet currency for app-scoped merchant wallets (NGN aligns with Payonus NUBAN defaults). */
+  merchantWalletCurrency: string;
 }
 
 const pwaAssetMaxMb = parseInt(process.env.PWA_ASSET_MAX_UPLOAD_MB || '2', 10);
@@ -39,7 +47,8 @@ export const config: Config = {
   port: parseInt(process.env.PORT || '3002', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
   serviceAuthUrl: process.env.SERVICE_AUTH_URL || 'http://localhost:3000',
-  productServiceUrl: process.env.PRODUCT_SERVICE_URL || 'http://localhost:3005',
+  accountServiceUrl: process.env.ACCOUNT_SERVICE_URL || 'http://localhost:4008',
+  productServiceUrl: process.env.PRODUCT_SERVICE_URL || 'http://localhost:4005',
   walletServiceUrl: process.env.WALLET_SERVICE_URL || 'http://localhost:3004',
   specialApiKey: process.env.SPECIAL_API_KEY || 'default-special-key',
   publicKey: process.env.PUBLIC_KEY || 'default-public-key',
@@ -55,12 +64,19 @@ export const config: Config = {
     pwaKeyPrefix: (process.env.DO_SPACES_PWA_PREFIX || 'pwa-assets').replace(/^\/+|\/+$/g, '')
   },
   pwaAssetMaxBytes: Math.max(1, pwaAssetMaxMb) * 1024 * 1024,
-  appPlatformBaseDomain: (process.env.APP_PLATFORM_BASE_DOMAIN || 'springtd.com').replace(/^\.+|\.+$/g, ''),
-  appUrlScheme: (process.env.APP_URL_SCHEME || 'https').replace(/:$/, '')
+  appPlatformBaseDomain: (process.env.APP_PLATFORM_BASE_DOMAIN || 'tryspring.io').replace(/^\.+|\.+$/g, ''),
+  appSubdomainPrefix: (process.env.APP_SUBDOMAIN_PREFIX || 'www').trim().replace(/\.+/g, ''),
+  appUrlScheme: (process.env.APP_URL_SCHEME || 'https').replace(/:$/, ''),
+  notificationsServiceUrl:
+    process.env.NOTIFICATIONS_SERVICE_URL ||
+    (process.env.NODE_ENV === 'production' ? 'https://springtd-notifications-ms.fly.dev' : 'http://localhost:4009'),
+  merchantWalletCurrency: (process.env.MERCHANT_WALLET_CURRENCY || 'NGN').trim().toUpperCase() || 'NGN'
 };
 
 /** Full default URL for an app on the platform origin, e.g. https://my-store.springtd.com */
 export function buildDefaultAppUrl(subdomain: string): string {
   const s = subdomain.trim().toLowerCase();
-  return `${config.appUrlScheme}://${s}.${config.appPlatformBaseDomain}`;
+  const prefix = config.appSubdomainPrefix.trim().toLowerCase();
+  const host = prefix ? `${prefix}.${s}.${config.appPlatformBaseDomain}` : `${s}.${config.appPlatformBaseDomain}`;
+  return `${config.appUrlScheme}://${host}/`;
 }

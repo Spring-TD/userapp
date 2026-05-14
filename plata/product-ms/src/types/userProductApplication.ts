@@ -28,6 +28,14 @@ export type UserProductApplicationStatus =
   | 'cancelled'
   | 'withdrawn';
 
+/** Originating merchant (product creator) loan underwriting workflow — LOAN / MORTGAGE applications only. */
+export type LoanWorkflowStatus =
+  | 'requested'
+  | 'under_review'
+  | 'approved'
+  | 'declined'
+  | 'blacklisted';
+
 /**
  * Immutable snapshot written when a merchant-platform user applies for a product.
  * `merchantId` / `merchantName` = creator of the global product; `offeringMerchant*` = distributor.
@@ -47,6 +55,8 @@ export interface UserProductApplication {
   globalProductReferenceNumber?: string;
   merchantProductId?: string;
   status: UserProductApplicationStatus;
+  /** Set for LOAN and MORTGAGE; managed only by the originating product merchant (`merchantId`). */
+  loanWorkflowStatus?: LoanWorkflowStatus;
   submittedAt: string;
   signedAt?: string;
   /**
@@ -90,6 +100,12 @@ export interface ListUserProductApplicationsQuery {
   globalProductId?: string;
   productType?: ProductDiscriminator;
   status?: UserProductApplicationStatus;
+  limit: number;
+  skip: number;
+}
+
+export interface ListLoanWorkflowQuery {
+  loanWorkflowStatus?: LoanWorkflowStatus;
   limit: number;
   skip: number;
 }

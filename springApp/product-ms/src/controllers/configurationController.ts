@@ -5,6 +5,8 @@ import {
   CreateProductConfigurationRequest, 
   UpdateProductConfigurationRequest 
 } from '../types/productConfiguration';
+import { getAccessTokenUser } from '../utils/gatewayUser';
+import { sendProductConfigurationNotification } from '../services/notificationHelper';
 
 interface TypedRequest<T> extends Request {
   body: T;
@@ -29,6 +31,19 @@ export class ConfigurationController {
       // For now, use a default app ID since this is not provided in the request
       const appId = 'default-app';
       const configuration = await this.productService.createProductConfiguration(configData, appId);
+
+      const gatewayUser = getAccessTokenUser(req);
+      if (gatewayUser) {
+        const catalog = await this.productService.getProductById(configData.productId);
+        void sendProductConfigurationNotification({
+          userId: gatewayUser.userId,
+          email: gatewayUser.email,
+          productId: configData.productId,
+          productType: catalog ? String(catalog.type) : configData.productType,
+          appId,
+          action: 'created'
+        });
+      }
       
       res.status(201).json({
         success: true,
@@ -103,6 +118,23 @@ export class ConfigurationController {
         throw new ApiError(404, 'Product configuration not found');
       }
 
+      const gatewayUser = getAccessTokenUser(req);
+      if (gatewayUser) {
+        const catalog = await this.productService.getProductById(productId);
+        const appId =
+          'appId' in configuration && typeof (configuration as { appId?: string }).appId === 'string'
+            ? (configuration as { appId: string }).appId
+            : 'default-app';
+        void sendProductConfigurationNotification({
+          userId: gatewayUser.userId,
+          email: gatewayUser.email,
+          productId,
+          productType: catalog ? String(catalog.type) : 'unknown',
+          appId,
+          action: 'updated'
+        });
+      }
+
       res.json({
         success: true,
         message: 'Product configuration updated successfully',
@@ -133,10 +165,25 @@ export class ConfigurationController {
         throw new ApiError(400, 'Product ID is required');
       }
 
+      const existing = await this.productService.getProductConfiguration(productId);
+      const catalog = await this.productService.getProductById(productId);
+
       const deleted = await this.productService.deleteProductConfiguration(productId);
       
       if (!deleted) {
         throw new ApiError(404, 'Product configuration not found');
+      }
+
+      const gatewayUser = getAccessTokenUser(req);
+      if (gatewayUser && catalog && existing && 'appId' in existing) {
+        void sendProductConfigurationNotification({
+          userId: gatewayUser.userId,
+          email: gatewayUser.email,
+          productId,
+          productType: String(catalog.type),
+          appId: existing.appId,
+          action: 'deleted'
+        });
       }
 
       res.json({

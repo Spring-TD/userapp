@@ -1,7 +1,7 @@
 // src/middleware/complianceMiddleware.ts
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
-import { UserType, RiskLevel, BusinessType, KYCStatus, BusinessDocumentType } from '../types/kycTypes';
+import { UserType, RiskLevel, BusinessType, KYCStatus } from '../types/kycTypes';
 import { kycService } from '../services/kycService';
 
 // Enhanced middleware for individual customer compliance
@@ -196,17 +196,22 @@ export const validateDocumentRequirements = (req: Request, res: Response, next: 
     // Business submit sends businessDocuments; individual/legacy sends documents
     const documentsToCheck = documents ?? businessDocuments;
 
-    if (!userType || !documentsToCheck || !Array.isArray(documentsToCheck) || documentsToCheck.length === 0) {
+    if (!userType) {
       return res.status(400).json({
         success: false,
-        error: 'User type and documents are required'
+        error: 'User type is required'
       });
     }
 
-    const documentTypes = documentsToCheck.map((doc: any) => doc.type);
-
     if (userType === UserType.INDIVIDUAL) {
-      // Check individual required documents
+      if (!documentsToCheck || !Array.isArray(documentsToCheck) || documentsToCheck.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'User type and documents are required'
+        });
+      }
+
+      const documentTypes = documentsToCheck.map((doc: any) => doc.type);
       const requiredDocs = ['identity', 'address'];
       const missingDocs = requiredDocs.filter(doc => !documentTypes.includes(doc));
 
@@ -217,16 +222,22 @@ export const validateDocumentRequirements = (req: Request, res: Response, next: 
         });
       }
     } else if (userType === UserType.MERCHANT) {
-      // Check business required documents (all 7 BusinessDocumentType values)
-      const requiredDocs = Object.values(BusinessDocumentType);
-      const missingDocs = requiredDocs.filter(doc => !documentTypes.includes(doc));
-
-      if (missingDocs.length > 0) {
+      // Business KYC: documents are optional on submit; merchants may upload the rest later (PUT /business/documents).
+      if (
+        documentsToCheck !== undefined &&
+        documentsToCheck !== null &&
+        !Array.isArray(documentsToCheck)
+      ) {
         return res.status(400).json({
           success: false,
-          error: `Missing required documents for business: ${missingDocs.join(', ')}`
+          error: 'businessDocuments must be an array when provided'
         });
       }
+    } else if (!documentsToCheck || !Array.isArray(documentsToCheck) || documentsToCheck.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'User type and documents are required'
+      });
     }
 
     next();

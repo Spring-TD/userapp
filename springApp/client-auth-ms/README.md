@@ -25,10 +25,36 @@ Deployment URL: https://client-auth-ms.fly.dev/
 - **✅ Role Management**: Create roles and manage permissions
 - **✅ Invitation Management**: Invite users, validate tokens, accept invitations
 - **✅ Session Management**: View active sessions and revoke device access
+- **✅ FAQ Management**: FAQ CRUD with publish controls
+- **✅ Contact Support Management**: Support contact CRUD with publish controls
+- **✅ Legal Documents Management**: Terms of Service and Privacy Policy CRUD
 - **✅ Administrative Operations**: User suspension and activation
 - **✅ API Gateway**: Centralized routing and validation
 - **✅ CORS Support**: Configured for frontend integration
 - **✅ Health Check**: Service monitoring endpoint
+- **✅ Retail user wallets**: After successful `POST /api/v1/registration/user` (and compliance profile), optionally provisions a **wallet-ms** user wallet (including **Payonus NUBAN** when wallet-ms is configured). Requires **`WALLET_SERVICE_URL`**, **`WALLET_INTERNAL_TOKEN`** (same value as wallet-ms), and **`USER_WALLET_DEFAULT_CURRENCY`** (default `NGN`). See [Environment Variables](#environment-variables).
+
+## Fuspay + Compliance Registration Sync
+
+`POST /api/v1/registration/user` now performs these additional steps during signup (when enabled):
+
+1. Create local user in `client-auth-ms`.
+2. Create Fuspay Modular user via `POST /api/v1/modular/user/` using:
+   - `email`, `phone`, `country`
+   - `app` from `FUSPAY_MODULAR_APP_ID` (env only)
+   - `user_ref` as canonical local user id
+3. Create minimal KYC profile in `compliance-ms` (`POST /api/v1/kyc/profile/:userId`) and persist Fuspay identifiers.
+4. **Wallet (optional):** If `WALLET_SERVICE_URL` and `WALLET_INTERNAL_TOKEN` are set (matching **wallet-ms** `WALLET_INTERNAL_TOKEN`), calls **`POST /api/v1/internal/wallets/user`** on wallet-ms to create the user’s wallet and run **Payonus** provisioning for the configured currency.
+
+Registration response includes:
+
+- `fuspayProfileCreated`
+- `fuspayUserId` (Fuspay `customer_id` / `data.id`)
+- `fuspayUserRef` (your canonical local user id)
+- **`wallet`** — created wallet object from wallet-ms when provisioning succeeded (may include `virtualNuban` when Payonus is active)
+- **`walletProvisioningError`** — present when wallet-ms was configured but the create call failed (user account is still created; retry or alert)
+
+If Fuspay or compliance profile creation fails, registration is rolled back so partial onboarding is not left behind.
 
 ## API Endpoints
 
@@ -195,6 +221,7 @@ Content-Type: application/json
   "email": "user@example.com"
 }
 ```
+Sends a one-time OTP code to the user's email for password reset.
 
 #### Reset Password
 ```
@@ -202,10 +229,18 @@ POST /api/v1/password/reset
 Content-Type: application/json
 
 {
-  "token": "reset-token-string",
-  "password": "NewSecurePass123!"
+  "identifier": "user@example.com",
+  "code": "123456",
+  "newPassword": "NewSecurePass123!"
 }
 ```
+
+#### Request Password Change OTP (Authenticated)
+```
+POST /api/v1/password/change/request-otp
+Authorization: Bearer <jwt-token>
+```
+Sends a one-time OTP code to the authenticated user's email for password change confirmation.
 
 #### Change Password
 ```
@@ -215,9 +250,12 @@ Authorization: Bearer <jwt-token>
 
 {
   "currentPassword": "OldPass123!",
+  "code": "123456",
   "newPassword": "NewSecurePass123!"
 }
 ```
+
+After a successful **reset** or **change** password, the service sends a **confirmation email** via notifications-ms (`template: password-change`, `data.userName`). OTP emails use the separate **`otp`** template. Notification failures are logged only and do not fail the API response.
 
 ### User Management Endpoints ✅
 
@@ -242,8 +280,38 @@ Authorization: Bearer <jwt-token>
 {
   "first_name": "UpdatedName",
   "last_name": "UpdatedLastName",
-  "phone": "+1234567890"
+  "phone": "+1234567890",
+  "country": "NG"
 }
+```
+
+All profile fields are optional; send only the fields you want to update.
+
+#### Update Email (Account Settings)
+
+Requires the current password. `newEmail` and `confirmEmail` must match.
+
+```
+PUT /api/v1/user/email
+Content-Type: application/json
+Authorization: Bearer <jwt-token>
+
+{
+  "newEmail": "new.address@example.com",
+  "confirmEmail": "new.address@example.com",
+  "currentPassword": "CurrentPass123!"
+}
+```
+
+On success, the response prompts the user to verify the new email address.
+
+#### Deactivate Account (Account Control)
+
+Soft-deactivates the authenticated user’s account. No request body.
+
+```
+POST /api/v1/user/deactivate
+Authorization: Bearer <jwt-token>
 ```
 
 #### Get User Info (Admin)
@@ -364,7 +432,6 @@ Returns a list of all active login sessions for the authenticated user, includin
   }
 }
 ```
-
 #### Revoke Session
 ```
 DELETE /api/v1/sessions/{sessionId}
@@ -379,6 +446,465 @@ Revokes a specific session, logging out the user on that device. Users can only 
   "message": "Session revoked successfully"
 }
 ```
+
+### FAQ Endpoints ✅
+
+#### List FAQs (Public)
+```
+GET /api/v1/faqs
+```
+Optional query parameters:
+- `q`: text search on `question` and `answer`
+- `includeUnpublished=true`: only honored for authenticated `merchant`/`admin`
+
+**Response Example (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "faqs": [
+      {
+        "id": "68105bc4af8f554f922a4ba5",
+        "question": "Why is SpringTD",
+        "answer": "SpringTD helps merchants launch products quickly.",
+        "sort_order": 0,
+        "is_published": true,
+        "created_at": "2026-04-29T05:31:32.745Z",
+        "updated_at": "2026-04-29T05:31:32.745Z"
+      }
+    ]
+  }
+}
+```
+
+#### Get FAQ by ID
+```
+GET /api/v1/faqs/{id}
+```
+
+**Response Example (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "faq": {
+      "id": "68105bc4af8f554f922a4ba5",
+      "question": "Why is SpringTD",
+      "answer": "SpringTD helps merchants launch products quickly.",
+      "sort_order": 0,
+      "is_published": true,
+      "created_at": "2026-04-29T05:31:32.745Z",
+      "updated_at": "2026-04-29T05:31:32.745Z"
+    }
+  }
+}
+```
+
+#### Create FAQ (Merchant/Admin)
+```
+POST /api/v1/faqs
+Content-Type: application/json
+Authorization: Bearer <merchant-or-admin-jwt-token>
+```
+
+**Request Body:**
+```json
+{
+  "question": "How does mortgage work?",
+  "answer": "Mortgage products are managed from your product dashboard.",
+  "sort_order": 1,
+  "is_published": true
+}
+```
+
+**Response Example (201):**
+```json
+{
+  "success": true,
+  "message": "FAQ created",
+  "data": {
+    "faq": {
+      "id": "68105bc4af8f554f922a4ba5",
+      "question": "How does mortgage work?",
+      "answer": "Mortgage products are managed from your product dashboard.",
+      "sort_order": 1,
+      "is_published": true,
+      "created_at": "2026-04-29T05:31:32.745Z",
+      "updated_at": "2026-04-29T05:31:32.745Z"
+    }
+  }
+}
+```
+
+#### Update FAQ (Merchant/Admin)
+```
+PUT /api/v1/faqs/{id}
+Content-Type: application/json
+Authorization: Bearer <merchant-or-admin-jwt-token>
+```
+
+**Request Body (partial update):**
+```json
+{
+  "answer": "Updated FAQ answer",
+  "is_published": false
+}
+```
+
+**Response Example (200):**
+```json
+{
+  "success": true,
+  "message": "FAQ updated",
+  "data": {
+    "faq": {
+      "id": "68105bc4af8f554f922a4ba5",
+      "question": "How does mortgage work?",
+      "answer": "Updated FAQ answer",
+      "sort_order": 1,
+      "is_published": false,
+      "created_at": "2026-04-29T05:31:32.745Z",
+      "updated_at": "2026-04-29T05:35:10.122Z"
+    }
+  }
+}
+```
+
+#### Delete FAQ (Merchant/Admin)
+```
+DELETE /api/v1/faqs/{id}
+Authorization: Bearer <merchant-or-admin-jwt-token>
+```
+
+**Response Example (200):**
+```json
+{
+  "success": true,
+  "message": "FAQ deleted"
+}
+```
+
+### Contact Support Endpoints ✅
+
+#### List Support Contacts (Public)
+```
+GET /api/v1/support-contacts
+```
+Optional query parameters:
+- `q`: text search on `title` and `link_url`
+- `includeUnpublished=true`: only honored for authenticated `merchant`/`admin`
+
+**Response Example (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "contacts": [
+      {
+        "id": "68105ce5af8f554f922a4c23",
+        "title": "Customer Support",
+        "link_url": "mailto:support@springtd.com",
+        "icon_type": "question-mark-filled",
+        "sort_order": 1,
+        "is_published": true,
+        "created_at": "2026-04-29T05:36:21.407Z",
+        "updated_at": "2026-04-29T05:36:21.407Z"
+      }
+    ]
+  }
+}
+```
+
+#### Get Support Contact by ID
+```
+GET /api/v1/support-contacts/{id}
+```
+
+**Response Example (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "contact": {
+      "id": "68105ce5af8f554f922a4c23",
+      "title": "Customer Support",
+      "link_url": "mailto:support@springtd.com",
+      "icon_type": "question-mark-filled",
+      "sort_order": 1,
+      "is_published": true,
+      "created_at": "2026-04-29T05:36:21.407Z",
+      "updated_at": "2026-04-29T05:36:21.407Z"
+    }
+  }
+}
+```
+
+#### Create Support Contact (Merchant/Admin)
+```
+POST /api/v1/support-contacts
+Content-Type: application/json
+Authorization: Bearer <merchant-or-admin-jwt-token>
+```
+
+**Request Body:**
+```json
+{
+  "title": "WhatsApp",
+  "link_url": "https://wa.me/2348012345678",
+  "icon_type": "whatsapp",
+  "sort_order": 3,
+  "is_published": true
+}
+```
+
+**Response Example (201):**
+```json
+{
+  "success": true,
+  "message": "Support contact created",
+  "data": {
+    "contact": {
+      "id": "68105ce5af8f554f922a4c23",
+      "title": "WhatsApp",
+      "link_url": "https://wa.me/2348012345678",
+      "icon_type": "whatsapp",
+      "sort_order": 3,
+      "is_published": true,
+      "created_at": "2026-04-29T05:36:21.407Z",
+      "updated_at": "2026-04-29T05:36:21.407Z"
+    }
+  }
+}
+```
+
+#### Update Support Contact (Merchant/Admin)
+```
+PUT /api/v1/support-contacts/{id}
+Content-Type: application/json
+Authorization: Bearer <merchant-or-admin-jwt-token>
+```
+
+**Request Body (partial update):**
+```json
+{
+  "title": "Website",
+  "link_url": "https://springtd.com/support",
+  "icon_type": "website"
+}
+```
+
+**Response Example (200):**
+```json
+{
+  "success": true,
+  "message": "Support contact updated",
+  "data": {
+    "contact": {
+      "id": "68105ce5af8f554f922a4c23",
+      "title": "Website",
+      "link_url": "https://springtd.com/support",
+      "icon_type": "website",
+      "sort_order": 3,
+      "is_published": true,
+      "created_at": "2026-04-29T05:36:21.407Z",
+      "updated_at": "2026-04-29T05:39:44.884Z"
+    }
+  }
+}
+```
+
+#### Delete Support Contact (Merchant/Admin)
+```
+DELETE /api/v1/support-contacts/{id}
+Authorization: Bearer <merchant-or-admin-jwt-token>
+```
+
+**Response Example (200):**
+```json
+{
+  "success": true,
+  "message": "Support contact deleted"
+}
+```
+
+### Legal Documents Endpoints (Terms + Privacy Policy) ✅
+
+#### List Legal Documents (Public)
+```
+GET /api/v1/legal-documents
+```
+Optional query parameters:
+- `document_type`: `terms_of_service` or `privacy_policy`
+- `q`: text search on `title` and `content`
+- `includeUnpublished=true`: only honored for authenticated `merchant`/`admin`
+
+**Response Example (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "documents": [
+      {
+        "id": "681075db355f7031f9f53f08",
+        "document_type": "terms_of_service",
+        "title": "Terms of Service Summary",
+        "effective_date": "2025-01-01T00:00:00.000Z",
+        "content": "1. Introduction\\nWelcome to SpringTD...",
+        "sort_order": 1,
+        "is_published": true,
+        "created_at": "2026-04-29T06:59:39.123Z",
+        "updated_at": "2026-04-29T06:59:39.123Z"
+      },
+      {
+        "id": "681075f2355f7031f9f53f09",
+        "document_type": "privacy_policy",
+        "title": "Privacy Policy Summary",
+        "effective_date": "2025-01-01T00:00:00.000Z",
+        "content": "1. Overview\\nYour privacy is important to us...",
+        "sort_order": 2,
+        "is_published": true,
+        "created_at": "2026-04-29T07:00:02.001Z",
+        "updated_at": "2026-04-29T07:00:02.001Z"
+      }
+    ]
+  }
+}
+```
+
+#### Get Legal Document by ID
+```
+GET /api/v1/legal-documents/{id}
+```
+
+**Response Example (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "document": {
+      "id": "681075db355f7031f9f53f08",
+      "document_type": "terms_of_service",
+      "title": "Terms of Service Summary",
+      "effective_date": "2025-01-01T00:00:00.000Z",
+      "content": "1. Introduction\\nWelcome to SpringTD...",
+      "sort_order": 1,
+      "is_published": true,
+      "created_at": "2026-04-29T06:59:39.123Z",
+      "updated_at": "2026-04-29T06:59:39.123Z"
+    }
+  }
+}
+```
+
+#### Create Legal Document (Merchant/Admin)
+```
+POST /api/v1/legal-documents
+Content-Type: application/json
+Authorization: Bearer <merchant-or-admin-jwt-token>
+```
+
+**Request Body:**
+```json
+{
+  "document_type": "terms_of_service",
+  "title": "Terms of Service Summary",
+  "effective_date": "2025-01-01T00:00:00.000Z",
+  "content": "1. Introduction\nWelcome to SpringTD...",
+  "sort_order": 1,
+  "is_published": true
+}
+```
+
+**Response Example (201):**
+```json
+{
+  "success": true,
+  "message": "Legal document created",
+  "data": {
+    "document": {
+      "id": "681075db355f7031f9f53f08",
+      "document_type": "terms_of_service",
+      "title": "Terms of Service Summary",
+      "effective_date": "2025-01-01T00:00:00.000Z",
+      "content": "1. Introduction\\nWelcome to SpringTD...",
+      "sort_order": 1,
+      "is_published": true,
+      "created_at": "2026-04-29T06:59:39.123Z",
+      "updated_at": "2026-04-29T06:59:39.123Z"
+    }
+  }
+}
+```
+
+#### Update Legal Document (Merchant/Admin)
+```
+PUT /api/v1/legal-documents/{id}
+Content-Type: application/json
+Authorization: Bearer <merchant-or-admin-jwt-token>
+```
+
+**Request Body (partial update):**
+```json
+{
+  "title": "Updated Terms of Service Summary",
+  "is_published": false
+}
+```
+
+**Response Example (200):**
+```json
+{
+  "success": true,
+  "message": "Legal document updated",
+  "data": {
+    "document": {
+      "id": "681075db355f7031f9f53f08",
+      "document_type": "terms_of_service",
+      "title": "Updated Terms of Service Summary",
+      "effective_date": "2025-01-01T00:00:00.000Z",
+      "content": "1. Introduction\\nWelcome to SpringTD...",
+      "sort_order": 1,
+      "is_published": false,
+      "created_at": "2026-04-29T06:59:39.123Z",
+      "updated_at": "2026-04-29T07:05:13.010Z"
+    }
+  }
+}
+```
+
+#### Delete Legal Document (Merchant/Admin)
+```
+DELETE /api/v1/legal-documents/{id}
+Authorization: Bearer <merchant-or-admin-jwt-token>
+```
+
+**Response Example (200):**
+```json
+{
+  "success": true,
+  "message": "Legal document deleted"
+}
+```
+
+### FAQ + Contact Support Authorization Matrix
+
+| Endpoint | Method | Public | Merchant | Admin |
+|----------|--------|--------|----------|-------|
+| `/api/v1/faqs` | GET | ✅ Published only | ✅ Published + unpublished with `includeUnpublished=true` | ✅ Published + unpublished with `includeUnpublished=true` |
+| `/api/v1/faqs/{id}` | GET | ✅ Published only | ✅ Published + unpublished | ✅ Published + unpublished |
+| `/api/v1/faqs` | POST | ❌ | ✅ | ✅ |
+| `/api/v1/faqs/{id}` | PUT | ❌ | ✅ | ✅ |
+| `/api/v1/faqs/{id}` | DELETE | ❌ | ✅ | ✅ |
+| `/api/v1/support-contacts` | GET | ✅ Published only | ✅ Published + unpublished with `includeUnpublished=true` | ✅ Published + unpublished with `includeUnpublished=true` |
+| `/api/v1/support-contacts/{id}` | GET | ✅ Published only | ✅ Published + unpublished | ✅ Published + unpublished |
+| `/api/v1/support-contacts` | POST | ❌ | ✅ | ✅ |
+| `/api/v1/support-contacts/{id}` | PUT | ❌ | ✅ | ✅ |
+| `/api/v1/support-contacts/{id}` | DELETE | ❌ | ✅ | ✅ |
+| `/api/v1/legal-documents` | GET | ✅ Published only | ✅ Published + unpublished with `includeUnpublished=true` | ✅ Published + unpublished with `includeUnpublished=true` |
+| `/api/v1/legal-documents/{id}` | GET | ✅ Published only | ✅ Published + unpublished | ✅ Published + unpublished |
+| `/api/v1/legal-documents` | POST | ❌ | ✅ | ✅ |
+| `/api/v1/legal-documents/{id}` | PUT | ❌ | ✅ | ✅ |
+| `/api/v1/legal-documents/{id}` | DELETE | ❌ | ✅ | ✅ |
 - `last_name`: String (required, 2-50 chars)  
 - `email`: Valid email address (required)
 - `phone`: International format (required)
@@ -446,6 +972,17 @@ Revokes a specific session, logging out the user on that device. Users can only 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
 | `SERVICE_AUTH_URL` | string | `http://localhost:3000` | Base URL for service-auth-ms communication |
+| `NOTIFICATIONS_SERVICE_URL` | string | `http://localhost:4009` (non-prod) / `https://notifications-ms.fly.dev` (prod default in code) | Base URL for **notifications-ms** (`/api/v1/notifications/send`). Set to your deployed app (e.g. `https://springtd-notifications-ms.fly.dev`) in production. |
+| `COMPLIANCE_SERVICE_URL` | string | `http://localhost:3003` | Base URL for **compliance-ms** (KYC profile bootstrap on user signup). |
+
+### Wallet microservice (retail signup provisioning)
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `WALLET_SERVICE_URL` | string | *(empty)* | Base URL of **wallet-ms** (no trailing slash), e.g. `http://localhost:4004` or `https://wallet-ms.fly.dev`. If empty, user signup **does not** create a wallet. |
+| `WALLET_INTERNAL_TOKEN` | string | *(empty)* | Shared secret with **wallet-ms** `WALLET_INTERNAL_TOKEN`. Sent as `X-Internal-Token` to `POST /api/v1/internal/wallets/user`. **Must match** wallet-ms. If **`WALLET_SERVICE_URL`** or **`WALLET_INTERNAL_TOKEN`** is empty, signup skips wallet creation. |
+| `USER_WALLET_DEFAULT_CURRENCY` | string | `NGN` | ISO currency for the new user wallet (use `NGN` to align with Payonus `PAYONUS_NUBAN_CURRENCIES` defaults on wallet-ms). |
+| `WALLET_SERVICE_HTTP_TIMEOUT_MS` | number | `30000` | HTTP timeout for wallet-ms internal calls. |
 
 ### Security & CORS
 | Variable | Type | Default | Description |
@@ -590,7 +1127,7 @@ interface Admin extends BaseUser {
 - Field length limits are enforced
 - JWT tokens must be valid for authenticated endpoints
 - OTP codes must be 6 digits
-- Password reset tokens must be valid and not expired
+- Password reset and password change OTP codes must be valid and not expired
 
 ## Complete API Gateway Coverage ✅
 
@@ -607,6 +1144,9 @@ The client-auth-ms now provides complete coverage of all authentication operatio
 | **Role Management** | Create roles, Get roles, Permissions | ✅ Complete |
 | **Invitation Management** | Create, List, Validate, Accept | ✅ Complete |
 | **Session Management** | Get active sessions, Revoke sessions | ✅ Complete |
+| **FAQ Management** | List/Get/Create/Update/Delete FAQs | ✅ Complete |
+| **Contact Support Management** | List/Get/Create/Update/Delete support contacts | ✅ Complete |
+| **Legal Documents Management** | List/Get/Create/Update/Delete terms and privacy policy | ✅ Complete |
 | **Administration** | Suspend/Activate users, Verify info | ✅ Complete |
 | **Health & Monitoring** | Health check endpoint | ✅ Complete |
 

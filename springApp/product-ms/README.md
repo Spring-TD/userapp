@@ -29,6 +29,16 @@ When clients call **`GET https://account-ms.fly.dev/api/v1/products`**, Spring *
 - `PLATA_SECRET_KEY`
 - `MONGODB_URI` or `DATABASE_URL`
 
+### Optional: notifications (email + in-app)
+
+Merchant-facing flows can trigger **notifications-ms** `POST /api/v1/notifications/send-dual` when all of the following are true:
+
+- The request includes **`Authorization: Bearer <access token>`** issued by **client-auth-ms** (`type: access` in the JWT payload).
+- This service has **`JWT_SECRET`** set to the **same value** as client-auth-ms (used only to read `userId` / `email` from the token).
+- **`NOTIFICATIONS_SERVICE_URL`** points at a running notifications-ms (default in code: `http://localhost:4009` in development, `https://springtd-notifications-ms.fly.dev` in production).
+
+**When it fires:** successful **`PUT /api/v1/products/toggle/:appId/:productId`**, **`PUT /api/v1/products/config/:appId/:productId`**, and **`POST|PUT|DELETE /api/v1/configurations/...`** (legacy configuration API). If there is no valid Bearer token, the API still succeeds; no notification is sent.
+
 ### Optional upstream URL
 
 - `PLATA_ACCOUNT_SERVICE_URL` — preferred base URL for account-ms (no trailing slash), e.g. `https://account-ms-plata.fly.dev`
@@ -124,17 +134,31 @@ Turn a product on or off for a specific app.
 
 **Request Body:**
 
+When `activate` is `false`, only `activate` is required.
+
+When `activate` is `true`, the service also notifies Plata at `POST /api/v1/products/sub-merchant-activations` on the Plata account-ms base URL (`PLATA_ACCOUNT_SERVICE_URL`). You must include merchant and sub-merchant fields (the sub-merchant is the actor turning the product on). Path parameters `appId` and `productId` must each be 1–100 characters (aligned with Plata).
+
 ```json
 {
-  "activate": true
+  "activate": true,
+  "merchantId": "merchant-entity-id",
+  "merchantName": "Merchant display name",
+  "productName": "Optional override sent to Plata",
+  "subMerchant": {
+    "id": "sub-merchant-id",
+    "name": "Sub-merchant name",
+    "email": "merchant@example.com",
+    "phone": "+1234567890"
+  }
 }
 ```
 
 **Behavior:**
 
-- If `activate` is `true` and the app does not already have a local copy, the product is cloned from upstream into the local `products` collection.
-- If the app already has a local copy, `isActive` is updated.
-- If `activate` is `false`, the existing local app product is marked inactive.
+- If `activate` is `true` and the app does not already have a local copy, the product is cloned from upstream into the local `products` collection, then Plata is notified. If Plata returns an error, the local create is rolled back.
+- If the app already has a local copy, `isActive` is updated. If the product was inactive and is turned on, Plata is notified; if Plata fails, the local document is set back to inactive.
+- If `activate` is `true` but the product is **already** active, the local document is unchanged and Plata is **not** called again.
+- If `activate` is `false`, the existing local app product is marked inactive (no Plata sub-merchant activation call).
 
 **Response:**
 
@@ -167,6 +191,12 @@ Update the locally stored app product document.
 This endpoint now updates the Plata-shaped local product document for that app.
 
 For fees, merchants should send additions under `merchantFeeAdditions` only. The service recalculates and persists total `feesAndCharges` using base + additions.
+
+With a valid **client-auth access** JWT, a **`product-configuration`** notification (email + in-app) is sent after a successful update (failures logged only).
+
+### Legacy product configuration routes
+
+Mounted at **`/api/v1/configurations`** (also proxied by account-ms). Create, update, and delete can emit the same **`product-configuration`** **send-dual** notification when a valid Bearer access token is present.
 
 ### Get App Product
 

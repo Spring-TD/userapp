@@ -21,6 +21,11 @@
  *       200:
  *         description: KYC status
  * /api/v1/kyc/business/documents:
+ *   put:
+ *     summary: Upsert one or more business documents (add or replace by type)
+ *     tags: [KYC - Business]
+ *     security:
+ *       - bearerAuth: []
  *   get:
  *     summary: Get business KYC documents
  *     tags: [KYC - Business]
@@ -202,6 +207,7 @@ router.use(requireBusinessCustomer);
 // Business KYC routes
 router.post('/submit', validateDocumentRequirements, KYCController.submitBusinessKYC);
 router.get('/status', KYCController.getKYCStatus);
+router.put('/documents', KYCController.upsertBusinessDocuments);
 router.get('/documents', KYCController.getAllKYCDocuments);
 router.get('/document/:documentId', KYCController.getKYCDocument);
 router.get('/business-info', KYCController.getBusinessInfo);

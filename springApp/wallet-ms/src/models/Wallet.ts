@@ -1,3 +1,18 @@
+export type VirtualNubanAccountType = 'static' | 'reserved' | 'dynamic';
+
+export type VirtualNubanProvisionStatus = 'active' | 'failed';
+
+export interface VirtualNubanDetails {
+  accountType: VirtualNubanAccountType;
+  provisionStatus: VirtualNubanProvisionStatus;
+  accountNumber?: string;
+  bankName?: string;
+  bankCode?: string;
+  providerReference?: string;
+  provisionError?: string;
+  provisionedAt?: Date;
+}
+
 export interface BaseWallet {
   id: string;
   balance: number; // Alias for mainBalance for backward compatibility
@@ -7,6 +22,8 @@ export interface BaseWallet {
   createdAt: Date;
   updatedAt: Date;
   status: WalletStatus;
+  /** Payonus (or compatible) virtual NUBAN, when provisioned */
+  virtualNuban?: VirtualNubanDetails;
 }
 
 // Define wallet types for merchants
@@ -18,7 +35,14 @@ export enum MerchantWalletType {
 
 export interface MerchantWallet extends BaseWallet {
   merchantId: string;
+  /**
+   * Auth primary user id (JWT userId). Shareholders in compliance-ms are keyed by this value,
+   * not by userMerchantId (`merchantId`).
+   */
+  complianceShareholderUserId?: string;
   appId?: string;
+  appName?: string;
+  payonusSubaccountCode?: string;
   walletType: 'MERCHANT';
   merchantWalletType: MerchantWalletType; // Specific type for merchant wallets
   name: string;
@@ -27,6 +51,8 @@ export interface MerchantWallet extends BaseWallet {
 export interface UserWallet extends BaseWallet {
   userId: string;
   merchantId: string;
+  /** Merchant owner's auth userId for compliance shareholder / BVN lookup. */
+  complianceShareholderUserId?: string;
   walletType: 'USER';
   name: string;
 }

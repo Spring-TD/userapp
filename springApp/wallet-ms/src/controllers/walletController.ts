@@ -7,6 +7,9 @@ import { MerchantWalletType, TransactionType } from '../models/Wallet';
 // Define interfaces for the validated data
 interface CreateMerchantWalletData {
   appId?: string;
+  appName?: string;
+  payonusSubaccountCode?: string;
+  complianceShareholderUserId?: string;
   name: string;
   currency: string;
   merchantWalletType: MerchantWalletType;
@@ -121,11 +124,15 @@ export class WalletController {
       }
 
       const merchantId = req.user.merchantId || req.user.userId;
-      const { appId, name, currency, merchantWalletType } = value!;
+      const { appId, appName, payonusSubaccountCode, complianceShareholderUserId, name, currency, merchantWalletType } =
+        value!;
 
       const result = await WalletService.createMerchantWallet({
         merchantId,
+        complianceShareholderUserId: complianceShareholderUserId || req.user.userId,
         appId,
+        appName,
+        payonusSubaccountCode,
         name: name || `${merchantWalletType} Wallet`,
         currency: currency || 'USD',
         merchantWalletType
@@ -174,9 +181,17 @@ export class WalletController {
       }
 
       const merchantId = req.user.merchantId || req.user.userId;
-      const { currency, appId } = req.body;
+      const { currency, appId, appName, payonusSubaccountCode, complianceShareholderUserId } = req.body;
 
-      const result = await WalletService.createAllMerchantWallets(merchantId, currency || 'USD', false, appId);
+      const result = await WalletService.createAllMerchantWallets(
+        merchantId,
+        currency || 'USD',
+        false,
+        appId,
+        appName,
+        payonusSubaccountCode,
+        complianceShareholderUserId || req.user.userId
+      );
 
       if (!result.success) {
         res.status(400).json({
@@ -437,6 +452,7 @@ export class WalletController {
       const result = await WalletService.createUserWallet({
         userId,
         merchantId,
+        complianceShareholderUserId: req.user.userId,
         name: name || `Personal Wallet`,
         currency: currency || 'USD'
       });

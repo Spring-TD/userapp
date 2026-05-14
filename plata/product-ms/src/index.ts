@@ -10,6 +10,8 @@ import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './config/swagger';
 import { productRoutes, configurationRoutes } from './routes';
 import './models/UserProductApplicationModel';
+import './models/SubMerchantProductActivationModel';
+import './models/SubMerchantProductUsageEventModel';
 
 const app = express();
 let server: ReturnType<express.Express['listen']> | null = null;
@@ -34,6 +36,19 @@ app.get('/', (_req, res) => {
       health: '/health',
       products: '/api/v1/products',
       userProductApplications: '/api/v1/products/applications',
+      productOverview: '/api/v1/products/app/:appId/product-overview (GET, Bearer)',
+      productOverviewByType:
+        '/api/v1/products/app/:appId/product-overview/by-type/:productType (GET, Bearer)',
+      subMerchantActivations:
+        '/api/v1/products/sub-merchant-activations (POST, gateway + PLATA_PUBLIC_KEY / PLATA_SECRET_KEY)',
+      subMerchantUsageEvents:
+        '/api/v1/products/sub-merchant-usage-events (POST, gateway + PLATA_PUBLIC_KEY / PLATA_SECRET_KEY)',
+      subMerchantMerchantDashboard:
+        '/api/v1/products/sub-merchants/merchant-dashboard (GET, Bearer)',
+      subMerchantCustomersDashboard:
+        '/api/v1/products/sub-merchants/customers-dashboard (GET, Bearer)',
+      loanWorkflow:
+        '/api/v1/products/applications/me/loan-workflow (GET, Bearer) + PATCH .../:id/loan-workflow',
       configurationOptionsLegacy: '/api/v1/configurations/options',
       configurationOptions: '/api/v1/products/options'
     },

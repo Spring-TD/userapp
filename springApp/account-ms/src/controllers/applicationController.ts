@@ -99,10 +99,11 @@ class ApplicationController {
         }
     }
 
-    // Get all applications
+    // Get all applications (admin: all; merchant: scoped to token merchantId)
     async getAllApplications(req: Request, res: Response) {
         try {
-            const applications = await applicationService.getAllApplications();
+            const authReq = req as AuthRequest;
+            const applications = await applicationService.getAllApplications(authReq.applicationsMerchantIdFilter);
             res.status(200).json({
                 success: true,
                 data: applications
@@ -118,10 +119,11 @@ class ApplicationController {
         }
     }
 
-    // Get pending applications
+    // Get pending applications (admin: all pending; merchant: pending for their apps only)
     async getPendingApplications(req: Request, res: Response) {
         try {
-            const applications = await applicationService.getPendingApplications();
+            const authReq = req as AuthRequest;
+            const applications = await applicationService.getPendingApplications(authReq.applicationsMerchantIdFilter);
             res.status(200).json({
                 success: true,
                 data: applications
@@ -189,6 +191,61 @@ class ApplicationController {
             return;
         } catch (error: any) {
             console.error('Error in getUserMortgageApplications:', error);
+            res.status(500).json({
+                success: false,
+                error: error.message || 'Internal server error'
+            });
+            return;
+        }
+    }
+
+    // Get blacklisted mortgage applications (admin: all; merchant: scoped)
+    async getBlacklistedMortgageApplications(req: Request, res: Response) {
+        try {
+            const authReq = req as AuthRequest;
+            const applications = await applicationService.getBlacklistedMortgageApplications(authReq.applicationsMerchantIdFilter);
+            res.status(200).json({
+                success: true,
+                data: applications
+            });
+            return;
+        } catch (error: any) {
+            console.error('Error in getBlacklistedMortgageApplications:', error);
+            res.status(500).json({
+                success: false,
+                error: error.message || 'Internal server error'
+            });
+            return;
+        }
+    }
+
+    // Blacklist a mortgage application
+    async blacklistMortgageApplication(req: Request, res: Response) {
+        try {
+            const { id } = req.params;
+            const { reason } = req.body;
+            const adminId = (req as AuthRequest).adminId;
+
+            if (!adminId) {
+                res.status(403).json({
+                    success: false,
+                    error: 'Admin ID is required'
+                });
+                return;
+            }
+
+            if (!reason) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Blacklist reason is required'
+                });
+            }
+
+            const result = await applicationService.blacklistMortgageApplication(id, reason, adminId);
+            res.status(200).json(result);
+            return;
+        } catch (error: any) {
+            console.error('Error in blacklistMortgageApplication:', error);
             res.status(500).json({
                 success: false,
                 error: error.message || 'Internal server error'

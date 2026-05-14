@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { AuthService } from '../services/AuthService';
+import { UserType } from '../models/User';
 import { userProfileUpdateSchema, validateForm, updateEmailSchema } from '../utils/validation';
 
 export class UserController {
@@ -147,9 +148,34 @@ export class UserController {
         return;
       }
 
-      res.status(500).json({
-        success: false,
-        error: 'List users functionality not fully implemented in this simplified version'
+      if (req.user.userType !== UserType.MERCHANT && req.user.userType !== UserType.ADMIN) {
+        res.status(403).json({
+          success: false,
+          error: 'Access denied: Merchant or Admin only'
+        });
+        return;
+      }
+
+      const merchantId =
+        req.user.userType === UserType.ADMIN
+          ? req.user.userMerchantId || 'admin'
+          : req.user.userMerchantId || req.user.userId;
+
+      const result = await AuthService.getMerchantUsers(merchantId);
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: result.error
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          users: result.users
+        }
       });
     } catch (error) {
       console.error('Error listing users:', error);

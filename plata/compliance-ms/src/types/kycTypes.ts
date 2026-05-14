@@ -34,7 +34,9 @@ export enum DocumentType {
   ARTICLES_OF_INCORPORATION = 'articles_of_incorporation',
   FINANCIAL_STATEMENTS = 'financial_statements',
   TAX_CERTIFICATE = 'tax_certificate',
-  
+  /** Legacy / generic KYC document list (same string as `BusinessDocumentType.DIRECTOR_IDENTIFICATION`). */
+  DIRECTOR_IDENTIFICATION = 'director_identification',
+
   // Common documents
   BANK = 'bank',
   TAX = 'tax'
@@ -166,6 +168,9 @@ export enum BusinessDocumentType {
   BANK_STATEMENT = 'bank_statement',
   AML_POLICIES = 'aml_policies',
   DATA_PRIVACY_POLICY = 'data_privacy_policy',
+  DIRECTOR_IDENTIFICATION = 'director_identification',
+  /** Optional / industry-specific license — UI: "Operating License (if applicable)" */
+  OPERATING_LICENSE = 'operating_license',
 }
 
 /** Display names for business document types (UI labels) */
@@ -177,6 +182,8 @@ export const BUSINESS_DOCUMENT_DISPLAY_NAMES: Record<BusinessDocumentType, strin
   [BusinessDocumentType.BANK_STATEMENT]: 'Bank Statement',
   [BusinessDocumentType.AML_POLICIES]: 'AML Policy',
   [BusinessDocumentType.DATA_PRIVACY_POLICY]: 'Data & Privacy Policy',
+  [BusinessDocumentType.DIRECTOR_IDENTIFICATION]: 'Director Identification',
+  [BusinessDocumentType.OPERATING_LICENSE]: 'Operating License (if applicable)',
 };
 
 // Business Document interface for the required documents
@@ -198,6 +205,10 @@ export interface Shareholder {
   phoneNumber?: string;
   bvn?: string;
   bankAccount?: string;
+  /** Nigeria bank code (digits) for IdentityPass bank account verification; required with `bankAccount` unless `PREMBLY_DEFAULT_BANK_CODE` is set. */
+  bankCode?: string;
+  /** Optional Prembly `doc_type` when using document IdentityPass (e.g. UBO / bank statement). */
+  documentType?: string;
   ownershipPercentage: number;
   submittedAt?: Date;
   uboDocument?: {
@@ -215,12 +226,16 @@ export interface Shareholder {
     uploadDate: Date;
   };
   status: KYCStatus;
-  // Added kyc field for liveness test link
+  /** Prembly shareholder verification (IdentityPass: BVN / bank account / document — not liveness). */
   kyc: {
-    url: string; // The URL for the liveness test
-    expiresAt: Date; // When the link expires
-    status: 'pending' | 'active' | 'expired' | 'completed' | 'failed'; // Current status of the link
-    providerReference?: string; // Reference ID from the 3rd party provider
+    url: string; // Customer or status URL (Prembly redirect when provided, else app fallback)
+    expiresAt: Date;
+    status: 'pending' | 'active' | 'expired' | 'completed' | 'failed';
+    providerReference?: string;
+    flow?: 'identitypass';
+    verificationKind?: 'bvn' | 'bank_account' | 'document';
+    premlyVerificationStatus?: string;
+    message?: string;
     result?: {
       success: boolean;
       score?: number;
@@ -237,8 +252,8 @@ export interface BusinessKYCSubmissionRequest {
   businessInfo: AboutTheBusinessData;
   businessSurvey: BusinessSurveyData;
   shareholders: Shareholder[];
-  // Replace the generic documents array with businessDocuments
-  businessDocuments: BusinessDocumentData[];
+  /** Partial uploads allowed; omitted or empty means merchant can add documents later via `PUT /business/documents`. */
+  businessDocuments?: BusinessDocumentData[];
   riskAssessment: {
     annualTurnover: number;
     expectedTransactionVolume: number;

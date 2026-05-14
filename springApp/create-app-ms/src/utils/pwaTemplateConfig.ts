@@ -26,6 +26,7 @@ const APP_PROFILE_KEYS = [
   'fontFamily',
   'textColors',
   'elementColors',
+  'auxElementColors',
   'backgroundColors',
   'menuColors'
 ] as const;
@@ -33,6 +34,7 @@ const APP_PROFILE_KEYS = [
 const APP_PROFILE_COLOR_GROUP_KEYS = [
   'textColors',
   'elementColors',
+  'auxElementColors',
   'backgroundColors',
   'menuColors'
 ] as const;
@@ -40,13 +42,13 @@ const APP_PROFILE_COLOR_GROUP_KEYS = [
 const APP_PROFILE_FONT_FAMILY_MAX_LEN = 120;
 
 /** primary / secondary / auxiliary (text & menu) */
-const PROFILE_TEXT_KEYS = ['primary', 'secondary', 'auxiliary'] as const;
+const PROFILE_TEXT_KEYS = ['primary', 'secondary', 'auxiliary', 'aux'] as const;
 /** primary / secondary (element & background) */
 const PROFILE_PAIR_KEYS = ['primary', 'secondary'] as const;
 /** primary / secondary / auxiliary (menu) */
-const PROFILE_MENU_KEYS = ['primary', 'secondary', 'auxiliary'] as const;
+const PROFILE_MENU_KEYS = ['primary', 'secondary', 'auxiliary', 'aux'] as const;
 
-const POLICY_TERMS_TOP_KEYS = ['privacyPolicy', 'termsOfService'] as const;
+const POLICY_TERMS_TOP_KEYS = ['privacyPolicy', 'termsOfService', 'faq'] as const;
 const POLICY_DOC_STRING_KEYS = ['title', 'contentHtml', 'contentText'] as const;
 const POLICY_DOC_KEYS = [
   ...POLICY_DOC_STRING_KEYS,
@@ -79,6 +81,7 @@ export const APP_PWA_SUPPORT_STRING_KEYS = [
   'linkedinPage',
   'instagramHandle',
   'twitterHandle',
+  'whatsapp',
   'privacyPolicyLink',
   'termsAndConditionsLink'
 ] as const;
@@ -456,6 +459,13 @@ function assertAppProfileSection(raw: Record<string, unknown>): AppPwaAppProfile
       PROFILE_PAIR_KEYS
     ) as AppPwaAppProfileSection['elementColors'];
   }
+  if (raw.auxElementColors !== undefined) {
+    out.auxElementColors = parseColorSubgroup(
+      raw.auxElementColors,
+      'config.appProfile.auxElementColors',
+      PROFILE_PAIR_KEYS
+    ) as AppPwaAppProfileSection['auxElementColors'];
+  }
   if (raw.backgroundColors !== undefined) {
     out.backgroundColors = parseColorSubgroup(
       raw.backgroundColors,
@@ -510,6 +520,9 @@ function coerceAppProfileSection(raw: Record<string, unknown>): AppPwaAppProfile
     } else if (k === 'elementColors') {
       const t = coerceColorSubgroup(v, PROFILE_PAIR_KEYS);
       if (t) out.elementColors = t;
+    } else if (k === 'auxElementColors') {
+      const t = coerceColorSubgroup(v, PROFILE_PAIR_KEYS);
+      if (t) out.auxElementColors = t;
     } else if (k === 'backgroundColors') {
       const t = coerceColorSubgroup(v, PROFILE_PAIR_KEYS);
       if (t) out.backgroundColors = t;
@@ -605,6 +618,14 @@ function mergeAppProfileDeep(
       PROFILE_PAIR_KEYS
     );
   }
+  if (patch.auxElementColors !== undefined) {
+    out.auxElementColors = mergeColorSubgroup(
+      existing.auxElementColors,
+      patch.auxElementColors,
+      'config.appProfile.auxElementColors',
+      PROFILE_PAIR_KEYS
+    );
+  }
   if (patch.backgroundColors !== undefined) {
     out.backgroundColors = mergeColorSubgroup(
       existing.backgroundColors,
@@ -662,6 +683,20 @@ function assertPolicyMediaArray(raw: unknown, path: string): AppPwaPolicyTermsMe
     throw new ApiError(400, `${path} must be an array`);
   }
   return raw.map((item, i) => assertPolicyMediaItem(item, `${path}[${i}]`));
+}
+
+function assertPolicyFaqItem(raw: unknown, path: string): Record<string, unknown> {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new ApiError(400, `${path} must be an object`);
+  }
+  return { ...(raw as Record<string, unknown>) };
+}
+
+function assertPolicyFaq(raw: unknown, path: string): Record<string, unknown>[] {
+  if (!Array.isArray(raw)) {
+    throw new ApiError(400, `${path} must be an array`);
+  }
+  return raw.map((item, i) => assertPolicyFaqItem(item, `${path}[${i}]`));
 }
 
 /** TipTap `getJSON()` root must be a non-null object (not a top-level array). */
@@ -729,6 +764,12 @@ function assertPolicyTermsSection(raw: Record<string, unknown>): AppPwaPolicyTer
       'config.policyTerms.termsOfService'
     );
   }
+  if (raw.faq !== undefined) {
+    if (raw.faq === null) {
+      throw new ApiError(400, 'config.policyTerms.faq must be an array');
+    }
+    out.faq = assertPolicyFaq(raw.faq, 'config.policyTerms.faq');
+  }
   return out;
 }
 
@@ -785,6 +826,11 @@ function coercePolicyTermsSection(raw: Record<string, unknown>): AppPwaPolicyTer
     if (d) {
       out.termsOfService = d;
     }
+  }
+  if (Array.isArray(raw.faq)) {
+    out.faq = raw.faq
+      .filter((item) => item !== null && typeof item === 'object' && !Array.isArray(item))
+      .map((item) => ({ ...(item as Record<string, unknown>) }));
   }
   return out;
 }
@@ -865,6 +911,14 @@ function mergePolicyTermsDeep(
       patch.termsOfService,
       'config.policyTerms.termsOfService'
     );
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'faq')) {
+    const faqPatch = patch.faq;
+    if (faqPatch === null || faqPatch === undefined) {
+      delete out.faq;
+    } else {
+      out.faq = assertPolicyFaq(faqPatch, 'config.policyTerms.faq');
+    }
   }
   return out;
 }

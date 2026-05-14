@@ -1,13 +1,16 @@
 # Notifications Microservice
 
 ## Overview
-This microservice provides centralized notification functionality for the SpringTD platform, handling email and SMS notifications across all services.
+
+This microservice provides centralized notification functionality for the SpringTD platform, handling email, SMS, **in-app inbox** records, and combined **email + in-app** delivery across all services.
 
 ## Features
 
 - **Email Notifications**: Send emails via Mailtrap (development) or production SMTP
 - **SMS Notifications**: Send SMS via Twilio
-- **Template Support**: Reusable email and SMS templates with variable substitution
+- **In-app notifications**: Persist rendered title/body per user id (`channel: in_app`); clients list via `GET /api/v1/notifications/user/:recipient?channel=in_app`
+- **Dual delivery**: Single request sends the same template to **email** and **in-app** (`POST /api/v1/notifications/send-dual`)
+- **Template Support**: Reusable email, SMS, and in-app templates with `{{variable}}` substitution
 - **Delivery Tracking**: Track notification status and delivery
 - **MongoDB Persistence**: Store all notification records for auditing
 - **Graceful Degradation**: Service continues to work even if email/SMS providers are not configured
@@ -29,7 +32,7 @@ Health check endpoint: https://notifications-ms.fly.dev/health
 
 ### Fly.io: Email must be configured
 
-For emails to be sent (e.g. verification OTP, password reset), set Mailtrap (or SMTP) secrets on the **notifications-ms** Fly app. Without these, the service will accept send requests but no email is delivered.
+For emails to be sent (e.g. verification OTP, password reset OTP, password change OTP), set Mailtrap (or SMTP) secrets on the **notifications-ms** Fly app. Without these, the service will accept send requests but no email is delivered.
 
 1. **Check current status:** Open https://notifications-ms.fly.dev/health — if `services.email` is `"not configured"`, set the secrets below.
 
@@ -69,13 +72,16 @@ For emails to be sent (e.g. verification OTP, password reset), set Mailtrap (or 
 Create a `.env` file with the following variables:
 
 ```env
-# Server
+# Server (docker-compose uses PORT=3009; local default in code is 4009 if unset)
 PORT=4009
 NODE_ENV=development
 MONGO_URI=mongodb://localhost:27017/notifications_db
 
 # CORS
 CORS_ORIGINS=http://localhost:3000,http://localhost:4008
+
+# Optional: override templates directory (default: ./templates next to build)
+# TEMPLATES_DIR=/absolute/path/to/templates
 
 # Mailtrap SMTP (Email)
 MAILTRAP_HOST=smtp.mailtrap.io
@@ -96,11 +102,13 @@ LOG_LEVEL=info
 ### Running the Service
 
 #### Development Mode
+
 ```
 npm run dev
 ```
 
 #### Production Mode
+
 ```
 npm run build
 npm start
@@ -109,11 +117,13 @@ npm start
 ## API Endpoints
 
 ### Send Notification
-Send a notification via email or SMS.
+
+Send a notification via email, SMS, or in-app (persisted inbox record).
 
 **Endpoint:** `POST /api/v1/notifications/send`
 
 **Request Body:**
+
 ```json
 {
   "channel": "email",
@@ -128,6 +138,7 @@ Send a notification via email or SMS.
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -138,12 +149,56 @@ Send a notification via email or SMS.
 }
 ```
 
+**Channels**
+
+- `email` — `recipient` must be a valid email address.
+- `sms` — `recipient` must be a valid E.164-style phone number.
+- `in_app` — `recipient` is the **end-user id** (same id the client uses to load the inbox). Renders `{template}.in-app.json` and stores `inAppTitle` / `inAppBody` on the record’s `data`.
+
+### Send email + in-app (dual)
+
+Delivers the **same** `template` and `data` as both an email and an in-app notification in one synchronous call.
+
+**Endpoint:** `POST /api/v1/notifications/send-dual`
+
+**Request Body:**
+
+```json
+{
+  "userId": "USER_DOCUMENT_ID",
+  "email": "user@example.com",
+  "template": "app-created",
+  "data": {
+    "appName": "My App",
+    "merchantName": "merchant_123",
+    "detail": ""
+  }
+}
+```
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "inApp": { "success": true, "id": "..." },
+    "email": { "success": true, "id": "..." }
+  },
+  "error": null
+}
+```
+
+Either delivery can fail independently; check `data.inApp` and `data.email`.
+
 ### Get Notification Status
+
 Get the status of a specific notification.
 
 **Endpoint:** `GET /api/v1/notifications/:id/status`
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -160,11 +215,16 @@ Get the status of a specific notification.
 ```
 
 ### Get User Notifications
-Get all notifications for a specific user.
 
-**Endpoint:** `GET /api/v1/notifications/user/:recipient?limit=50&offset=0`
+Get all notifications for a specific **recipient** (for in-app, this is the **user id**).
+
+**Endpoint:** `GET /api/v1/notifications/user/:recipient?limit=50&offset=0&channel=in_app`
+
+- Optional query **`channel`**: `email` | `sms` | `in_app` — filter by channel.
+- For **`in_app`** rows, each item includes **`data`** (includes `inAppTitle`, `inAppBody`, and any template variables).
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -177,6 +237,20 @@ Get all notifications for a specific user.
         "status": "sent",
         "createdAt": "2024-01-01T00:00:00.000Z",
         "sentAt": "2024-01-01T00:00:00.000Z"
+      },
+      {
+        "id": "notification_id_2",
+        "channel": "in_app",
+        "template": "app-created",
+        "status": "sent",
+        "createdAt": "2024-01-01T00:00:00.000Z",
+        "sentAt": "2024-01-01T00:00:00.000Z",
+        "data": {
+          "appName": "My App",
+          "merchantName": "merchant_123",
+          "inAppTitle": "App created",
+          "inAppBody": "My App was created successfully for merchant_123."
+        }
       }
     ],
     "total": 100,
@@ -187,6 +261,7 @@ Get all notifications for a specific user.
 ```
 
 ### Get All Notifications (Admin)
+
 Get all notifications (admin endpoint).
 
 **Endpoint:** `GET /api/v1/notifications?limit=50&offset=0`
@@ -199,12 +274,14 @@ Templates are stored in the `templates/` directory. Each template should have:
 - `{template-name}.email.txt` - Plain text email template (optional)
 - `{template-name}.email.subject.txt` - Email subject template (optional)
 - `{template-name}.sms.txt` - SMS template
+- `{template-name}.in-app.json` - In-app title/body (required for `channel: in_app` and for `send-dual`). JSON shape: `{ "title": "...", "body": "..." }` with `{{placeholders}}` in strings.
 
 ### Template Variables
 
 Use `{{variableName}}` syntax for variable substitution:
 
 **Example Email Template (`email-verification.email.html`):**
+
 ```html
 <!DOCTYPE html>
 <html>
@@ -220,17 +297,49 @@ Use `{{variableName}}` syntax for variable substitution:
 ```
 
 **Example SMS Template (`email-verification.sms.txt`):**
+
 ```
 Hello {{userName}}! Please verify your email: {{verificationUrl}}
 ```
 
 ### Available Templates
 
+**Auth / onboarding**
+
 - `email-verification` - Email verification
-- `password-reset` - Password reset
+- `password-reset` - Password reset (link-style; SpringTD may also use OTP + `otp` for reset)
+- `password-change` - **Email only:** confirmation after password was changed or reset successfully (`data.userName`). OTP codes still use the `otp` template.
+- `otp` - One-time code (email/SMS)
+- `invitation` - Team invitation
+
+For the `otp` template, set `data.purpose` to describe the use case (for example: `Verification`, `Password Reset`, `Password Change`, or `Login`).
+
+**Domain events (email + `.in-app.json` where dual delivery is used)**
+
+- `app-created` - Application created successfully (**create-app-ms** → `send-dual`)
+- `app-deactivated` - App **suspended** or **deleted** (`data.appName`, `merchantName`, `action`: `suspended` | `deleted`)
+- `app-reactivated` - App set back to **active** (`data.appName`, `merchantName`)
+- `product-configuration` - Product **activated/deactivated**, **config updated**, or legacy **configurations** CRUD (**product-ms** → `send-dual` when Bearer access JWT present; `data.productId`, `productType`, `appId`, `action`, optional `detail`)
+- `product-created` - Product created successfully
+- `merchant-registered` - New merchant registered
+- `compliance-incomplete` - Compliance needs attention (`failed` / `rejected` / `in_progress` flows from compliance-ms)
+- `withdrawal-alert` - Withdrawal processed (billing-ms)
+- `support-ticket-new` - New support ticket (call `send-dual` from the service that owns tickets when implemented)
+- `merchant-account-status` - Merchant account deactivated (or similar lifecycle)
+- `merchant-product-status` - Product set live or deactivated
+
+**Other**
+
 - `contract-submission` - Contract submission confirmation
-- `kyc-approved` - KYC verification approved
-- `kyc-rejected` - KYC verification rejected
+- `kyc-approved` / `kyc-rejected` - Legacy naming; compliance also uses `kyc-status-updated` email template
+
+## OpenAPI
+
+A static spec is checked in as `openapi.json`. Regenerate from the running app’s Swagger UI export if needed:
+
+```
+npm run export-swagger
+```
 
 ## Mailtrap Configuration
 
@@ -266,6 +375,7 @@ The notifications-ms is integrated with account-ms as the gateway. All requests 
 ## Testing
 
 Run tests with:
+
 ```
 npm test
 ```
@@ -273,6 +383,7 @@ npm test
 ## Error Handling
 
 The service uses graceful degradation:
+
 - If Mailtrap is not configured, email sending is skipped (logged)
 - If Twilio is not configured, SMS sending is skipped (logged)
 - Notification records are still created in MongoDB for tracking
@@ -280,9 +391,7 @@ The service uses graceful degradation:
 ## Future Enhancements
 
 - Background worker for retry logic
-- Push notifications support
-- In-app notifications
+- Push notifications support (FCM/APNs) in addition to in-app store
 - Webhook notifications
 - Rate limiting
 - Provider fallback mechanisms
-

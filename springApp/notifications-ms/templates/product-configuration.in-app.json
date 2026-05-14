@@ -1,0 +1,4 @@
+{
+  "title": "Product {{action}}",
+  "body": "{{productType}} ({{productId}}) for app {{appId}}: {{action}}."
+}

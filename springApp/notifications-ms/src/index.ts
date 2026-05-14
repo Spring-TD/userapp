@@ -32,6 +32,7 @@ app.get('/', (_req, res) => {
     endpoints: {
       health: '/health',
       send: '/api/v1/notifications/send',
+      sendDual: '/api/v1/notifications/send-dual',
       status: '/api/v1/notifications/:id/status',
       userNotifications: '/api/v1/notifications/user/:recipient',
       allNotifications: '/api/v1/notifications'

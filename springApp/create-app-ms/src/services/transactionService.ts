@@ -28,6 +28,10 @@ export class TransactionService {
       filter.status = queryParams.status;
     }
 
+    if (queryParams.productId) {
+      filter.productId = queryParams.productId;
+    }
+
     if (queryParams.startDate || queryParams.endDate) {
       filter.createdAt = {};
       if (queryParams.startDate) {
@@ -149,6 +153,71 @@ export class TransactionService {
       completedTransactions: result.completedTransactions,
       failedTransactions: result.failedTransactions,
       netAmount: result.totalCreditAmount - result.totalDebitAmount
+    };
+  }
+
+  /**
+   * Aggregates transaction volumes for an app + product (requires `productId` on stored transactions).
+   */
+  static async getProductTransactionOverview(
+    appId: string,
+    productId: string
+  ): Promise<{
+    completedVolume: number;
+    completedCount: number;
+    pendingVolume: number;
+    pendingCount: number;
+    failedCount: number;
+  }> {
+    if (!appId || !productId) {
+      throw new ApiError(400, 'App ID and product ID are required');
+    }
+
+    const rows = await TransactionMongoModel.aggregate([
+      { $match: { appId, productId } },
+      {
+        $group: {
+          _id: null,
+          completedVolume: {
+            $sum: {
+              $cond: [{ $eq: ['$status', 'completed'] }, '$amount', 0]
+            }
+          },
+          completedCount: {
+            $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] }
+          },
+          pendingVolume: {
+            $sum: {
+              $cond: [{ $eq: ['$status', 'pending'] }, '$amount', 0]
+            }
+          },
+          pendingCount: {
+            $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] }
+          },
+          failedCount: {
+            $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] }
+          }
+        }
+      }
+    ]);
+
+    if (rows.length === 0) {
+      return {
+        completedVolume: 0,
+        completedCount: 0,
+        pendingVolume: 0,
+        pendingCount: 0,
+        failedCount: 0
+      };
+    }
+
+    const r = rows[0];
+    return {
+      completedVolume: r.completedVolume,
+      completedCount: r.completedCount,
+      pendingVolume: r.pendingVolume,
+      pendingCount: r.pendingCount,
+      failedCount: r.failedCount
     };
   }
 }

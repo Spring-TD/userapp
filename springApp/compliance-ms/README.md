@@ -30,6 +30,7 @@ This service has been aligned with `plata/compliance-ms`.
 - **AML Document Verification** - Verify business documents using Prembly API (KYB/AML providers)
 - **Sanctions List Checking** - Check individuals and businesses against international sanctions lists (via Prembly API)
 - **Prembly Integration** - Comprehensive identity verification and compliance platform integration
+- **Fuspay Modular KYC** - Creates a Modular KYC user for merchants via `POST /modular/user/` before business KYC is persisted when enabled ([Fuspay: Create User](https://docs.fuspay.us/modular-kyc/create-user)). Automatically resolves `email`, `phone`, `country`, and `user_ref` from `client-auth-ms` (`GET /api/v1/user/profile`) using the caller’s bearer token, with optional overrides in the submit payload.
 
 ## Technology Stack
 
@@ -69,6 +70,280 @@ Example upload flow:
 1. `POST` multipart form-data to `/api/v1/kyc/upload` with the file in the `file` field.
 2. Read the response `{ success, url, key }`.
 3. Send that `url` as the document `fileUrl` in the subsequent KYC submission payload.
+
+## Fuspay Modular KYC setup
+
+When **`FUSPAY_MODULAR_KYC_ENABLED=true`**, **`POST /api/v1/kyc/business/submit`** (same router under **`/api/v1/compliance/business/submit`**) calls Fuspay’s Modular API to **create the user** with payload shape `email`, `phone`, `app`, `country`, `user_ref` before your business KYC records are saved. Official reference: [Create User — Fuspay Modular KYC](https://docs.fuspay.us/modular-kyc/create-user).
+
+### Environment variables
+
+Add these to `.env` (see `.env.example`):
+
+```env
+# Toggle Modular KYC user creation on business submit
+FUSPAY_MODULAR_KYC_ENABLED=true
+
+# Fuspay API base (host-only; service appends /api/v1/modular/...)
+FUSPAY_MODULAR_BASE_URL=https://kyc-verif-new.fly.dev
+
+# Fuspay app id (maps to the "app" field in Create User)
+FUSPAY_MODULAR_APP_ID=your_fuspay_app_id
+
+# Optional: Bearer token if your Fuspay tenant requires Authorization on Modular endpoints
+FUSPAY_MODULAR_API_KEY=
+
+# Required by Payonus create-verification unless callback is sent per request
+FUSPAY_MODULAR_VERIFICATION_CALLBACK=https://account-ms.fly.dev/api/v1/kyc/modular/webhook
+
+# Optional return URL after hosted flow; defaults to callback when omitted
+FUSPAY_MODULAR_VERIFICATION_REDIRECT=https://your-frontend-app.com/kyc/done
+
+# Optional default country when create-verification payload omits country
+FUSPAY_MODULAR_DEFAULT_COUNTRY=NG
+
+# Optional webhook shared secret (header: x-fuspay-webhook-secret or x-webhook-secret)
+FUSPAY_MODULAR_WEBHOOK_SECRET=
+
+# client-auth-ms — base URL for server-side profile fetch (same JWT as the merchant caller)
+CLIENT_AUTH_BASE_URL=http://localhost:3001/api/v1
+```
+
+JWT verification for merchants logging in via **`client-auth-ms`** already supports **`CLIENT_AUTH_JWT_SECRET`** when it differs from **`JWT_SECRET`** (see authentication middleware). Ensure **`CLIENT_AUTH_BASE_URL`** is reachable from `compliance-ms` (Docker hostname or Fly internal URL in production).
+
+### How identity fields are resolved
+
+For each submit when Fuspay is enabled, the service resolves:
+
+| Field (Fuspay) | Resolution order |
+|----------------|------------------|
+| `email` | `body.modularKycUser.email` → client-auth profile `email` → first shareholder `email` |
+| `phone` | `body.modularKycUser.phone` → client-auth profile `phone` → first shareholder `phoneNumber` |
+| `country` | `body.modularKycUser.country` → client-auth profile `country` → `businessSurvey.country` |
+| `user_ref` | `body.modularKycUser.userRef` (optional override) → **JWT `userId`** (canonical `client-auth-ms` subject from `Authorization`) → `body.userId` (e.g. service calls without attaching JWT user) |
+
+We intentionally **do not** send MongoDB’s optional `user_ref` profile field here so Fuspay always receives your **canonical auth user id** unless you override with `modularKycUser.userRef`.
+
+If **`email`**, **`phone`**, or **`country`** are still missing after these steps, the submit fails with a validation-style error so incomplete Modular onboarding cannot slip through.
+
+### Optional request overrides
+
+You may include **`modularKycUser`** on the business submit JSON:
+
+```json
+"modularKycUser": {
+  "email": "merchant@example.com",
+  "phone": "2348000000000",
+  "country": "NG",
+  "userRef": "USR_optional_stable_ref"
+}
+```
+
+### Modular verification and webhook endpoints in `compliance-ms`
+
+Routes are mounted under both `/api/v1/kyc` and `/api/v1/compliance`.
+User-facing verification routes require bearer auth; webhook route does not.
+Verification routes map 1:1 to Fuspay Modular endpoints:
+
+- Create verification: [Fuspay Create Verification](https://docs.fuspay.us/modular-kyc/create-verification)
+- Submit verification: [Fuspay Submit Verification](https://docs.fuspay.us/modular-kyc/submit-verification)
+- Status: [Fuspay Get Verification Status](https://docs.fuspay.us/modular-kyc/get-verification-status)
+- Complete: [Fuspay Complete Verification](https://docs.fuspay.us/modular-kyc/complete-verification)
+
+- `POST /api/v1/kyc/modular/verification` → create verification
+- `GET /api/v1/kyc/modular/verification-url` → fetch saved verification details for authenticated user
+- `POST /api/v1/kyc/modular/submit/:verificationId` → submit check payloads
+- `GET /api/v1/kyc/modular/status/:verificationId` → fetch verification status
+- `POST /api/v1/kyc/modular/complete/:verificationId` → request completion
+- `POST /api/v1/kyc/modular/webhook` → receive Fuspay webhook and update `KYCProfile`
+
+#### Create verification payload (customer-based)
+
+```json
+{
+  "customer_id": "697226bcc043b64f205740c8",
+  "country": "NG",
+  "callback": "https://your-app.com/kyc-callback",
+  "redirect": "https://your-app.com/dashboard",
+  "individual_checks": {
+    "verification_types": {
+      "bvn": true,
+      "nin": true,
+      "phone": true,
+      "email": true
+    },
+    "address_verification": {
+      "enabled": true,
+      "upload_proof_of_address": true
+    },
+    "bio": true,
+    "document_verification": true,
+    "disclaimer": true
+  },
+  "business_checks": {
+    "tin": false,
+    "cac": false
+  },
+  "aml_checks": {
+    "aml_check": true,
+    "sanction_list": true
+  }
+}
+```
+
+Example create verification response:
+
+```json
+{
+  "success": true,
+  "message": "Fuspay verification created successfully",
+  "data": {
+    "verification_id": "69fdad2de19e6a83826a5a31",
+    "reference": "VRF_409fdc11-b7c1-4ccd-8441-2a740d71499d",
+    "verification_url": "https://transid2.fuspay.finance/?verificationId=69fdad2de19e6a83826a5a31",
+    "todo": [
+      "bvn",
+      "nin",
+      "phone",
+      "email",
+      "address_verification",
+      "bio",
+      "document_verification",
+      "disclaimer",
+      "aml_check",
+      "sanction_list"
+    ],
+    "total_checks": 10,
+    "status": "pending"
+  },
+  "verification_url": "https://transid2.fuspay.finance/?verificationId=69fdad2de19e6a83826a5a31",
+  "verification_id": "69fdad2de19e6a83826a5a31"
+}
+```
+
+The service now supports both styles:
+
+- customer style: `customer_id` (+ optional `country`, `callback`, checks)
+- user style: `user_id` + `kyc_type` (service injects `app` from env)
+
+If checks are omitted, compliance-ms applies defaults (individual or business + AML) so hosted verification has actionable `todo` items.
+
+Example submit verification payload (`POST /api/v1/kyc/modular/submit/:verificationId`) depends on the check type.
+For identity checks:
+
+```json
+{
+  "check_type": "bvn",
+  "data": {
+    "bvn": "37374434156"
+  }
+}
+```
+
+```json
+{
+  "check_type": "nin",
+  "data": {
+    "nin": "12345678901"
+  }
+}
+```
+
+For image-based checks (when required by provider):
+
+```json
+{
+  "check_type": "liveness",
+  "data": {
+    "image": "data:image/jpeg;base64,<base64>"
+  }
+}
+```
+
+Example submit verification response:
+
+```json
+{
+  "success": true,
+  "message": "Fuspay verification data submitted successfully",
+  "data": {
+    "success": true,
+    "message": "Verification submitted"
+  }
+}
+```
+
+Example status call:
+
+```bash
+GET /api/v1/kyc/modular/status/:verificationId
+```
+
+Example status response:
+
+```json
+{
+  "success": true,
+  "message": "Fuspay verification status fetched successfully",
+  "data": {
+    "verification_id": "69fdad2de19e6a83826a5a31",
+    "status": "pending",
+    "overall_status": "pending",
+    "completed_checks": 2,
+    "total_checks": 10
+  }
+}
+```
+
+Example complete call:
+
+```bash
+POST /api/v1/kyc/modular/complete/:verificationId
+```
+
+Example complete response:
+
+```json
+{
+  "success": true,
+  "message": "Fuspay verification completion attempted",
+  "data": {
+    "success": true,
+    "message": "Verification completed"
+  }
+}
+```
+
+#### Get saved modular verification URL (authenticated user)
+
+`GET /api/v1/kyc/modular/verification-url`  
+Alias via gateway: `GET /api/v1/compliance/modular/verification-url`
+
+Headers:
+
+```http
+Authorization: Bearer <access-token>
+```
+
+This endpoint returns saved verification metadata from the user's KYC profile.
+
+Example response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "customerId": "69fd4f4be19e6a838269c198",
+    "verificationId": "69fdad2de19e6a83826a5a31",
+    "verificationUrl": "https://transid2.fuspay.finance/?verificationId=69fdad2de19e6a83826a5a31",
+    "reference": "VRF_409fdc11-b7c1-4ccd-8441-2a740d71499d",
+    "status": "pending",
+    "overallStatus": "pending",
+    "completedChecks": 2,
+    "totalChecks": 10,
+    "lastSyncedAt": "2026-05-08T10:20:00.000Z"
+  }
+}
+```
 
 ## API Documentation
 
@@ -128,9 +403,17 @@ Submit KYC information for a business customer to create a KYC order.
 
 **Authentication**: Requires valid JWT token for business customers
 
+**Fuspay Modular KYC**: When enabled via env (see **Fuspay Modular KYC setup**), the caller should use a normal **`client-auth-ms` bearer token** so **`user_ref`** sent to Fuspay is that JWT’s **`userId`**. Optionally set **`modularKycUser`** for overrides; ensure **`phone`** / **`country`** exist on the profile or payload (and **`email`** via profile or first shareholder if needed).
+
 **Request Body:**
 ```json
 {
+  "modularKycUser": {
+    "email": "merchant@example.com",
+    "phone": "2348000000000",
+    "country": "NG",
+    "userRef": "USR_optional"
+  },
   "businessInfo": {
     "companyName": "Example Business Ltd",
     "industry": "Technology",

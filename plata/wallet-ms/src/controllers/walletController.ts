@@ -10,6 +10,8 @@ interface CreateMerchantWalletData {
   currency: string;
   merchantWalletType: MerchantWalletType;
   appId?: string;
+  appName?: string;
+  payonusSubaccountCode?: string;
 }
 
 interface CreateUserData {
@@ -121,11 +123,14 @@ export class WalletController {
       }
 
       const merchantId = req.user.merchantId || req.user.userId;
-      const { name, currency, merchantWalletType, appId } = value!;
+      const { name, currency, merchantWalletType, appId, appName, payonusSubaccountCode } = value!;
 
       const result = await WalletService.createMerchantWallet({
         merchantId,
+        complianceShareholderUserId: req.user.userId,
         appId,
+        appName,
+        payonusSubaccountCode,
         name: name || `${merchantWalletType} Wallet`,
         currency: currency || 'USD',
         merchantWalletType
@@ -174,9 +179,17 @@ export class WalletController {
       }
 
       const merchantId = req.user.merchantId || req.user.userId;
-      const { currency, appId } = req.body;
+      const { currency, appId, appName, payonusSubaccountCode } = req.body;
 
-      const result = await WalletService.createAllMerchantWallets(merchantId, currency || 'USD', false, appId);
+      const result = await WalletService.createAllMerchantWallets(
+        merchantId,
+        currency || 'USD',
+        false,
+        appId,
+        appName,
+        payonusSubaccountCode,
+        req.user.userId
+      );
 
       if (!result.success) {
         res.status(400).json({
@@ -438,6 +451,7 @@ export class WalletController {
       const result = await WalletService.createUserWallet({
         userId,
         merchantId,
+        complianceShareholderUserId: userId,
         name: name || `Personal Wallet`,
         currency: currency || 'USD'
       });

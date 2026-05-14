@@ -27,17 +27,24 @@ export class PasswordController {
 
   static async reset(req: Request, res: Response): Promise<void> {
     try {
-      const { token, newPassword } = req.body;
+      const body = req.body || {};
+      const identifier = body.identifier ?? body.email;
+      const code = body.code ?? body.otp ?? body.verificationCode;
+      const { newPassword } = body;
 
-      if (!token || !newPassword) {
+      if (!identifier || !code || !newPassword) {
         res.status(400).json({
           success: false,
-          error: 'Token and new password are required'
+          error: 'Email, OTP code, and new password are required'
         });
         return;
       }
 
-      const result = await AuthService.resetPassword(token, newPassword);
+      const result = await AuthService.resetPassword(
+        String(identifier).trim(),
+        String(code).trim(),
+        String(newPassword)
+      );
       res.status(result.success ? 200 : 400).json(result);
     } catch (error) {
       console.error('Error in resetPassword:', error);

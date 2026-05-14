@@ -14,6 +14,7 @@ import savingsRoutes from './routes/savingsRoutes';
 import mortgageRoutes from './routes/mortgageRoutes';
 import apiKeyRoutes from './routes/apiKeyRoutes';
 import { setupProxies } from './middleware/proxyMiddleware';
+import { tenantResolverMiddleware } from './middleware/tenantResolverMiddleware';
 
 const app = express();
 const PORT = config.port;
@@ -24,6 +25,7 @@ app.use(cors({
   origin: config.corsOrigins
 }));
 app.use(morgan(config.logLevel));
+app.use(tenantResolverMiddleware);
 
 // Setup Proxies (must be before body parser)
 setupProxies(app);

@@ -194,7 +194,7 @@ class MongoDatabase {
         identifier: string;
         code: string;
         channel: 'email' | 'sms';
-        purpose: 'verification' | 'password-reset' | 'login';
+        purpose: 'verification' | 'password-reset' | 'password-change' | 'login';
         expiresAt: Date;
     }): Promise<OtpDocument> {
         return OtpModel.create(data);
@@ -205,7 +205,7 @@ class MongoDatabase {
      */
     async findActiveOtp(
         identifier: string,
-        purpose: 'verification' | 'password-reset' | 'login'
+        purpose: 'verification' | 'password-reset' | 'password-change' | 'login'
     ): Promise<OtpDocument | null> {
         return OtpModel.findOne({
             identifier: identifier.toLowerCase(),
@@ -228,7 +228,7 @@ class MongoDatabase {
     /** Delete all OTP records for an identifier + purpose (used before generating a new one). */
     async deleteOtpsByIdentifier(
         identifier: string,
-        purpose: 'verification' | 'password-reset' | 'login'
+        purpose: 'verification' | 'password-reset' | 'password-change' | 'login'
     ): Promise<void> {
         await OtpModel.deleteMany({ identifier: identifier.toLowerCase(), purpose });
     }

@@ -112,7 +112,7 @@ export class WalletService {
         `${this.WALLET_SERVICE_URL}/api/v1/wallets/merchant`,
         {
           name: name || `${walletType} Wallet for App ${merchantId}`,
-          currency: 'USD',
+          currency: config.merchantWalletCurrency,
           merchantWalletType: walletType
         },
         {
@@ -145,13 +145,18 @@ export class WalletService {
    * @param merchantId The merchant ID (used as the app ID)
    * @returns The created wallets or error information
    */
-  static async createAllMerchantWallets(appId: string, authHeader?: string): Promise<CreateWalletResponse> {
+  static async createAllMerchantWallets(
+    appId: string,
+    authHeader?: string,
+    appName?: string
+  ): Promise<CreateWalletResponse> {
     try {
       const response = await axios.post<CreateWalletResponse>(
         `${this.WALLET_SERVICE_URL}/api/v1/wallets/merchant/all`,
         {
-          currency: 'USD',
-          appId
+          currency: config.merchantWalletCurrency,
+          appId,
+          ...(appName ? { appName } : {})
         },
         {
           headers: {

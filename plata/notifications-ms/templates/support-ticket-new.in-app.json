@@ -1,0 +1,4 @@
+{
+  "title": "New support ticket",
+  "body": "#{{ticketId}} — {{subject}} ({{merchantName}})"
+}

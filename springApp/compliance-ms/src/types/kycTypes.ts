@@ -57,6 +57,24 @@ export interface KYCProfile {
   userType: UserType;
   documents: KYCDocument[];
   status: KYCStatus;
+  fuspay?: {
+    customerId?: string;
+    userRef?: string;
+    appId?: string;
+    country?: string;
+    email?: string;
+    phone?: string;
+    verification?: {
+      verificationId?: string;
+      verificationUrl?: string;
+      reference?: string;
+      status?: string;
+      overallStatus?: string;
+      completedChecks?: number;
+      totalChecks?: number;
+      lastSyncedAt?: Date;
+    };
+  };
   submittedAt?: Date;
   completedAt?: Date;
   reviewedBy?: string;
@@ -234,6 +252,12 @@ export interface Shareholder {
 export interface BusinessKYCSubmissionRequest {
   userId: string;
   userType: UserType.MERCHANT;
+  modularKycUser?: {
+    email?: string;
+    phone?: string;
+    country?: string;
+    userRef?: string;
+  };
   businessInfo: AboutTheBusinessData;
   businessSurvey: BusinessSurveyData;
   shareholders: Shareholder[];

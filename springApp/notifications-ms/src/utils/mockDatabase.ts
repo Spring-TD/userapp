@@ -34,10 +34,10 @@ class MockDatabase {
   /**
    * Find notifications by recipient
    */
-  async findNotificationsByRecipient(recipient: string): Promise<INotification[]> {
+  async findNotificationsByRecipient(recipient: string, channel?: NotificationChannel): Promise<INotification[]> {
     const result: INotification[] = [];
     for (const notification of this.notifications.values()) {
-      if (notification.recipient === recipient) {
+      if (notification.recipient === recipient && (!channel || notification.channel === channel)) {
         result.push(notification);
       }
     }

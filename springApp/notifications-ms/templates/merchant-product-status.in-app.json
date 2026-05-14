@@ -1,0 +1,4 @@
+{
+  "title": "Product {{statusLabel}}",
+  "body": "{{productName}} ({{merchantName}})"
+}

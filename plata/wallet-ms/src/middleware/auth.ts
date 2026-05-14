@@ -46,7 +46,13 @@ export const authenticate = async (
       );
       
       if (response.data.success && response.data.data?.user) {
-        req.user = response.data.data.user;
+        req.user = {
+          ...response.data.data.user,
+          userType: String(response.data.data.user.userType || '').toUpperCase(),
+          merchantId:
+            response.data.data.user.merchantId ||
+            response.data.data.user.userMerchantId,
+        };
         next();
       } else {
         res.status(401).json({

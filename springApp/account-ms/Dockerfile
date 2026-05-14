@@ -1,25 +1,30 @@
-FROM node:18-alpine
+FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
+# Install all deps (including dev) for TypeScript build
 COPY package*.json ./
+RUN npm ci
 
-# Install dependencies
-RUN npm ci --only=production
-
-# Copy source code
+# Copy source and build
 COPY . .
-
-# Build TypeScript
 RUN npm run build
 
-# Expose port
+FROM node:18-alpine AS runner
+
+WORKDIR /app
+
+# Install only production dependencies for runtime image
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+# Copy compiled output and required runtime files
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/healthcheck.js ./healthcheck.js
+
 EXPOSE 4008
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node healthcheck.js
 
-# Start application
 CMD ["npm", "start"]

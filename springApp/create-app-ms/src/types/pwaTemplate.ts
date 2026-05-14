@@ -57,6 +57,7 @@ export interface AppPwaTextColors {
   primary?: string;
   secondary?: string;
   auxiliary?: string;
+  aux?: string;
 }
 
 export interface AppPwaElementColors {
@@ -73,6 +74,7 @@ export interface AppPwaMenuColors {
   primary?: string;
   secondary?: string;
   auxiliary?: string;
+  aux?: string;
 }
 
 export interface AppPwaAppProfileSection {
@@ -80,6 +82,7 @@ export interface AppPwaAppProfileSection {
   fontFamily?: string;
   textColors?: AppPwaTextColors;
   elementColors?: AppPwaElementColors;
+  auxElementColors?: AppPwaElementColors;
   backgroundColors?: AppPwaBackgroundColors;
   menuColors?: AppPwaMenuColors;
 }
@@ -111,10 +114,19 @@ export interface AppPwaPolicyTermsDocument {
   media?: AppPwaPolicyTermsMediaItem[];
 }
 
+/**
+ * FAQ row shown under Policy/Terms in App Creator.
+ * Kept intentionally flexible because the editor payload can evolve.
+ */
+export interface AppPwaPolicyTermsFaqItem {
+  [key: string]: unknown;
+}
+
 /** Policy / Terms tab: privacy policy and terms of service content. */
 export interface AppPwaPolicyTermsSection {
   privacyPolicy?: AppPwaPolicyTermsDocument;
   termsOfService?: AppPwaPolicyTermsDocument;
+  faq?: AppPwaPolicyTermsFaqItem[];
 }
 
 /**
@@ -128,6 +140,8 @@ export interface AppPwaSupportSection {
   linkedinPage?: string;
   instagramHandle?: string;
   twitterHandle?: string;
+  /** E.164 phone, `wa.me/...` link, or display text — App Creator / PWA may format as needed. */
+  whatsapp?: string;
   privacyPolicyLink?: string;
   termsAndConditionsLink?: string;
 }

@@ -30,11 +30,13 @@ export function registerConfigurationOptionsRoutes(router: Router, c: Configurat
   router.get('/options/trigger-duration', c.getTriggerDurationOptions);
   router.get('/options/collateral-type', c.getCollateralTypeOptions);
   router.get('/options/property-type', c.getPropertyTypeOptions);
+  router.get('/options/mortgage-facilities', c.getMortgageFacilityOptions);
   router.get('/options/security-requirements', c.getSecurityRequirementOptions);
   router.get('/options/commodity-trading-cycle', c.getCommodityTradingCycleOptions);
   router.get('/options/commodity-tenure', c.getCommodityTenureOptions);
   router.get('/options/investment-trading-cycle', c.getInvestmentTradingCycleOptions);
   router.get('/options/investment-tenure', c.getInvestmentTenureOptions);
+  router.get('/options/investment-type', c.getInvestmentTypeOptions);
   router.get('/options/savings-tenure', c.getSavingsTenureOptions);
   router.get('/options/savings-type', c.getSavingsTypeOptions);
   router.get('/options/savings-repayment-cycle', c.getSavingsRepaymentCycleOptions);

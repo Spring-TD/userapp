@@ -34,13 +34,17 @@
  *         description: New tokens
  * /api/v1/auth/me:
  *   get:
- *     summary: Get current user
+ *     summary: Get current user (profile page — same payload as GET /api/v1/user/profile)
  *     tags: [Auth]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Current user
+ *         description: Current user without password; shape matches UserController getProfile
+ *       401:
+ *         description: Missing or invalid token
+ *       404:
+ *         description: User not found
  * /api/v1/auth/verify-token:
  *   post:
  *     summary: Verify token

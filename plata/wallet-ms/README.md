@@ -2,7 +2,7 @@
 
 This microservice handles wallet functionality for merchants and their users.
 
-Deployment URL: https://walletms-2026.fly.dev/
+Deployment URL: https://wallet-ms-plata.fly.dev
 
 ## Features
 
@@ -13,6 +13,7 @@ Deployment URL: https://walletms-2026.fly.dev/
 - Transaction history
 - 3rd Party API Integration
 - External Funding Callbacks
+- Optional **Payonus** virtual **NUBAN** provisioning for **NGN** wallets (static accounts for merchant wallets, reserved accounts for user wallets) when enabled via environment variables
 
 ## API Endpoints
 
@@ -91,6 +92,9 @@ curl -X GET "http://localhost:3004/api/v1/wallets/merchant/merchant-123/all?appI
 
 ### Funding Callbacks
 - `POST /api/v1/wallets/funding/callback` - Webhook endpoint for funding notifications from payment providers
+  - **PayOnUs webhook signature verification**: validates `hash` header using `accountNumber + onusReference + paymentStatus + PAYONUS_WEBHOOK_VERIFICATION_KEY`
+  - **PayOnUs payload normalization**: accepts native PayOnUs fields (`onusReference`, `paymentStatus`, `paymentChannel`, `transactionAmount`, `businessId`) and maps them to existing funding flow
+  - **Persistent idempotency**: deduplicates webhook processing with MongoDB on `onusReference`/`transactionId`
   - **Supports merchant wallet funding**: Use `merchantId` + `merchantWalletType` (TREASURY, OPERATION, or KYC)
   - **Optional app-scoped merchant funding**: Include `appId` to resolve merchant wallet by app
   - **Supports user wallet funding (by walletId)**: Use `walletId`
@@ -440,6 +444,65 @@ Webhook endpoint for funding notifications from payment providers. This endpoint
 }
 ```
 
+## Payonus virtual NUBAN
+
+When `PAYONUS_NUBAN_ENABLED` is set to a truthy value (`true`, `1`, `yes`) and `PAYONUS_BASE_URL` plus credentials are set, the service attempts to provision a PayOnUs virtual account after each successful wallet create:
+
+| Wallet | Payonus flow | Stored `virtualNuban.accountType` |
+|--------|----------------|-----------------------------------|
+| Merchant (Treasury, Operation, KYC) | Static virtual NUBAN | `static` |
+| User | Reserved virtual NUBAN | `reserved` |
+
+Provisioning only runs for currencies listed in `PAYONUS_NUBAN_CURRENCIES` (default **`NGN`**). Other currencies skip the Payonus call. If Payonus returns an error or no account number, the wallet is still created; the response includes `virtualNuban` with `provisionStatus: "failed"` and `provisionError`.
+
+### Environment variables
+
+| Variable | Description |
+|----------|-------------|
+| `PAYONUS_NUBAN_ENABLED` | Turn integration on or off |
+| `PAYONUS_BASE_URL` | API base URL (no trailing slash), e.g. `https://api.payonus.com/v1` or `https://core.payonus.com` |
+| `PAYONUS_OAUTH_BASE_URL` | Optional OAuth host when it differs from `PAYONUS_BASE_URL` (defaults: sandbox → `https://core-sandbox.payonus.com`, otherwise `https://core.payonus.com`) |
+| `PAYONUS_API_KEY` / `PAYONUS_SECRET_KEY` | API credential (often used as `Bearer` secret key, or as OAuth `apiClientId` fallback) |
+| `PAYONUS_AUTH_MODE` | `bearer` (default), `api-key`, `basic`, or `oauth` |
+| `PAYONUS_API_SECRET` | Password for `basic` mode |
+| `PAYONUS_CLIENT_ID` | OAuth client id for `oauth` mode (`apiClientId`) |
+| `PAYONUS_CLIENT_SECRET` | OAuth client secret for `oauth` mode (`apiClientSecret`) |
+| `PAYONUS_TOKEN_PATH` | OAuth token endpoint path (default `/api/v1/access-token`) |
+| `PAYONUS_API_KEY_HEADER` | Header name when using `api-key` mode (default `x-api-key`) |
+| `PAYONUS_MERCHANT_NUBAN_PATH` | Relative path for merchant virtual account create (default `/api/v1/virtual-accounts/fixed-account`) |
+| `PAYONUS_USER_NUBAN_PATH` | Relative path for user virtual account create (default `/api/v1/virtual-accounts/fixed-account`) |
+| `PAYONUS_VA_EMAIL_DOMAIN` | Synthetic email domain for required `email` field when provisioning from wallet rows (default `wallet.local`) |
+| `PAYONUS_VA_BVN` | BVN for virtual account creation (required unless test placeholders enabled) |
+| `PAYONUS_VA_PHONE_PREFIX` | Phone prefix for synthetic `phone` (default `080`) |
+| `PAYONUS_VA_BUSINESS_ID` | PayOnUs Business ID required for fixed-account create |
+| `PAYONUS_VA_DOB` | Date of birth sent for fixed-account create (default `1990-01-01`) |
+| `PAYONUS_VA_NOTIFICATION_URL` | Optional callback URL sent as `notificationUrl` on fixed-account create |
+| `PAYONUS_VA_ADDRESS_LINE1` | Customer address line1 sent to PayOnUs |
+| `PAYONUS_VA_ADDRESS_CITY` | Customer address city (default `Lagos`) |
+| `PAYONUS_VA_ADDRESS_STATE` | Customer address state (default `Lagos`) |
+| `PAYONUS_VA_ADDRESS_POSTAL_CODE` | Customer address postal code (default `100001`) |
+| `PAYONUS_VA_ADDRESS_COUNTRY_CODE` | Customer address country code (default `NG`) |
+| `PAYONUS_VA_PREFERRED_BANK` | Optional `preferred_bank` (e.g. `WEMA`) |
+| `PAYONUS_VA_USE_TEST_PLACEHOLDERS` | If `true`, uses `00000000000` as BVN when `PAYONUS_VA_BVN` is unset (sandbox-only; not for production) |
+| `PAYONUS_NUBAN_CURRENCIES` | Comma-separated ISO codes (default `NGN`) |
+| `PAYONUS_TIMEOUT_MS` | HTTP timeout in ms (default `30000`) |
+| `PAYONUS_MERCHANT_EXTRA_JSON` | JSON object merged into the merchant create request body |
+| `PAYONUS_USER_EXTRA_JSON` | JSON object merged into the user create request body |
+| `PAYONUS_RESPONSE_ACCOUNT_NUMBER_PATHS` | Comma-separated dot paths to parse account number from responses (optional overrides) |
+| `PAYONUS_RESPONSE_BANK_NAME_PATHS` | Same for bank name |
+| `PAYONUS_RESPONSE_BANK_CODE_PATHS` | Same for bank / NIP code |
+| `PAYONUS_RESPONSE_PROVIDER_REFERENCE_PATHS` | Same for provider reference id |
+| `PAYONUS_WEBHOOK_ENABLED` | Toggle PayOnUs webhook processing behavior (default `true`) |
+| `PAYONUS_WEBHOOK_VERIFICATION_KEY` | Secret key used to validate webhook `hash` signatures |
+| `PAYONUS_WEBHOOK_ENFORCE_SIGNATURE` | Reject webhook when signature is missing/invalid (default `true`) |
+| `PAYONUS_DEFAULT_MERCHANT_WALLET_TYPE` | Fallback merchant wallet type for normalized PayOnUs payloads (`TREASURY` default) |
+
+### Wallet API shape
+
+Successful or attempted provisioning is reflected on the wallet as `virtualNuban` (mapped from Mongo fields `payonusNuban*`): `accountNumber`, `bankName`, `bankCode`, `providerReference`, `accountType`, `provisionStatus`, `provisionError`, `provisionedAt`.
+
+Implementation lives under `src/config/payonusNuban.ts`, `src/services/payonusNubanClient.ts`, and `src/services/payonusNubanProvisioning.ts`.
+
 ## Setup
 
 1. Install dependencies:
@@ -465,6 +528,8 @@ Webhook endpoint for funding notifications from payment providers. This endpoint
    ```
 
 ## Testing
+
+`src/__tests__/walletService.test.ts` uses **NGN** as the wallet currency so it matches the default `PAYONUS_NUBAN_CURRENCIES` behavior. Each test run sets `PAYONUS_NUBAN_ENABLED=false` so Jest does not call Payonus over the network (restore your env after the suite via `afterAll`). Running these tests still requires a reachable **MongoDB** instance (`MONGODB_URI`).
 
 Run user wallet feature tests:
 ```bash

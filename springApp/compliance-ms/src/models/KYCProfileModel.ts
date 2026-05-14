@@ -24,6 +24,7 @@ const KYCProfileSchema = new Schema<IKYCProfileDocument>(
     userType: { type: String, enum: Object.values(UserType), required: true },
     documents: { type: [KYCDocumentSchema], default: [] },
     status: { type: String, enum: Object.values(KYCStatus), default: KYCStatus.PENDING },
+    fuspay: { type: Schema.Types.Mixed },
     submittedAt: { type: Date },
     completedAt: { type: Date },
     reviewedBy: { type: String },

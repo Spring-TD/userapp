@@ -52,6 +52,8 @@ export interface AppResponse {
 export interface Transaction {
   id: string;
   appId: string;
+  /** When set, ties ledger rows to a merchant product (local catalog id or upstream id). */
+  productId?: string;
   amount: number;
   currency: string;
   type: 'credit' | 'debit';
@@ -69,6 +71,7 @@ export interface TransactionQueryParams {
   status?: 'pending' | 'completed' | 'failed' | 'cancelled';
   startDate?: string;
   endDate?: string;
+  productId?: string;
 }
 
 // Drive Document interface

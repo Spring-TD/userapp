@@ -2,6 +2,11 @@ import { App, CreateAppRequest } from '../types/app';
 import { AppMongoModel } from './app.mongo';
 
 export class AppModel {
+  static async getAppBySubdomain(subdomain: string): Promise<App | null> {
+    const app = await AppMongoModel.findOne({ subdomain: subdomain.trim().toLowerCase() });
+    return app ? (app.toJSON() as unknown as App) : null;
+  }
+
   static async getAllSubdomains(): Promise<string[]> {
     const docs = await AppMongoModel.find({
       subdomain: { $exists: true, $nin: [null, ''] }

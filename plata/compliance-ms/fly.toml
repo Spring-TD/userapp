@@ -1,10 +1,9 @@
 # fly.toml app configuration file generated for compliance-ms on 2025-11-25T08:54:03+01:00
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
-#
 # Set secrets via: fly secrets set MONGODB_URI=... JWT_SECRET=... REDIS_URL=... DO_SPACES_REGION=... DO_SPACES_ENDPOINT=... DO_SPACES_BUCKET=... DO_SPACES_ACCESS_KEY_ID=... DO_SPACES_SECRET_ACCESS_KEY=...
 
-app = 'compliance-ms'
-primary_region = 'lhr'
+app = 'compliance-ms-plata'
+primary_region = 'fra'
 
 [build]
 

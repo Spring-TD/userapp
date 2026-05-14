@@ -3,10 +3,15 @@ import { logger } from '../utils/logger';
 import axios, { AxiosRequestConfig } from 'axios';
 import * as walletRepo from '../repositories/walletRepository';
 import * as transactionRepo from '../repositories/transactionRepository';
+import { provisionPayonusNubanForWallet } from './payonusNubanProvisioning';
 
 export interface CreateMerchantWalletData {
   merchantId: string;
+  /** JWT userId — matches ShareholderModel.userId in compliance-ms */
+  complianceShareholderUserId?: string;
   appId?: string;
+  appName?: string;
+  payonusSubaccountCode?: string;
   name: string;
   currency: string;
   merchantWalletType: MerchantWalletType;
@@ -15,6 +20,7 @@ export interface CreateMerchantWalletData {
 export interface CreateUserWalletData {
   userId: string;
   merchantId: string;
+  complianceShareholderUserId?: string;
   name: string;
   currency: string;
 }
@@ -77,7 +83,10 @@ export class WalletService {
       const newWallet = await walletRepo.createWallet({
         walletType: 'MERCHANT',
         merchantId: data.merchantId,
+        complianceShareholderUserId: data.complianceShareholderUserId,
         appId: data.appId,
+        appName: data.appName,
+        payonusSubaccountCode: data.payonusSubaccountCode,
         name: data.name,
         currency: data.currency,
         merchantWalletType: data.merchantWalletType
@@ -101,7 +110,15 @@ export class WalletService {
 
           // If not all three exist, create the missing ones
           if (!hasTreasury || !hasOperation || !hasKYC) {
-            const autoCreateResult = await this.createAllMerchantWallets(data.merchantId, data.currency, true, data.appId);
+            const autoCreateResult = await this.createAllMerchantWallets(
+              data.merchantId,
+              data.currency,
+              true,
+              data.appId,
+              data.appName,
+              data.payonusSubaccountCode,
+              data.complianceShareholderUserId
+            );
             if (!autoCreateResult.success) {
               logger.error('Failed to auto-create merchant wallets', { 
                 merchantId: data.merchantId, 
@@ -119,9 +136,13 @@ export class WalletService {
         }
       }
 
+      const walletWithNuban = (await provisionPayonusNubanForWallet(
+        newWallet as MerchantWallet
+      )) as MerchantWallet;
+
       return {
         success: true,
-        wallet: newWallet
+        wallet: walletWithNuban
       };
     } catch (error) {
       logger.error('Error creating merchant wallet', { error });
@@ -139,7 +160,10 @@ export class WalletService {
     merchantId: string,
     currency: string = 'USD',
     skipAutoCreate: boolean = false,
-    appId?: string
+    appId?: string,
+    appName?: string,
+    payonusSubaccountCode?: string,
+    complianceShareholderUserId?: string
   ): Promise<{ 
     success: boolean; 
     wallets?: MerchantWallet[]; 
@@ -165,7 +189,10 @@ export class WalletService {
         // Create the wallet if it doesn't exist
         const result = await this.createMerchantWallet({
           merchantId,
+          complianceShareholderUserId,
           appId,
+          appName,
+          payonusSubaccountCode,
           name: walletType.name,
           currency,
           merchantWalletType: walletType.type
@@ -250,12 +277,14 @@ export class WalletService {
       const newWallet = await walletRepo.createWallet({
         walletType: 'USER',
         merchantId: data.merchantId,
+        complianceShareholderUserId: data.complianceShareholderUserId,
         userId: data.userId,
         name: data.name,
         currency: data.currency
       }) as UserWallet;
       logger.info('User wallet created', { walletId: newWallet.id, userId: data.userId, merchantId: data.merchantId });
-      return { success: true, wallet: newWallet };
+      const walletWithNuban = (await provisionPayonusNubanForWallet(newWallet)) as UserWallet;
+      return { success: true, wallet: walletWithNuban };
     } catch (error) {
       logger.error('Error creating user wallet', { error });
       return { success: false, error: 'Failed to create user wallet' };
@@ -353,6 +382,21 @@ export class WalletService {
     } catch (error) {
       logger.error('Error retrieving wallet', { error });
       return { success: false, error: 'Failed to retrieve wallet' };
+    }
+  }
+
+  static async getWalletByPayonusAccountNumber(accountNumber: string): Promise<{
+    success: boolean;
+    wallet?: Wallet;
+    error?: string;
+  }> {
+    try {
+      const wallet = await walletRepo.getWalletByPayonusAccountNumber(accountNumber);
+      if (!wallet) return { success: false, error: 'Wallet not found for account number' };
+      return { success: true, wallet };
+    } catch (error) {
+      logger.error('Error retrieving wallet by PayOnUs account number', { error, accountNumber });
+      return { success: false, error: 'Failed to retrieve wallet by account number' };
     }
   }
 

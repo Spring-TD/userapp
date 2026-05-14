@@ -7,7 +7,7 @@ export interface INotificationDocument extends Omit<INotification, 'id'>, Docume
 
 const NotificationSchema = new Schema<INotificationDocument>(
   {
-    channel: { type: String, enum: ['email', 'sms'], required: true },
+    channel: { type: String, enum: ['email', 'sms', 'in_app'], required: true },
     recipient: { type: String, required: true, index: true },
     template: { type: String, required: true },
     data: { type: Schema.Types.Mixed, default: {} },

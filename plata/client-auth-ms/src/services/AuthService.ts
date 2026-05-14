@@ -1,9 +1,8 @@
 import { User, Merchant, UserType, AccountStatus, UserAccount, Role, Permission, CreateRoleRequest } from '../models/User';
 import { db as mockDb } from '../utils/mongoDatabase';
-import { hashPassword, comparePassword, verifyToken, generatePasswordResetToken } from '../utils/crypto';
+import { hashPassword, comparePassword, verifyToken } from '../utils/crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { RoleService } from './RoleService';
-import jwt from 'jsonwebtoken';
 import axios from 'axios';
 import { config } from '../config/environment';
 import notificationService, { SendNotificationResponse } from './NotificationService';
@@ -81,7 +80,7 @@ export class AuthService {
           headers: {
             'X-Internal-Token': config.serviceAuthInternalToken,
           },
-          timeout: config.serviceAuthHttpTimeoutMs,
+          timeout: 8000,
         }
       );
 
@@ -196,7 +195,6 @@ export class AuthService {
     merchant?: UserResponse;
     verificationEmailSent?: boolean;
     apiKey?: { publicKey: string; secretKey: string | null; environment: 'test' | 'live' };
-    apiKeyBootstrapError?: string;
     error?: string;
   }> {
     try {
@@ -237,21 +235,14 @@ export class AuthService {
 
       const merchant = await mockDb.createUser(newMerchant as Omit<UserAccount, 'id' | 'created_at' | 'updated_at' | 'failed_login_attempts'>);
 
+      // Bootstrap default merchant API key in service-auth-ms
       const bootstrapResult = await AuthService.bootstrapMerchantApiKey(merchant.id);
-      let apiKey:
-        | { publicKey: string; secretKey: string | null; environment: 'test' | 'live' }
-        | undefined;
-      let apiKeyBootstrapError: string | undefined;
-      if (bootstrapResult.success && bootstrapResult.apiKey) {
-        apiKey = {
-          publicKey: bootstrapResult.apiKey.public_key,
-          secretKey: bootstrapResult.secretKey ?? null,
-          environment: bootstrapResult.apiKey.environment
+      if (!bootstrapResult.success || !bootstrapResult.apiKey) {
+        await mockDb.deleteUser(merchant.id);
+        return {
+          success: false,
+          error: `Merchant created but API key bootstrap failed and registration was rolled back: ${bootstrapResult.error || 'unknown error'}`
         };
-      } else {
-        const msg = bootstrapResult.error || 'unknown error';
-        console.error('Merchant API key bootstrap failed; merchant account kept:', msg);
-        apiKeyBootstrapError = msg;
       }
 
       // Send one-time verification code email via notifications-ms
@@ -268,12 +259,31 @@ export class AuthService {
 
       // Return merchant without password
       const { password, ...merchantWithoutPassword } = merchant;
+
+      try {
+        await notificationService.sendEmailAndInApp({
+          userId: merchant.id,
+          email: merchant.email,
+          template: 'merchant-registered',
+          data: {
+            merchantName: `${merchant.first_name} ${merchant.last_name}`.trim() || merchant.email,
+            email: merchant.email,
+            detail: ''
+          }
+        });
+      } catch (notifyErr) {
+        console.error('Failed to send merchant-registered notification:', notifyErr);
+      }
+
       return {
         success: true,
         merchant: merchantWithoutPassword,
         verificationEmailSent,
-        ...(apiKey ? { apiKey } : {}),
-        ...(apiKeyBootstrapError ? { apiKeyBootstrapError } : {})
+        apiKey: {
+          publicKey: bootstrapResult.apiKey.public_key,
+          secretKey: bootstrapResult.secretKey ?? null,
+          environment: bootstrapResult.apiKey.environment
+        }
       };
     } catch (error) {
       console.error('Error registering merchant:', error);
@@ -500,16 +510,12 @@ export class AuthService {
         };
       }
 
-      // Generate password reset token
-      const resetToken = generatePasswordResetToken({ userId: user.id, email: user.email, userType: user.user_type, userMerchantId: 'user_merchant_id' in user ? user.user_merchant_id : undefined });
-
-      // Send password reset email via notifications service
-      const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
-      const notificationResult = await notificationService.sendPasswordResetEmail(
-        user.email,
-        resetUrl,
-        `${user.first_name} ${user.last_name}`
-      );
+      // Password reset now uses OTP instead of URL tokens
+      const notificationResult = await AuthService.generateOTP({
+        identifier: user.email,
+        channel: 'email',
+        purpose: 'password-reset'
+      });
 
       if (!notificationResult.success) {
         console.error('Failed to send password reset email:', notificationResult.error);
@@ -530,45 +536,35 @@ export class AuthService {
   }
 
   /**
-   * Reset password with token
+   * Reset password with email + OTP
    */
-  static async resetPassword(token: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+  static async resetPassword(email: string, code: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
     try {
-      // Verify the password reset token
-      let tokenData;
-      try {
-        const decoded = jwt.verify(token, config.jwt.secret) as any;
-
-        if (decoded.type !== 'password_reset') {
-          return {
-            success: false,
-            error: 'Invalid password reset token'
-          };
-        }
-
-        // We'll use the decoded payload as tokenData
-        tokenData = { valid: true, payload: decoded };
-      } catch (error) {
+      const identifier = email.toLowerCase();
+      const otp = await mockDb.findActiveOtp(identifier, 'password-reset');
+      if (!otp) {
         return {
           success: false,
-          error: 'Invalid or expired password reset token'
+          error: 'Invalid or expired password reset code'
         };
       }
 
-      // Find user by ID
-      const user = await mockDb.findUserById(tokenData.payload.userId);
+      const validCode = await comparePassword(code, otp.code);
+      if (!validCode) {
+        await mockDb.incrementOtpAttempts((otp as any)._id.toString());
+        return {
+          success: false,
+          error: 'Invalid password reset code'
+        };
+      }
+      await mockDb.markOtpVerified((otp as any)._id.toString());
+
+      // Find user by email
+      const user = await mockDb.findUserByEmail(identifier);
       if (!user) {
         return {
           success: false,
           error: 'User not found'
-        };
-      }
-
-      // Check if email matches
-      if (user.email !== tokenData.payload.email) {
-        return {
-          success: false,
-          error: 'Invalid password reset token'
         };
       }
 
@@ -807,6 +803,21 @@ export class AuthService {
 
       // Invalidate all active sessions once account is deactivated.
       await SessionService.revokeAllForUser(userId);
+
+      try {
+        await notificationService.sendEmailAndInApp({
+          userId,
+          email: user.email,
+          template: 'merchant-account-status',
+          data: {
+            merchantName: `${user.first_name} ${user.last_name}`.trim() || user.email,
+            action: 'deactivated',
+            detail: 'Your merchant account has been deactivated.'
+          }
+        });
+      } catch (notifyErr) {
+        console.error('Failed to send account deactivation notification:', notifyErr);
+      }
 
       return {
         success: true
