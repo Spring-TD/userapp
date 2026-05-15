@@ -20,7 +20,7 @@ export default function CreateKycPage() {
         <p className="text-center text-sm text-gray-500 mb-4">
           KYC is completed securely on Fuspay.
         </p>
-        <Button asChild className="w-full h-12 rounded-xl bg-[#1E40AF] hover:bg-[#1E3A8A]">
+        <Button asChild className="w-full h-12 rounded-xl bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button,#1E40AF)]">
           <a href={FUSPAY_VERIFICATION_URL}>START KYC</a>
         </Button>
       </div>

@@ -19,20 +19,20 @@ function LoadingScreen() {
 }
 
 /**
- * Splash / onboarding: `MobileV2TenantProvider` loads resolve + manifest; colors/name are merged here.
+ * Splash / onboarding: resolve returns `pwaManifest` (colors, name, icons); merged into shell config here.
  */
 function MobileV2Content() {
-    const { appId, pwaManifest, displayName, error: resolveNote } = useMobileV2Tenant();
+    const { appId, pwaManifest, displayName, error: resolveNote, ready: tenantReady } = useMobileV2Tenant();
 
     const effectiveAppId = appId ?? undefined;
-    const { config, loading } = useMobileConfig({ appId: effectiveAppId });
+    const { config, loading: configLoading } = useMobileConfig({ appId: effectiveAppId });
 
     const mergedConfig = useMemo(() => {
         if (!config) return null;
         return applyManifestToMobileAppConfig(config, pwaManifest, displayName);
     }, [config, pwaManifest, displayName]);
 
-    if (loading || !mergedConfig) {
+    if (!tenantReady || configLoading || !mergedConfig) {
         return <LoadingScreen />;
     }
 

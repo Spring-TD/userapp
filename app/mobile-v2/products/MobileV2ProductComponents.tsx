@@ -43,7 +43,7 @@ export function MobileV2TabBar({ activeTab }: { activeTab: ProductTab }) {
                     className={cn(
                         'flex-1 text-center py-2.5 px-4 rounded-full text-xs font-semibold transition-all whitespace-nowrap',
                         tab === activeTab
-                            ? 'bg-white text-[#1E40AF] shadow-sm'
+                            ? 'bg-white text-[var(--sf-button,#1E40AF)] shadow-sm'
                             : 'text-gray-400 hover:text-gray-600 bg-transparent'
                     )}
                 >
@@ -113,7 +113,7 @@ export function LoanProductCard({ product }: { product: MobileProduct }) {
     const applyRoute = `${APPLY_ROUTES['Loan']}?productId=${product.id}`;
 
     return (
-        <div className="bg-[#1E1B4B] rounded-[24px] p-5 text-white shadow-lg relative overflow-hidden flex flex-col justify-between min-h-[220px]">
+        <div className="bg-[var(--sf-ink,#1E1B4B)] rounded-[24px] p-5 text-white shadow-lg relative overflow-hidden flex flex-col justify-between min-h-[220px]">
             <div className="flex flex-col mb-4">
                 <span className="text-[10px] text-blue-200 mb-1 font-medium block">Loan Amount</span>
                 <h2 className="text-xl font-bold tracking-tight mb-4">{product.name}</h2>
@@ -152,7 +152,7 @@ export function LoanProductCard({ product }: { product: MobileProduct }) {
 
             <div className="flex items-center justify-end mt-auto">
                 <Link href={applyRoute}>
-                    <Button className="h-9 rounded-xl bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[11px] font-semibold px-4 shadow-lg shadow-blue-500/20">
+                    <Button className="h-9 rounded-xl bg-[var(--sf-primary,#2563EB)] hover:bg-[var(--sf-primary,#2563EB)] text-white text-[11px] font-semibold px-4 shadow-lg shadow-blue-500/20">
                         Apply for Loan
                     </Button>
                 </Link>
@@ -183,30 +183,30 @@ export function FeaturedMortgageCard({ product }: { product: MobileProduct }) {
                     backgroundPosition: 'center',
                 }}
             >
-                <span className="absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-[#1E40AF] shadow-sm">
+                <span className="absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-[var(--sf-button,#1E40AF)] shadow-sm">
                     By AG Mortgage
                 </span>
             </div>
             <div className="p-4">
                 <div className="mb-1 flex items-start justify-between gap-2">
-                    <h3 className="line-clamp-1 text-base font-bold text-[#1E1B4B]">{product.name}</h3>
-                    {price ? <span className="shrink-0 text-sm font-bold text-[#1E1B4B]">{price}</span> : null}
+                    <h3 className="line-clamp-1 text-base font-bold text-[var(--sf-ink,#1E1B4B)]">{product.name}</h3>
+                    {price ? <span className="shrink-0 text-sm font-bold text-[var(--sf-ink,#1E1B4B)]">{price}</span> : null}
                 </div>
                 <p className="mb-4 line-clamp-2 text-[11px] leading-relaxed text-gray-500">
                     {product.description || 'Explore competitive rates and flexible repayment on this mortgage.'}
                 </p>
                 <div className="mb-4 flex gap-6 text-xs text-gray-700">
                     <div className="flex items-center gap-1.5">
-                        <Calendar className="h-3.5 w-3.5 text-[#2563EB]" />
+                        <Calendar className="h-3.5 w-3.5 text-[var(--sf-primary,#2563EB)]" />
                         <span>{product.duration || '12 months'}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                        <Percent className="h-3.5 w-3.5 text-[#2563EB]" />
+                        <Percent className="h-3.5 w-3.5 text-[var(--sf-primary,#2563EB)]" />
                         <span>{product.interestRate || '3% p.a'}</span>
                     </div>
                 </div>
                 <Link href={detailHref}>
-                    <Button className="h-11 w-full rounded-full bg-[#2E5AAC] text-sm font-semibold text-white hover:bg-[#265499]">
+                    <Button className="h-11 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-sm font-semibold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]">
                         Get Started
                     </Button>
                 </Link>
@@ -217,7 +217,7 @@ export function FeaturedMortgageCard({ product }: { product: MobileProduct }) {
                             type="button"
                             aria-label={`Highlight ${i + 1}`}
                             onClick={() => setSlide(i)}
-                            className={cn('h-1.5 rounded-full transition-all', i === slide ? 'w-5 bg-[#2E5AAC]' : 'w-1.5 bg-gray-300')}
+                            className={cn('h-1.5 rounded-full transition-all', i === slide ? 'w-5 bg-[var(--sf-button,#1E40AF)]' : 'w-1.5 bg-gray-300')}
                         />
                     ))}
                 </div>
@@ -239,22 +239,22 @@ export function MortgageProductCard({ product, compact }: { product: MobileProdu
                 style={{ backgroundImage: `url(${product.image || DEFAULT_IMAGE})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
             />
             <div className="space-y-1.5 px-0.5">
-                <h3 className={cn('font-bold text-[#1E1B4B]', compact ? 'line-clamp-2 text-xs' : 'text-sm')}>{product.name}</h3>
+                <h3 className={cn('font-bold text-[var(--sf-ink,#1E1B4B)]', compact ? 'line-clamp-2 text-xs' : 'text-sm')}>{product.name}</h3>
                 {!compact && (
                     <p className="line-clamp-2 text-[10px] text-gray-500">{product.description}</p>
                 )}
                 {product.propertyValue != null && (
-                    <div className="text-xs font-bold text-[#1E1B4B]">
+                    <div className="text-xs font-bold text-[var(--sf-ink,#1E1B4B)]">
                         NGN{product.propertyValue.toLocaleString('en-NG')}
                     </div>
                 )}
                 {product.interestRate && (
-                    <div className="text-[10px] font-semibold text-[#1E40AF]">{product.interestRate} p.a.</div>
+                    <div className="text-[10px] font-semibold text-[var(--sf-button,#1E40AF)]">{product.interestRate} p.a.</div>
                 )}
                 <Link href={detailHref}>
                     <Button
                         className={cn(
-                            'mt-1 w-full rounded-full bg-[#2E5AAC] font-semibold text-white hover:bg-[#265499]',
+                            'mt-1 w-full rounded-full bg-[var(--sf-button,#1E40AF)] font-semibold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]',
                             compact ? 'h-9 text-[10px]' : 'h-10 text-xs',
                         )}
                     >
@@ -306,16 +306,16 @@ export function CommodityProductCard({ product }: { product: MobileProduct }) {
                 style={{ backgroundImage: `url(${product.image || DEFAULT_IMAGE})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
             />
             <div className="px-1 space-y-2">
-                <h3 className="text-sm font-bold text-[#1E1B4B]">{product.name}</h3>
+                <h3 className="text-sm font-bold text-[var(--sf-ink,#1E1B4B)]">{product.name}</h3>
                 <p className="text-[10px] text-gray-500 line-clamp-2">{product.description}</p>
                 {product.price && (
-                    <div className="text-sm font-bold text-[#1E1B4B]">
+                    <div className="text-sm font-bold text-[var(--sf-ink,#1E1B4B)]">
                         ₦{product.price.toLocaleString()}
                         {product.unitOfMeasure && <span className="text-xs font-normal text-gray-500"> / {product.unitOfMeasure}</span>}
                     </div>
                 )}
                 <Link href={applyRoute}>
-                    <Button className="w-full h-10 rounded-full bg-[#3B82F6] hover:bg-[#2563EB] text-white text-xs font-semibold mt-2">
+                    <Button className="w-full h-10 rounded-full bg-[var(--sf-primary,#2563EB)] hover:bg-[var(--sf-primary,#2563EB)] text-white text-xs font-semibold mt-2">
                         Buy Now
                     </Button>
                 </Link>
@@ -357,7 +357,7 @@ export function MobileV2ProductList({ productType }: MobileV2ProductListProps) {
             <div className="space-y-4">
                 <div className="flex justify-between items-center">
                     <h2 className="font-bold text-[#1E293B]">Available Loans</h2>
-                    <button className="px-3 py-1.5 bg-[#1E40AF] text-white text-[10px] uppercase font-bold rounded-lg">
+                    <button className="px-3 py-1.5 bg-[var(--sf-button,#1E40AF)] text-white text-[10px] uppercase font-bold rounded-lg">
                         Check Eligibility
                     </button>
                 </div>
@@ -378,7 +378,7 @@ export function MobileV2ProductList({ productType }: MobileV2ProductListProps) {
                     <h2 className="font-bold text-[#1E293B]">Feature</h2>
                     <Link
                         href="/mobile-v2/products/mortgage/survey"
-                        className="rounded-lg bg-[#2E5AAC] px-3 py-1.5 text-[10px] font-bold uppercase text-white hover:bg-[#265499]"
+                        className="rounded-lg bg-[var(--sf-button,#1E40AF)] px-3 py-1.5 text-[10px] font-bold uppercase text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]"
                     >
                         Check Eligibility
                     </Link>

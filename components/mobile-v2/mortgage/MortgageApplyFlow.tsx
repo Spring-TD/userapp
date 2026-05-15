@@ -35,7 +35,7 @@ function RoundedInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
     <input
       {...props}
       className={cn(
-        'h-12 w-full rounded-2xl border-0 bg-gray-100 px-4 text-sm text-[#1E293B] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#2E5AAC]/30',
+        'h-12 w-full rounded-2xl border-0 bg-gray-100 px-4 text-sm text-[#1E293B] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[color-mix(in_srgb,var(--sf-primary,#2563EB)_30%,transparent)]',
         props.className,
       )}
     />
@@ -57,7 +57,7 @@ function RoundedSelect({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="h-12 w-full appearance-none rounded-2xl border-0 bg-gray-100 px-4 text-sm text-[#1E293B] focus:outline-none focus:ring-2 focus:ring-[#2E5AAC]/30"
+      className="h-12 w-full appearance-none rounded-2xl border-0 bg-gray-100 px-4 text-sm text-[#1E293B] focus:outline-none focus:ring-2 focus:ring-[color-mix(in_srgb,var(--sf-primary,#2563EB)_30%,transparent)]"
     >
       <option value="">{placeholder}</option>
       {children}
@@ -431,7 +431,7 @@ export function MortgageApplyFlow({ productId }: { productId: string }) {
                 key={i}
                 className={cn(
                   'flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white',
-                  i < 2 ? 'bg-[#2E5AAC]' : 'bg-gray-300 text-gray-600',
+                  i < 2 ? 'bg-[var(--sf-button,#1E40AF)]' : 'bg-gray-300 text-gray-600',
                 )}
               >
                 {i < 2 ? <Check className="h-4 w-4" /> : '3'}
@@ -439,10 +439,10 @@ export function MortgageApplyFlow({ productId }: { productId: string }) {
             ))}
           </div>
           <div className="rounded-[24px] bg-[#E8EEF8] p-6 text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#2E5AAC] text-xl font-bold text-white">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--sf-button,#1E40AF)] text-xl font-bold text-white">
               2
             </div>
-            <h2 className="mb-6 text-lg font-bold text-[#2E5AAC]">Down Payment</h2>
+            <h2 className="mb-6 text-lg font-bold text-[var(--sf-button,#1E40AF)]">Down Payment</h2>
             <div className="mb-4 text-left">
               <p className="text-[10px] uppercase tracking-wide text-gray-500">Amount</p>
               <p className="text-lg font-bold text-[#1E293B]">{formatNgn(primaryAmount)}</p>
@@ -457,7 +457,7 @@ export function MortgageApplyFlow({ productId }: { productId: string }) {
             </div>
             <div className="flex items-center justify-between rounded-2xl bg-white/80 px-4 py-3">
               <span className="text-sm font-medium text-gray-700">Central Wallet</span>
-              <span className="h-5 w-5 rounded-full border-2 border-[#2E5AAC] bg-[#2E5AAC] shadow-[inset_0_0_0_3px_white]" />
+              <span className="h-5 w-5 rounded-full border-2 border-[#2E5AAC] bg-[var(--sf-button,#1E40AF)] shadow-[inset_0_0_0_3px_white]" />
             </div>
           </div>
           <Button
@@ -482,7 +482,7 @@ export function MortgageApplyFlow({ productId }: { productId: string }) {
                 key={i}
                 className={cn(
                   'flex h-8 w-8 items-center justify-center rounded-full border-2',
-                  i === 0 ? 'border-[#2E5AAC] bg-[#2E5AAC] text-white' : 'border-gray-300 bg-white text-gray-400',
+                  i === 0 ? 'border-[#2E5AAC] bg-[var(--sf-button,#1E40AF)] text-white' : 'border-gray-300 bg-white text-gray-400',
                 )}
               >
                 {i === 0 ? <Check className="h-4 w-4" /> : i + 1}
@@ -490,10 +490,10 @@ export function MortgageApplyFlow({ productId }: { productId: string }) {
             ))}
           </div>
           <div className="rounded-[24px] bg-[#E8EEF8] p-6 text-center">
-            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-[#2E5AAC] text-2xl font-bold text-white">
+            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-[var(--sf-button,#1E40AF)] text-2xl font-bold text-white">
               1
             </div>
-            <h2 className="mb-3 text-lg font-bold text-[#2E5AAC]">Physical inspection</h2>
+            <h2 className="mb-3 text-lg font-bold text-[var(--sf-button,#1E40AF)]">Physical inspection</h2>
             <p className="text-left text-sm leading-relaxed text-gray-600">
               A qualified inspector will visit the property. You will receive updates here. Please be available within two
               to three working days after you start the inspection process.
@@ -519,17 +519,17 @@ export function MortgageApplyFlow({ productId }: { productId: string }) {
             {[0, 1, 2].map((i) => (
               <div
                 key={i}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-[#2E5AAC] text-white"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--sf-button,#1E40AF)] text-white"
               >
                 <Check className="h-4 w-4" />
               </div>
             ))}
           </div>
           <div className="rounded-[24px] bg-[#E8EEF8] p-6 text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#2E5AAC] text-xl font-bold text-white">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--sf-button,#1E40AF)] text-xl font-bold text-white">
               3
             </div>
-            <h2 className="mb-3 text-lg font-bold text-[#2E5AAC]">Contract signing</h2>
+            <h2 className="mb-3 text-lg font-bold text-[var(--sf-button,#1E40AF)]">Contract signing</h2>
             <p className="text-left text-sm leading-relaxed text-gray-600">
               Review the mortgage agreement prepared for you. When you are ready, confirm below to proceed to your
               formal offer summary.
@@ -555,7 +555,7 @@ export function MortgageApplyFlow({ productId }: { productId: string }) {
                 backgroundImage: `url(${product.image || 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1200'})`,
               }}
             />
-            <span className="absolute left-3 top-3 rounded-full bg-white/90 px-3 py-1 text-[10px] font-semibold text-[#2E5AAC]">
+            <span className="absolute left-3 top-3 rounded-full bg-white/90 px-3 py-1 text-[10px] font-semibold text-[var(--sf-button,#1E40AF)]">
               By {lender}
             </span>
             <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5">
@@ -653,7 +653,7 @@ export function MortgageApplyFlow({ productId }: { productId: string }) {
               <span
                 className={cn(
                   'h-5 w-5 rounded-full border-2',
-                  paymentPlan === key ? 'border-[#2E5AAC] bg-[#2E5AAC] shadow-[inset_0_0_0_3px_white]' : 'border-gray-300',
+                  paymentPlan === key ? 'border-[#2E5AAC] bg-[var(--sf-button,#1E40AF)] shadow-[inset_0_0_0_3px_white]' : 'border-gray-300',
                 )}
               />
             </button>
@@ -680,7 +680,7 @@ export function MortgageApplyFlow({ productId }: { productId: string }) {
               key={step}
               className={cn(
                 'flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white',
-                step === 1 ? 'bg-[#2E5AAC]' : 'bg-gray-300',
+                step === 1 ? 'bg-[var(--sf-button,#1E40AF)]' : 'bg-gray-300',
               )}
             >
               {step === 1 ? <Check className="h-4 w-4" /> : step}
@@ -714,7 +714,7 @@ export function MortgageApplyFlow({ productId }: { productId: string }) {
           </RoundedSelect>
           <FieldLabel>Address</FieldLabel>
           <textarea
-            className="min-h-[88px] w-full rounded-2xl border-0 bg-gray-100 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2E5AAC]/30"
+            className="min-h-[88px] w-full rounded-2xl border-0 bg-gray-100 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[color-mix(in_srgb,var(--sf-primary,#2563EB)_30%,transparent)]"
             placeholder="Full address"
           />
         </div>
@@ -727,15 +727,15 @@ export function MortgageApplyFlow({ productId }: { productId: string }) {
         </Button>
         <p className="mt-4 text-center text-[10px] text-gray-400">
           Status preview:{' '}
-          <button type="button" className="font-medium text-[#2E5AAC] underline" onClick={() => setSheet('doc_poa_missing')}>
+          <button type="button" className="font-medium text-[var(--sf-button,#1E40AF)] underline" onClick={() => setSheet('doc_poa_missing')}>
             not submitted
           </button>
           {' · '}
-          <button type="button" className="font-medium text-[#2E5AAC] underline" onClick={() => setSheet('doc_poa_pending')}>
+          <button type="button" className="font-medium text-[var(--sf-button,#1E40AF)] underline" onClick={() => setSheet('doc_poa_pending')}>
             pending
           </button>
           {' · '}
-          <button type="button" className="font-medium text-[#2E5AAC] underline" onClick={() => setSheet('doc_poa_rejected')}>
+          <button type="button" className="font-medium text-[var(--sf-button,#1E40AF)] underline" onClick={() => setSheet('doc_poa_rejected')}>
             rejected
           </button>
         </p>
@@ -749,7 +749,7 @@ export function MortgageApplyFlow({ productId }: { productId: string }) {
               key={step}
               className={cn(
                 'flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white',
-                step <= 2 ? 'bg-[#2E5AAC]' : 'bg-gray-300',
+                step <= 2 ? 'bg-[var(--sf-button,#1E40AF)]' : 'bg-gray-300',
               )}
             >
               {step <= 2 ? <Check className="h-4 w-4" /> : step}
@@ -791,7 +791,7 @@ export function MortgageApplyFlow({ productId }: { productId: string }) {
           {[0, 1, 2].map((i) => (
             <div
               key={`doc3-step-${i}`}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-[#2E5AAC] text-white"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--sf-button,#1E40AF)] text-white"
             >
               <Check className="h-4 w-4" />
             </div>
@@ -930,7 +930,7 @@ export function MortgageApplyFlow({ productId }: { productId: string }) {
           >
             Done
           </Button>
-          <button type="button" className="mt-3 text-sm font-semibold text-[#2E5AAC]" onClick={() => setSheet(null)}>
+          <button type="button" className="mt-3 text-sm font-semibold text-[var(--sf-button,#1E40AF)]" onClick={() => setSheet(null)}>
             Go back
           </button>
         </div>

@@ -37,7 +37,7 @@ export default function InvestDetailPage({ params }: { params: { id: string } })
                     <h2 className="text-lg font-bold text-[#1E293B] text-center mb-1">Payment Done Successfully</h2>
 
                     <Link href="/mobile-v2/products/invest" className="w-full mt-8">
-                        <Button className="w-full h-12 rounded-full bg-[#1E40AF] hover:bg-[#1e3a8a] text-white font-semibold">
+                        <Button className="w-full h-12 rounded-full bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white font-semibold">
                             Done
                         </Button>
                     </Link>
@@ -60,7 +60,7 @@ export default function InvestDetailPage({ params }: { params: { id: string } })
 
                     <div className="flex gap-4 mb-12">
                         {[0, 1, 2, 3].map((i) => (
-                            <div key={i} className="w-14 h-14 rounded-2xl bg-[#EEF2FF] border border-[#E0E7FF] flex items-center justify-center text-xl font-bold text-[#1E1B4B]">
+                            <div key={i} className="w-14 h-14 rounded-2xl bg-[#EEF2FF] border border-[#E0E7FF] flex items-center justify-center text-xl font-bold text-[var(--sf-ink,#1E1B4B)]">
                                 {pin[i] ? '•' : ''}
                             </div>
                         ))}
@@ -68,7 +68,7 @@ export default function InvestDetailPage({ params }: { params: { id: string } })
 
                     <Button
                         onClick={() => setPurchaseStep('success')}
-                        className="w-full h-14 rounded-full bg-[#1E40AF] hover:bg-[#1e3a8a] text-white font-semibold text-base shadow-xl shadow-blue-900/10 mb-8"
+                        className="w-full h-14 rounded-full bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white font-semibold text-base shadow-xl shadow-blue-900/10 mb-8"
                     >
                         Pay Now
                     </Button>
@@ -134,7 +134,7 @@ export default function InvestDetailPage({ params }: { params: { id: string } })
                         <div className="p-4 space-y-4">
                             <div className="flex justify-between items-start">
                                 <h2 className="text-base font-bold text-[#1E293B]">Maize Investment....</h2>
-                                <span className="text-base font-bold text-[#1E1B4B]">NGN60,000,000</span>
+                                <span className="text-base font-bold text-[var(--sf-ink,#1E1B4B)]">NGN60,000,000</span>
                             </div>
 
                             <p className="text-xs text-gray-500 leading-relaxed">
@@ -161,7 +161,7 @@ export default function InvestDetailPage({ params }: { params: { id: string } })
                         <div className="bg-white rounded-[24px] p-6 space-y-4 shadow-sm">
                             <div className="flex justify-between items-center text-sm">
                                 <span className="text-gray-600">Order Amounts</span>
-                                <span className="font-bold text-[#1E1B4B]">N16M</span>
+                                <span className="font-bold text-[var(--sf-ink,#1E1B4B)]">N16M</span>
                             </div>
                             <div className="flex justify-between items-center text-sm">
                                 <div className="flex items-center gap-2">
@@ -179,12 +179,12 @@ export default function InvestDetailPage({ params }: { params: { id: string } })
 
                             <div className="flex justify-between items-center text-base">
                                 <span className="font-bold text-[#1E293B]">Order Total</span>
-                                <span className="font-bold text-[#1E1B4B]">N16M</span>
+                                <span className="font-bold text-[var(--sf-ink,#1E1B4B)]">N16M</span>
                             </div>
 
                             <Button
                                 onClick={() => setPurchaseStep('pin')}
-                                className="w-full h-12 rounded-full bg-[#1E40AF] hover:bg-[#1e3a8a] text-white font-semibold mt-4"
+                                className="w-full h-12 rounded-full bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white font-semibold mt-4"
                             >
                                 Invest
                             </Button>

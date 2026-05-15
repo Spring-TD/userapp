@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { getApiBaseUrl } from "@/lib/apiBaseUrl"
 import { isReservedSubdomain } from "@/lib/mobileTenant/subdomain"
+import { fetchUpstream, isUpstreamTimeoutError, upstreamErrorMessage } from "@/lib/server/upstreamFetch"
 
 export const dynamic = "force-dynamic"
 
@@ -57,15 +58,13 @@ export async function GET(
       request.headers.get("host")?.trim() ||
       ""
 
-    const response = await fetch(url, {
+    const response = await fetchUpstream(url, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
         ...(forwardedHost ? { "X-Forwarded-Host": forwardedHost } : {}),
       },
-      cache: "no-store",
-      signal: AbortSignal.timeout(25_000),
     })
 
     const data = await response.json().catch(() => ({}))
@@ -104,6 +103,9 @@ export async function GET(
     const resolvedSub = asNonEmptyString(d.subdomain) || subdomain
     const pwaRaw = "pwaInstall" in d ? d.pwaInstall : undefined
     const pwaInstall = normalizePwaInstall(pwaRaw)
+    const pwaManifestRaw = "pwaManifest" in d ? d.pwaManifest : undefined
+    const pwaManifest =
+      pwaManifestRaw && typeof pwaManifestRaw === "object" ? (pwaManifestRaw as Record<string, unknown>) : null
 
     return NextResponse.json({
       success: true,
@@ -112,10 +114,18 @@ export async function GET(
         subdomain: resolvedSub,
         ...(merchantId ? { merchantId } : {}),
         ...(pwaInstall ? { pwaInstall } : {}),
+        ...(pwaManifest ? { pwaManifest } : {}),
       },
     })
   } catch (e) {
     console.error("[resolve-subdomain]", e)
-    return NextResponse.json({ success: false, error: "Failed to resolve subdomain" }, { status: 500 })
+    const timeout = isUpstreamTimeoutError(e)
+    return NextResponse.json(
+      {
+        success: false,
+        error: upstreamErrorMessage(e, "Failed to resolve subdomain"),
+      },
+      { status: timeout ? 504 : 502 },
+    )
   }
 }

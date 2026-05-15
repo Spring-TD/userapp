@@ -13,7 +13,7 @@ export default function CommodityProductPage() {
                 <div className="pt-12 px-6 pb-2 bg-white sticky top-0 z-30">
                     <div className="flex items-center justify-between mb-6">
                         <div className="w-10 h-10" />
-                        <h1 className="text-lg font-bold text-[#1E1B4B]">Commodity</h1>
+                        <h1 className="text-lg font-bold text-[var(--sf-ink,#1E1B4B)]">Commodity</h1>
                         <div className="w-10 h-10" />
                     </div>
                     <MobileV2TabBar activeTab="Commodity" />
@@ -34,7 +34,7 @@ export default function CommodityProductPage() {
                     <User className="w-6 h-6" />
                     <span className="text-[10px] font-medium">Account</span>
                 </Link>
-                <button className="flex flex-col items-center gap-1 text-[#1E40AF]">
+                <button className="flex flex-col items-center gap-1 text-[var(--sf-button,#1E40AF)]">
                     <Briefcase className="w-6 h-6 fill-current" />
                     <span className="text-[10px] font-bold">Product</span>
                 </button>

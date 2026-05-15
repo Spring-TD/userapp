@@ -2,10 +2,9 @@
 
 ## What happens when someone opens the app
 
-1. **`GET /api/v1/apps/resolve/{subdomain}`** (via **`/api/apps/resolve-subdomain/...`**) — returns **`data.id`** (app id), **`data.merchantId`**, optional **`data.pwaInstall`** (URLs only, not the manifest body).
-2. **`GET /api/v1/apps/{id}/pwa/manifest.webmanifest`** (proxied as **`/api/apps/{id}/pwa/manifest.webmanifest`** or **`/api/apps/{id}/pwa/manifest`**) — Web App Manifest JSON. **404** usually means there is no **published** PWA for that app yet; the UI keeps defaults.
+1. **`GET /api/v1/apps/resolve/{subdomain}`** (via **`/api/apps/resolve-subdomain/...`**) — returns **`data.appId`**, **`data.merchantId`**, optional **`data.pwaManifest`** (name, colors, icons for splash/theme), and optional **`data.pwaInstall`** (SW/manifest URLs for install).
 
-`MobileV2TenantProvider` runs (1) then (2). Splash/onboarding merge manifest fields into the UI; `MobileV2ThemedChrome` uses the same manifest for shell colors.
+`MobileV2TenantProvider` uses resolve only. Splash/onboarding merge **`pwaManifest`** into the UI; `MobileV2ThemedChrome` uses the same fields for shell colors.
 
 ## Env
 

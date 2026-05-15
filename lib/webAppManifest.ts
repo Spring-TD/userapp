@@ -4,6 +4,7 @@ import type { MobileAppConfig } from "@/hooks/useMobileConfig"
 export interface WebAppManifestBranding {
   name?: string
   short_name?: string
+  description?: string
   theme_color?: string
   background_color?: string
   icons?: { src?: string; sizes?: string; type?: string; purpose?: string }[]
@@ -36,20 +37,33 @@ export function parseWebAppManifestBranding(raw: unknown): WebAppManifestBrandin
 
   const name = asTrimmedString(o.name)
   const short_name = asTrimmedString(o.short_name)
+  const description = asTrimmedString(o.description)
   const theme_color = asTrimmedString(o.theme_color)
   const background_color = asTrimmedString(o.background_color)
 
-  if (!name && !short_name && !theme_color && !background_color && (!icons || icons.length === 0)) {
+  if (
+    !name &&
+    !short_name &&
+    !description &&
+    !theme_color &&
+    !background_color &&
+    (!icons || icons.length === 0)
+  ) {
     return null
   }
 
   return {
     ...(name ? { name } : {}),
     ...(short_name ? { short_name } : {}),
+    ...(description ? { description } : {}),
     ...(theme_color ? { theme_color } : {}),
     ...(background_color ? { background_color } : {}),
     ...(icons && icons.length ? { icons } : {}),
   }
+}
+
+export function manifestDescription(m: WebAppManifestBranding | null): string | undefined {
+  return m?.description?.trim() || undefined
 }
 
 export function storefrontDisplayName(m: WebAppManifestBranding | null): string | null {
@@ -57,7 +71,19 @@ export function storefrontDisplayName(m: WebAppManifestBranding | null): string 
   return m.short_name?.trim() || m.name?.trim() || null
 }
 
-/** Apply manifest JSON (theme_color, background_color, names) onto the default mobile shell config. */
+/** Prefer largest manifest icon for splash / chrome. */
+export function pickManifestIconUrl(manifest: WebAppManifestBranding | null): string | undefined {
+  const icons = manifest?.icons
+  if (!icons?.length) return undefined
+  const sorted = [...icons].sort((a, b) => {
+    const sizeA = parseInt(String(a.sizes ?? "").split("x")[0] || "0", 10)
+    const sizeB = parseInt(String(b.sizes ?? "").split("x")[0] || "0", 10)
+    return sizeB - sizeA
+  })
+  return sorted.find((i) => i.src)?.src
+}
+
+/** Apply manifest JSON (theme_color, background_color, names, icons) onto the default mobile shell config. */
 export function applyManifestToMobileAppConfig(
   base: MobileAppConfig,
   manifest: WebAppManifestBranding | null,
@@ -66,12 +92,14 @@ export function applyManifestToMobileAppConfig(
   const name = displayNameOverride?.trim() || storefrontDisplayName(manifest) || base.appName
   const primary = manifest?.theme_color?.trim() || base.theme.primaryColor
   const shell = manifest?.background_color?.trim() || manifest?.theme_color?.trim() || base.onboarding.backgroundColor
+  const logo = pickManifestIconUrl(manifest) || base.splash.logo
 
   return {
     ...base,
     appName: name,
     splash: {
       ...base.splash,
+      logo,
       backgroundColor: shell,
     },
     onboarding: {
@@ -83,6 +111,7 @@ export function applyManifestToMobileAppConfig(
     theme: {
       ...base.theme,
       primaryColor: primary,
+      secondaryColor: primary,
     },
   }
 }

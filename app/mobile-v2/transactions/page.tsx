@@ -54,7 +54,7 @@ export default function TransactionsPage() {
                     <div key={tx.id} className="bg-white rounded-2xl p-4 flex items-center justify-between shadow-[0_2px_8px_rgba(0,0,0,0.02)] border border-gray-50/50">
                         <div>
                             <p className="text-[11px] text-gray-400 font-medium mb-0.5">{tx.type}</p>
-                            <h3 className="text-sm font-semibold text-[#1E1B4B]">{tx.name}</h3>
+                            <h3 className="text-sm font-semibold text-[var(--sf-ink,#1E1B4B)]">{tx.name}</h3>
                         </div>
                         <div className="text-right">
                             <p className={`text-sm font-bold ${tx.type === 'Receive' ? 'text-green-500' : 'text-red-500'}`}>

@@ -86,14 +86,14 @@ export default function HomePage() {
                         {profileLoading ? (
                             <>
                                 {' '}
-                                <span className="text-[#1E1B4B] inline-flex items-center">
+                                <span className="text-[var(--sf-ink,#1E1B4B)] inline-flex items-center">
                                     <Skeleton className="inline-block h-[1.15em] w-36 max-w-[55vw] rounded-md bg-gray-200/90" aria-hidden />
                                 </span>
                             </>
                         ) : displayGreetingName ? (
                             <>
                                 {' '}
-                                <span className="text-[#1E1B4B] inline-flex items-center">{displayGreetingName}</span>
+                                <span className="text-[var(--sf-ink,#1E1B4B)] inline-flex items-center">{displayGreetingName}</span>
                             </>
                         ) : null}
                     </h1>
@@ -107,7 +107,7 @@ export default function HomePage() {
                         )}
                     </p>
                 </div>
-                <button className="w-10 h-10 rounded-full bg-[#E0E7FF] flex items-center justify-center text-[#2563EB]">
+                <button className="w-10 h-10 rounded-full bg-[var(--sf-tint,#E0E7FF)] flex items-center justify-center text-[var(--sf-primary,#2563EB)]">
                     <Bell className="w-5 h-5" />
                 </button>
             </div>
@@ -116,14 +116,14 @@ export default function HomePage() {
             <div className="px-6 mb-6">
                 <div className="relative w-full h-[220px] rounded-[30px] overflow-hidden shadow-xl shadow-blue-900/10">
                     {/* Background Image/Pattern */}
-                    <div className="absolute inset-0 bg-[#1E40AF]">
+                    <div className="absolute inset-0 bg-[var(--sf-button,#1E40AF)]">
                         <div className="absolute inset-0 opacity-10 bg-[url('/home-card-bg.png')] bg-cover bg-center mix-blend-overlay"></div>
                     </div>
 
                     <div className="relative z-10 flex flex-col items-center justify-center h-full text-white pt-4">
                         {/* Avatar in Card */}
                         <div className="w-12 h-12 rounded-full border-2 border-green-400/30 p-0.5 mb-3 bg-white/10 backdrop-blur-sm">
-                            <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-indigo-400 to-blue-800">
+                            <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-[var(--sf-primary,#2563EB)] to-[var(--sf-button,#1E40AF)]">
                                 {avatarSrc ? (
                                     // eslint-disable-next-line @next/next/no-img-element -- optional remote URL from API
                                     <img src={avatarSrc} alt="" className="h-full w-full object-cover" />
@@ -164,7 +164,7 @@ export default function HomePage() {
             <div className="px-6 flex gap-4 mb-6">
                 <button
                     onClick={() => setActiveModal('fund_options')}
-                    className="flex-1 w-full h-12 rounded-full bg-[#1E1B4B] text-white hover:bg-[#1E1B4B]/90 text-[13px] font-semibold flex items-center justify-center"
+                    className="flex-1 w-full h-12 rounded-full bg-[var(--sf-ink,#1E1B4B)] text-white hover:bg-[var(--sf-ink,#1E1B4B)]/90 text-[13px] font-semibold flex items-center justify-center"
                 >
                     Fund/Withdraw
                 </button>
@@ -178,9 +178,9 @@ export default function HomePage() {
 
             {/* Promo/Sort Card */}
             <div className="px-6 mb-8">
-                <div className="w-full h-[80px] bg-[#1E40AF] rounded-[24px] flex items-center px-4 relative overflow-hidden shadow-lg shadow-blue-900/5">
+                <div className="w-full h-[80px] bg-[var(--sf-button,#1E40AF)] rounded-[24px] flex items-center px-4 relative overflow-hidden shadow-lg shadow-blue-900/5">
                     {/* Icon Box */}
-                    <div className="w-10 h-10 rounded-xl bg-[#4F46E5] flex items-center justify-center text-white mr-4 shadow-inner">
+                    <div className="w-10 h-10 rounded-xl bg-[var(--sf-primary,#2563EB)] flex items-center justify-center text-white mr-4 shadow-inner">
                         <span className="text-lg font-bold">%</span>
                     </div>
                     <div className="flex-1 text-white">
@@ -198,19 +198,19 @@ export default function HomePage() {
                 <h3 className="font-bold text-[#1E293B] mb-4">Quick Actions</h3>
                 <div className="grid grid-cols-4 gap-y-6 gap-x-2">
                     {[
-                        { icon: <Briefcase className="w-6 h-6" />, label: "Loan", color: "text-[#2563EB]", link: "/mobile-v2/products/loan" },
-                        { icon: <Home className="w-6 h-6" />, label: "Mortgage", color: "text-[#2563EB]", link: "/mobile-v2/products/mortgage" },
-                        { icon: <Landmark className="w-6 h-6" />, label: "Saving", color: "text-[#2563EB]", link: "/mobile-v2/products/savings" },
-                        { icon: <ShoppingCart className="w-6 h-6" />, label: "Shop", color: "text-[#2563EB]" },
+                        { icon: <Briefcase className="w-6 h-6" />, label: "Loan", color: "text-[var(--sf-primary,#2563EB)]", link: "/mobile-v2/products/loan" },
+                        { icon: <Home className="w-6 h-6" />, label: "Mortgage", color: "text-[var(--sf-primary,#2563EB)]", link: "/mobile-v2/products/mortgage" },
+                        { icon: <Landmark className="w-6 h-6" />, label: "Saving", color: "text-[var(--sf-primary,#2563EB)]", link: "/mobile-v2/products/savings" },
+                        { icon: <ShoppingCart className="w-6 h-6" />, label: "Shop", color: "text-[var(--sf-primary,#2563EB)]" },
 
-                        { icon: <Plus className="w-6 h-6" />, label: "Top Up", color: "text-[#2563EB]" },
-                        { icon: <SendIcon className="w-6 h-6" />, label: "Send", color: "text-[#2563EB]" },
-                        { icon: <CreditCard className="w-6 h-6" />, label: "Add card", color: "text-[#2563EB]" },
-                        { icon: <FileText className="w-6 h-6" />, label: "Orders", color: "text-[#2563EB]" },
+                        { icon: <Plus className="w-6 h-6" />, label: "Top Up", color: "text-[var(--sf-primary,#2563EB)]" },
+                        { icon: <SendIcon className="w-6 h-6" />, label: "Send", color: "text-[var(--sf-primary,#2563EB)]" },
+                        { icon: <CreditCard className="w-6 h-6" />, label: "Add card", color: "text-[var(--sf-primary,#2563EB)]" },
+                        { icon: <FileText className="w-6 h-6" />, label: "Orders", color: "text-[var(--sf-primary,#2563EB)]" },
                     ].map((item, idx) => {
                         const Content = (
                             <>
-                                <div className="w-[50px] h-[50px] rounded-[18px] bg-white border border-gray-100 shadow-sm flex items-center justify-center text-[#2563EB] group-hover:bg-blue-50 transition-colors">
+                                <div className="w-[50px] h-[50px] rounded-[18px] bg-white border border-gray-100 shadow-sm flex items-center justify-center text-[var(--sf-primary,#2563EB)] group-hover:bg-[var(--sf-tint,#E0E7FF)] transition-colors">
                                     {item.icon}
                                 </div>
                                 <span className="text-[11px] font-medium text-gray-500">{item.label}</span>
@@ -245,7 +245,7 @@ export default function HomePage() {
                 <div className="absolute bottom-0 left-0 right-0 z-50 bg-white rounded-t-[30px] p-6 pb-12 animate-in slide-in-from-bottom duration-300">
                     <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-8" />
                     <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-xl font-bold text-[#1E1B4B]">Choose ways to Fund wallet</h2>
+                        <h2 className="text-xl font-bold text-[var(--sf-ink,#1E1B4B)]">Choose ways to Fund wallet</h2>
                         <button onClick={closeModal}><X className="w-5 h-5 text-gray-400" /></button>
                     </div>
                     <div className="space-y-6">
@@ -253,20 +253,20 @@ export default function HomePage() {
                             onClick={() => setActiveModal('fund_bank')}
                             className="flex items-start gap-4 w-full text-left group"
                         >
-                            <div className="w-12 h-12 rounded-full bg-[#E0E7FF] flex items-center justify-center text-[#2563EB] shrink-0">
+                            <div className="w-12 h-12 rounded-full bg-[var(--sf-tint,#E0E7FF)] flex items-center justify-center text-[var(--sf-primary,#2563EB)] shrink-0">
                                 <Building2 className="w-6 h-6" />
                             </div>
                             <div>
-                                <h3 className="text-base font-semibold text-[#1E1B4B]">Add via bank transfer</h3>
+                                <h3 className="text-base font-semibold text-[var(--sf-ink,#1E1B4B)]">Add via bank transfer</h3>
                                 <p className="text-sm text-gray-500 mt-1">Fund your account by sending money to your unique USD bank account</p>
                             </div>
                         </button>
                         <button className="flex items-start gap-4 w-full text-left group">
-                            <div className="w-12 h-12 rounded-full bg-[#E0E7FF] flex items-center justify-center text-[#2563EB] shrink-0">
+                            <div className="w-12 h-12 rounded-full bg-[var(--sf-tint,#E0E7FF)] flex items-center justify-center text-[var(--sf-primary,#2563EB)] shrink-0">
                                 <CreditCard className="w-6 h-6" />
                             </div>
                             <div>
-                                <h3 className="text-base font-semibold text-[#1E1B4B]">Add via Card</h3>
+                                <h3 className="text-base font-semibold text-[var(--sf-ink,#1E1B4B)]">Add via Card</h3>
                                 <p className="text-sm text-gray-500 mt-1">Add funds from your card to your wallet.</p>
                             </div>
                         </button>
@@ -279,7 +279,7 @@ export default function HomePage() {
                 <div className="absolute bottom-0 left-0 right-0 z-50 bg-white rounded-t-[30px] p-6 pb-12 animate-in slide-in-from-bottom duration-300">
                     <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-8" />
                     <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-lg font-bold text-[#1E1B4B] pr-8">Fund wallet via Bank Transfer</h2>
+                        <h2 className="text-lg font-bold text-[var(--sf-ink,#1E1B4B)] pr-8">Fund wallet via Bank Transfer</h2>
                         <button onClick={closeModal}><X className="w-5 h-5 text-gray-400" /></button>
                     </div>
 
@@ -324,7 +324,7 @@ export default function HomePage() {
                 <div className="absolute bottom-0 left-0 right-0 z-50 bg-white rounded-t-[30px] p-6 pb-12 animate-in slide-in-from-bottom duration-300">
                     <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-8" />
                     <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-xl font-bold text-[#1E1B4B]">Account Details</h2>
+                        <h2 className="text-xl font-bold text-[var(--sf-ink,#1E1B4B)]">Account Details</h2>
                         <button onClick={closeModal}><X className="w-5 h-5 text-gray-400" /></button>
                     </div>
 
@@ -354,7 +354,7 @@ export default function HomePage() {
 
             {/* Bottom Nav */}
             <div className="absolute bottom-6 left-6 right-6 h-[72px] bg-white rounded-[24px] shadow-[0_4px_30px_rgba(0,0,0,0.08)] flex items-center justify-around px-2 z-40">
-                <button className="flex flex-col items-center gap-1 text-[#1E40AF]">
+                <button className="flex flex-col items-center gap-1 text-[var(--sf-button,#1E40AF)]">
                     <Home className="w-6 h-6 fill-current" />
                     <span className="text-[10px] font-bold">Home</span>
                 </button>

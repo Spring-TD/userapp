@@ -12,7 +12,11 @@ import {
 import { usePathname, useSearchParams } from "next/navigation"
 
 import { getTenantSubdomainFromHost } from "@/lib/mobileTenant/subdomain"
-import { TENANT_APP_ID_STORAGE_KEY, TENANT_MERCHANT_ID_STORAGE_KEY } from "@/lib/mobileTenant/storageKeys"
+import {
+  TENANT_APP_ID_STORAGE_KEY,
+  TENANT_MERCHANT_ID_STORAGE_KEY,
+  TENANT_PWA_MANIFEST_STORAGE_KEY,
+} from "@/lib/mobileTenant/storageKeys"
 import type { StorefrontPwaInstallPayload } from "@/lib/storefrontPwaTypes"
 import { parseWebAppManifestBranding, storefrontDisplayName, type WebAppManifestBranding } from "@/lib/webAppManifest"
 
@@ -33,36 +37,17 @@ interface MobileV2TenantContextValue extends MobileV2TenantState {
 
 const MobileV2TenantContext = createContext<MobileV2TenantContextValue | undefined>(undefined)
 
-/**
- * Second hop: Web App Manifest JSON (not in resolve body).
- * After resolve by subdomain: if upstream omits `pwaInstall`, there is no manifest URL — skip fetch.
- * With `pwaInstall.manifestUrl`, use the doc flow `GET manifestUrl` via same-origin proxy.
- */
-async function getManifestBranding(
-  appId: string,
-  pwaInstall: StorefrontPwaInstallPayload | null,
-  skipManifestIfNoPwaInstall: boolean,
-): Promise<WebAppManifestBranding | null> {
-  if (skipManifestIfNoPwaInstall && !pwaInstall) return null
-  const manifestUrl = typeof pwaInstall?.manifestUrl === "string" ? pwaInstall.manifestUrl.trim() : ""
-  try {
-    const req = manifestUrl
-      ? `/api/apps/manifest-proxy?url=${encodeURIComponent(manifestUrl)}`
-      : `/api/apps/${encodeURIComponent(appId)}/pwa/manifest.webmanifest`
-    const res = await fetch(req, { cache: "no-store" })
-    if (!res.ok) return null
-    return parseWebAppManifestBranding(await res.json())
-  } catch {
-    return null
-  }
-}
-
-/** Proxies to `GET /api/v1/apps/resolve/{subdomain}` → `data.id`, `data.merchantId`, optional `pwaInstall` (links only). */
+/** Proxies `GET /api/v1/apps/resolve/{subdomain}` — includes `pwaManifest` + optional `pwaInstall`. */
 async function resolveSubdomain(slug: string) {
   const res = await fetch(`/api/apps/resolve-subdomain/${encodeURIComponent(slug)}`)
   const json = (await res.json()) as {
     success?: boolean
-    data?: { appId?: string; merchantId?: string; pwaInstall?: StorefrontPwaInstallPayload }
+    data?: {
+      appId?: string
+      merchantId?: string
+      pwaInstall?: StorefrontPwaInstallPayload
+      pwaManifest?: unknown
+    }
     error?: string
   }
   if (!res.ok || !json.success || !json.data?.appId) {
@@ -72,10 +57,25 @@ async function resolveSubdomain(slug: string) {
     appId: json.data.appId,
     merchantId: json.data.merchantId?.trim() || null,
     pwaInstall: json.data.pwaInstall && typeof json.data.pwaInstall === "object" ? json.data.pwaInstall : null,
+    pwaManifest: parseWebAppManifestBranding(json.data.pwaManifest),
   }
 }
 
-function persist(appId: string | null, merchantId: string | null) {
+function readCachedManifest(): WebAppManifestBranding | null {
+  try {
+    const raw = sessionStorage.getItem(TENANT_PWA_MANIFEST_STORAGE_KEY)
+    if (!raw) return null
+    return parseWebAppManifestBranding(JSON.parse(raw) as unknown)
+  } catch {
+    return null
+  }
+}
+
+function persist(
+  appId: string | null,
+  merchantId: string | null,
+  pwaManifest: WebAppManifestBranding | null,
+) {
   try {
     if (appId) sessionStorage.setItem(TENANT_APP_ID_STORAGE_KEY, appId)
     else sessionStorage.removeItem(TENANT_APP_ID_STORAGE_KEY)
@@ -85,6 +85,12 @@ function persist(appId: string | null, merchantId: string | null) {
   try {
     if (merchantId) sessionStorage.setItem(TENANT_MERCHANT_ID_STORAGE_KEY, merchantId)
     else sessionStorage.removeItem(TENANT_MERCHANT_ID_STORAGE_KEY)
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (pwaManifest) sessionStorage.setItem(TENANT_PWA_MANIFEST_STORAGE_KEY, JSON.stringify(pwaManifest))
+    else sessionStorage.removeItem(TENANT_PWA_MANIFEST_STORAGE_KEY)
   } catch {
     /* ignore */
   }
@@ -110,7 +116,7 @@ async function loadTenantFromNavigation(search: string) {
   let merchantId: string | null = merchantFromQuery
   let tenantSubdomain: string | null = null
   let pwaInstall: StorefrontPwaInstallPayload | null = null
-  let skipManifestIfNoPwaInstall = false
+  let pwaManifest: WebAppManifestBranding | null = null
   let error: string | null = null
 
   const readMerchant = () => {
@@ -132,35 +138,30 @@ async function loadTenantFromNavigation(search: string) {
     if (appIdParam) {
       appId = appIdParam
       if (!merchantId) merchantId = readMerchant()
-    } else if (subdomainParam) {
-      tenantSubdomain = subdomainParam
-      const t = await resolveSubdomain(subdomainParam)
+      pwaManifest = readCachedManifest()
+    } else if (subdomainParam || hostSub) {
+      const slug = subdomainParam || hostSub!
+      tenantSubdomain = slug
+      const t = await resolveSubdomain(slug)
       appId = t.appId
       merchantId = merchantId || t.merchantId
       pwaInstall = t.pwaInstall
-      skipManifestIfNoPwaInstall = true
+      pwaManifest = t.pwaManifest
     } else if (storedApp) {
       appId = storedApp
       if (!merchantId) merchantId = readMerchant()
-    } else if (hostSub) {
-      tenantSubdomain = hostSub
-      const t = await resolveSubdomain(hostSub)
-      appId = t.appId
-      merchantId = merchantId || t.merchantId
-      pwaInstall = t.pwaInstall
-      skipManifestIfNoPwaInstall = true
+      pwaManifest = readCachedManifest()
     }
   } catch (e) {
     error = e instanceof Error ? e.message : "Tenant resolution failed"
     appId = appIdParam || storedApp || readApp()
     merchantId = merchantId || readMerchant()
-    tenantSubdomain = null
+    tenantSubdomain = subdomainParam || hostSub || null
     pwaInstall = null
+    pwaManifest = readCachedManifest()
   }
 
-  const pwaManifest = appId ? await getManifestBranding(appId, pwaInstall, skipManifestIfNoPwaInstall) : null
-
-  persist(appId, merchantId)
+  persist(appId, merchantId, pwaManifest)
 
   return { appId, merchantId, tenantSubdomain, pwaInstall, pwaManifest, error }
 }
@@ -182,6 +183,7 @@ export function MobileV2TenantProvider({ children }: { children: ReactNode }) {
     try {
       sessionStorage.removeItem(TENANT_APP_ID_STORAGE_KEY)
       sessionStorage.removeItem(TENANT_MERCHANT_ID_STORAGE_KEY)
+      sessionStorage.removeItem(TENANT_PWA_MANIFEST_STORAGE_KEY)
     } catch {
       /* ignore */
     }

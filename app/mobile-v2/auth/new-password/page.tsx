@@ -30,10 +30,10 @@ export default function NewPasswordPage() {
 
             {/* Description Section */}
             <div className="mb-8 text-left">
-                <h2 className="text-[24px] font-bold text-[#1E1B4B] mb-2">
+                <h2 className="text-[24px] font-bold text-[var(--sf-ink,#1E1B4B)] mb-2">
                     Set your password
                 </h2>
-                <p className="text-[#1E1B4B] text-[15px] leading-relaxed max-w-[90%]">
+                <p className="text-[var(--sf-ink,#1E1B4B)] text-[15px] leading-relaxed max-w-[90%]">
                     Please create your new account password for Airpay
                 </p>
             </div>
@@ -47,7 +47,7 @@ export default function NewPasswordPage() {
                             type="password"
                             id="password"
                             placeholder=" "
-                            className="peer w-full h-14 px-4 pt-4 pb-1 rounded-2xl bg-white border-0 shadow-[0_2px_10px_rgba(0,0,0,0.03)] focus:ring-2 focus:ring-[#2563EB]/20 focus:outline-none text-base placeholder-transparent transition-all font-bold tracking-widest"
+                            className="peer w-full h-14 px-4 pt-4 pb-1 rounded-2xl bg-white border-0 shadow-[0_2px_10px_rgba(0,0,0,0.03)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--sf-primary,#2563EB)_20%,transparent)] focus:outline-none text-base placeholder-transparent transition-all font-bold tracking-widest"
                             defaultValue="Password123"
                         />
                         <label
@@ -64,7 +64,7 @@ export default function NewPasswordPage() {
                             type="password"
                             id="retype-password"
                             placeholder=" "
-                            className="peer w-full h-14 px-4 pt-4 pb-1 rounded-2xl bg-white border-0 shadow-[0_2px_10px_rgba(0,0,0,0.03)] focus:ring-2 focus:ring-[#2563EB]/20 focus:outline-none text-base placeholder-transparent transition-all font-bold tracking-widest"
+                            className="peer w-full h-14 px-4 pt-4 pb-1 rounded-2xl bg-white border-0 shadow-[0_2px_10px_rgba(0,0,0,0.03)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--sf-primary,#2563EB)_20%,transparent)] focus:outline-none text-base placeholder-transparent transition-all font-bold tracking-widest"
                             defaultValue="Password123"
                         />
                         <label
@@ -81,7 +81,7 @@ export default function NewPasswordPage() {
             <div className="mt-auto mb-4">
                 <Link href="/mobile-v2/auth/login">
                     <Button
-                        className="w-full h-14 rounded-[20px] bg-[#1E40AF] hover:bg-[#1e3a8a] text-white font-medium text-base shadow-lg shadow-blue-900/20"
+                        className="w-full h-14 rounded-[20px] bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white font-medium text-base shadow-lg shadow-blue-900/20"
                     >
                         Continue
                     </Button>

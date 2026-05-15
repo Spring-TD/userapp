@@ -1,65 +1,59 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server"
 
-import { getApiUpstreamBase } from '@/lib/server/apiUpstreamBase';
+import { getApiUpstreamBase } from "@/lib/server/apiUpstreamBase"
+import { fetchUpstream, isUpstreamTimeoutError, upstreamErrorMessage } from "@/lib/server/upstreamFetch"
 
-const API_UPSTREAM_BASE = getApiUpstreamBase();
-const UPSTREAM_TIMEOUT_MS = 8000;
-
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic"
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id: appId } = await params;
-  const authHeader = request.headers.get('Authorization');
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+  const { id: appId } = await params
+  const authHeader = request.headers.get("Authorization")
+  const base = getApiUpstreamBase()
 
   try {
-    const response = await fetch(
-      `${API_UPSTREAM_BASE}/api/v1/apps/${encodeURIComponent(appId)}/pwa/manifest.webmanifest`,
+    const response = await fetchUpstream(
+      `${base}/api/v1/apps/${encodeURIComponent(appId)}/pwa/manifest.webmanifest`,
       {
-        method: 'GET',
+        method: "GET",
         headers: {
-          ...(authHeader && { Authorization: authHeader }),
+          Accept: "application/manifest+json, application/json, */*",
+          ...(authHeader ? { Authorization: authHeader } : {}),
         },
-        signal: controller.signal,
-      }
-    );
+      },
+    )
 
-    const contentType =
-      response.headers.get('content-type') || 'application/manifest+json';
-    const body = await response.arrayBuffer();
-    const cacheControl = response.headers.get('cache-control');
-    const etag = response.headers.get('etag');
+    const contentType = response.headers.get("content-type") || "application/manifest+json"
+    const body = await response.arrayBuffer()
+    const cacheControl = response.headers.get("cache-control")
+    const etag = response.headers.get("etag")
+
+    if (!response.ok) {
+      return NextResponse.json(
+        { success: false, error: "Manifest not available" },
+        { status: response.status === 404 ? 404 : response.status || 502 },
+      )
+    }
 
     return new NextResponse(body, {
-      status: response.status,
+      status: 200,
       headers: {
-        'Content-Type': contentType,
-        ...(cacheControl && { 'Cache-Control': cacheControl }),
-        ...(etag && { ETag: etag }),
+        "Content-Type": contentType.split(";")[0].trim(),
+        ...(cacheControl ? { "Cache-Control": cacheControl } : { "Cache-Control": "public, max-age=120" }),
+        ...(etag ? { ETag: etag } : {}),
       },
-    });
+    })
   } catch (error) {
-    const aborted =
-      error instanceof Error && (error.name === 'AbortError' || /aborted/i.test(error.message));
-    console.error(
-      `Error proxying PWA manifest for app ${appId} (upstream=${API_UPSTREAM_BASE}):`,
-      error,
-    );
+    const timeout = isUpstreamTimeoutError(error)
+    console.error(`Error proxying PWA manifest for app ${appId} (upstream=${base}):`, error)
     return NextResponse.json(
       {
         success: false,
-        error: aborted
-          ? `PWA manifest upstream timed out after ${UPSTREAM_TIMEOUT_MS}ms`
-          : 'Failed to reach PWA manifest upstream',
+        error: upstreamErrorMessage(error, "Failed to reach PWA manifest upstream"),
       },
-      { status: aborted ? 504 : 502 },
-    );
-  } finally {
-    clearTimeout(timer);
+      { status: timeout ? 504 : 502 },
+    )
   }
 }

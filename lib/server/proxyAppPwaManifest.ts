@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 
 import { getApiBaseUrl } from "@/lib/apiBaseUrl"
+import { fetchUpstream, isUpstreamTimeoutError } from "@/lib/server/upstreamFetch"
 
 const APP_ID_RE = /^[a-zA-Z\d_-]{8,128}$/
-const UPSTREAM_MS = 25_000
 
 const MANIFEST_PATH_RE = /^\/api\/v\d+\/apps\/[^/]+\/pwa\/manifest\.webmanifest$/i
 
@@ -43,11 +43,9 @@ export async function proxyAppManifestToNextResponse(appId: string): Promise<Nex
   const url = `${base}/api/v1/apps/${encodeURIComponent(appId)}/pwa/manifest.webmanifest`
 
   try {
-    const upstream = await fetch(url, {
+    const upstream = await fetchUpstream(url, {
       method: "GET",
       headers: { Accept: "application/manifest+json, application/json, */*" },
-      cache: "no-store",
-      signal: AbortSignal.timeout(UPSTREAM_MS),
     })
 
     const body = await upstream.text()
@@ -68,7 +66,10 @@ export async function proxyAppManifestToNextResponse(appId: string): Promise<Nex
     })
   } catch (e) {
     console.error("[pwa/manifest proxy]", e)
-    return NextResponse.json({ success: false, error: "Failed to load manifest" }, { status: 502 })
+    return NextResponse.json(
+      { success: false, error: "Failed to load manifest" },
+      { status: isUpstreamTimeoutError(e) ? 504 : 502 },
+    )
   }
 }
 
@@ -79,11 +80,9 @@ export async function proxyManifestUrlToNextResponse(manifestUrl: string): Promi
   }
 
   try {
-    const upstream = await fetch(manifestUrl, {
+    const upstream = await fetchUpstream(manifestUrl, {
       method: "GET",
       headers: { Accept: "application/manifest+json, application/json, */*" },
-      cache: "no-store",
-      signal: AbortSignal.timeout(UPSTREAM_MS),
     })
 
     const body = await upstream.text()
@@ -104,6 +103,9 @@ export async function proxyManifestUrlToNextResponse(manifestUrl: string): Promi
     })
   } catch (e) {
     console.error("[pwa/manifest-proxy url]", e)
-    return NextResponse.json({ success: false, error: "Failed to load manifest" }, { status: 502 })
+    return NextResponse.json(
+      { success: false, error: "Failed to load manifest" },
+      { status: isUpstreamTimeoutError(e) ? 504 : 502 },
+    )
   }
 }

@@ -4,3 +4,5 @@
  */
 export const TENANT_APP_ID_STORAGE_KEY = "mobile-v2-tenant-app-id"
 export const TENANT_MERCHANT_ID_STORAGE_KEY = "mobile-v2-tenant-merchant-id"
+/** Cached `pwaManifest` JSON from last successful resolve (survives flaky upstream). */
+export const TENANT_PWA_MANIFEST_STORAGE_KEY = "mobile-v2-tenant-pwa-manifest"

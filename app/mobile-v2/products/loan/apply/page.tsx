@@ -49,7 +49,7 @@ export default function LoanApplyPage() {
                         <input
                             type="text"
                             placeholder="Enter outstanding amount"
-                            className="w-full text-sm text-[#1E1B4B] placeholder-gray-300 focus:outline-none"
+                            className="w-full text-sm text-[var(--sf-ink,#1E1B4B)] placeholder-gray-300 focus:outline-none"
                         />
                     </div>
 
@@ -73,7 +73,7 @@ export default function LoanApplyPage() {
                         <input
                             type="text"
                             placeholder="Enter BVN"
-                            className="w-full text-sm text-[#1E1B4B] placeholder-gray-300 focus:outline-none"
+                            className="w-full text-sm text-[var(--sf-ink,#1E1B4B)] placeholder-gray-300 focus:outline-none"
                         />
                     </div>
 
@@ -83,7 +83,7 @@ export default function LoanApplyPage() {
                         <input
                             type="text"
                             placeholder="Enter BVN"
-                            className="w-full text-sm text-[#1E1B4B] placeholder-gray-300 focus:outline-none"
+                            className="w-full text-sm text-[var(--sf-ink,#1E1B4B)] placeholder-gray-300 focus:outline-none"
                         />
                     </div>
 
@@ -93,7 +93,7 @@ export default function LoanApplyPage() {
                         <input
                             type="text"
                             placeholder="Enter BVN"
-                            className="w-full text-sm text-[#1E1B4B] placeholder-gray-300 focus:outline-none"
+                            className="w-full text-sm text-[var(--sf-ink,#1E1B4B)] placeholder-gray-300 focus:outline-none"
                         />
                     </div>
 
@@ -124,7 +124,7 @@ export default function LoanApplyPage() {
 
                     {/* Submit Button */}
                     <Button
-                        className="w-full h-14 rounded-full bg-[#1E40AF] hover:bg-[#1e3a8a] text-white font-semibold text-base shadow-xl shadow-blue-900/10 mt-4"
+                        className="w-full h-14 rounded-full bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white font-semibold text-base shadow-xl shadow-blue-900/10 mt-4"
                         disabled={!agreed}
                         onClick={handleSubmit}
                     >
@@ -160,7 +160,7 @@ export default function LoanApplyPage() {
                         <h2 className="text-xl font-bold text-[#1E293B] text-center mb-8">Loan Approved</h2>
 
                         <Link href="/mobile-v2/products/loan" className="w-full">
-                            <Button className="w-full h-14 rounded-full bg-[#1E40AF] hover:bg-[#1e3a8a] text-white font-semibold text-base shadow-xl shadow-blue-900/10">
+                            <Button className="w-full h-14 rounded-full bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white font-semibold text-base shadow-xl shadow-blue-900/10">
                                 Continue
                             </Button>
                         </Link>

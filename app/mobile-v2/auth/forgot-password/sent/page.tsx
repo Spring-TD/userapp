@@ -27,7 +27,7 @@ export default function EmailSentPage() {
 
             {/* Text Content */}
             <div className="text-center mb-12 max-w-xs">
-                <h2 className="text-[24px] font-bold text-[#1E1B4B] mb-4">
+                <h2 className="text-[24px] font-bold text-[var(--sf-ink,#1E1B4B)] mb-4">
                     Your email is on the way
                 </h2>
                 <p className="text-gray-500 text-[15px] leading-relaxed">
@@ -39,7 +39,7 @@ export default function EmailSentPage() {
             <div className="w-full mt-auto mb-4 space-y-4">
                 <Link href="/mobile-v2/auth/new-password">
                     <Button
-                        className="w-full h-14 rounded-[20px] bg-[#1E40AF] hover:bg-[#1e3a8a] text-white font-medium text-base shadow-lg shadow-blue-900/20"
+                        className="w-full h-14 rounded-[20px] bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white font-medium text-base shadow-lg shadow-blue-900/20"
                     >
                         Continue
                     </Button>

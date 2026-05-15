@@ -3,23 +3,13 @@
 import { useEffect, type CSSProperties, type ReactNode } from 'react'
 
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
-
-const DEFAULT_PRIMARY = '#2563EB'
-const DEFAULT_SHELL = '#2563EB'
-const DEFAULT_BUTTON = '#1E40AF'
+import { buildStorefrontBrandCssVars } from '@/lib/storefrontBranding'
+import { pickManifestIconUrl } from '@/lib/webAppManifest'
 
 export function MobileV2ThemedChrome({ children }: { children: ReactNode }) {
-  const { pwaManifest } = useMobileV2Tenant()
+  const { pwaManifest, displayName } = useMobileV2Tenant()
 
-  const primary = pwaManifest?.theme_color?.trim()
-  const bg = pwaManifest?.background_color?.trim()
-  const shell = (bg || primary || DEFAULT_SHELL).trim()
-
-  const vars = {
-    '--sf-primary': primary || DEFAULT_PRIMARY,
-    '--sf-shell': shell,
-    '--sf-button': primary || DEFAULT_BUTTON,
-  } as CSSProperties
+  const brandVars = buildStorefrontBrandCssVars(pwaManifest) as CSSProperties
 
   useEffect(() => {
     const tc = pwaManifest?.theme_color?.trim()
@@ -38,16 +28,42 @@ export function MobileV2ThemedChrome({ children }: { children: ReactNode }) {
     }
   }, [pwaManifest?.theme_color])
 
+  useEffect(() => {
+    if (!displayName || typeof document === 'undefined') return
+    const prev = document.title
+    document.title = displayName
+    return () => {
+      document.title = prev
+    }
+  }, [displayName])
+
+  useEffect(() => {
+    const href = pickManifestIconUrl(pwaManifest)
+    if (!href || typeof document === 'undefined') return
+    const id = 'storefront-apple-touch-icon'
+    document.getElementById(id)?.remove()
+    const link = document.createElement('link')
+    link.id = id
+    link.rel = 'apple-touch-icon'
+    link.href = href
+    document.head.appendChild(link)
+    return () => {
+      document.getElementById(id)?.remove()
+    }
+  }, [pwaManifest])
+
   return (
     <div
-      style={vars}
-      className="min-h-screen bg-gray-100 flex items-center justify-center p-4"
+      className="sf-storefront-root min-h-[100dvh] w-full md:min-h-screen md:flex md:items-center md:justify-center md:bg-gray-100 md:p-4"
+      style={brandVars}
     >
-      <div className="w-full max-w-[400px] h-[850px] bg-white rounded-[40px] shadow-2xl overflow-hidden relative border-8 border-gray-900 ring-1 ring-gray-900/5">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-7 bg-gray-900 rounded-b-3xl z-50" />
+      {/* Phone preview frame — md+ only; mobile uses full viewport width */}
+      <div className="relative flex h-[100dvh] w-full min-h-0 flex-col overflow-hidden bg-white md:h-[850px] md:max-w-[400px] md:rounded-[40px] md:border-8 md:border-gray-900 md:shadow-2xl md:ring-1 md:ring-gray-900/5">
         <div
-          className="relative h-full w-full overflow-y-auto no-scrollbar bg-[var(--sf-shell,#2563EB)] transition-[background-color] duration-300"
-        >
+          className="pointer-events-none absolute top-0 left-1/2 z-50 hidden h-7 w-40 -translate-x-1/2 rounded-b-3xl bg-gray-900 md:block"
+          aria-hidden
+        />
+        <div className="relative min-h-0 flex-1 w-full overflow-y-auto overflow-x-hidden no-scrollbar bg-[var(--sf-shell,#2563EB)] transition-[background-color] duration-300">
           {children}
         </div>
       </div>

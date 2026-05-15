@@ -90,7 +90,7 @@ function LoginPageInner() {
       </div>
 
       <div className="mb-10 text-center">
-        <h2 className="mb-2 text-[28px] font-bold tracking-tight text-[#1E1B4B]">Welcome back</h2>
+        <h2 className="mb-2 text-[28px] font-bold tracking-tight text-[var(--sf-ink,#1E1B4B)]">Welcome back</h2>
         <p className="px-4 text-[15px] leading-normal text-gray-500">Sign in with your email and password</p>
       </div>
 
@@ -133,7 +133,7 @@ function LoginPageInner() {
           <button
             type="button"
             onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--sf-primary,#2563EB)] transition-colors hover:text-[#1d4ed8]"
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--sf-primary,#2563EB)] transition-colors hover:text-[var(--sf-button-hover,#1e3a8a)]"
           >
             {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
           </button>

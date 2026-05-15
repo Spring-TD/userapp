@@ -4,6 +4,7 @@ import type { PWAInstallElement } from '@khmyznikov/pwa-install';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Download, X } from 'lucide-react';
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
+import { manifestDescription, pickManifestIconUrl, storefrontDisplayName } from '@/lib/webAppManifest';
 import { Button } from '@/components/ui/button';
 
 function isStandaloneDisplay(): boolean {
@@ -39,7 +40,7 @@ export type StorefrontPwaInstallProps = {
  * `pwaInstall` from resolve is used for display metadata when present.
  */
 export function StorefrontPwaInstall({ installAppId }: StorefrontPwaInstallProps) {
-  const { appId: tenantAppId, ready, pwaInstall } = useMobileV2Tenant();
+  const { appId: tenantAppId, ready, pwaInstall, pwaManifest } = useMobileV2Tenant();
   const pwaRef = useRef<PWAInstallElement | null>(null);
   const [moduleLoaded, setModuleLoaded] = useState(false);
   const [iosHintOpen, setIosHintOpen] = useState(false);
@@ -116,12 +117,15 @@ export function StorefrontPwaInstall({ installAppId }: StorefrontPwaInstallProps
       // Probe the manifest endpoint so we know whether the browser will be able
       // to satisfy install criteria. If the upstream is unreachable or replies
       // with an error, fall back to a manual "Add to Home Screen" overlay.
-      let manifestOk = false;
-      try {
-        const head = await fetch(manifestHref, { method: 'GET', cache: 'no-store' });
-        manifestOk = head.ok;
-      } catch {
-        manifestOk = false;
+      // Resolve already returned `pwaManifest` — skip another upstream manifest round-trip.
+      let manifestOk = Boolean(pwaManifest);
+      if (!manifestOk) {
+        try {
+          const head = await fetch(manifestHref, { method: 'GET', cache: 'no-store' });
+          manifestOk = head.ok;
+        } catch {
+          manifestOk = false;
+        }
       }
 
       if (!manifestOk) {
@@ -146,7 +150,7 @@ export function StorefrontPwaInstall({ installAppId }: StorefrontPwaInstallProps
     } finally {
       setBusy(false);
     }
-  }, [busy, isApple, standalone, manifestHref]);
+  }, [busy, isApple, standalone, manifestHref, pwaManifest]);
 
   // Hide only when already installed (standalone). The button stays visible at the
   // top-left of the onboarding header even before the tenant `appId` resolves, so
@@ -157,15 +161,17 @@ export function StorefrontPwaInstall({ installAppId }: StorefrontPwaInstallProps
   }
 
   const name =
-    typeof pwaInstall?.name === 'string' && pwaInstall.name.trim()
-      ? pwaInstall.name.trim()
-      : 'App';
+    storefrontDisplayName(pwaManifest) ||
+    (typeof pwaInstall?.name === 'string' && pwaInstall.name.trim() ? pwaInstall.name.trim() : '') ||
+    'App';
   const description =
-    typeof pwaInstall?.description === 'string' && pwaInstall.description.trim()
+    manifestDescription(pwaManifest) ||
+    (typeof pwaInstall?.description === 'string' && pwaInstall.description.trim()
       ? pwaInstall.description.trim()
-      : undefined;
+      : undefined);
   const iconCandidate =
-    typeof pwaInstall?.icon === 'string' && pwaInstall.icon.trim() ? pwaInstall.icon.trim() : undefined;
+    pickManifestIconUrl(pwaManifest) ||
+    (typeof pwaInstall?.icon === 'string' && pwaInstall.icon.trim() ? pwaInstall.icon.trim() : undefined);
 
   const installButton = (
     <button
@@ -207,7 +213,7 @@ export function StorefrontPwaInstall({ installAppId }: StorefrontPwaInstallProps
           <span className="whitespace-nowrap">(□↑)</span> and choose{' '}
           <strong>Add to Home Screen</strong>.
         </p>
-        <Button className="mt-4 w-full rounded-xl bg-[#1E40AF]" type="button" onClick={() => setIosHintOpen(false)}>
+        <Button className="mt-4 w-full rounded-xl bg-[var(--sf-button,#1E40AF)]" type="button" onClick={() => setIosHintOpen(false)}>
           OK
         </Button>
       </div>
@@ -243,7 +249,7 @@ export function StorefrontPwaInstall({ installAppId }: StorefrontPwaInstallProps
           <strong>Add to Home Screen</strong>.
         </p>
         <Button
-          className="mt-4 w-full rounded-xl bg-[#1E40AF]"
+          className="mt-4 w-full rounded-xl sf-btn"
           type="button"
           onClick={() => setFallbackOpen(false)}
         >

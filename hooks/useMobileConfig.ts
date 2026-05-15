@@ -103,7 +103,7 @@ const DEFAULT_CONFIG: MobileAppConfig = {
 
 /**
  * Hook to fetch optional **`GET /api/apps/[appId]/configuration/public`** when `appId` is set.
- * Splash colors / app name are overlaid from the manifest in `mobile-v2/page.tsx` via **`applyManifestToMobileAppConfig`**.
+ * Splash colors / logo / app name are overlaid from resolve **`pwaManifest`** in `mobile-v2/page.tsx` via **`applyManifestToMobileAppConfig`**.
  */
 export function useMobileConfig(options: UseMobileConfigOptions = {}): UseMobileConfigReturn {
   const [config, setConfig] = useState<MobileAppConfig | null>(null);

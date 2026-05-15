@@ -38,4 +38,4 @@ export function MortgageSheet({ open, onClose, children, maxHeightClassName }: M
   )
 }
 
-export const MORTGAGE_PRIMARY = 'bg-[#2E5AAC] hover:bg-[#265499] text-white'
+export const MORTGAGE_PRIMARY = 'bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white'
