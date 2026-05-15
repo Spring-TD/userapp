@@ -1,7 +1,7 @@
 /**
  * Wildcard-subdomain helpers for mobile v2.
- * Set NEXT_PUBLIC_MOBILE_ROOT_DOMAIN to your apex (e.g. springtd.com) so we can
- * parse myshop.springtd.com → myshop. Without it, only ?appId / ?subdomain / session apply.
+ * When `rootDomain` is omitted, multi-label hosts (e.g. `shop.example.com`) still yield `shop`
+ * via a simple heuristic; use `?subdomain=` on localhost.
  */
 
 const RESERVED_SUBDOMAINS = new Set([

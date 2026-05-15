@@ -105,7 +105,7 @@ const SELECT_OPTIONS = {
 export function MortgageApplyFlow({ productId }: { productId: string }) {
   const router = useRouter()
   const { appId: tenantAppId, ready: tenantReady } = useMobileV2Tenant()
-  const springAppId = tenantAppId ?? process.env.NEXT_PUBLIC_SPRING_APP_ID
+  const springAppId = tenantAppId ?? undefined
 
   const { products, loading, getProductById } = useMobileProducts({
     type: 'Mortgage',

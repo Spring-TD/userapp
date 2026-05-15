@@ -1,66 +1,20 @@
 # Mobile V2 User App
 
-This repository is now focused on the **Mobile V2 user experience** (`/mobile-v2`) and its authentication + profile flows.
+## What happens when someone opens the app
 
-## Main App Route
+1. **`GET /api/v1/apps/resolve/{subdomain}`** (via **`/api/apps/resolve-subdomain/...`**) — returns **`data.id`** (app id), **`data.merchantId`**, optional **`data.pwaInstall`** (URLs only, not the manifest body).
+2. **`GET /api/v1/apps/{id}/pwa/manifest.webmanifest`** (proxied as **`/api/apps/{id}/pwa/manifest.webmanifest`** or **`/api/apps/{id}/pwa/manifest`**) — Web App Manifest JSON. **404** usually means there is no **published** PWA for that app yet; the UI keeps defaults.
 
-- Start route: `/mobile-v2`
-- Local entry URL: `http://localhost:3000/mobile-v2`
+`MobileV2TenantProvider` runs (1) then (2). Splash/onboarding merge manifest fields into the UI; `MobileV2ThemedChrome` uses the same manifest for shell colors.
 
-## Current Scope
+## Env
 
-- Mobile onboarding and splash
-- Mobile V2 auth:
-  - signup
-  - login
-  - OTP verification
-  - forgot/reset password UI flow
-- Mobile V2 home, accounts, transactions, products, and profile screens
-- Redux-based state management for auth/mobile auth
-- Next.js API proxy routes under `app/api` for backend gateway communication
+Use your project `.env` (e.g. **`NEXT_PUBLIC_API_URL`** for the gateway that serves resolve + manifest, plus your server secrets). Tenant **`id` / `merchantId`** are stored in **sessionStorage** keys defined in `lib/mobileTenant/storageKeys.ts` (not env vars).
 
-## Tech Stack
-
-- Next.js 15 (App Router)
-- React 19
-- TypeScript
-- Tailwind CSS
-- Redux Toolkit
-
-## Project Structure (Mobile V2 Relevant)
-
-- `app/mobile-v2` - Mobile V2 pages and route segments
-- `store` - Redux slices and store setup
-- `app/api` - Next.js route handlers/proxy endpoints
-- `lib` - API helpers, validation, shared utilities
-- `components` - shared UI building blocks
-
-## Environment Variables
-
-Set these in `.env`:
-
-- `NEXT_PUBLIC_API_URL` - client auth gateway base URL
-```
-
-## Run Locally
+## Run
 
 ```bash
-npm install
-npm run dev
+npm install && npm run dev
 ```
 
-Then open:
-
-- `http://localhost:3000/mobile-v2`
-
-## Notes
-
-- Mobile signup submits backend-compatible fields:
-  - `user_merchant_id`
-  - `first_name`
-  - `last_name`
-  - `email`
-  - `phone`
-  - `country`
-  - `password`
-- OTP and password endpoints are proxied through `app/api` routes for consistent error handling and browser-safe requests.
+Open `http://localhost:3000` or `/mobile-v2` depending on your `app/page.tsx` setup.

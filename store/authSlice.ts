@@ -74,6 +74,10 @@ export const loadUserFromTokenThunk = createAsyncThunk<AuthUser | null>(
   async () => {
     try {
       const res = await fetch("/api/auth/validate", { method: "GET", credentials: "include" })
+      if (!res.ok) {
+        const user = getUserFromToken()
+        return (user as any) || null
+      }
       const data = await res.json()
       if (data?.valid && data?.user) {
         return data.user as AuthUser

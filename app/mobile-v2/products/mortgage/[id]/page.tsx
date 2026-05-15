@@ -23,7 +23,7 @@ function MortgageDetailInner() {
   const productId = typeof rawId === 'string' ? decodeURIComponent(rawId) : ''
 
   const { appId: tenantAppId, ready: tenantReady } = useMobileV2Tenant()
-  const springAppId = tenantAppId ?? process.env.NEXT_PUBLIC_SPRING_APP_ID
+  const springAppId = tenantAppId ?? undefined
 
   const { products, loading, getProductById } = useMobileProducts({
     type: 'Mortgage',

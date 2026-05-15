@@ -5,6 +5,7 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from "axios"
 import { getAccessToken } from "@/lib/cookieAuth"
+import { TENANT_APP_ID_STORAGE_KEY, TENANT_MERCHANT_ID_STORAGE_KEY } from "@/lib/mobileTenant/storageKeys"
 
 // Use relative URL so requests go through our own Next.js API proxy
 export interface ApiRequestConfig extends AxiosRequestConfig {
@@ -61,13 +62,13 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig & { includeAuth
   if (typeof window !== "undefined" && config.headers) {
     const h = config.headers as Record<string, string>
     try {
-      const tid = sessionStorage.getItem("mobile-v2-tenant-app-id")
+      const tid = sessionStorage.getItem(TENANT_APP_ID_STORAGE_KEY)
       if (tid) h["x-tenant-app-id"] = tid
     } catch {
       /* ignore */
     }
     try {
-      const mid = sessionStorage.getItem("mobile-v2-tenant-merchant-id")
+      const mid = sessionStorage.getItem(TENANT_MERCHANT_ID_STORAGE_KEY)
       if (mid) h["x-tenant-merchant-id"] = mid
     } catch {
       /* ignore */

@@ -84,15 +84,19 @@ function EmptyState({
             )}
             {tenantAppId ? (
                 <p className="mt-3 text-[11px] text-gray-400 max-w-[300px]">
-                    Current app filter: <code className="rounded bg-gray-100 px-1">{tenantAppId}</code>. Try opening the
-                    app with <code className="rounded bg-gray-100 px-1">?appId=…</code> or set{' '}
-                    <code className="rounded bg-gray-100 px-1">NEXT_PUBLIC_SPRING_APP_ID</code> to match the app that owns
-                    the products.
+                    Current app id from the store: <code className="rounded bg-gray-100 px-1">{tenantAppId}</code>. If
+                    this is wrong, open the storefront from your tenant subdomain or add{' '}
+                    <code className="rounded bg-gray-100 px-1">?subdomain=…</code> /{' '}
+                    <code className="rounded bg-gray-100 px-1">?appId=…</code> once; it is stored for this session.
                 </p>
             ) : (
                 <p className="mt-3 text-[11px] text-gray-400 max-w-[300px]">
-                    Add <code className="rounded bg-gray-100 px-1">?appId=YOUR_SPRING_APP_ID</code> to the URL once, then
-                    reload — it&apos;s stored for this session.
+                    Products are loaded using the app id returned by{' '}
+                    <code className="rounded bg-gray-100 px-1">GET /api/v1/apps/resolve/&lt;subdomain&gt;</code> (or add{' '}
+                    <code className="rounded bg-gray-100 px-1">?appId=…</code> /{' '}
+                    <code className="rounded bg-gray-100 px-1">?subdomain=…</code> for local testing).{' '}
+                    <code className="rounded bg-gray-100 px-1">?merchant_id=…</code> alone sets signup headers but does not
+                    resolve an app id.
                 </p>
             )}
         </div>
@@ -327,7 +331,7 @@ interface MobileV2ProductListProps {
 
 export function MobileV2ProductList({ productType }: MobileV2ProductListProps) {
     const { appId: tenantAppId, ready: tenantReady, error: tenantError } = useMobileV2Tenant();
-    const springAppId = tenantAppId ?? process.env.NEXT_PUBLIC_SPRING_APP_ID;
+    const springAppId = tenantAppId ?? undefined;
     const { products, loading, error, getProductsByType } = useMobileProducts({
         springAppId: springAppId || undefined,
         autoFetch: true,
