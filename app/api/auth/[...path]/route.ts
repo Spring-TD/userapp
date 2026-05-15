@@ -3,6 +3,7 @@ import https from 'node:https';
 import axios from 'axios';
 import { BACKEND } from '@/lib/endpoints';
 import { getPlataAuthApiBaseUrl } from '@/lib/plataAuthBaseUrl';
+import { forwardStorefrontHeaders } from '@/lib/server/forwardStorefrontHeaders';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,15 +26,15 @@ const axiosConfig = {
   httpsAgent,
   headers: { 'Content-Type': 'application/json' },
   validateStatus: () => true,
+  timeout: 25_000,
 };
 
-function forwardTenantHeaders(request: NextRequest): Record<string, string> {
-  const out: Record<string, string> = {}
-  const appId = request.headers.get('x-tenant-app-id')?.trim()
-  const merchantId = request.headers.get('x-tenant-merchant-id')?.trim()
-  if (appId) out['x-tenant-app-id'] = appId
-  if (merchantId) out['x-tenant-merchant-id'] = merchantId
-  return out
+function mergeStorefrontHeaders(request: NextRequest, extra?: Record<string, string>) {
+  return {
+    ...(axiosConfig.headers as Record<string, string>),
+    ...forwardStorefrontHeaders(request),
+    ...extra,
+  }
 }
 
 const cookieOpts = (maxAge: number) => ({
@@ -81,7 +82,10 @@ export class Auth {
     const loginUrl = buildUrl(BACKEND.auth.login);
     try {
       const body = await request.json();
-      const res = await axios.post(loginUrl, body, axiosConfig);
+      const res = await axios.post(loginUrl, body, {
+        ...axiosConfig,
+        headers: mergeStorefrontHeaders(request),
+      });
       return NextResponse.json(res.data, { status: res.status });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Login failed';
@@ -99,17 +103,32 @@ export class Auth {
   }
 
   static async register(request: NextRequest) {
+    const url = buildUrl(BACKEND.registration.user);
     try {
       const body = await request.json();
-      const tenant = forwardTenantHeaders(request);
-      const res = await axios.post(buildUrl(BACKEND.registration.user), body, {
+      const headers = mergeStorefrontHeaders(request);
+      console.log('[Auth] register → upstream', {
+        url,
+        tenantHeaders: {
+          'x-tenant-subdomain': headers['x-tenant-subdomain'],
+          'x-tenant-app-id': headers['x-tenant-app-id'],
+          'x-tenant-merchant-id': headers['x-tenant-merchant-id'],
+          'X-Forwarded-Host': headers['X-Forwarded-Host'],
+        },
+      });
+      const res = await axios.post(url, body, {
         ...axiosConfig,
-        headers: { ...(axiosConfig.headers as Record<string, string>), ...tenant },
+        headers,
+      });
+      console.log('[Auth] register ← upstream', {
+        status: res.status,
+        success: (res.data as { success?: boolean })?.success,
+        error: (res.data as { error?: string })?.error,
       });
       return NextResponse.json(res.data, { status: res.status });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Registration failed';
-      console.error('[Auth] register:', msg);
+      console.error('[Auth] register:', msg, url);
       return NextResponse.json({ success: false, error: msg }, { status: 500 });
     }
   }
@@ -117,10 +136,9 @@ export class Auth {
   static async registerMerchant(request: NextRequest) {
     try {
       const body = await request.json();
-      const tenant = forwardTenantHeaders(request);
       const res = await axios.post(buildUrl(BACKEND.registration.merchant), body, {
         ...axiosConfig,
-        headers: { ...(axiosConfig.headers as Record<string, string>), ...tenant },
+        headers: mergeStorefrontHeaders(request),
       });
       return NextResponse.json(res.data, { status: res.status });
     } catch (err: unknown) {
@@ -288,6 +306,18 @@ export class Auth {
     }
   }
 
+  static async otpGenerate(request: NextRequest) {
+    try {
+      const body = await request.json();
+      const res = await axios.post(buildUrl(BACKEND.otp.generate), body, axiosConfig);
+      return NextResponse.json(res.data, { status: res.status });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to generate OTP';
+      console.error('[Auth] otpGenerate:', msg);
+      return NextResponse.json({ success: false, error: msg }, { status: 500 });
+    }
+  }
+
   /** POST /api/v1/password/forgot — Public. No auth. Sends password-reset link or OTP to the given email. */
   static async passwordForgot(request: NextRequest) {
     const url = buildUrl(BACKEND.password.forgot);
@@ -424,19 +454,48 @@ export class Auth {
   }
 
   static async emailExists(request: NextRequest, email: string) {
-    if (!email?.trim()) {
+    const normalized = email?.trim().toLowerCase();
+    if (!normalized) {
       return NextResponse.json({ success: false, error: 'Email is required' }, { status: 400 });
     }
-    const url = buildUrl(BACKEND.auth.emailExists(email));
+    const url = buildUrl(BACKEND.auth.emailExists(normalized));
     try {
       const res = await axios.get(url, axiosConfig);
-      return NextResponse.json(res.data, { status: res.status });
+      if (res.status === 404) {
+        return NextResponse.json({ success: true, exists: false }, { status: 200 });
+      }
+      const data = res.data as { exists?: boolean; data?: { exists?: boolean } };
+      const exists =
+        typeof data?.exists === 'boolean'
+          ? data.exists
+          : typeof data?.data?.exists === 'boolean'
+            ? data.data.exists
+            : false;
+      return NextResponse.json(
+        typeof data === 'object' && data !== null ? { ...data, exists } : { success: true, exists },
+        { status: res.status >= 400 ? 200 : res.status },
+      );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Request failed';
       console.error('[Auth] emailExists:', msg, url);
-      return NextResponse.json({ success: false, error: msg }, { status: 500 });
+      // Optional pre-check — do not block signup when upstream is unavailable.
+      return NextResponse.json({ success: true, exists: false, skipped: true }, { status: 200 });
     }
   }
+}
+
+export function emailFromEmailExistsRequest(request: NextRequest, pathKey: string): string | null {
+  if (pathKey === 'email-exists') {
+    const q = new URL(request.url).searchParams.get('email')?.trim();
+    if (q) return q;
+    return null;
+  }
+  if (pathKey.startsWith('email-exists/')) {
+    const raw = pathKey.slice('email-exists/'.length);
+    // Path segments may turn `+` into space — restore for plus-addressed emails.
+    return decodeURIComponent(raw.replace(/ /g, '+'));
+  }
+  return null;
 }
 
 type RouteParams = { params: Promise<{ path: string[] }> };
@@ -450,10 +509,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   if (key === 'get-token') return Auth.getToken(request);
   if (key === 'validate') return Auth.validateGet(request);
   if (key === 'me') return Auth.me(request);
-  if (key.startsWith('email-exists/')) {
-    const email = decodeURIComponent(key.slice('email-exists/'.length));
-    return Auth.emailExists(request, email);
-  }
+  const emailParam = emailFromEmailExistsRequest(request, key);
+  if (emailParam) return Auth.emailExists(request, emailParam);
   return NextResponse.json({ error: 'Not found' }, { status: 404 });
 }
 

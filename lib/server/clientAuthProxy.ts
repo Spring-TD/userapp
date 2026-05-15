@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { getApiBaseUrl } from "@/lib/apiBaseUrl"
 import { isAllowedClientAuthMsPath } from "@/lib/clientAuthMsAllowlist"
+import { forwardStorefrontHeaders } from "@/lib/server/forwardStorefrontHeaders"
 
 const UPSTREAM_TIMEOUT_MS = 25_000
 const UPSTREAM_RETRIES = 2
@@ -21,7 +22,7 @@ function buildUpstreamUrl(segments: string[], search: string): string {
 }
 
 export function forwardClientAuthHeaders(request: NextRequest): Record<string, string> {
-  const out: Record<string, string> = {}
+  const out: Record<string, string> = { ...forwardStorefrontHeaders(request) }
   const cookieAccessToken = request.cookies.get("accessToken")?.value
   const auth =
     request.headers.get("authorization") ||
@@ -64,11 +65,38 @@ export async function proxyClientAuthRequest(
   const url = buildUpstreamUrl(segments, request.nextUrl.search)
   const method = request.method.toUpperCase()
   const headers = forwardClientAuthHeaders(request)
+  const pathKey = segments.join("/")
+  const isRegistration = pathKey.startsWith("registration/")
+  const isOtp = pathKey.startsWith("otp/")
 
   let body: Buffer | undefined
+  let bodyLog: unknown
   if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
     const buf = await request.arrayBuffer()
-    if (buf.byteLength > 0) body = Buffer.from(buf)
+    if (buf.byteLength > 0) {
+      body = Buffer.from(buf)
+      try {
+        const parsed = JSON.parse(body.toString("utf8")) as Record<string, unknown>
+        bodyLog = { ...parsed, password: parsed.password ? "[REDACTED]" : undefined }
+      } catch {
+        bodyLog = `[${buf.byteLength} bytes]`
+      }
+    }
+  }
+
+  if (isRegistration || isOtp) {
+    console.log("[mobile-auth][proxy] → upstream", {
+      method,
+      pathKey,
+      url,
+      tenantHeaders: {
+        "x-tenant-subdomain": headers["x-tenant-subdomain"],
+        "x-tenant-app-id": headers["x-tenant-app-id"],
+        "x-tenant-merchant-id": headers["x-tenant-merchant-id"],
+        "X-Forwarded-Host": headers["X-Forwarded-Host"],
+      },
+      body: bodyLog,
+    })
   }
 
   let lastError: unknown
@@ -87,6 +115,19 @@ export async function proxyClientAuthRequest(
 
     try {
       const res = await axios.request(config)
+      if (isRegistration || isOtp) {
+        const data = res.data as Record<string, unknown> | null
+        console.log("[mobile-auth][proxy] ← upstream", {
+          pathKey,
+          status: res.status,
+          success: data?.success,
+          error: data?.error,
+          userId: (data?.user as Record<string, unknown> | undefined)?.id,
+          verificationEmailSent: data?.verificationEmailSent,
+          exists: data?.exists,
+          valid: data?.valid,
+        })
+      }
       return NextResponse.json(res.data, { status: res.status })
     } catch (e) {
       lastError = e

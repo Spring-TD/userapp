@@ -1,7 +1,8 @@
 import { createAsyncThunk, createSlice, type PayloadAction } from "@reduxjs/toolkit"
-import api from "@/lib/api"
+import { apiClient } from "@/lib/api"
 import { ENDPOINTS } from "@/lib/endpoints"
 import { setSecureTokens, clearSecureTokens, getUserFromToken } from "@/lib/tokenManager"
+import { clientAuthErrorFromResponse, normalizeClientAuthError } from "@/lib/normalizeClientAuthError"
 import type {
   AuthUser,
   LoginRequestDto,
@@ -29,7 +30,11 @@ export const loginThunk = createAsyncThunk<
   { rejectValue: string }
 >("auth/login", async (payload, { rejectWithValue }) => {
   try {
-    const response = await api.post<LoginResponseDto>(ENDPOINTS.auth.login, payload)
+    const response = await apiClient.post<LoginResponseDto>(ENDPOINTS.auth.login, payload, { includeAuth: false })
+    const loginFailure = clientAuthErrorFromResponse(response.data, response.status)
+    if (loginFailure) {
+      return rejectWithValue(loginFailure.message)
+    }
     const responseData = response.data
 
     let userData: AuthUser | undefined
@@ -59,13 +64,8 @@ export const loginThunk = createAsyncThunk<
 
     const fallbackUser = getUserFromToken()
     return (userData as AuthUser) || (fallbackUser as unknown as AuthUser) || rejectWithValue("Unable to resolve user from token")
-  } catch (error: any) {
-    const errorMessage =
-      error?.response?.data?.message ||
-      error?.response?.data?.error ||
-      error?.message ||
-      "Signin failed"
-    return rejectWithValue(errorMessage)
+  } catch (error: unknown) {
+    return rejectWithValue(normalizeClientAuthError(error))
   }
 })
 
@@ -100,7 +100,7 @@ export const registerMerchantThunk = createAsyncThunk<
   { rejectValue: string }
 >("auth/registerMerchant", async (payload, { rejectWithValue }) => {
   try {
-    await api.post(ENDPOINTS.auth.signup.merchant, payload)
+    await apiClient.post(ENDPOINTS.auth.signup.merchant, payload)
   } catch (error: any) {
     const errorMessage =
       error?.response?.data?.message ||

@@ -10,6 +10,7 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { clearAuthError, loginThunk } from '@/store/authSlice';
 import { clearMobileClientAuthError } from '@/store/mobileClientAuthSlice';
 import { AuthRouteSkeleton } from '@/components/mobile-v2/data-skeletons';
+import { showAuthError } from '@/lib/showAuthError';
 
 const DEFAULT_POST_LOGIN = '/mobile-v2/home';
 
@@ -39,14 +40,15 @@ function LoginPageInner() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     if (error) {
-      toast.error(error);
+      setSubmitError(showAuthError(error));
       dispatch(clearAuthError());
     }
     if (mobileErr) {
-      toast.error(mobileErr);
+      setSubmitError(showAuthError(mobileErr));
       dispatch(clearMobileClientAuthError());
     }
   }, [error, mobileErr, dispatch]);
@@ -60,16 +62,17 @@ function LoginPageInner() {
   };
 
   const handleLogin = async () => {
+    setSubmitError(null);
     const { ok, errors } = validate();
     if (!ok) {
       const msg = errors.email || errors.password;
-      if (msg) toast.error(msg);
+      if (msg) setSubmitError(showAuthError(msg));
       return;
     }
     const res = await dispatch(loginThunk({ email: email.trim().toLowerCase(), password }));
     if (loginThunk.rejected.match(res)) {
       const status = (res.error as { message?: string })?.message;
-      toast.error(res.payload ?? status ?? 'Sign in failed.');
+      setSubmitError(showAuthError(res.payload ?? status ?? 'Sign in failed.'));
       return;
     }
 
@@ -95,6 +98,11 @@ function LoginPageInner() {
       </div>
 
       <div className="min-h-0 flex-1 space-y-6">
+        {submitError ? (
+          <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900" role="alert">
+            {submitError}
+          </p>
+        ) : null}
         <div className="group relative">
           <input
             id="email"

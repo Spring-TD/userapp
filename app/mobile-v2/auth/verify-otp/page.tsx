@@ -9,7 +9,6 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp
 import { toast } from 'sonner';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { clearMobileClientAuthError, resendOtpThunk, verifyOtpThunk } from '@/store/mobileClientAuthSlice';
-import { setSecureTokens } from '@/lib/tokenManager';
 
 function VerifyOtpContent() {
   const router = useRouter();
@@ -46,31 +45,25 @@ function VerifyOtpContent() {
       toast.warning('Enter the 6-digit code.');
       return;
     }
-    const res = await dispatch(
-      verifyOtpThunk({
-        identifier: email,
-        code,
-        purpose: 'verification',
-      }),
-    );
-    if (verifyOtpThunk.rejected.match(res)) {
-      toast.error(res.payload ?? 'Invalid or expired code.');
-      return;
+    try {
+      await dispatch(
+        verifyOtpThunk({
+          identifier: email,
+          code,
+          purpose: 'verification',
+        }),
+      ).unwrap()
+    } catch (err: unknown) {
+      const msg =
+        (typeof err === 'string' ? err : null) ||
+        (err instanceof Error ? err.message : null) ||
+        'Invalid or expired code.'
+      toast.error(msg)
+      return
     }
-    const data = res.payload as {
-      data?: { accessToken?: string; refreshToken?: string; tokens?: { accessToken?: string; refreshToken?: string } }
-      accessToken?: string
-      refreshToken?: string
-    }
-    const access =
-      data?.data?.tokens?.accessToken ?? data?.data?.accessToken ?? data?.accessToken
-    const refresh =
-      data?.data?.tokens?.refreshToken ?? data?.data?.refreshToken ?? data?.refreshToken
-    if (access) {
-      await setSecureTokens(access, refresh)
-    }
-    toast.success('Email verified. Continue to start KYC.');
-    router.push('/mobile-v2/profile/kyc/create?from=registration');
+
+    toast.success('Email verified. You can sign in or continue setup.')
+    router.push(`/mobile-v2/auth/login?next=${encodeURIComponent('/mobile-v2/profile/kyc/create?from=registration')}`)
   };
 
   const handleResend = async () => {
