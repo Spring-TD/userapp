@@ -6,9 +6,18 @@ export const dynamic = "force-dynamic"
 
 type RouteParams = { params: Promise<{ path: string[] }> }
 
-async function handle(request: NextRequest, params: RouteParams) {
+function normalizeProxySegments(path: string[] | string | undefined): string[] {
+  if (path == null) return []
+  if (Array.isArray(path)) return path.map((s) => s.trim()).filter(Boolean)
+  return String(path)
+    .split("/")
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+async function handle(request: NextRequest, { params }: RouteParams) {
   const { path } = await params
-  return proxyClientAuthRequest(request, path || [])
+  return proxyClientAuthRequest(request, normalizeProxySegments(path))
 }
 
 export async function GET(request: NextRequest, ctx: RouteParams) {

@@ -16,6 +16,7 @@ import {
   TENANT_APP_ID_STORAGE_KEY,
   TENANT_MERCHANT_ID_STORAGE_KEY,
   TENANT_PWA_MANIFEST_STORAGE_KEY,
+  TENANT_SUBDOMAIN_STORAGE_KEY,
 } from "@/lib/mobileTenant/storageKeys"
 import type { StorefrontPwaInstallPayload } from "@/lib/storefrontPwaTypes"
 import { parseWebAppManifestBranding, storefrontDisplayName, type WebAppManifestBranding } from "@/lib/webAppManifest"
@@ -45,6 +46,7 @@ async function resolveSubdomain(slug: string) {
     data?: {
       appId?: string
       merchantId?: string
+      subdomain?: string
       pwaInstall?: StorefrontPwaInstallPayload
       pwaManifest?: unknown
     }
@@ -56,6 +58,7 @@ async function resolveSubdomain(slug: string) {
   return {
     appId: json.data.appId,
     merchantId: json.data.merchantId?.trim() || null,
+    subdomain: json.data.subdomain?.trim().toLowerCase() || slug,
     pwaInstall: json.data.pwaInstall && typeof json.data.pwaInstall === "object" ? json.data.pwaInstall : null,
     pwaManifest: parseWebAppManifestBranding(json.data.pwaManifest),
   }
@@ -71,9 +74,18 @@ function readCachedManifest(): WebAppManifestBranding | null {
   }
 }
 
+function readCachedSubdomain(): string | null {
+  try {
+    return sessionStorage.getItem(TENANT_SUBDOMAIN_STORAGE_KEY)?.trim().toLowerCase() || null
+  } catch {
+    return null
+  }
+}
+
 function persist(
   appId: string | null,
   merchantId: string | null,
+  subdomain: string | null,
   pwaManifest: WebAppManifestBranding | null,
 ) {
   try {
@@ -85,6 +97,12 @@ function persist(
   try {
     if (merchantId) sessionStorage.setItem(TENANT_MERCHANT_ID_STORAGE_KEY, merchantId)
     else sessionStorage.removeItem(TENANT_MERCHANT_ID_STORAGE_KEY)
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (subdomain) sessionStorage.setItem(TENANT_SUBDOMAIN_STORAGE_KEY, subdomain)
+    else sessionStorage.removeItem(TENANT_SUBDOMAIN_STORAGE_KEY)
   } catch {
     /* ignore */
   }
@@ -161,7 +179,7 @@ async function loadTenantFromNavigation(search: string) {
     pwaManifest = readCachedManifest()
   }
 
-  persist(appId, merchantId, pwaManifest)
+  persist(appId, merchantId, tenantSubdomain, pwaManifest)
 
   return { appId, merchantId, tenantSubdomain, pwaInstall, pwaManifest, error }
 }
@@ -183,6 +201,7 @@ export function MobileV2TenantProvider({ children }: { children: ReactNode }) {
     try {
       sessionStorage.removeItem(TENANT_APP_ID_STORAGE_KEY)
       sessionStorage.removeItem(TENANT_MERCHANT_ID_STORAGE_KEY)
+      sessionStorage.removeItem(TENANT_SUBDOMAIN_STORAGE_KEY)
       sessionStorage.removeItem(TENANT_PWA_MANIFEST_STORAGE_KEY)
     } catch {
       /* ignore */

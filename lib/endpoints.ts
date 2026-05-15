@@ -295,33 +295,51 @@ export const BACKEND = {
 } as const
 
 // ─── Frontend paths (relative to baseURL /api) for Next.js API proxy routes ───
-// Auth + password + OTP handled by /api/v1/auth/[...path] (shows v1 in request path)
-// Compliance (KYC) handled by single catch-all: /api/compliance/[...path]
+// Gateway-aligned public routes proxied via `/api/v1/client-ms/*` → account-ms `/api/v1/*`
+// Legacy auth shortcuts: `/api/v1/auth/register` → same as registration/user
 const AUTH_BASE = "/v1/auth"
 const USER_BASE = "/v1/user"
 const COMPLIANCE_BASE = "/compliance"
-/** Allowlisted proxy to client-auth-ms (`NEXT_PUBLIC_API_URL`) — see `app/api/v1/client-ms/[...path]/route.ts`. */
+/** Gateway-aligned routes (dedicated Next proxies under `/api/v1/...`). */
+const REGISTRATION_BASE = "/v1/registration"
+const OTP_BASE = "/v1/otp"
+/** Allowlisted catch-all proxy to account-ms gateway (`NEXT_PUBLIC_API_URL`). */
 const CLIENT_MS = "/v1/client-ms"
 
 export const ENDPOINTS = {
+  /** POST /api/v1/registration/user — retail signup (send `x-tenant-subdomain`). */
+  registration: {
+    user: `${REGISTRATION_BASE}/user`,
+    forms: `${CLIENT_MS}/registration/forms`,
+    merchant: `${CLIENT_MS}/registration/merchant`,
+    admin: `${CLIENT_MS}/registration/admin`,
+  },
+  /** POST /api/v1/otp/* — verify / resend / generate */
+  otp: {
+    verify: `${OTP_BASE}/verify`,
+    resend: `${OTP_BASE}/resend`,
+    generate: `${OTP_BASE}/generate`,
+  },
   auth: {
     login: `${AUTH_BASE}/login`,
     signup: {
       merchant: `${AUTH_BASE}/register/merchant`,
+      /** Legacy alias; prefer `ENDPOINTS.registration.user`. */
       user: `${AUTH_BASE}/register`,
       admin: `${AUTH_BASE}/register/admin`,
     },
     verify: {
       account: `${AUTH_BASE}/verify-account`,
       token: `${AUTH_BASE}/verify-token`,
-      // Frontend verify-email uses OTP verify endpoint: POST /api/v1/otp/verify
-      emailOtp: '/v1/otp/verify',
+      /** @deprecated Use `ENDPOINTS.otp.verify` */
+      emailOtp: `${OTP_BASE}/verify`,
     },
     otp: {
+      /** @deprecated Use `ENDPOINTS.otp.resend` */
       resendEmail: `${AUTH_BASE}/resend-email-otp`,
-      /** Proxied by app/api/v1/otp/generate/route.ts */
-      generate: `/v1/otp/generate`,
-      verify: `/v1/otp/verify`,
+      generate: `${OTP_BASE}/generate`,
+      verify: `${OTP_BASE}/verify`,
+      resend: `${OTP_BASE}/resend`,
     },
     password: {
       forgot: `${AUTH_BASE}/password/forgot`,
@@ -332,7 +350,8 @@ export const ENDPOINTS = {
     },
     me: `${AUTH_BASE}/me`,
     logout: `${AUTH_BASE}/logout`,
-    emailExists: (email: string) => `${AUTH_BASE}/email-exists/${encodeURIComponent(email)}`,
+    /** Query param avoids `+` / `@` mangling in URL path segments (e.g. plus-addressed Gmail). */
+    emailExists: (email: string) => `${AUTH_BASE}/email-exists?email=${encodeURIComponent(email)}`,
     sessions: {
       list: "/sessions",
       byId: (sessionId: string) => `/sessions/${encodeURIComponent(sessionId)}`,

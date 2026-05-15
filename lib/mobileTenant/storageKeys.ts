@@ -4,5 +4,7 @@
  */
 export const TENANT_APP_ID_STORAGE_KEY = "mobile-v2-tenant-app-id"
 export const TENANT_MERCHANT_ID_STORAGE_KEY = "mobile-v2-tenant-merchant-id"
+/** Storefront subdomain slug (e.g. crbc) for registration body + gateway headers. */
+export const TENANT_SUBDOMAIN_STORAGE_KEY = "mobile-v2-tenant-subdomain"
 /** Cached `pwaManifest` JSON from last successful resolve (survives flaky upstream). */
 export const TENANT_PWA_MANIFEST_STORAGE_KEY = "mobile-v2-tenant-pwa-manifest"

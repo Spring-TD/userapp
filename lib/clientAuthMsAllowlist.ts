@@ -11,8 +11,9 @@ export function isAllowedClientAuthMsPath(segments: string[]): boolean {
   switch (a) {
     case "registration": {
       const sub = segments[1]
+      if (segments.length === 1) return true
       if (sub === "forms" && segments.length === 2) return true
-      if ((sub === "merchant" || sub === "user" || sub === "admin") && segments.length === 2) return true
+      if ((sub === "merchant" || sub === "user" || sub === "admin") && segments.length >= 2) return true
       return false
     }
     case "auth":

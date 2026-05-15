@@ -15,21 +15,52 @@ import {
   registerMobileUserThunk,
   emailExistsThunk,
 } from '@/store/mobileClientAuthSlice';
-import type { MobileUserRegistrationDto } from '@/types/mobileClientAuth';
+import { buildMobileRegisterPayload, registrationVerificationEmailSent } from '@/lib/mobileRegistration';
 import {
+  normalizeRegistrationPhone,
   validateCountry,
   validateInternationalPhone,
   validateNamePart,
   validatePasswordForMobileUser,
 } from '@/lib/mobileUserAuthValidation';
+import type { MobileClientAuthReject } from '@/store/mobileClientAuthSlice';
 import { AuthRouteSkeleton } from '@/components/mobile-v2/data-skeletons';
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
+import { readTenantFromSession } from '@/lib/mobileTenant/readTenantFromSession';
+import { showAuthError } from '@/lib/showAuthError';
+import {
+  isMobileAuthDebugEnabled,
+  mobileAuthError,
+  mobileAuthLog,
+  mobileAuthWarn,
+  redactRegisterPayload,
+  summarizeAxiosError,
+} from '@/lib/mobileAuthDebug';
+
+function resolveSignupTenant(tenant: ReturnType<typeof useMobileV2Tenant>) {
+  const stored = readTenantFromSession();
+  return {
+    ready: tenant.ready,
+    error: tenant.error,
+    displayName: tenant.displayName,
+    appId: tenant.appId ?? stored.appId,
+    merchantId: tenant.merchantId ?? stored.merchantId,
+    subdomain: tenant.tenantSubdomain ?? stored.subdomain,
+  };
+}
 
 function SignupForm() {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const { loading, error } = useAppSelector((s) => s.mobileClientAuth);
-  const { ready: tenantReady, merchantId, error: tenantError, displayName } = useMobileV2Tenant();
+  const tenant = useMobileV2Tenant();
+  const t = resolveSignupTenant(tenant);
+  const tenantReady = t.ready;
+  const tenantError = t.error;
+  const displayName = t.displayName;
+  const appId = t.appId;
+  const merchantId = t.merchantId;
+  const resolvedSubdomain = t.subdomain;
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -43,19 +74,20 @@ function SignupForm() {
   const [country, setCountry] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (error) {
-      toast.error(error);
-      dispatch(clearMobileClientAuthError());
-    }
+    if (!error) return;
+    setSubmitError(showAuthError(error));
+    dispatch(clearMobileClientAuthError());
   }, [error, dispatch]);
 
   const validateForm = (): { ok: boolean; errors: Record<string, string> } => {
     const next: Record<string, string> = {};
-    if (tenantReady && !merchantId) {
+    if (tenantReady && !merchantId && !resolvedSubdomain) {
       next.user_merchant_id =
-        'This store could not be identified. Open the app from your tenant link (for example yourstore.tryspring.io), or add ?merchant_id=… to the URL for local testing.';
+        'This store could not be identified. Open the app from your tenant link (for example yourstore.tryspring.io), or add ?subdomain=… or ?merchant_id=… for local testing.';
     }
     const fn = validateNamePart(firstName, 'First name');
     if (fn) next.first_name = fn;
@@ -75,55 +107,121 @@ function SignupForm() {
   };
 
   const handleRegister = async () => {
-    const { ok, errors } = validateForm();
-    if (!ok) {
-      const first = Object.values(errors)[0];
-      if (first) toast.error(first);
+    if (isSubmitting) {
+      console.log('[signup] blocked — already submitting');
       return;
     }
+    setSubmitError(null);
+    setIsSubmitting(true);
 
-    const existsRes = await dispatch(emailExistsThunk(email.trim()));
-    if (emailExistsThunk.rejected.match(existsRes)) {
-      toast.error(existsRes.payload ?? 'Could not verify email.');
-      return;
-    }
-    if (existsRes.payload === true) {
-      toast.error('This email is already registered. Try signing in.');
-      return;
-    }
-
-    const payload: MobileUserRegistrationDto = {
-      first_name: firstName.trim(),
-      last_name: lastName.trim(),
-      email: email.trim().toLowerCase(),
-      phone: phone.trim(),
-      // Backend expects ISO alpha-2 (e.g. NG), same as Spring/Plata CountrySelect values uppercased.
-      country: country.trim().toUpperCase(),
-      password,
-    };
-
-    const reg = await dispatch(registerMobileUserThunk(payload));
-    if (registerMobileUserThunk.rejected.match(reg)) {
-      toast.error(reg.payload ?? 'Registration failed.');
-      return;
-    }
-
-    const gen = await dispatch(
-      generateOtpThunk({
-        identifier: payload.email,
-        channel: 'email',
-        purpose: 'verification',
-      }),
-    );
-    if (generateOtpThunk.rejected.match(gen)) {
-      toast.message('Account created', {
-        description: 'We could not send a new code automatically. Use Resend on the next screen if needed.',
+    try {
+      const signupTenant = resolveSignupTenant(tenant);
+      console.log('[signup] 1 start', {
+        tenantReady: signupTenant.ready,
+        subdomain: signupTenant.subdomain,
+        merchantId: signupTenant.merchantId,
+        appId: signupTenant.appId,
+        email: email.trim().toLowerCase(),
       });
-    } else {
-      toast.success('Check your email for the verification code.');
-    }
 
-    router.push(`/mobile-v2/auth/verify-otp?email=${encodeURIComponent(payload.email)}`);
+      const { ok, errors } = validateForm();
+      if (!ok) {
+        mobileAuthWarn('signup:validationFailed', { errors });
+        const first = Object.values(errors)[0];
+        if (first) setSubmitError(showAuthError(first));
+        return;
+      }
+      console.log('[signup] 2 validation passed');
+
+      const existsRes = await dispatch(emailExistsThunk(email.trim()));
+      console.log('[signup] 3 email-exists done', {
+        type: existsRes.type,
+        exists: existsRes.payload,
+      });
+      if (existsRes.payload === true) {
+        setSubmitError(showAuthError('This email is already registered. Try signing in.'));
+        return;
+      }
+
+      const normalizedPhone = normalizeRegistrationPhone(phone, country);
+      const payload = buildMobileRegisterPayload({
+        first_name: firstName,
+        last_name: lastName,
+        email,
+        phone: normalizedPhone,
+        country: country.trim().toUpperCase(),
+        password,
+        tenantSubdomain: signupTenant.subdomain,
+        merchantId: signupTenant.merchantId,
+        appId: signupTenant.appId,
+      });
+
+      console.log('[signup] 4 calling register', {
+        url: '/api/v1/registration/user',
+        payload: redactRegisterPayload(payload as unknown as Record<string, unknown>),
+      });
+
+      const regData = await dispatch(registerMobileUserThunk(payload)).unwrap();
+      console.log('[signup] 5 register success', {
+        userId: regData.user?.id,
+        verificationEmailSent: regData.verificationEmailSent,
+      });
+      mobileAuthLog('signup:registerSuccess', {
+        userId: regData.user?.id,
+        verificationEmailSent: regData.verificationEmailSent,
+      });
+
+      const walletNuban = regData.wallet?.virtualNuban?.accountNumber;
+      if (walletNuban) {
+        toast.success(`Account created. Your wallet account: ${walletNuban}`);
+      }
+
+      if (regData.walletProvisioningError) {
+        toast.message('Account created', {
+          description: 'Wallet setup is still in progress. You can continue with email verification.',
+        });
+      }
+
+      const otpAlreadySent = registrationVerificationEmailSent(regData);
+      if (!otpAlreadySent) {
+        const gen = await dispatch(
+          generateOtpThunk({
+            identifier: payload.email,
+            channel: 'email',
+            purpose: 'verification',
+          }),
+        );
+        if (generateOtpThunk.rejected.match(gen)) {
+          toast.message('Account created', {
+            description: 'We could not send a verification code. Tap Resend on the next screen.',
+          });
+        }
+      } else {
+        toast.success('Check your email for the 6-digit verification code.');
+      }
+
+      console.log('[signup] 6 navigate to verify-otp');
+      router.push(`/mobile-v2/auth/verify-otp?email=${encodeURIComponent(payload.email)}`);
+    } catch (err: unknown) {
+      console.error('[signup] FAILED', err, summarizeAxiosError(err));
+      mobileAuthError('signup:failed', {
+        ...summarizeAxiosError(err),
+        raw: err,
+      });
+      const p = err as MobileClientAuthReject | undefined;
+      const msg =
+        (typeof p === 'object' && p?.message) ||
+        (typeof err === 'string' ? err : null) ||
+        (err instanceof Error ? err.message : null) ||
+        'Registration failed. Please check your details and try again.';
+      if (p?.fieldErrors) {
+        setFieldErrors((prev) => ({ ...prev, ...p.fieldErrors! }));
+      }
+      setSubmitError(showAuthError(msg));
+    } finally {
+      setIsSubmitting(false);
+      mobileAuthLog('signup:finished');
+    }
   };
 
   return (
@@ -149,13 +247,25 @@ function SignupForm() {
         {!tenantReady && (
           <p className="rounded-xl bg-slate-100 px-3 py-2 text-xs text-slate-700">Loading store configuration…</p>
         )}
+        {submitError && (
+          <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900" role="alert">
+            {submitError}
+          </p>
+        )}
         {tenantError && (
           <p className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-900">{tenantError}</p>
         )}
-        {tenantReady && !merchantId && !tenantError && (
+        {isMobileAuthDebugEnabled() && (
+          <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-2 font-mono text-[10px] text-slate-600">
+            Debug on — open DevTools → Console, filter <strong>mobile-auth</strong>. Terminal shows{' '}
+            <strong>[mobile-auth][proxy]</strong> for register requests.
+          </p>
+        )}
+        {tenantReady && !merchantId && !resolvedSubdomain && !tenantError && (
           <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900">
             Missing tenant. Use your merchant storefront link (subdomain), or add{' '}
-            <code className="font-mono">?merchant_id=…</code> for local testing.
+            <code className="font-mono">?subdomain=…</code> / <code className="font-mono">?merchant_id=…</code>{' '}
+            for local testing.
           </p>
         )}
 
@@ -276,14 +386,22 @@ function SignupForm() {
         {fieldErrors.terms && <p className="text-xs text-red-600">{fieldErrors.terms}</p>}
       </div>
 
-      <div className="mb-4 mt-4">
+      <div className="mb-4 mt-4 space-y-3">
+        {submitError ? (
+          <p
+            className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-900"
+            role="alert"
+          >
+            {submitError}
+          </p>
+        ) : null}
         <Button
           type="button"
           className="h-14 w-full rounded-[20px] bg-[var(--sf-button,#1E40AF)] text-base font-medium text-white shadow-lg shadow-blue-900/20 hover:opacity-95"
-          disabled={loading || !tenantReady || !merchantId}
-          onClick={handleRegister}
+          disabled={isSubmitting || loading || !tenantReady || (!merchantId && !resolvedSubdomain)}
+          onClick={() => void handleRegister()}
         >
-          {loading ? 'Please wait…' : 'Register'}
+          {isSubmitting || loading ? 'Please wait…' : 'Register'}
         </Button>
       </div>
     </div>

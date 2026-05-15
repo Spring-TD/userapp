@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Auth } from '@/app/api/auth/[...path]/route';
+import { Auth, emailFromEmailExistsRequest } from '@/app/api/auth/[...path]/route';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,10 +14,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   if (key === 'get-token') return Auth.getToken(request);
   if (key === 'validate') return Auth.validateGet(request);
   if (key === 'me') return Auth.me(request);
-  if (key.startsWith('email-exists/')) {
-    const email = decodeURIComponent(key.slice('email-exists/'.length));
-    return Auth.emailExists(request, email);
-  }
+  const emailParam = emailFromEmailExistsRequest(request, key);
+  if (emailParam) return Auth.emailExists(request, emailParam);
   return NextResponse.json({ error: 'Not found' }, { status: 404 });
 }
 
