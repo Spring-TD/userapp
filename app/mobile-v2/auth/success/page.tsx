@@ -41,10 +41,10 @@ export default function SuccessPage() {
                     animate={{ y: 0, opacity: 1 }}
                     transition={{ delay: 0.3, duration: 0.5 }}
                 >
-                    <h1 className="text-2xl font-bold text-[#1E1B4B] mb-2">
-                        Hi! <span className="text-[#1E1B4B]">John</span>
+                    <h1 className="text-2xl font-bold text-[var(--sf-ink,#1E1B4B)] mb-2">
+                        Hi! <span className="text-[var(--sf-ink,#1E1B4B)]">John</span>
                     </h1>
-                    <h2 className="text-xl text-[#1E1B4B] font-medium">
+                    <h2 className="text-xl text-[var(--sf-ink,#1E1B4B)] font-medium">
                         Welcome to Airpay
                     </h2>
                 </motion.div>
@@ -55,7 +55,7 @@ export default function SuccessPage() {
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => router.push('/mobile-v2/home')}
-                    className="w-full h-14 rounded-[20px] bg-[#1E40AF] hover:bg-[#1e3a8a] text-white font-medium text-base shadow-lg shadow-blue-900/20"
+                    className="w-full h-14 rounded-[20px] bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white font-medium text-base shadow-lg shadow-blue-900/20"
                 >
                     Let's get started
                 </motion.button>

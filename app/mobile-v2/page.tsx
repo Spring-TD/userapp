@@ -1,54 +1,65 @@
 'use client';
 
-import React, { useState, Suspense } from 'react';
+import React, { useState, Suspense, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence } from 'framer-motion';
 import { V2SplashScreen, V2OnboardingView } from '@/components/mobile-templates';
 import { StorefrontPwaInstall } from '@/components/mobile-v2/StorefrontPwaInstall';
-import { useMobileConfig } from '@/hooks/useMobileConfig';
+import { useMobileConfig, type MobileAppConfig } from '@/hooks/useMobileConfig';
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
+import { applyManifestToMobileAppConfig } from '@/lib/webAppManifest';
 import { Loader2 } from 'lucide-react';
 
 function LoadingScreen() {
     return (
-        <div className="flex items-center justify-center h-full bg-[#2563EB]">
+        <div className="flex items-center justify-center h-full bg-[var(--sf-shell,#2563EB)]">
             <Loader2 className="w-8 h-8 text-white animate-spin" />
         </div>
     );
 }
 
-/** Resolves tenant (host subdomain, ?appId, ?subdomain, session) before loading config. */
+/**
+ * Splash / onboarding: resolve returns `pwaManifest` (colors, name, icons); merged into shell config here.
+ */
 function MobileV2Content() {
-    const { appId, ready, error } = useMobileV2Tenant();
+    const { appId, pwaManifest, displayName, error: resolveNote, ready: tenantReady } = useMobileV2Tenant();
 
-    if (!ready) {
+    const effectiveAppId = appId ?? undefined;
+    const { config, loading: configLoading } = useMobileConfig({ appId: effectiveAppId });
+
+    const mergedConfig = useMemo(() => {
+        if (!config) return null;
+        return applyManifestToMobileAppConfig(config, pwaManifest, displayName);
+    }, [config, pwaManifest, displayName]);
+
+    if (!tenantReady || configLoading || !mergedConfig) {
         return <LoadingScreen />;
     }
 
-    return <MobileV2Configured appId={appId ?? undefined} resolveNote={error} />;
+    return (
+        <MobileV2Configured
+            config={mergedConfig}
+            resolveNote={resolveNote}
+            installAppId={effectiveAppId}
+        />
+    );
 }
 
 function MobileV2Configured({
-    appId,
+    config,
     resolveNote,
+    installAppId,
 }: {
-    appId?: string;
+    config: MobileAppConfig;
     resolveNote: string | null;
+    installAppId?: string;
 }) {
     const [showSplash, setShowSplash] = useState(true);
     const router = useRouter();
 
-    const { config, loading } = useMobileConfig({ appId });
-
     const handleOnboardingComplete = () => {
         router.push('/mobile-v2/auth/login');
     };
-
-    if (loading || !config) {
-        return <LoadingScreen />;
-    }
-
-    const installAppId = appId ?? config.appId ?? undefined;
 
     return (
         <>

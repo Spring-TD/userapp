@@ -158,7 +158,7 @@ export default function ProfilePage() {
                     <Briefcase className="w-6 h-6" />
                     <span className="text-[10px] font-medium">Product</span>
                 </Link>
-                <button className="flex flex-col items-center gap-1 text-[#1E40AF]">
+                <button className="flex flex-col items-center gap-1 text-[var(--sf-button,#1E40AF)]">
                     <User className="w-6 h-6 fill-current" />
                     <span className="text-[10px] font-bold">Profile</span>
                 </button>

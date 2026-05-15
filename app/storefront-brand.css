@@ -1,0 +1,60 @@
+/**
+ * Storefront brand utilities — use inside `MobileV2ThemedChrome` (vars from resolve `pwaManifest`).
+ * Tailwind arbitrary classes reference these vars with fallbacks for pre-resolve paint.
+ */
+
+.sf-storefront-root .sf-bg-button {
+  background-color: var(--sf-button, #1e40af);
+}
+.sf-storefront-root .sf-bg-primary {
+  background-color: var(--sf-primary, #2563eb);
+}
+.sf-storefront-root .sf-bg-shell {
+  background-color: var(--sf-shell, #2563eb);
+}
+.sf-storefront-root .sf-bg-ink {
+  background-color: var(--sf-ink, #1e1b4b);
+}
+.sf-storefront-root .sf-bg-tint {
+  background-color: var(--sf-tint, #e0e7ff);
+}
+
+.sf-storefront-root .sf-text-primary {
+  color: var(--sf-primary, #2563eb);
+}
+.sf-storefront-root .sf-text-button {
+  color: var(--sf-button, #1e40af);
+}
+.sf-storefront-root .sf-text-ink {
+  color: var(--sf-ink, #1e1b4b);
+}
+
+.sf-storefront-root .sf-btn {
+  background-color: var(--sf-button, #1e40af);
+  color: #fff;
+}
+.sf-storefront-root .sf-btn:hover {
+  background-color: var(--sf-button-hover, #1e3a8a);
+}
+.sf-storefront-root .sf-btn-outline {
+  border: 1px solid color-mix(in srgb, var(--sf-primary, #2563eb) 35%, transparent);
+  color: var(--sf-ink, #1e1b4b);
+  background-color: #fff;
+}
+
+.sf-storefront-root .sf-icon-tile {
+  color: var(--sf-primary, #2563eb);
+}
+.sf-storefront-root .sf-icon-tile-bg {
+  background-color: var(--sf-tint, #e0e7ff);
+  color: var(--sf-primary, #2563eb);
+}
+
+.sf-storefront-root .sf-nav-active {
+  color: var(--sf-button, #1e40af);
+}
+
+.sf-storefront-root .sf-ring-primary:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--sf-primary, #2563eb) 28%, transparent);
+}

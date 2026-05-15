@@ -102,7 +102,7 @@ function VerifyOtpContent() {
         <div className="w-8" />
       </div>
 
-      <div className="mb-6 self-start rounded-2xl bg-blue-50 p-3.5 text-[#2563EB]">
+      <div className="mb-6 self-start rounded-2xl bg-blue-50 p-3.5 text-[var(--sf-primary,#2563EB)]">
         <MessageSquare className="h-7 w-7 fill-current" />
       </div>
 
@@ -127,7 +127,7 @@ function VerifyOtpContent() {
               <InputOTPSlot
                 key={idx}
                 index={idx}
-                className="h-10 w-10 rounded-full border-none bg-gray-200 p-0 text-base shadow-none ring-0 data-[active=true]:bg-[#2563EB] data-[active=true]:text-white data-[active=true]:ring-0"
+                className="h-10 w-10 rounded-full border-none bg-gray-200 p-0 text-base shadow-none ring-0 data-[active=true]:bg-[var(--sf-primary,#2563EB)] data-[active=true]:text-white data-[active=true]:ring-0"
               />
             ))}
           </InputOTPGroup>
@@ -138,10 +138,10 @@ function VerifyOtpContent() {
         {seconds > 0 ? (
           <>
             You can get code again in{' '}
-            <span className="font-semibold text-[#2563EB]">{seconds} seconds</span>
+            <span className="font-semibold text-[var(--sf-primary,#2563EB)]">{seconds} seconds</span>
           </>
         ) : (
-          <button type="button" className="font-semibold text-[#2563EB] hover:underline" onClick={handleResend} disabled={loading}>
+          <button type="button" className="font-semibold text-[var(--sf-primary,#2563EB)] hover:underline" onClick={handleResend} disabled={loading}>
             Resend code
           </button>
         )}
@@ -150,7 +150,7 @@ function VerifyOtpContent() {
       <div className="mt-auto">
         <Button
           type="button"
-          className="h-14 w-full rounded-full bg-[#1E40AF] text-base font-medium text-white shadow-lg shadow-blue-900/20 hover:bg-[#1e3a8a]"
+          className="h-14 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-base font-medium text-white shadow-lg shadow-blue-900/20 hover:bg-[var(--sf-button-hover,#1e3a8a)]"
           disabled={loading || code.length !== 6}
           onClick={handleConfirm}
         >

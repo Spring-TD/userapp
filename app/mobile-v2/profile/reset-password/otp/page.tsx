@@ -29,7 +29,7 @@ export default function OTPPage() {
             </div>
 
             <div className="px-6 flex flex-col items-start text-left w-full">
-                <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center text-[#2563EB] mb-6 self-start">
+                <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center text-[var(--sf-primary,#2563EB)] mb-6 self-start">
                     <MessageSquare className="w-7 h-7 fill-current" />
                 </div>
 
@@ -45,7 +45,7 @@ export default function OTPPage() {
                                 <div key={idx} className="relative">
                                     <InputOTPSlot
                                         index={idx}
-                                        className="h-9 w-9 rounded-full border-none bg-gray-300 p-0 text-transparent shadow-none ring-0 data-[active=true]:bg-[#2563EB] data-[active=true]:scale-110 data-[active=true]:ring-0 transition-all"
+                                        className="h-9 w-9 rounded-full border-none bg-gray-300 p-0 text-transparent shadow-none ring-0 data-[active=true]:bg-[var(--sf-primary,#2563EB)] data-[active=true]:scale-110 data-[active=true]:ring-0 transition-all"
                                     />
                                 </div>
                             ))}
@@ -54,13 +54,13 @@ export default function OTPPage() {
                 </div>
 
                 <p className="text-sm text-gray-500 w-full text-left mb-8">
-                    You can get code again in <span className="text-[#2563EB] font-semibold">{seconds} seconds</span>
+                    You can get code again in <span className="text-[var(--sf-primary,#2563EB)] font-semibold">{seconds} seconds</span>
                 </p>
 
                 <div className="flex-1 min-h-4" />
 
                 <Link href="/mobile-v2/profile/reset-password/new-pin" className="w-full mb-8">
-                    <Button className="w-full h-14 rounded-full bg-[#1E40AF] hover:bg-[#1e3a8a] text-white font-semibold text-base shadow-lg shadow-blue-900/20">
+                    <Button className="w-full h-14 rounded-full bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white font-semibold text-base shadow-lg shadow-blue-900/20">
                         Confirm
                     </Button>
                 </Link>

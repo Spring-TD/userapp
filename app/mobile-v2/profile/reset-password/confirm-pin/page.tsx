@@ -43,7 +43,7 @@ export default function ConfirmPinPage() {
             </div>
 
             <div className="flex-1 flex flex-col items-center px-6">
-                <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center text-[#2563EB] mb-6">
+                <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center text-[var(--sf-primary,#2563EB)] mb-6">
                     <Lock className="w-6 h-6" />
                 </div>
 
@@ -56,7 +56,7 @@ export default function ConfirmPinPage() {
                             key={i}
                             className={cn(
                                 "w-4 h-4 rounded-full transition-colors",
-                                i < pin.length ? "bg-[#2563EB]" : "bg-gray-200"
+                                i < pin.length ? "bg-[var(--sf-primary,#2563EB)]" : "bg-gray-200"
                             )}
                         />
                     ))}
@@ -74,7 +74,7 @@ export default function ConfirmPinPage() {
                         </button>
                     ))}
                     <div className="h-16 flex items-center justify-center">
-                        <span className="text-sm font-semibold text-[#2563EB] cursor-pointer" onClick={() => {/* Handle Forgot PIN logic */ }}>
+                        <span className="text-sm font-semibold text-[var(--sf-primary,#2563EB)] cursor-pointer" onClick={() => {/* Handle Forgot PIN logic */ }}>
                             Forgot PIN?
                         </span>
                     </div>

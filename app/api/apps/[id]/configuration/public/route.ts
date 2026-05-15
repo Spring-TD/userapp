@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getApiUpstreamBase } from '@/lib/server/apiUpstreamBase';
+import { fetchUpstream } from '@/lib/server/upstreamFetch';
 
 const API_UPSTREAM_BASE = getApiUpstreamBase();
 
@@ -19,17 +20,12 @@ export async function GET(
         const { id: appId } = await params;
 
         // Fetch active configuration from upstream app API (see getApiUpstreamBase)
-        const response = await fetch(
-            `${API_UPSTREAM_BASE}/api/v1/apps/${appId}/configuration`,
-            {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                // Cache for 5 minutes
-                next: { revalidate: 300 },
-            }
-        );
+        const response = await fetchUpstream(`${API_UPSTREAM_BASE}/api/v1/apps/${appId}/configuration`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
 
         const data = await response.json();
 

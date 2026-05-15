@@ -23,7 +23,7 @@ function MortgageDetailInner() {
   const productId = typeof rawId === 'string' ? decodeURIComponent(rawId) : ''
 
   const { appId: tenantAppId, ready: tenantReady } = useMobileV2Tenant()
-  const springAppId = tenantAppId ?? process.env.NEXT_PUBLIC_SPRING_APP_ID
+  const springAppId = tenantAppId ?? undefined
 
   const { products, loading, getProductById } = useMobileProducts({
     type: 'Mortgage',
@@ -58,7 +58,7 @@ function MortgageDetailInner() {
   //   return (
   //     <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 bg-[#FAFAFA] px-6 text-center">
   //       <p className="text-sm text-gray-600">Product not found.</p>
-  //       <Button className="rounded-full bg-[#2E5AAC] text-white" onClick={() => router.push('/mobile-v2/products/mortgage')}>
+  //       <Button className="rounded-full bg-[var(--sf-button,#1E40AF)] text-white" onClick={() => router.push('/mobile-v2/products/mortgage')}>
   //         Back
   //       </Button>
   //     </div>
@@ -85,7 +85,7 @@ function MortgageDetailInner() {
         <div className="px-4 pt-4">
           <div className="relative aspect-[16/11] overflow-hidden rounded-[24px] bg-gray-200">
             <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${imageUrl})` }} />
-            <span className="absolute left-3 top-3 rounded-full bg-white/95 px-3 py-1 text-[10px] font-semibold text-[#2E5AAC] shadow-sm">
+            <span className="absolute left-3 top-3 rounded-full bg-white/95 px-3 py-1 text-[10px] font-semibold text-[var(--sf-button,#1E40AF)] shadow-sm">
               By {lender}
             </span>
             <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5">
@@ -113,11 +113,11 @@ function MortgageDetailInner() {
 
           <div className="mt-4 flex gap-8 text-sm text-gray-800">
             <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-[#2E5AAC]" />
+              <Calendar className="h-4 w-4 text-[var(--sf-button,#1E40AF)]" />
               <span>{product?.duration || '12 months'}</span>
             </div>
             <div className="flex items-center gap-2">
-              <Percent className="h-4 w-4 text-[#2E5AAC]" />
+              <Percent className="h-4 w-4 text-[var(--sf-button,#1E40AF)]" />
               <span>{product?.interestRate || '3% p.a'}</span>
             </div>
           </div>
@@ -145,7 +145,7 @@ function MortgageDetailInner() {
 
       <div className="absolute bottom-24 left-4 right-4 z-30">
         <Link href={`/mobile-v2/products/mortgage/apply?productId=${encodeURIComponent(product?.id ?? '')}`}>
-          <Button className="h-14 w-full rounded-full bg-[#2E5AAC] text-base font-semibold text-white hover:bg-[#265499]">
+          <Button className="h-14 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-base font-semibold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]">
             Apply
           </Button>
         </Link>
@@ -160,7 +160,7 @@ function MortgageDetailInner() {
           <User className="h-6 w-6" />
           <span className="text-[10px] font-medium">Account</span>
         </Link>
-        <div className="flex flex-col items-center gap-1 text-[#1E40AF]">
+        <div className="flex flex-col items-center gap-1 text-[var(--sf-button,#1E40AF)]">
           <Briefcase className="h-6 w-6 fill-current" />
           <span className="text-[10px] font-bold">Product</span>
         </div>

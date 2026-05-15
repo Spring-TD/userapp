@@ -25,17 +25,17 @@ export default function PasswordResetSuccessPage() {
                 />
             </motion.div>
 
-            <h1 className="text-2xl font-bold text-[#1E1B4B] mb-4">
-                Hi! <span className="text-[#1E1B4B]">John</span>
+            <h1 className="text-2xl font-bold text-[var(--sf-ink,#1E1B4B)] mb-4">
+                Hi! <span className="text-[var(--sf-ink,#1E1B4B)]">John</span>
             </h1>
 
-            <p className="text-[#1E1B4B] text-[15px] leading-relaxed max-w-xs mb-12">
+            <p className="text-[var(--sf-ink,#1E1B4B)] text-[15px] leading-relaxed max-w-xs mb-12">
                 Your password has been reset, you can now log back into your Airpay account
             </p>
 
             <Link href="/mobile-v2/auth/login" className="w-full">
                 <Button
-                    className="w-full h-14 rounded-[20px] bg-[#1E40AF] hover:bg-[#1e3a8a] text-white font-medium text-base shadow-lg shadow-blue-900/20"
+                    className="w-full h-14 rounded-[20px] bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white font-medium text-base shadow-lg shadow-blue-900/20"
                 >
                     Go to Airpay app
                 </Button>

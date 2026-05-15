@@ -29,14 +29,14 @@ export default function TargetDetailPage({ params }: { params: { id: string } })
 
                 <div className="px-6 space-y-6">
                     {/* Header Card */}
-                    <div className="bg-[#2563EB] rounded-[24px] p-8 text-center text-white shadow-lg shadow-blue-500/20">
+                    <div className="bg-[var(--sf-primary,#2563EB)] rounded-[24px] p-8 text-center text-white shadow-lg shadow-blue-500/20">
                         <h2 className="text-3xl font-bold mb-2">₦30,000,000.00</h2>
                         <p className="text-base font-semibold mb-1">Save to Buy a Building</p>
                         <p className="text-[10px] text-blue-100 mb-6">Saving plan towards a 2 bedroom duplex</p>
 
                         <Button
                             onClick={() => setShowJoinModal(true)}
-                            className="w-[180px] h-10 rounded-full bg-white hover:bg-gray-50 text-[#1E1B4B] text-xs font-bold"
+                            className="w-[180px] h-10 rounded-full bg-white hover:bg-gray-50 text-[var(--sf-ink,#1E1B4B)] text-xs font-bold"
                         >
                             Join Now
                         </Button>
@@ -73,7 +73,7 @@ export default function TargetDetailPage({ params }: { params: { id: string } })
                                 <div key={idx} className="bg-white rounded-[20px] p-4 flex justify-between items-center">
                                     <div>
                                         <p className="text-[10px] text-gray-500 mb-0.5">Receive</p>
-                                        <p className="text-sm font-bold text-[#1E1B4B]">Charles Boss</p>
+                                        <p className="text-sm font-bold text-[var(--sf-ink,#1E1B4B)]">Charles Boss</p>
                                     </div>
                                     <div className="text-right">
                                         <p className="text-sm font-bold text-[#16A34A]">N10,000.00</p>
@@ -128,7 +128,7 @@ export default function TargetDetailPage({ params }: { params: { id: string } })
                             ))}
                         </div>
 
-                        <Button className="w-full h-14 rounded-full bg-[#1E40AF] hover:bg-[#1e3a8a] text-white font-semibold text-base shadow-xl shadow-blue-900/10">
+                        <Button className="w-full h-14 rounded-full bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white font-semibold text-base shadow-xl shadow-blue-900/10">
                             Submit
                         </Button>
                     </div>

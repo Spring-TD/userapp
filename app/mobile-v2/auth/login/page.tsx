@@ -84,13 +84,13 @@ function LoginPageInner() {
           <ChevronLeft className="h-6 w-6" />
         </Link>
         <h1 className="absolute left-1/2 -translate-x-1/2 text-lg font-semibold">Login</h1>
-        <Link href="/mobile-v2/auth/signup" className="text-sm font-semibold text-[#2563EB] hover:underline">
+        <Link href="/mobile-v2/auth/signup" className="text-sm font-semibold text-[var(--sf-primary,#2563EB)] hover:underline">
           Register
         </Link>
       </div>
 
       <div className="mb-10 text-center">
-        <h2 className="mb-2 text-[28px] font-bold tracking-tight text-[#1E1B4B]">Welcome back</h2>
+        <h2 className="mb-2 text-[28px] font-bold tracking-tight text-[var(--sf-ink,#1E1B4B)]">Welcome back</h2>
         <p className="px-4 text-[15px] leading-normal text-gray-500">Sign in with your email and password</p>
       </div>
 
@@ -103,7 +103,7 @@ function LoginPageInner() {
             autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="peer h-14 w-full rounded-2xl border-0 bg-white px-4 pb-1 pt-4 text-base shadow-[0_2px_10px_rgba(0,0,0,0.03)] placeholder-transparent transition-all focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20"
+            className="peer h-14 w-full rounded-2xl border-0 bg-white px-4 pb-1 pt-4 text-base shadow-[0_2px_10px_rgba(0,0,0,0.03)] placeholder-transparent transition-all focus:outline-none focus:ring-2 focus:ring-[var(--sf-primary,#2563EB)]/20"
           />
           <label
             htmlFor="email"
@@ -122,7 +122,7 @@ function LoginPageInner() {
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="peer h-14 w-full rounded-2xl border-0 bg-white px-4 pb-1 pt-4 text-base shadow-[0_2px_10px_rgba(0,0,0,0.03)] placeholder-transparent transition-all focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20"
+            className="peer h-14 w-full rounded-2xl border-0 bg-white px-4 pb-1 pt-4 text-base shadow-[0_2px_10px_rgba(0,0,0,0.03)] placeholder-transparent transition-all focus:outline-none focus:ring-2 focus:ring-[var(--sf-primary,#2563EB)]/20"
           />
           <label
             htmlFor="password"
@@ -133,7 +133,7 @@ function LoginPageInner() {
           <button
             type="button"
             onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-4 top-1/2 -translate-y-1/2 text-[#2563EB] transition-colors hover:text-[#1d4ed8]"
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--sf-primary,#2563EB)] transition-colors hover:text-[var(--sf-button-hover,#1e3a8a)]"
           >
             {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
           </button>
@@ -141,7 +141,7 @@ function LoginPageInner() {
         </div>
 
         <div className="flex justify-end pt-2">
-          <Link href="/mobile-v2/auth/forgot-password" className="text-sm font-medium text-[#2563EB] hover:underline">
+          <Link href="/mobile-v2/auth/forgot-password" className="text-sm font-medium text-[var(--sf-primary,#2563EB)] hover:underline">
             Forgot Password?
           </Link>
         </div>
@@ -150,7 +150,7 @@ function LoginPageInner() {
       <div className="mb-4 mt-8">
         <Button
           type="button"
-          className="h-14 w-full rounded-[20px] bg-[#1E40AF] text-base font-medium text-white shadow-lg shadow-blue-900/20 hover:bg-[#1e3a8a]"
+          className="h-14 w-full rounded-[20px] bg-[var(--sf-button,#1E40AF)] text-base font-medium text-white shadow-lg shadow-blue-900/20 hover:opacity-95"
           disabled={loading}
           onClick={handleLogin}
         >

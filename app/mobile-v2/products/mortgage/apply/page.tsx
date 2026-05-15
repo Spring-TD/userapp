@@ -14,7 +14,7 @@ function ApplyInner() {
     return (
       <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 bg-[#FAFAFA] px-6 text-center">
         <p className="text-sm text-gray-600">Missing product. Open this page from a mortgage product.</p>
-        <Link href="/mobile-v2/products/mortgage" className="text-sm font-semibold text-[#2E5AAC] underline">
+        <Link href="/mobile-v2/products/mortgage" className="text-sm font-semibold text-[var(--sf-button,#1E40AF)] underline">
           Browse mortgages
         </Link>
       </div>

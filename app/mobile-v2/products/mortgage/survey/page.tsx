@@ -121,7 +121,7 @@ export default function MortgageSurveyPage() {
                         <CheckCircle2 className="w-12 h-12 text-green-500" />
                     </div>
                     
-                    <h1 className="text-2xl font-bold text-[#1E1B4B] text-center mb-3">
+                    <h1 className="text-2xl font-bold text-[var(--sf-ink,#1E1B4B)] text-center mb-3">
                         Survey Complete!
                     </h1>
                     
@@ -130,7 +130,7 @@ export default function MortgageSurveyPage() {
                     </p>
                     
                     <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 mt-6 w-full max-w-[300px]">
-                        <p className="text-[#1E40AF] font-semibold text-center text-sm mb-1">
+                        <p className="text-[var(--sf-button,#1E40AF)] font-semibold text-center text-sm mb-1">
                             Eligibility Status
                         </p>
                         <p className="text-green-600 font-bold text-center text-lg">
@@ -144,7 +144,7 @@ export default function MortgageSurveyPage() {
                     <div className="w-full space-y-3 mt-8">
                         <Button
                             onClick={() => router.push('/mobile-v2/products/mortgage')}
-                            className="w-full h-14 rounded-full bg-[#1E40AF] hover:bg-[#1e3a8a] text-white font-semibold"
+                            className="w-full h-14 rounded-full bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white font-semibold"
                         >
                             Browse Mortgages
                         </Button>
@@ -175,7 +175,7 @@ export default function MortgageSurveyPage() {
                         >
                             <ChevronLeft className="w-5 h-5 text-gray-600" />
                         </button>
-                        <h1 className="text-lg font-bold text-[#1E1B4B]">Eligibility Survey</h1>
+                        <h1 className="text-lg font-bold text-[var(--sf-ink,#1E1B4B)]">Eligibility Survey</h1>
                         <div className="w-10 h-10" />
                     </div>
 
@@ -185,13 +185,13 @@ export default function MortgageSurveyPage() {
                             <span className="text-xs text-gray-500 font-medium">
                                 Question {currentQuestion + 1} of {surveyQuestions.length}
                             </span>
-                            <span className="text-xs text-[#1E40AF] font-semibold">
+                            <span className="text-xs text-[var(--sf-button,#1E40AF)] font-semibold">
                                 {Math.round(progress)}%
                             </span>
                         </div>
                         <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                             <div 
-                                className="h-full bg-[#1E40AF] rounded-full transition-all duration-500 ease-out"
+                                className="h-full bg-[var(--sf-button,#1E40AF)] rounded-full transition-all duration-500 ease-out"
                                 style={{ width: `${progress}%` }}
                             />
                         </div>
@@ -200,7 +200,7 @@ export default function MortgageSurveyPage() {
 
                 {/* Question Content */}
                 <div className="px-6 py-4">
-                    <h2 className="text-xl font-bold text-[#1E1B4B] mb-6 leading-tight">
+                    <h2 className="text-xl font-bold text-[var(--sf-ink,#1E1B4B)] mb-6 leading-tight">
                         {question.question}
                     </h2>
 
@@ -214,7 +214,7 @@ export default function MortgageSurveyPage() {
                                     className={cn(
                                         "w-full p-4 rounded-2xl border-2 text-left transition-all duration-200",
                                         answers[question.id] === option
-                                            ? "border-[#1E40AF] bg-blue-50"
+                                            ? "border-[var(--sf-button,#1E40AF)] bg-[var(--sf-tint,#E0E7FF)]"
                                             : "border-gray-100 bg-white hover:border-gray-200"
                                     )}
                                 >
@@ -222,13 +222,13 @@ export default function MortgageSurveyPage() {
                                         <span className={cn(
                                             "font-medium",
                                             answers[question.id] === option
-                                                ? "text-[#1E40AF]"
+                                                ? "text-[var(--sf-button,#1E40AF)]"
                                                 : "text-gray-700"
                                         )}>
                                             {option}
                                         </span>
                                         {answers[question.id] === option && (
-                                            <div className="w-6 h-6 rounded-full bg-[#1E40AF] flex items-center justify-center">
+                                            <div className="w-6 h-6 rounded-full bg-[var(--sf-button,#1E40AF)] flex items-center justify-center">
                                                 <Check className="w-4 h-4 text-white" />
                                             </div>
                                         )}
@@ -253,7 +253,7 @@ export default function MortgageSurveyPage() {
                                         className={cn(
                                             "flex-1 h-14 rounded-2xl border-2 font-bold text-lg transition-all duration-200",
                                             answers[question.id] === option
-                                                ? "border-[#1E40AF] bg-[#1E40AF] text-white"
+                                                ? "border-[#1E40AF] bg-[var(--sf-button,#1E40AF)] text-white"
                                                 : "border-gray-100 bg-white text-gray-700 hover:border-gray-200"
                                         )}
                                     >
@@ -274,7 +274,7 @@ export default function MortgageSurveyPage() {
                     className={cn(
                         "w-full h-14 rounded-full font-semibold text-base transition-all",
                         hasAnswer
-                            ? "bg-[#1E40AF] hover:bg-[#1e3a8a] text-white"
+                            ? "bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white"
                             : "bg-gray-100 text-gray-400 cursor-not-allowed"
                     )}
                 >

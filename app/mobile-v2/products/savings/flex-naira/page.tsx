@@ -29,15 +29,15 @@ export default function FlexNairaPage() {
 
                 <div className="px-6 space-y-6">
                     {/* Balance Card */}
-                    <div className="bg-[#BFDBFE] rounded-[24px] p-6 text-center text-[#1E1B4B] relative overflow-hidden">
+                    <div className="bg-[#BFDBFE] rounded-[24px] p-6 text-center text-[var(--sf-ink,#1E1B4B)] relative overflow-hidden">
                         <p className="text-sm font-medium mb-1">Flex Naira Balance</p>
                         <h2 className="text-3xl font-bold mb-6">₦500,039.12</h2>
 
                         <div className="flex justify-between items-center gap-4">
-                            <div className="bg-[#1E3A8A] text-white text-[10px] font-bold px-3 py-1.5 rounded-lg">
+                            <div className="bg-[var(--sf-button,#1E40AF)] text-white text-[10px] font-bold px-3 py-1.5 rounded-lg">
                                 12% per annum
                             </div>
-                            <div className="bg-[#1E3A8A] text-white text-[10px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1">
+                            <div className="bg-[var(--sf-button,#1E40AF)] text-white text-[10px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1">
                                 AG BANK: 1234567890
                             </div>
                         </div>
@@ -45,7 +45,7 @@ export default function FlexNairaPage() {
 
                     {/* Info Banner - Moved Up */}
                     {showInfoBanner && (
-                        <div className="bg-[#E0E7FF] rounded-[20px] p-5 relative">
+                        <div className="bg-[var(--sf-tint,#E0E7FF)] rounded-[20px] p-5 relative">
                             <button
                                 onClick={() => setShowInfoBanner(false)}
                                 className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
@@ -53,7 +53,7 @@ export default function FlexNairaPage() {
                                 <X className="w-4 h-4" />
                             </button>
 
-                            <h3 className="text-xs font-bold text-[#1E1B4B] mb-3">What is new on Flex Naira?</h3>
+                            <h3 className="text-xs font-bold text-[var(--sf-ink,#1E1B4B)] mb-3">What is new on Flex Naira?</h3>
                             <ul className="space-y-3">
                                 <li className="flex gap-2 text-[10px] text-gray-600 leading-relaxed">
                                     <span className="text-gray-400">•</span>
@@ -90,7 +90,7 @@ export default function FlexNairaPage() {
                     <div>
                         <div className="flex justify-between items-center mb-4">
                             <h3 className="font-bold text-[#1E293B]">History</h3>
-                            <button className="text-[10px] font-bold text-[#2563EB]">See all</button>
+                            <button className="text-[10px] font-bold text-[var(--sf-primary,#2563EB)]">See all</button>
                         </div>
 
                         <div className="space-y-3">
@@ -98,7 +98,7 @@ export default function FlexNairaPage() {
                             <div className="bg-white rounded-[20px] p-4 flex justify-between items-center">
                                 <div>
                                     <p className="text-[10px] text-gray-500 mb-0.5">Receive</p>
-                                    <p className="text-sm font-bold text-[#1E1B4B]">Charles Boss</p>
+                                    <p className="text-sm font-bold text-[var(--sf-ink,#1E1B4B)]">Charles Boss</p>
                                 </div>
                                 <div className="text-right">
                                     <p className="text-sm font-bold text-[#16A34A]">N10,000.00</p>
@@ -109,7 +109,7 @@ export default function FlexNairaPage() {
                             <div className="bg-white rounded-[20px] p-4 flex justify-between items-center">
                                 <div>
                                     <p className="text-[10px] text-gray-500 mb-0.5">Transfer</p>
-                                    <p className="text-sm font-bold text-[#1E1B4B]">Chidi David</p>
+                                    <p className="text-sm font-bold text-[var(--sf-ink,#1E1B4B)]">Chidi David</p>
                                 </div>
                                 <div className="text-right">
                                     <p className="text-sm font-bold text-[#DC2626]">N3000.00</p>
@@ -120,7 +120,7 @@ export default function FlexNairaPage() {
                             <div className="bg-white rounded-[20px] p-4 flex justify-between items-center">
                                 <div>
                                     <p className="text-[10px] text-gray-500 mb-0.5">Receive</p>
-                                    <p className="text-sm font-bold text-[#1E1B4B]">Charles Boss</p>
+                                    <p className="text-sm font-bold text-[var(--sf-ink,#1E1B4B)]">Charles Boss</p>
                                 </div>
                                 <div className="text-right">
                                     <p className="text-sm font-bold text-[#16A34A]">N10,000.00</p>
@@ -131,7 +131,7 @@ export default function FlexNairaPage() {
                             <div className="bg-white rounded-[20px] p-4 flex justify-between items-center">
                                 <div>
                                     <p className="text-[10px] text-gray-500 mb-0.5">Receive</p>
-                                    <p className="text-sm font-bold text-[#1E1B4B]">Charles Boss</p>
+                                    <p className="text-sm font-bold text-[var(--sf-ink,#1E1B4B)]">Charles Boss</p>
                                 </div>
                                 <div className="text-right">
                                     <p className="text-sm font-bold text-[#16A34A]">N10,000.00</p>
@@ -178,7 +178,7 @@ export default function FlexNairaPage() {
                             </div>
                         </div>
 
-                        <Button className="w-full h-14 rounded-full bg-[#1E40AF] hover:bg-[#1e3a8a] text-white font-semibold text-base shadow-xl shadow-blue-900/10">
+                        <Button className="w-full h-14 rounded-full bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white font-semibold text-base shadow-xl shadow-blue-900/10">
                             Create Account
                         </Button>
                     </div>
@@ -195,7 +195,7 @@ export default function FlexNairaPage() {
                     <User className="w-6 h-6" />
                     <span className="text-[10px] font-medium">Account</span>
                 </Link>
-                <button className="flex flex-col items-center gap-1 text-[#1E40AF]">
+                <button className="flex flex-col items-center gap-1 text-[var(--sf-button,#1E40AF)]">
                     <Briefcase className="w-6 h-6 fill-current" />
                     <span className="text-[10px] font-bold">Product</span>
                 </button>

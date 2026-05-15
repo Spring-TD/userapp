@@ -50,7 +50,7 @@ export default function ForgotPasswordPage() {
       </div>
 
       <div className="mb-10 max-w-[90%] text-left">
-        <p className="text-[20px] font-bold leading-tight text-[#1E1B4B]">Enter your email and we’ll send you a link to reset your password.</p>
+        <p className="text-[20px] font-bold leading-tight text-[var(--sf-ink,#1E1B4B)]">Enter your email and we’ll send you a link to reset your password.</p>
       </div>
 
       <div className="min-h-0 flex-1 space-y-6">
@@ -62,7 +62,7 @@ export default function ForgotPasswordPage() {
             autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="peer h-14 w-full rounded-2xl border-0 bg-white px-4 pb-1 pt-4 text-base shadow-[0_2px_10px_rgba(0,0,0,0.03)] placeholder-transparent transition-all focus:outline-none focus:ring-2 focus:ring-[#2563EB]/20"
+            className="peer h-14 w-full rounded-2xl border-0 bg-white px-4 pb-1 pt-4 text-base shadow-[0_2px_10px_rgba(0,0,0,0.03)] placeholder-transparent transition-all focus:outline-none focus:ring-2 focus:ring-[color-mix(in_srgb,var(--sf-primary,#2563EB)_20%,transparent)]"
           />
           <label
             htmlFor="email"
@@ -77,7 +77,7 @@ export default function ForgotPasswordPage() {
       <div className="mb-4 mt-auto">
         <Button
           type="button"
-          className="h-14 w-full rounded-[20px] bg-[#1E40AF] text-base font-medium text-white shadow-lg shadow-blue-900/20 hover:bg-[#1e3a8a]"
+          className="h-14 w-full rounded-[20px] bg-[var(--sf-button,#1E40AF)] text-base font-medium text-white shadow-lg shadow-blue-900/20 hover:bg-[var(--sf-button-hover,#1e3a8a)]"
           disabled={loading}
           onClick={handleContinue}
         >

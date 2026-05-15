@@ -1,12 +1,4 @@
-/**
- * **User-App** — `NEXT_PUBLIC_API_URL` with **User-App** fallback only.
- *
- * Fallback when unset: `https://client-auth-ms.fly.dev` ([Client Authentication Microservice](https://client-auth-ms.fly.dev/)).
- * Other frontends use the same env name with different defaults (see their `lib/*apiBaseUrl*.ts`).
- *
- * Trailing `/`, `/api`, and `/api/v1` are stripped so callers can append **`/api/v1/...`** safely.
- */
-const FALLBACK_WHEN_UNSET = "https://client-auth-ms.fly.dev"
+const FALLBACK_WHEN_UNSET = "https://account-ms.fly.dev"
 
 function stripTrailingApiPath(origin: string): string {
   let u = origin.replace(/\/+$/, "")

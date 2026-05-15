@@ -37,15 +37,15 @@ export default function TargetSavingsPage() {
 
                 <div className="px-6 space-y-6">
                     {/* Balance Card */}
-                    <div className="bg-[#1E40AF] rounded-[24px] p-6 text-center text-white relative overflow-hidden">
+                    <div className="bg-[var(--sf-button,#1E40AF)] rounded-[24px] p-6 text-center text-white relative overflow-hidden">
                         <p className="text-sm font-medium mb-1 text-blue-100">Target Saving Balance</p>
                         <h2 className="text-3xl font-bold mb-6">₦500,039.12</h2>
 
                         <div className="flex justify-center items-center gap-4">
-                            <div className="bg-white text-[#1E3A8A] text-[10px] font-bold px-3 py-1.5 rounded-lg">
+                            <div className="bg-white text-[var(--sf-button,#1E40AF)] text-[10px] font-bold px-3 py-1.5 rounded-lg">
                                 12% per annum
                             </div>
-                            <div className="bg-white text-[#1E3A8A] text-[10px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1">
+                            <div className="bg-white text-[var(--sf-button,#1E40AF)] text-[10px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1">
                                 AG BANK: 1234567890
                             </div>
                         </div>
@@ -53,7 +53,7 @@ export default function TargetSavingsPage() {
 
                     {/* Info Banner */}
                     {showInfoBanner && (
-                        <div className="bg-[#E0E7FF] rounded-[20px] p-5 relative">
+                        <div className="bg-[var(--sf-tint,#E0E7FF)] rounded-[20px] p-5 relative">
                             <button
                                 onClick={() => setShowInfoBanner(false)}
                                 className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
@@ -61,7 +61,7 @@ export default function TargetSavingsPage() {
                                 <X className="w-4 h-4" />
                             </button>
 
-                            <h3 className="text-xs font-bold text-[#1E1B4B] mb-3">What is new on Target Savings?</h3>
+                            <h3 className="text-xs font-bold text-[var(--sf-ink,#1E1B4B)] mb-3">What is new on Target Savings?</h3>
                             <ul className="space-y-3">
                                 <li className="flex gap-2 text-[10px] text-gray-600 leading-relaxed">
                                     <span className="text-gray-400">•</span>
@@ -96,7 +96,7 @@ export default function TargetSavingsPage() {
                                             className="object-cover"
                                         />
                                     </div>
-                                    <h3 className="text-sm font-semibold text-[#1E1B4B]">{target.title}</h3>
+                                    <h3 className="text-sm font-semibold text-[var(--sf-ink,#1E1B4B)]">{target.title}</h3>
                                 </div>
                             </Link>
                         ))}
@@ -114,7 +114,7 @@ export default function TargetSavingsPage() {
                     <User className="w-6 h-6" />
                     <span className="text-[10px] font-medium">Account</span>
                 </Link>
-                <button className="flex flex-col items-center gap-1 text-[#1E40AF]">
+                <button className="flex flex-col items-center gap-1 text-[var(--sf-button,#1E40AF)]">
                     <Briefcase className="w-6 h-6 fill-current" />
                     <span className="text-[10px] font-bold">Product</span>
                 </button>

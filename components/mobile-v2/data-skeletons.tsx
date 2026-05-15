@@ -97,9 +97,9 @@ export function MortgageApplyFlowSkeleton() {
 /** Mobile v2 layout shell while tenant resolves */
 export function MobileV2LayoutSkeleton() {
   return (
-    <div className="flex min-h-[320px] flex-col items-center justify-center gap-4 p-6" aria-busy="true">
-      <div className="h-[720px] w-full max-w-[400px] overflow-hidden rounded-[40px] border-8 border-gray-900 bg-white p-6 shadow-2xl">
-        <Skeleton className={cn('mx-auto mb-8 h-7 w-40 rounded-b-3xl', sk)} />
+    <div className="flex min-h-[100dvh] w-full flex-col p-6 md:min-h-[320px] md:items-center md:justify-center md:gap-4" aria-busy="true">
+      <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-white p-6 md:h-[720px] md:max-w-[400px] md:flex-none md:rounded-[40px] md:border-8 md:border-gray-900 md:shadow-2xl">
+        <Skeleton className={cn('mx-auto mb-8 hidden h-7 w-40 rounded-b-3xl md:block', sk)} />
         <Skeleton className={cn('h-8 w-[75%] rounded-md', sk)} />
         <Skeleton className={cn('mt-6 h-12 w-full rounded-2xl', sk)} />
         <Skeleton className={cn('mt-4 h-12 w-full rounded-2xl', sk)} />
