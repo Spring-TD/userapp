@@ -1,8 +1,9 @@
 'use client'
 
-import { Toaster } from '@/components/ui/sonner'
-
-/** Toasts inside the mobile shell (top-center, above phone chrome). */
+/**
+ * @deprecated Use the single app-wide Sonner in `app/providers.tsx` only.
+ * Mounting a second `<Toaster />` duplicates every `toast.*()` call.
+ */
 export function MobileV2Sonner() {
-  return <Toaster position="top-center" richColors closeButton toastOptions={{ className: 'z-[10000]' }} />
+  return null
 }

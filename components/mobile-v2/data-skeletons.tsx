@@ -61,18 +61,30 @@ export function MortgageDetailSkeleton() {
       <Skeleton className={cn('h-4 w-full rounded-md', sk)} />
       <Skeleton className={cn('h-4 w-full rounded-md', sk)} />
       <Skeleton className={cn('h-4 w-[75%] rounded-md', sk)} />
-      <div className="flex gap-8 pt-2">
-        <Skeleton className={cn('h-4 w-24 rounded-md', sk)} />
-        <Skeleton className={cn('h-4 w-20 rounded-md', sk)} />
-      </div>
-      <div className="space-y-3 border-t border-gray-200 pt-6">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="flex justify-between gap-4">
-            <Skeleton className={cn('h-4 w-28 rounded-md', sk)} />
-            <Skeleton className={cn('h-4 w-24 rounded-md', sk)} />
-          </div>
-        ))}
-      </div>
+      <motionlessMortgageDetailMeta />
+      <motionlessMortgageDetailRows />
+    </div>
+  )
+}
+
+function motionlessMortgageDetailMeta() {
+  return (
+    <div className="flex gap-8 pt-2">
+      <Skeleton className={cn('h-4 w-24 rounded-md', sk)} />
+      <Skeleton className={cn('h-4 w-20 rounded-md', sk)} />
+    </div>
+  )
+}
+
+function motionlessMortgageDetailRows() {
+  return (
+    <div className="space-y-3 border-t border-gray-200 pt-6">
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div key={i} className="flex justify-between gap-4">
+          <Skeleton className={cn('h-4 w-28 rounded-md', sk)} />
+          <Skeleton className={cn('h-4 w-24 rounded-md', sk)} />
+        </div>
+      ))}
     </div>
   )
 }
@@ -105,6 +117,39 @@ export function MobileV2LayoutSkeleton() {
         <Skeleton className={cn('mt-4 h-12 w-full rounded-2xl', sk)} />
         <Skeleton className={cn('mt-8 h-40 w-full rounded-3xl', sk)} />
       </div>
+    </div>
+  )
+}
+
+/** Home / accounts balance hero card */
+export function WalletBalanceCardSkeleton({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        'relative w-full h-[220px] rounded-[30px] overflow-hidden shadow-xl shadow-blue-900/10',
+        className,
+      )}
+      aria-busy="true"
+      aria-label="Loading wallet"
+    >
+      <div className="absolute inset-0 bg-[var(--sf-button,#1E40AF)]" />
+      <div className="relative z-10 flex flex-col items-center justify-center h-full pt-4 px-4">
+        <Skeleton className={cn('h-12 w-12 rounded-full mb-3 bg-white/25', sk)} />
+        <Skeleton className={cn('h-4 w-40 rounded-md mb-2 bg-white/25', sk)} />
+        <Skeleton className={cn('h-10 w-48 max-w-[70vw] rounded-lg mb-2 bg-white/25', sk)} />
+        <Skeleton className={cn('h-3 w-56 max-w-[85vw] rounded-md bg-white/20', sk)} />
+      </div>
+    </div>
+  )
+}
+
+/** Accounts list row */
+export function WalletAccountRowSkeleton() {
+  return (
+    <div className="w-full rounded-[24px] bg-[#EFF6FF] p-6" aria-busy="true">
+      <Skeleton className={cn('h-8 w-8 rounded-lg mb-4', sk)} />
+      <Skeleton className={cn('h-4 w-32 rounded-md mb-2', sk)} />
+      <Skeleton className={cn('h-8 w-36 rounded-md', sk)} />
     </div>
   )
 }
