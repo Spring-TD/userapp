@@ -190,19 +190,15 @@ export const userWalletApi = {
   },
 
   /**
-   * Get user wallet
+   * Get user wallet (same-origin BFF — prefer this over direct gateway calls).
    */
   async getUserWallet(userId: string) {
-    const response = await fetchWithAuth(`${WALLET_API_V1}/wallets/user/${userId}`, {
-    });
-
-    const data = await response.json();
-    
-    if (!response.ok) {
-      throw new Error(data.error || 'Failed to fetch user wallet');
+    const { fetchUserWallet } = await import("@/lib/services/userWalletApi");
+    const { wallet, error, status } = await fetchUserWallet(userId);
+    if (!wallet) {
+      throw new Error(error || "Failed to fetch user wallet");
     }
-
-    return data as WalletApiResponse<Wallet>;
+    return { success: true, data: wallet, status } as WalletApiResponse<Wallet>;
   },
 
   /**
@@ -246,16 +242,12 @@ export const userWalletApi = {
       });
     }
 
-    const url = `${WALLET_API_V1}/wallets/user/${userId}/transactions?${queryParams.toString()}`;
-    const response = await fetchWithAuth(url, {});
-
-    const data = await response.json();
-    
-    if (!response.ok) {
-      throw new Error(data.error || 'Failed to fetch user transactions');
+    const { fetchUserWalletTransactions } = await import("@/lib/services/userWalletApi");
+    const { transactions, error } = await fetchUserWalletTransactions(userId, params);
+    if (error) {
+      throw new Error(error);
     }
-
-    return data as WalletApiResponse<Transaction[]>;
+    return { success: true, data: transactions } as WalletApiResponse<Transaction[]>;
   },
 
   /**

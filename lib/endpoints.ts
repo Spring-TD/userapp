@@ -303,6 +303,7 @@ const COMPLIANCE_BASE = "/compliance"
 /** Gateway-aligned routes (dedicated Next proxies under `/api/v1/...`). */
 const REGISTRATION_BASE = "/v1/registration"
 const OTP_BASE = "/v1/otp"
+const WALLET_BASE = "/v1/wallets"
 /** Allowlisted catch-all proxy to account-ms gateway (`NEXT_PUBLIC_API_URL`). */
 const CLIENT_MS = "/v1/client-ms"
 
@@ -319,6 +320,12 @@ export const ENDPOINTS = {
     verify: `${OTP_BASE}/verify`,
     resend: `${OTP_BASE}/resend`,
     generate: `${OTP_BASE}/generate`,
+  },
+  /** User wallet — proxied via `/api/v1/wallets/*` (account-ms → wallet-ms). Bearer required. */
+  wallet: {
+    userById: (userId: string) => `${WALLET_BASE}/user/${encodeURIComponent(userId)}`,
+    userTransactions: (userId: string) =>
+      `${WALLET_BASE}/user/${encodeURIComponent(userId)}/transactions`,
   },
   auth: {
     login: `${AUTH_BASE}/login`,

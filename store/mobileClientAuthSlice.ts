@@ -15,6 +15,7 @@ import {
   isRegistrationSuccess,
   normalizeClientAuthError,
 } from '@/lib/normalizeClientAuthError'
+import { cacheAuthUserId, cacheRegistrationWallet } from '@/lib/userWallet'
 import type {
   ForgotPasswordDto,
   MobileUserRegistrationDto,
@@ -86,7 +87,10 @@ export const registerMobileUserThunk = createAsyncThunk<
       })
     }
     mobileAuthLog('registerMobileUserThunk:fulfilled')
-    return (res.data ?? { success: true }) as RegisterUserResponse
+    const result = (res.data ?? { success: true }) as RegisterUserResponse
+    if (result.user?.id) cacheAuthUserId(result.user.id)
+    if (result.wallet) cacheRegistrationWallet(result.wallet)
+    return result
   } catch (error: unknown) {
     mobileAuthError('registerMobileUserThunk:throw', summarizeAxiosError(error))
     const { message, fieldErrors } = clientAuthErrorFromAxios(error)

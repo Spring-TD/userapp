@@ -2,6 +2,7 @@ import { createAsyncThunk, createSlice, type PayloadAction } from "@reduxjs/tool
 import { apiClient } from "@/lib/api"
 import { ENDPOINTS } from "@/lib/endpoints"
 import { setSecureTokens, clearSecureTokens, getUserFromToken } from "@/lib/tokenManager"
+import { cacheAuthUserId } from "@/lib/userWallet"
 import { clientAuthErrorFromResponse, normalizeClientAuthError } from "@/lib/normalizeClientAuthError"
 import type {
   AuthUser,
@@ -22,6 +23,27 @@ const initialState: AuthState = {
   loading: false,
   error: null,
   isAuthenticated: false,
+}
+
+function mapLoginUser(raw: unknown): AuthUser | null {
+  if (!raw || typeof raw !== "object") return null
+  const u = raw as Record<string, unknown>
+  const id =
+    (typeof u.id === "string" && u.id.trim()) ||
+    (u._id != null && String(u._id).trim()) ||
+    (typeof u.userId === "string" && u.userId.trim()) ||
+    ""
+  if (!id) return null
+  return {
+    id,
+    email: String(u.email ?? ""),
+    first_name: String(u.first_name ?? u.firstName ?? ""),
+    last_name: String(u.last_name ?? u.lastName ?? ""),
+    phone: typeof u.phone === "string" ? u.phone : undefined,
+    country: typeof u.country === "string" ? u.country : undefined,
+    user_type: typeof u.user_type === "string" ? u.user_type : typeof u.userType === "string" ? u.userType : undefined,
+    status: typeof u.status === "string" ? u.status : undefined,
+  }
 }
 
 export const loginThunk = createAsyncThunk<
@@ -62,8 +84,12 @@ export const loginThunk = createAsyncThunk<
 
     await setSecureTokens(accessToken, refreshToken)
 
-    const fallbackUser = getUserFromToken()
-    return (userData as AuthUser) || (fallbackUser as unknown as AuthUser) || rejectWithValue("Unable to resolve user from token")
+    const mapped = mapLoginUser(userData) || (getUserFromToken() as AuthUser | null)
+    if (!mapped?.id) {
+      return rejectWithValue("Unable to resolve user from token")
+    }
+    cacheAuthUserId(mapped.id)
+    return mapped
   } catch (error: unknown) {
     return rejectWithValue(normalizeClientAuthError(error))
   }
@@ -80,13 +106,16 @@ export const loadUserFromTokenThunk = createAsyncThunk<AuthUser | null>(
       }
       const data = await res.json()
       if (data?.valid && data?.user) {
-        return data.user as AuthUser
+        const mapped = mapLoginUser(data.user) || (data.user as AuthUser)
+        if (mapped?.id) cacheAuthUserId(mapped.id)
+        return mapped
       }
     } catch {
       /* ignore */
     }
     const user = getUserFromToken()
-    return (user as any) || null
+    if (user?.id) cacheAuthUserId(user.id)
+    return (user as AuthUser) || null
   },
 )
 

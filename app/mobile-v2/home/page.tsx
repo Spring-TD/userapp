@@ -16,12 +16,14 @@ import {
     Send as SendIcon,
     FileText,
     Building2,
-    Copy,
     X,
 } from 'lucide-react';
-import { fetchAuthUserProfile, type AuthUserProfile } from '@/lib/userProfileClient';
-import { useWalletBalance } from '@/hooks/useWalletBalance';
+import { CopyableDetailRow } from '@/components/mobile-v2/CopyableDetailRow';
+import { WalletBalanceCardSkeleton } from '@/components/mobile-v2/data-skeletons';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useUserWallet } from '@/hooks/useUserWallet';
+import { fetchAuthUserProfile, type AuthUserProfile } from '@/lib/userProfileClient';
+import { isVirtualNubanActive } from '@/lib/userWallet';
 
 function profileAvatarUrl(user: AuthUserProfile | null): string | null {
     if (!user) return null
@@ -53,7 +55,10 @@ export default function HomePage() {
     const [activeModal, setActiveModal] = useState<'none' | 'fund_options' | 'fund_bank' | 'account_details'>('none');
     const [profile, setProfile] = useState<AuthUserProfile | null>(null);
     const [profileLoading, setProfileLoading] = useState(true);
-    const { formattedBalance, loading: walletLoading, error: walletError } = useWalletBalance();
+    const { wallet, formattedBalance, loading: walletLoading, error: walletError, notFound } = useUserWallet();
+    const nuban = wallet?.virtualNuban;
+    const nubanReady = isVirtualNubanActive(wallet);
+    const accountHolder = wallet?.name || displayNameFromProfile(profile) || '—';
 
     useEffect(() => {
         let cancelled = false;
@@ -114,6 +119,9 @@ export default function HomePage() {
 
             {/* Balance Card */}
             <div className="px-6 mb-6">
+                {walletLoading && !wallet ? (
+                    <WalletBalanceCardSkeleton />
+                ) : (
                 <div className="relative w-full h-[220px] rounded-[30px] overflow-hidden shadow-xl shadow-blue-900/10">
                     {/* Background Image/Pattern */}
                     <div className="absolute inset-0 bg-[var(--sf-button,#1E40AF)]">
@@ -152,12 +160,17 @@ export default function HomePage() {
                             )}
                         </h2>
                         <p className="text-[11px] text-blue-200/90 px-2 text-center max-w-[280px]">
-                            {walletError
-                                ? 'Wallet balance appears after you sign in and your wallet is linked.'
-                                : 'Balance reflects your main wallet when available.'}
+                            {notFound
+                                ? 'No wallet is linked to your account yet. Sign out and sign in again, or complete signup if you are new.'
+                                : walletError
+                                  ? walletError
+                                  : nubanReady
+                                    ? 'Fund via your virtual account below.'
+                                    : 'Balance reflects your main wallet.'}
                         </p>
                     </div>
                 </div>
+                )}
             </div>
 
             {/* Main Actions */}
@@ -284,28 +297,25 @@ export default function HomePage() {
                     </div>
 
                     <div className="space-y-6 mb-8">
-                        <div>
-                            <label className="text-xs text-gray-400 block mb-1">Account Holder</label>
-                            <div className="flex justify-between items-center">
-                                <span className="font-bold text-gray-500">—</span>
-                                <Copy className="w-4 h-4 text-gray-300 pointer-events-none" aria-hidden />
-                            </div>
-                        </div>
-                        <div>
-                            <label className="text-xs text-gray-400 block mb-1">Account Number</label>
-                            <div className="flex justify-between items-center">
-                                <span className="font-bold text-gray-500">—</span>
-                                <Copy className="w-4 h-4 text-gray-300 pointer-events-none" aria-hidden />
-                            </div>
-                        </div>
-                        <div>
-                            <label className="text-xs text-gray-400 block mb-1">Bank Name</label>
-                            <div className="flex justify-between items-center">
-                                <span className="font-bold text-gray-500">—</span>
-                                <Copy className="w-4 h-4 text-gray-300 pointer-events-none" aria-hidden />
-                            </div>
-                        </div>
-                        <p className="text-xs text-gray-500">Funding details will show here once your wallet exposes them.</p>
+                        {walletLoading ? (
+                            <>
+                                <Skeleton className="h-10 w-full rounded-md bg-gray-200/90" />
+                                <Skeleton className="h-10 w-full rounded-md bg-gray-200/90" />
+                                <Skeleton className="h-10 w-full rounded-md bg-gray-200/90" />
+                            </>
+                        ) : (
+                            <>
+                                <CopyableDetailRow label="Account Holder" value={accountHolder} />
+                                <CopyableDetailRow label="Account Number" value={nuban?.accountNumber} />
+                                <CopyableDetailRow label="Bank Name" value={nuban?.bankName} />
+                                {!nubanReady && (
+                                    <p className="text-xs text-gray-500">
+                                        {nuban?.provisionError ||
+                                            'Funding details appear when your virtual account is active.'}
+                                    </p>
+                                )}
+                            </>
+                        )}
                     </div>
 
                     <div className="bg-[#FEF3C7] rounded-xl p-4 text-[#92400E] text-xs leading-relaxed">
@@ -329,25 +339,22 @@ export default function HomePage() {
                     </div>
 
                     <div className="space-y-6">
-                        <div>
-                            <label className="text-xs text-gray-400 block mb-1">Account Type</label>
-                            <h3 className="font-bold text-gray-500">—</h3>
-                        </div>
-                        <div>
-                            <label className="text-xs text-gray-400 block mb-1">Account Number</label>
-                            <div className="flex justify-between items-center">
-                                <span className="font-bold text-gray-500">—</span>
-                                <Copy className="w-4 h-4 text-gray-300 pointer-events-none" aria-hidden />
-                            </div>
-                        </div>
-                        <div>
-                            <label className="text-xs text-gray-400 block mb-1">Bank Name</label>
-                            <div className="flex justify-between items-center">
-                                <span className="font-bold text-gray-500">—</span>
-                                <Copy className="w-4 h-4 text-gray-300 pointer-events-none" aria-hidden />
-                            </div>
-                        </div>
-                        <p className="text-xs text-gray-500">Account details will show here when available from your profile.</p>
+                        {walletLoading ? (
+                            <>
+                                <Skeleton className="h-10 w-full rounded-md bg-gray-200/90" />
+                                <Skeleton className="h-10 w-full rounded-md bg-gray-200/90" />
+                                <Skeleton className="h-10 w-full rounded-md bg-gray-200/90" />
+                            </>
+                        ) : (
+                            <>
+                                <CopyableDetailRow
+                                    label="Account Type"
+                                    value={nuban?.accountType || wallet?.walletType}
+                                />
+                                <CopyableDetailRow label="Account Number" value={nuban?.accountNumber} />
+                                <CopyableDetailRow label="Bank Name" value={nuban?.bankName} />
+                            </>
+                        )}
                     </div>
                 </div>
             )}
