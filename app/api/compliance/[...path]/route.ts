@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 import { getApiBaseUrl } from "@/lib/apiBaseUrl"
+import { forwardStorefrontHeaders } from "@/lib/server/forwardStorefrontHeaders"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -93,7 +94,9 @@ export class Compliance {
     const contentType = request.headers.get("Content-Type") ?? ""
     const isMultipart = contentType.includes("multipart/form-data")
 
-    const headers: Record<string, string> = {}
+    const headers: Record<string, string> = {
+      ...forwardStorefrontHeaders(request),
+    }
     if (!isMultipart && method !== "GET" && method !== "HEAD") {
       headers["Content-Type"] = "application/json"
     }

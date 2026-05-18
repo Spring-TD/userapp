@@ -8,6 +8,29 @@ function stripTrailingSlash(s: string): string {
   return s.replace(/\/+$/, "")
 }
 
+/** Fuspay or compliance-ms: no usable `fuspay.customerId` on the logged-in user's KYC profile. */
+export function isFuspayCustomerMissingError(message: string | undefined | null): boolean {
+  if (!message?.trim()) return false
+  const m = message.toLowerCase()
+  return (
+    /customer\s*id\s*is\s*required/i.test(message) ||
+    /fuspay\s+user\s+id\s+missing/i.test(message) ||
+    m.includes("fuspay.customerid")
+  )
+}
+
+export const KYC_TENANT_REQUIRED_MESSAGE =
+  "Open this app from your store link (e.g. crbc.tryspring.io) or add ?subdomain=crbc for local testing so tenant headers match signup."
+
+export const KYC_FUSPAY_MISSING_MESSAGE =
+  "Fuspay customer was not linked at signup. Register again from your store URL with Fuspay enabled, or contact support."
+
+/**
+ * POST /api/v1/kyc/modular/verification body.
+ * Prod with `FUSPAY_MODULAR_VERIFICATION_CALLBACK` on compliance-ms: `{}`.
+ * Local / missing env callback: `{ country, callback, redirect }` (extended path).
+ * Do not send `customer_id` — compliance resolves it from the JWT user's KYC profile.
+ */
 export function buildModularVerificationPostBody(): Record<string, unknown> {
   if (typeof window === "undefined") return {}
 
