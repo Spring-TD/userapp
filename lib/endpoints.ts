@@ -304,6 +304,7 @@ const COMPLIANCE_BASE = "/compliance"
 const REGISTRATION_BASE = "/v1/registration"
 const OTP_BASE = "/v1/otp"
 const WALLET_BASE = "/v1/wallets"
+const KYC_V1 = "/v1/kyc"
 /** Allowlisted catch-all proxy to account-ms gateway (`NEXT_PUBLIC_API_URL`). */
 const CLIENT_MS = "/v1/client-ms"
 
@@ -326,6 +327,14 @@ export const ENDPOINTS = {
     userById: (userId: string) => `${WALLET_BASE}/user/${encodeURIComponent(userId)}`,
     userTransactions: (userId: string) =>
       `${WALLET_BASE}/user/${encodeURIComponent(userId)}/transactions`,
+  },
+  /**
+   * Modular KYC — proxied via `/api/v1/kyc/*` → compliance-ms.
+   * Flow: POST `modularVerification` (create), then GET `modularVerificationUrl` (hosted link).
+   */
+  kyc: {
+    modularVerification: `${KYC_V1}/modular/verification`,
+    modularVerificationUrl: `${KYC_V1}/modular/verification-url`,
   },
   auth: {
     login: `${AUTH_BASE}/login`,
