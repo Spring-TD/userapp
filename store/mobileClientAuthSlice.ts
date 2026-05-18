@@ -1,6 +1,11 @@
 import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import { apiClient } from '@/lib/api'
 import { ENDPOINTS } from '@/lib/endpoints'
+import {
+  fuspayRegistrationErrorMessage,
+  isFuspayCustomerLinked,
+  isFuspayRegistrationFailed,
+} from '@/lib/fuspayRegistration'
 import { isOtpVerifyValid, registrationVerificationEmailSent } from '@/lib/mobileRegistration'
 import {
   mobileAuthError,
@@ -66,6 +71,8 @@ export const registerMobileUserThunk = createAsyncThunk<
       userId: res.data?.user?.id,
       verificationEmailSent: res.data?.verificationEmailSent,
       walletProvisioningError: res.data?.walletProvisioningError,
+      fuspayProfileCreated: res.data?.fuspayProfileCreated,
+      fuspayUserId: res.data?.fuspayUserId,
     })
     const failure = clientAuthErrorFromResponse(res.data, res.status)
     if (failure) {
@@ -86,8 +93,25 @@ export const registerMobileUserThunk = createAsyncThunk<
         ...(ambiguous.fieldErrors ? { fieldErrors: ambiguous.fieldErrors } : {}),
       })
     }
-    mobileAuthLog('registerMobileUserThunk:fulfilled')
     const result = (res.data ?? { success: true }) as RegisterUserResponse
+
+    if (isFuspayRegistrationFailed(result)) {
+      mobileAuthWarn('registerMobileUserThunk:fuspayNotCreated', {
+        userId: result.user?.id,
+        fuspayProfileCreated: result.fuspayProfileCreated,
+      })
+      return rejectWithValue({ message: fuspayRegistrationErrorMessage() })
+    }
+
+    if (result.fuspayProfileCreated !== undefined && !isFuspayCustomerLinked(result)) {
+      mobileAuthWarn('registerMobileUserThunk:fuspayMissingId', {
+        userId: result.user?.id,
+        fuspayProfileCreated: result.fuspayProfileCreated,
+      })
+      return rejectWithValue({ message: fuspayRegistrationErrorMessage() })
+    }
+
+    mobileAuthLog('registerMobileUserThunk:fulfilled')
     if (result.user?.id) cacheAuthUserId(result.user.id)
     if (result.wallet) cacheRegistrationWallet(result.wallet)
     return result

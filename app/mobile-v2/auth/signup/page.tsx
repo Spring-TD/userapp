@@ -15,6 +15,7 @@ import {
   registerMobileUserThunk,
   emailExistsThunk,
 } from '@/store/mobileClientAuthSlice';
+import { isFuspayCustomerLinked } from '@/lib/fuspayRegistration';
 import { buildMobileRegisterPayload, registrationVerificationEmailSent } from '@/lib/mobileRegistration';
 import {
   normalizeRegistrationPhone,
@@ -165,11 +166,19 @@ function SignupForm() {
       console.log('[signup] 5 register success', {
         userId: regData.user?.id,
         verificationEmailSent: regData.verificationEmailSent,
+        fuspayProfileCreated: regData.fuspayProfileCreated,
+        fuspayUserId: regData.fuspayUserId,
       });
       mobileAuthLog('signup:registerSuccess', {
         userId: regData.user?.id,
         verificationEmailSent: regData.verificationEmailSent,
+        fuspayProfileCreated: regData.fuspayProfileCreated,
+        fuspayUserId: regData.fuspayUserId,
       });
+
+      if (!isFuspayCustomerLinked(regData)) {
+        toast.warning('Account created, but Fuspay was not linked yet. After sign-in, open KYC again to retry setup.');
+      }
 
       const walletNuban = regData.wallet?.virtualNuban?.accountNumber;
       if (walletNuban) {

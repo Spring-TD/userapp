@@ -330,7 +330,7 @@ export const ENDPOINTS = {
   },
   /**
    * Modular KYC — proxied via `/api/v1/kyc/*` → compliance-ms.
-   * Flow: POST `modularVerification` (create), then GET `modularVerificationUrl` (hosted link).
+   * Flow: POST `modularVerification` (Bearer; `fuspay.customerId` from signup). Optional GET `modularVerificationUrl`.
    */
   kyc: {
     modularVerification: `${KYC_V1}/modular/verification`,
