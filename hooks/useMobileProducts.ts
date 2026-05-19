@@ -1,34 +1,22 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { apiClient } from '@/lib/api';
+import { ENDPOINTS } from '@/lib/endpoints';
+import { getAccessToken } from '@/lib/cookieAuth';
+import {
+  filterActiveAppProducts,
+  mapApiProductToMobileProduct,
+  type MobileProduct,
+  type StorefrontProductType,
+} from '@/lib/storefrontProducts';
 
-// Product type matching the backend
-export interface MobileProduct {
-  id: string;
-  referenceNumber: string;
-  name: string;
-  description: string;
-  type: 'Loan' | 'Mortgage' | 'Savings' | 'Commodity';
-  appId: string;
-  status: string;
-  isActive: boolean;
-  image?: string;
-  interestRate?: string;
-  duration?: string;
-  // Mortgage-specific
-  equityContribution?: number;
-  propertyValue?: number;
-  // Commodity-specific
-  price?: number;
-  minimumQuantity?: number;
-  unitOfMeasure?: string;
-  createdAt: string;
-  updatedAt: string;
-}
+export type { MobileProduct } from '@/lib/storefrontProducts';
 
 interface UseMobileProductsOptions {
-  type?: 'Loan' | 'Mortgage' | 'Savings' | 'Commodity';
-  springAppId?: string; // Spring App ID to filter products
+  type?: StorefrontProductType;
+  /** Tenant app id from `GET /api/v1/apps/resolve/{subdomain}` → `data.id` */
+  springAppId?: string;
   autoFetch?: boolean;
   /** When false, skips fetch until mobile v2 tenant is resolved (default: true). */
   tenantReady?: boolean;
@@ -43,8 +31,10 @@ interface UseMobileProductsReturn {
   getProductsByType: (type: string) => MobileProduct[];
 }
 
-const PRODUCT_MS_URL = process.env.NEXT_PUBLIC_PRODUCT_MS_URL || 'https://product-ms.fly.dev';
-
+/**
+ * App-scoped catalog — `GET /api/v1/products/app/{appId}` (products the merchant turned on).
+ * Do not use `GET /api/v1/products` (full upstream catalog).
+ */
 export function useMobileProducts(options: UseMobileProductsOptions = {}): UseMobileProductsReturn {
   const { type, springAppId, autoFetch = true, tenantReady = true } = options;
 
@@ -53,46 +43,41 @@ export function useMobileProducts(options: UseMobileProductsOptions = {}): UseMo
   const [error, setError] = useState<string | null>(null);
 
   const fetchProducts = useCallback(async () => {
+    if (!springAppId?.trim()) {
+      setProducts([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
-      // Use Next.js API proxy instead of hitting product-ms directly
-      const url = new URL(`/api/products/active`, window.location.origin);
+      const hasToken = typeof window !== 'undefined' && Boolean(getAccessToken());
+      const res = await apiClient.get<{ success?: boolean; data?: unknown[]; error?: string }>(
+        ENDPOINTS.products.byAppId(springAppId.trim()),
+        { includeAuth: hasToken, timeout: 30_000 },
+      );
+
+      if (!res.data?.success) {
+        throw new Error(res.data?.error || `Failed to fetch products (${res.status})`);
+      }
+
+      const raw = Array.isArray(res.data.data) ? res.data.data : [];
+      const active = filterActiveAppProducts(
+        raw.map((row) => mapApiProductToMobileProduct(row as Record<string, unknown>)).filter(Boolean) as MobileProduct[],
+      );
+
+      let list = active;
       if (type) {
-        url.searchParams.set('type', type);
-      }
-      if (springAppId) {
-        url.searchParams.set('springAppId', springAppId);
+        const want = type.toLowerCase();
+        list = list.filter((p) => String(p.type ?? '').toLowerCase() === want);
       }
 
-      const response = await fetch(url.toString(), {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch products: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (data.success) {
-        let list = (data.data || []).map((p: Record<string, unknown>) => {
-          const id = String(p.id ?? p._id ?? '').trim();
-          return { ...p, id } as MobileProduct;
-        }).filter((p: MobileProduct) => Boolean(p.id));
-        if (springAppId) {
-          list = list.filter((p: MobileProduct) => p.appId === springAppId);
-        }
-        setProducts(list);
-      } else {
-        throw new Error(data.error || 'Failed to fetch products');
-      }
+      setProducts(list);
     } catch (err) {
-      console.error('Error fetching mobile products:', err);
+      console.error('Error fetching app products:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch products');
       setProducts([]);
     } finally {
@@ -102,18 +87,22 @@ export function useMobileProducts(options: UseMobileProductsOptions = {}): UseMo
 
   useEffect(() => {
     if (autoFetch && tenantReady) {
-      fetchProducts();
+      void fetchProducts();
     }
   }, [autoFetch, tenantReady, fetchProducts]);
 
-  const getProductById = useCallback((id: string): MobileProduct | undefined => {
-    return products.find(p => p.id === id);
-  }, [products]);
+  const getProductById = useCallback(
+    (id: string): MobileProduct | undefined => products.find((p) => p.id === id),
+    [products],
+  );
 
-  const getProductsByType = useCallback((productType: string): MobileProduct[] => {
-    const want = productType.toLowerCase();
-    return products.filter((p) => String(p.type ?? '').toLowerCase() === want);
-  }, [products]);
+  const getProductsByType = useCallback(
+    (productType: string): MobileProduct[] => {
+      const want = productType.toLowerCase();
+      return products.filter((p) => String(p.type ?? '').toLowerCase() === want);
+    },
+    [products],
+  );
 
   return {
     products,
@@ -125,19 +114,18 @@ export function useMobileProducts(options: UseMobileProductsOptions = {}): UseMo
   };
 }
 
-// Helper hook for specific product types
-export function useLoanProducts() {
-  return useMobileProducts({ type: 'Loan' });
+export function useLoanProducts(springAppId?: string) {
+  return useMobileProducts({ type: 'Loan', springAppId });
 }
 
-export function useMortgageProducts() {
-  return useMobileProducts({ type: 'Mortgage' });
+export function useMortgageProducts(springAppId?: string) {
+  return useMobileProducts({ type: 'Mortgage', springAppId });
 }
 
-export function useSavingsProducts() {
-  return useMobileProducts({ type: 'Savings' });
+export function useSavingsProducts(springAppId?: string) {
+  return useMobileProducts({ type: 'Savings', springAppId });
 }
 
-export function useCommodityProducts() {
-  return useMobileProducts({ type: 'Commodity' });
+export function useCommodityProducts(springAppId?: string) {
+  return useMobileProducts({ type: 'Commodity', springAppId });
 }
