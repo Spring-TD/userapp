@@ -165,6 +165,17 @@ Content-Type: application/json
 ```
 **Note:** This endpoint is automatically called by service-auth-ms after successful account verification. No authentication required.
 
+### Internal Wallet Payout Ledger Hook
+```http
+POST /api/v1/records/internal/wallet-payout-ledger
+X-Internal-Token: <PAYMENT_INTERNAL_TOKEN>
+Content-Type: application/json
+```
+
+Called by **wallet-ms** after a successful user wallet payout. It appends an idempotent **DEBIT** ledger entry to the user's payment record using `txnRef` as the duplicate key. This endpoint does not move money; wallet-ms remains the wallet balance owner.
+
+Required payment-ms env: `PAYMENT_INTERNAL_TOKEN`. Configure the same value on wallet-ms as `PAYMENT_INTERNAL_TOKEN` with `PAYMENT_SERVICE_URL` pointing to payment-ms.
+
 ### Get Record by ID
 ```http
 GET /api/v1/records/:recordId

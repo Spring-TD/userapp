@@ -242,7 +242,7 @@ async function run() {
       _id: walletId1,
       walletType: 'MERCHANT',
       merchantId,
-      merchantWalletType: 'TREASURY',
+      merchantWalletType: 'SETTLEMENT',
       name: 'Treasury Wallet',
       balance: 5000,
       mainBalance: 5000,

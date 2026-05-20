@@ -1,5 +1,10 @@
 import axios, { AxiosError } from 'axios';
-import { payonusNubanConfig, isPayonusNubanReady, type PayonusAuthMode } from '../config/payonusNuban';
+import {
+  payonusNubanConfig,
+  isPayonusNubanReady,
+  isPayonusPayoutReady,
+  type PayonusAuthMode
+} from '../config/payonusNuban';
 import { logger } from '../utils/logger';
 import type { MerchantWallet, UserWallet } from '../models/Wallet';
 
@@ -13,6 +18,26 @@ export type PayonusNubanExtracted = {
 export type PayonusNubanCallResult = {
   ok: boolean;
   details: PayonusNubanExtracted;
+  errorMessage?: string;
+  httpStatus?: number;
+};
+
+export type PayonusBankPayoutRequest = {
+  sourceAccountNumber: string;
+  destinationAccountNumber: string;
+  destinationBankCode: string;
+  destinationAccountName: string;
+  amount: number;
+  currency: string;
+  reference: string;
+  narration?: string;
+};
+
+export type PayonusBankPayoutResult = {
+  ok: boolean;
+  providerReference?: string;
+  providerStatus?: string;
+  raw?: unknown;
   errorMessage?: string;
   httpStatus?: number;
 };
@@ -109,6 +134,23 @@ function extractFromPayload(payload: unknown): PayonusNubanExtracted {
   return base;
 }
 
+function extractPayoutFromPayload(payload: unknown): Pick<PayonusBankPayoutResult, 'providerReference' | 'providerStatus'> {
+  const c = payonusNubanConfig;
+  const base = {
+    providerReference: firstString(payload, c.payoutReferencePaths),
+    providerStatus: firstString(payload, c.payoutStatusPaths)
+  };
+  if (base.providerReference || base.providerStatus) return base;
+  const nested = getAtPath(payload, 'data');
+  if (nested && typeof nested === 'object') {
+    return {
+      providerReference: firstString(nested, c.payoutReferencePaths),
+      providerStatus: firstString(nested, c.payoutStatusPaths)
+    };
+  }
+  return base;
+}
+
 function pathUsesDocumentedVirtualAccountCreate(path: string): boolean {
   const p = path.toLowerCase();
   return p.includes('/api/v1/virtual-accounts/fixed-account');
@@ -128,6 +170,46 @@ function buildVirtualAccountEmail(localPart: string): string {
   const domain = payonusNubanConfig.vaEmailDomain.replace(/^@/, '');
   const safeLocal = localPart.replace(/[^a-zA-Z0-9._+-]/g, '-');
   return `${safeLocal}@${domain}`;
+}
+
+async function fetchUserBvnFromCompliance(retailUserId: string): Promise<string | undefined> {
+  const base = payonusNubanConfig.complianceServiceUrl.trim();
+  const token = payonusNubanConfig.complianceWalletInternalToken;
+  if (!base || !token) return undefined;
+
+  const url = `${base}/api/v1/kyc/internal/payonus/user-bvn/${encodeURIComponent(retailUserId)}`;
+  try {
+    const res = await axios.get<unknown>(url, {
+      headers: { 'X-Internal-Token': token },
+      timeout: payonusNubanConfig.complianceBvnTimeoutMs,
+      validateStatus: () => true
+    });
+    if (res.status >= 200 && res.status < 300 && res.data && typeof res.data === 'object') {
+      const o = res.data as Record<string, unknown>;
+      if (o.success === true && typeof o.bvn === 'string') {
+        const digits = o.bvn.replace(/\D/g, '');
+        if (digits.length === 11) return digits;
+      }
+    } else if (res.status !== 404) {
+      logger.warn('Compliance user BVN unexpected response', {
+        retailUserId,
+        httpStatus: res.status
+      });
+    }
+  } catch (err) {
+    logger.warn('Compliance user BVN request failed', {
+      retailUserId,
+      message: err instanceof Error ? err.message : String(err)
+    });
+  }
+  return undefined;
+}
+
+/** Retail user: Fuspay KYC BVN first, then merchant shareholder fallback. */
+async function resolveBvnForUserWallet(wallet: UserWallet): Promise<string> {
+  const fromKyc = await fetchUserBvnFromCompliance(wallet.userId.trim());
+  if (fromKyc) return fromKyc;
+  return resolveBvn(complianceShareholderOwnerUserId(wallet));
 }
 
 async function fetchFirstShareholderBvnFromCompliance(ownerUserId: string): Promise<string | undefined> {
@@ -188,7 +270,8 @@ async function buildVirtualAccountCreateBody(
   accountName: string,
   reference: string,
   idForEmail: string,
-  shareholderOwnerUserId: string
+  shareholderOwnerUserId: string,
+  options?: { bvn?: string }
 ): Promise<Record<string, unknown>> {
   const businessId = payonusNubanConfig.vaBusinessId.trim();
   if (!businessId) {
@@ -200,10 +283,10 @@ async function buildVirtualAccountCreateBody(
     throw new Error('PayOnUs fixed-account create requires PAYONUS_VA_DOB (YYYY-MM-DD).');
   }
 
-  const bvn = await resolveBvn(shareholderOwnerUserId);
+  const bvn = options?.bvn ?? (await resolveBvn(shareholderOwnerUserId));
   if (!bvn) {
     throw new Error(
-      'PayOnUs virtual account create requires an 11-digit BVN: add it to the first shareholder (by creation time) in compliance-ms under the merchant auth user id (JWT userId), set COMPLIANCE_SERVICE_URL + COMPLIANCE_WALLET_INTERNAL_TOKEN on wallet-ms, or set PAYONUS_VA_BVN, or PAYONUS_VA_USE_TEST_PLACEHOLDERS=true for sandbox.'
+      'PayOnUs virtual account create requires an 11-digit BVN: complete Fuspay modular KYC for the user (webhook stores BVN on KYC profile), add merchant shareholder BVN in compliance-ms, set COMPLIANCE_SERVICE_URL + COMPLIANCE_WALLET_INTERNAL_TOKEN on wallet-ms, or set PAYONUS_VA_BVN, or PAYONUS_VA_USE_TEST_PLACEHOLDERS=true for sandbox.'
     );
   }
 
@@ -393,12 +476,110 @@ async function postJson(path: string, body: Record<string, unknown>): Promise<Pa
   }
 }
 
+async function postPayoutJson(path: string, body: Record<string, unknown>): Promise<PayonusBankPayoutResult> {
+  if (!isPayonusPayoutReady()) {
+    return { ok: false, errorMessage: 'Payonus payout is not configured' };
+  }
+
+  const url = joinPayonusUrl(payonusNubanConfig.baseUrl, path);
+  const headers = await buildRequestHeaders();
+
+  try {
+    const res = await axios.post<unknown>(url, body, {
+      headers,
+      timeout: payonusNubanConfig.timeoutMs,
+      validateStatus: () => true
+    });
+
+    let payload = res.data;
+    let extracted = extractPayoutFromPayload(payload);
+
+    if (res.status === 401 && payonusNubanConfig.authMode === 'oauth') {
+      try {
+        const freshToken = await getOAuthAccessToken(true);
+        const retried = await axios.post<unknown>(url, body, {
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            Authorization: `Bearer ${freshToken}`
+          },
+          timeout: payonusNubanConfig.timeoutMs,
+          validateStatus: () => true
+        });
+        payload = retried.data;
+        extracted = extractPayoutFromPayload(payload);
+        if (retried.status >= 200 && retried.status < 300) {
+          return { ok: true, ...extracted, raw: payload, httpStatus: retried.status };
+        }
+        return {
+          ok: false,
+          ...extracted,
+          raw: payload,
+          errorMessage: readPayonusErrorMessage(payload, retried.status),
+          httpStatus: retried.status
+        };
+      } catch (tokenError) {
+        const msg = tokenError instanceof Error ? tokenError.message : 'OAuth refresh failed';
+        return { ok: false, ...extracted, raw: payload, errorMessage: msg, httpStatus: 401 };
+      }
+    }
+
+    if (res.status >= 200 && res.status < 300) {
+      return { ok: true, ...extracted, raw: payload, httpStatus: res.status };
+    }
+
+    logger.warn('Payonus payout request failed', {
+      httpStatus: res.status,
+      extracted,
+      path
+    });
+
+    return {
+      ok: false,
+      ...extracted,
+      raw: payload,
+      errorMessage: readPayonusErrorMessage(payload, res.status),
+      httpStatus: res.status
+    };
+  } catch (err) {
+    const ax = err as AxiosError;
+    const msg = ax.message || 'Payonus payout request failed';
+    logger.error('Payonus payout HTTP error', { path, message: msg, status: ax.response?.status });
+    return { ok: false, errorMessage: msg, httpStatus: ax.response?.status };
+  }
+}
+
 function mergeBody(
   base: Record<string, unknown>,
   extra?: Record<string, unknown>
 ): Record<string, unknown> {
   if (!extra) return { ...base };
   return { ...base, ...extra };
+}
+
+export async function initiateBankPayout(input: PayonusBankPayoutRequest): Promise<PayonusBankPayoutResult> {
+  const body: Record<string, unknown> = {
+    amount: input.amount,
+    currency: input.currency,
+    reference: input.reference,
+    narration: input.narration || 'Wallet payout',
+    businessId: payonusNubanConfig.vaBusinessId || undefined,
+    sourceAccountNumber: input.sourceAccountNumber,
+    source: {
+      accountNumber: input.sourceAccountNumber
+    },
+    destinationAccountNumber: input.destinationAccountNumber,
+    destinationBankCode: input.destinationBankCode,
+    destinationAccountName: input.destinationAccountName,
+    beneficiary: {
+      accountNumber: input.destinationAccountNumber,
+      bankCode: input.destinationBankCode,
+      accountName: input.destinationAccountName
+    }
+  };
+
+  if (!body.businessId) delete body.businessId;
+  return postPayoutJson(payonusNubanConfig.payoutPath, mergeBody(body, payonusNubanConfig.payoutExtraBody));
 }
 
 export async function createStaticMerchantNuban(wallet: MerchantWallet): Promise<PayonusNubanCallResult> {
@@ -441,11 +622,13 @@ export async function createReservedUserNuban(wallet: UserWallet): Promise<Payon
   let body: Record<string, unknown>;
   if (pathUsesDocumentedVirtualAccountCreate(payonusNubanConfig.userPath)) {
     try {
+      const bvn = await resolveBvnForUserWallet(wallet);
       body = await buildVirtualAccountCreateBody(
         wallet.name,
         `uw-${wallet.userId}-${wallet.id}`,
         `${wallet.userId}-${wallet.id}`,
-        complianceShareholderOwnerUserId(wallet)
+        complianceShareholderOwnerUserId(wallet),
+        { bvn }
       );
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Invalid virtual account body';

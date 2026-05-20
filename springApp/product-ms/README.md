@@ -70,6 +70,7 @@ The local document shape follows the Plata product model, including fields such 
 - `name`
 - `description`
 - `isActive`
+- `isFeatured` (merchant storefront: multiple turned-on products may be highlighted)
 - `type`
 - `subType`
 - `appId`
@@ -126,6 +127,32 @@ Fetch **all** product documents that have been saved locally for a specific app 
 
 The `/merchant/:appId` route currently exists as a compatibility alias.
 
+### Featured products (storefront)
+
+Merchants can mark multiple **turned-on** products (`isActive: true`) as featured using the boolean **`isFeatured`** on each local product row.
+
+**Replace the whole featured set for an app**
+
+**Endpoint:** `PUT /api/v1/products/featured/:appId`
+
+**Request body:**
+
+```json
+{
+  "productIds": ["6790abc123def45678901234", "6790abc123def45678905678"]
+}
+```
+
+- Each id must be a **local** product document id for that `appId` (same as returned from `GET /api/v1/products/app/:appId`).
+- Each listed product must currently be **turned on** (`isActive: true`). Otherwise the request fails with **400**.
+- Any turned-on product **not** listed is set to **`isFeatured: false`**. Use **`productIds: []`** to clear all featured flags.
+
+**Per-product toggle (optional)**
+
+**Endpoint:** `PUT /api/v1/products/config/:appId/:productId` with **`"isFeatured": true`** or **`false`** in the body (with other allowed fields). You cannot set **`isFeatured: true`** while the product is inactive.
+
+**Automatic clear:** `PUT .../toggle` with **`activate: false`**, or **`isActive: false`** via config, clears **`isFeatured`** for that product.
+
 ### Toggle Product Activation
 
 Turn a product on or off for a specific app.
@@ -134,31 +161,17 @@ Turn a product on or off for a specific app.
 
 **Request Body:**
 
-When `activate` is `false`, only `activate` is required.
-
-When `activate` is `true`, the service also notifies Plata at `POST /api/v1/products/sub-merchant-activations` on the Plata account-ms base URL (`PLATA_ACCOUNT_SERVICE_URL`). You must include merchant and sub-merchant fields (the sub-merchant is the actor turning the product on). Path parameters `appId` and `productId` must each be 1–100 characters (aligned with Plata).
-
 ```json
 {
-  "activate": true,
-  "merchantId": "merchant-entity-id",
-  "merchantName": "Merchant display name",
-  "productName": "Optional override sent to Plata",
-  "subMerchant": {
-    "id": "sub-merchant-id",
-    "name": "Sub-merchant name",
-    "email": "merchant@example.com",
-    "phone": "+1234567890"
-  }
+  "activate": true
 }
 ```
 
 **Behavior:**
 
-- If `activate` is `true` and the app does not already have a local copy, the product is cloned from upstream into the local `products` collection, then Plata is notified. If Plata returns an error, the local create is rolled back.
-- If the app already has a local copy, `isActive` is updated. If the product was inactive and is turned on, Plata is notified; if Plata fails, the local document is set back to inactive.
-- If `activate` is `true` but the product is **already** active, the local document is unchanged and Plata is **not** called again.
-- If `activate` is `false`, the existing local app product is marked inactive (no Plata sub-merchant activation call).
+- If `activate` is `true` and the app does not already have a local copy, the product is cloned from upstream into the local `products` collection.
+- If the app already has a local copy, `isActive` is updated.
+- If `activate` is `false`, the existing local app product is marked inactive.
 
 **Response:**
 

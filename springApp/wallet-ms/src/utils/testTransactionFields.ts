@@ -39,7 +39,7 @@ async function testTransactionFields() {
     // Test funding with additional transaction fields
     console.log('Testing transaction with additional fields...');
     
-    const treasuryWalletResult = await WalletService.getTreasuryWallet(merchantId);
+    const treasuryWalletResult = await WalletService.getSettlementWallet(merchantId);
     if (!treasuryWalletResult.success || !treasuryWalletResult.wallet) {
       console.error('Failed to get Treasury wallet:', treasuryWalletResult.error);
       return;

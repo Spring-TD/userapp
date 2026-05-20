@@ -2,6 +2,15 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+function parseFuspayAllowedCountryCodes(raw?: string): readonly string[] {
+  const src = (raw ?? 'NG,TZ,GH,KE').trim();
+  const codes = src
+    .split(',')
+    .map((s) => s.trim().toUpperCase())
+    .filter((s) => /^[A-Z]{2}$/.test(s));
+  return codes.length ? codes : ['NG', 'TZ', 'GH', 'KE'];
+}
+
 interface JwtConfig {
   secret: string;
   expiresIn: string;
@@ -33,6 +42,14 @@ interface EnvironmentConfig {
   fuspayModularBaseUrl: string;
   fuspayModularAppId: string;
   fuspayModularApiKey: string;
+  /** ISO alpha-2 codes permitted on Fuspay modular user/verification payloads (comma-separated env). */
+  fuspayModularAllowedCountryCodes: readonly string[];
+  /** create-app-ms base URL for host-based tenant resolution on signup (no trailing slash). */
+  createAppServiceUrl: string;
+  platformBaseDomain: string;
+  platformSubdomainPrefix: string;
+  reservedSubdomains: string[];
+  tenantResolverTimeoutMs: number;
   corsOrigins: string[];
   logLevel: string;
   jwt: JwtConfig;
@@ -59,6 +76,15 @@ export const config: EnvironmentConfig = {
   fuspayModularBaseUrl: process.env.FUSPAY_MODULAR_BASE_URL || 'https://kyc-verif-new.fly.dev',
   fuspayModularAppId: process.env.FUSPAY_MODULAR_APP_ID || '',
   fuspayModularApiKey: process.env.FUSPAY_MODULAR_API_KEY || '',
+  fuspayModularAllowedCountryCodes: parseFuspayAllowedCountryCodes(process.env.FUSPAY_MODULAR_ALLOWED_COUNTRIES),
+  createAppServiceUrl: (process.env.CREATE_APP_SERVICE_URL || 'http://localhost:4002').replace(/\/+$/, ''),
+  platformBaseDomain: (process.env.PLATFORM_BASE_DOMAIN || 'tryspring.io').replace(/^\.+|\.+$/g, ''),
+  platformSubdomainPrefix: (process.env.PLATFORM_SUBDOMAIN_PREFIX || 'www').trim().replace(/\.+/g, ''),
+  reservedSubdomains: (process.env.RESERVED_SUBDOMAINS || 'www,api,admin,docs')
+    .split(',')
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean),
+  tenantResolverTimeoutMs: parseInt(process.env.TENANT_RESOLVER_TIMEOUT_MS || '30000', 10),
   corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:3001'],
   logLevel: process.env.LOG_LEVEL || 'info',
   jwt: {

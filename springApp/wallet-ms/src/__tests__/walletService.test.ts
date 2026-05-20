@@ -13,7 +13,7 @@ describe('WalletService', () => {
         merchantId: 'merchant_123',
         name: 'Test Merchant Wallet',
         currency: 'USD',
-        merchantWalletType: MerchantWalletType.TREASURY
+        merchantWalletType: MerchantWalletType.SETTLEMENT
       });
 
       expect(result.success).toBe(true);
@@ -21,7 +21,7 @@ describe('WalletService', () => {
       expect(result.wallet?.merchantId).toBe('merchant_123');
       expect(result.wallet?.name).toBe('Test Merchant Wallet');
       expect(result.wallet?.currency).toBe('USD');
-      expect(result.wallet?.merchantWalletType).toBe(MerchantWalletType.TREASURY);
+      expect(result.wallet?.merchantWalletType).toBe(MerchantWalletType.SETTLEMENT);
       expect(result.wallet?.balance).toBe(0);
       expect(result.wallet?.status).toBe(WalletStatus.ACTIVE);
     });
@@ -32,7 +32,7 @@ describe('WalletService', () => {
         merchantId: 'merchant_456',
         name: 'First Wallet',
         currency: 'USD',
-        merchantWalletType: MerchantWalletType.OPERATION
+        merchantWalletType: MerchantWalletType.BILLING
       });
 
       // Try to create duplicate
@@ -40,11 +40,11 @@ describe('WalletService', () => {
         merchantId: 'merchant_456',
         name: 'Second Wallet',
         currency: 'USD',
-        merchantWalletType: MerchantWalletType.OPERATION
+        merchantWalletType: MerchantWalletType.BILLING
       });
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('OPERATION wallet already exists for this merchant');
+      expect(result.error).toBe('BILLING wallet already exists for this merchant');
     });
   });
 

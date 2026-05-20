@@ -3,7 +3,6 @@ import { ProductService } from '../services/productService';
 import { CreateProductRequest, UpdateProductRequest, SelectProductTypeRequest, CreateProductAfterTypeRequest } from '../types/product';
 import { ApiError } from '../middleware/errorHandler';
 import { validateInput, createProductSchema, updateProductSchema, selectProductTypeSchema, createProductAfterTypeSchema } from '../utils/validation';
-import { parseSubMerchantActivationContext } from '../types/subMerchantActivation';
 import { getAccessTokenUser } from '../utils/gatewayUser';
 import { sendProductConfigurationNotification } from '../services/notificationHelper';
 
@@ -279,12 +278,45 @@ export class ProductController {
     }
   };
 
+  /** Set which turned-on products are featured for the storefront (replaces previous featured set). */
+  setAppFeaturedProducts = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { appId } = req.params;
+      const { productIds } = req.body as { productIds?: unknown };
+
+      if (!appId) {
+        throw new ApiError(400, 'App ID is required');
+      }
+
+      const products = await this.productService.setFeaturedProductsForApp(appId, productIds);
+
+      res.json({
+        success: true,
+        message: 'Featured products updated',
+        data: products
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+        return;
+      }
+
+      console.error('Error in setAppFeaturedProducts controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  };
+
   // Toggle product activation for an app
   toggleProductActivation = async (req: Request, res: Response): Promise<void> => {
     try {
       const { appId, productId } = req.params;
-      const body = req.body as Record<string, unknown>;
-      const activateRaw = body.activate;
+      const { activate } = req.body;
 
       if (!appId) {
         throw new ApiError(400, 'App ID is required');
@@ -294,29 +326,11 @@ export class ProductController {
         throw new ApiError(400, 'Product ID is required');
       }
       
-      if (activateRaw !== true && activateRaw !== false) {
-        throw new ApiError(400, 'Activate flag is required and must be a boolean');
-      }
-      const activate = activateRaw;
-
-      const appIdTrim = appId.trim();
-      const productIdTrim = productId.trim();
-      if (appIdTrim.length < 1 || appIdTrim.length > 100) {
-        throw new ApiError(400, 'App ID must be between 1 and 100 characters');
-      }
-      if (productIdTrim.length < 1 || productIdTrim.length > 100) {
-        throw new ApiError(400, 'Product ID must be between 1 and 100 characters');
+      if (activate === undefined) {
+        throw new ApiError(400, 'Activate flag is required');
       }
 
-      const activationContext =
-        activate === true ? parseSubMerchantActivationContext(body) : undefined;
-
-      const product = await this.productService.toggleProductActivation(
-        appIdTrim,
-        productIdTrim,
-        activate,
-        activationContext
-      );
+      const product = await this.productService.toggleProductActivation(appId, productId, activate);
 
       if (!product) {
         throw new ApiError(500, 'Failed to toggle product activation');
@@ -327,9 +341,9 @@ export class ProductController {
         void sendProductConfigurationNotification({
           userId: gatewayUser.userId,
           email: gatewayUser.email,
-          productId: productIdTrim,
+          productId,
           productType: String(product.type),
-          appId: appIdTrim,
+          appId,
           action: activate ? 'activated' : 'deactivated'
         });
       }

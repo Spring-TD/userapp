@@ -6,7 +6,7 @@ async function testWalletIntegration() {
   try {
     // Test creating a single merchant wallet
     console.log('\n1. Testing single merchant wallet creation...');
-    const singleWalletResult = await WalletService.createMerchantWallet('test-app-123', 'TREASURY');
+    const singleWalletResult = await WalletService.createMerchantWallet('test-app-123', 'SETTLEMENT');
     console.log('Single wallet result:', JSON.stringify(singleWalletResult, null, 2));
     
     // Test creating all merchant wallets

@@ -5,5 +5,10 @@ import { InternalWalletController } from '../controllers/internalWalletControlle
 const router = Router();
 
 router.post('/user', requireWalletInternalToken, InternalWalletController.createUserWallet);
+router.post(
+  '/user/:userId/provision-nuban',
+  requireWalletInternalToken,
+  InternalWalletController.provisionUserNuban
+);
 
 export { router as internalWalletRoutes };

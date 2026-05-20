@@ -1,7 +1,9 @@
 import { Request, Response } from 'express';
 import { MerchantRegistrationForm, UserRegistrationForm, AdminRegistrationForm } from '../types/forms';
 import { merchantRegistrationSchema, userRegistrationSchema, adminRegistrationSchema, validateForm } from '../utils/validation';
-import { AuthService } from '../services/AuthService';
+import { AuthService, type UserRegistrationData } from '../services/AuthService';
+import { normalizeUserRegistrationBody } from '../utils/registrationBody';
+import { resolveTenantFromRequest } from '../utils/tenantHostResolver';
 
 interface TypedRequest<T> extends Request {
   body: T;
@@ -45,10 +47,31 @@ export class RegistrationController {
 
   static async registerUser(req: TypedRequest<UserRegistrationForm>, res: Response): Promise<void> {
     try {
-      const tenantMerchantId = (req.headers['x-tenant-merchant-id'] as string | undefined)?.trim();
+      let tenantMerchantId = (req.headers['x-tenant-merchant-id'] as string | undefined)?.trim() || '';
+      let tenantAppId = (req.headers['x-tenant-app-id'] as string | undefined)?.trim() || '';
+
+      if (!tenantMerchantId || !tenantAppId) {
+        const resolved = await resolveTenantFromRequest(req);
+        if (resolved) {
+          if (!tenantMerchantId) {
+            tenantMerchantId = resolved.merchantId;
+          }
+          if (!tenantAppId) {
+            tenantAppId = resolved.appId;
+          }
+        }
+      }
+
+      const normalizedBody = normalizeUserRegistrationBody(req.body);
+      const bodyRecord = req.body as unknown as Record<string, unknown>;
+      const bodyMerchantId =
+        (typeof bodyRecord.merchant_id === 'string' && bodyRecord.merchant_id.trim()) ||
+        (typeof bodyRecord.merchantId === 'string' && bodyRecord.merchantId.trim()) ||
+        '';
       const payload: UserRegistrationForm = {
-        ...req.body,
-        user_merchant_id: req.body.user_merchant_id || tenantMerchantId || ''
+        ...normalizedBody,
+        user_merchant_id:
+          normalizedBody.user_merchant_id || bodyMerchantId || tenantMerchantId || ''
       };
 
       const { error, value } = validateForm<UserRegistrationForm>(userRegistrationSchema, payload);
@@ -62,7 +85,17 @@ export class RegistrationController {
         return;
       }
 
-      const result = await AuthService.registerUser(value!);
+      const bodyAppId =
+        (typeof bodyRecord.app_id === 'string' && bodyRecord.app_id.trim()) ||
+        (typeof bodyRecord.appId === 'string' && bodyRecord.appId.trim()) ||
+        '';
+      const resolvedAppId = tenantAppId || bodyAppId;
+      const registrationPayload: UserRegistrationData =
+        resolvedAppId.length > 0
+          ? { ...(value as UserRegistrationData), app_id: resolvedAppId }
+          : (value as UserRegistrationData);
+
+      const result = await AuthService.registerUser(registrationPayload);
 
       if (!result.success) {
         res.status(400).json(result);

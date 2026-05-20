@@ -19,9 +19,18 @@ import { amlVerificationService, AMLVerificationResult } from '../services/amlVe
 import { sanctionsService, SanctionsCheckRequest } from '../services/sanctionsService';
 import * as spacesService from '../services/spacesService';
 import { fuspayModularKycService } from '../services/fuspayModularKycService';
+import { applyFuspayModularWebhook } from '../services/fuspayWebhookService';
+import { provisionUserNubanAfterKyc } from '../services/walletMsService';
 import { KYCProfileModel } from '../models/KYCProfileModel';
 import { v4 as uuidv4 } from 'uuid';
 import { businessSurveyUpdateSchema, businessInfoUpdateSchema } from '../utils/validation';
+
+/** Blocks polling/submitting another user's verification when the path id is stale or forged. */
+async function modularVerificationBelongsToUser(userId: string, verificationId: string): Promise<boolean> {
+  const profile = await KYCProfileModel.findOne({ userId }).lean();
+  const stored = (profile as any)?.fuspay?.verification?.verificationId as string | undefined;
+  return Boolean(stored && stored === verificationId);
+}
 
 // Enhanced KYC controller with separated individual and business methods
 export class KYCController {
@@ -96,17 +105,22 @@ export class KYCController {
         (await fuspayModularKycService.getBrandingForApp(
           typeof tenantAppId === 'string' && tenantAppId.trim().length > 0 ? tenantAppId.trim() : undefined
         ));
-      let fuspayUserId =
-        (body.user_id as string | undefined) ||
-        (body.customer_id as string | undefined);
 
       const jwtUserId = req.user?.userId;
-      if (!fuspayUserId) {
-        if (!jwtUserId) {
-          return res.status(401).json({ success: false, error: 'Authentication required' });
-        }
+      let fuspayUserId: string | undefined;
+
+      if (jwtUserId) {
+        // Never trust user_id/customer_id from the body for browser clients: UIs often replay full
+        // Fuspay status payloads and would accidentally start KYC for the wrong Fuspay customer.
         const profile = await KYCProfileModel.findOne({ userId: jwtUserId }).lean();
         fuspayUserId = (profile as any)?.fuspay?.customerId;
+      } else {
+        fuspayUserId =
+          (body.user_id as string | undefined) ||
+          (body.customer_id as string | undefined);
+        if (!fuspayUserId) {
+          return res.status(401).json({ success: false, error: 'Authentication required' });
+        }
       }
 
       if (!fuspayUserId) {
@@ -212,98 +226,63 @@ export class KYCController {
           ? (payload.data as Record<string, unknown>)
           : {};
 
-      const fuspayUserIdRaw =
+      const hasIdentifier = Boolean(
         nested.user_id ||
-        nested.customer_id ||
-        nested.customerId ||
-        payload.user_id ||
-        payload.customer_id;
-      const fuspayUserId =
-        typeof fuspayUserIdRaw === 'string' ? fuspayUserIdRaw : fuspayUserIdRaw != null ? String(fuspayUserIdRaw) : '';
+          nested.customer_id ||
+          nested.customerId ||
+          nested.reference ||
+          nested.verification_id ||
+          nested.verificationId ||
+          nested.id ||
+          payload.user_id ||
+          payload.customer_id
+      );
 
-      const verificationIdRaw =
-        nested.verification_id ||
-        nested.verificationId ||
-        nested.id ||
-        payload.verification_id ||
-        payload.verificationId;
-      const verificationId =
-        typeof verificationIdRaw === 'string'
-          ? verificationIdRaw
-          : verificationIdRaw != null
-            ? String(verificationIdRaw)
-            : '';
-
-      const rawStatusStr = (
-        nested.status ||
-        nested.overall_status ||
-        nested.overallStatus ||
-        nested.kyc_status ||
-        payload.status ||
-        ''
-      ).toString()
-        .toLowerCase();
-
-      const approvedHints = ['approved', 'completed', 'complete', 'verified', 'success'];
-      const rejectedHints = ['rejected', 'failed', 'declined'];
-
-      let newProfileStatus: KYCStatus | undefined;
-      if (approvedHints.some((h) => rawStatusStr.includes(h))) {
-        newProfileStatus = KYCStatus.APPROVED;
-      } else if (rejectedHints.some((h) => rawStatusStr.includes(h))) {
-        newProfileStatus = KYCStatus.REJECTED;
-      }
-
-      const setDoc: Record<string, unknown> = {
-        'fuspay.verification.lastSyncedAt': new Date()
-      };
-      if (verificationId) {
-        setDoc['fuspay.verification.verificationId'] = verificationId;
-      }
-      if (rawStatusStr) {
-        setDoc['fuspay.verification.status'] = rawStatusStr;
-      }
-      if (newProfileStatus) {
-        setDoc.status = newProfileStatus;
-        if (newProfileStatus === KYCStatus.APPROVED) {
-          setDoc.completedAt = new Date();
-        }
-      }
-
-      let matched = 0;
-      let modified = 0;
-
-      if (fuspayUserId) {
-        const one = await KYCProfileModel.updateOne({ 'fuspay.customerId': fuspayUserId }, { $set: setDoc });
-        matched = one.matchedCount;
-        modified = one.modifiedCount ?? 0;
-      }
-
-      if (!matched && verificationId) {
-        const two = await KYCProfileModel.updateOne(
-          { 'fuspay.verification.verificationId': verificationId },
-          { $set: setDoc }
-        );
-        matched = two.matchedCount;
-        modified = two.modifiedCount ?? 0;
-      }
-
-      if (!fuspayUserId && !verificationId) {
+      if (!hasIdentifier) {
         return res.status(400).json({
           success: false,
-          error: 'Webhook payload must include user/customer id or verification id'
+          error:
+            'Webhook payload must include user/customer id, reference, or verification id in data'
         });
       }
 
-      logger.info('Fuspay modular webhook processed', {
-        fuspayUserId: fuspayUserId || undefined,
-        verificationId: verificationId || undefined,
-        rawStatusStr,
-        profileStatus: newProfileStatus,
-        matched
-      });
+      const result = await applyFuspayModularWebhook(payload);
 
-      return res.status(200).json({ success: true, matched, modified });
+      let nubanProvision: Awaited<ReturnType<typeof provisionUserNubanAfterKyc>> | undefined;
+      if (result.shouldProvisionNuban && result.profileUserId) {
+        nubanProvision = await provisionUserNubanAfterKyc(result.profileUserId);
+        if (!nubanProvision.success) {
+          logger.warn('PayOnUs NUBAN provision after Fuspay KYC failed', {
+            userId: result.profileUserId,
+            error: nubanProvision.error
+          });
+        } else {
+          logger.info('PayOnUs NUBAN provision after Fuspay KYC', {
+            userId: result.profileUserId,
+            skipped: nubanProvision.skipped
+          });
+        }
+      }
+
+      return res.status(200).json({
+        success: true,
+        matched: result.matched,
+        modified: result.modified,
+        bvnStored: result.bvnStored ?? false,
+        nubanProvisionTriggered: Boolean(result.shouldProvisionNuban),
+        ...(nubanProvision
+          ? {
+              nubanProvision: {
+                success: nubanProvision.success,
+                skipped: nubanProvision.skipped,
+                error: nubanProvision.error
+              }
+            }
+          : {}),
+        ...(result.matched === 0
+          ? { warning: 'Webhook stored identifiers did not match any KYC profile' }
+          : {})
+      });
     } catch (error) {
       next(error);
     }
@@ -317,6 +296,14 @@ export class KYCController {
         return res.status(400).json({
           success: false,
           error: 'verificationId is required'
+        });
+      }
+
+      const userId = req.user?.userId;
+      if (userId && !(await modularVerificationBelongsToUser(userId, verificationId))) {
+        return res.status(403).json({
+          success: false,
+          error: 'Verification id does not match this account'
         });
       }
 
@@ -341,12 +328,19 @@ export class KYCController {
         });
       }
 
+      const userId = req.user?.userId;
+      if (userId && !(await modularVerificationBelongsToUser(userId, verificationId))) {
+        return res.status(403).json({
+          success: false,
+          error: 'Verification id does not match this account'
+        });
+      }
+
       const result = await fuspayModularKycService.getVerificationStatus(verificationId);
       if (!result.success) {
         return res.status(400).json(result);
       }
 
-      const userId = req.user?.userId;
       if (userId && result.data) {
         await KYCProfileModel.updateOne(
           { userId, 'fuspay.verification.verificationId': verificationId },
@@ -376,6 +370,14 @@ export class KYCController {
         return res.status(400).json({
           success: false,
           error: 'verificationId is required'
+        });
+      }
+
+      const userId = req.user?.userId;
+      if (userId && !(await modularVerificationBelongsToUser(userId, verificationId))) {
+        return res.status(403).json({
+          success: false,
+          error: 'Verification id does not match this account'
         });
       }
 
@@ -2173,6 +2175,40 @@ export class KYCController {
       }
       
       return res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** Internal: wallet-ms Payonus — retail user BVN from Fuspay KYC webhook. */
+  static async getUserBvnForPayonusInternal(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { userId } = req.params;
+      const result = await kycService.getUserBvnForPayonusInternal(userId || '');
+      if (result.success && result.bvn) {
+        return res.status(200).json({ success: true, bvn: result.bvn });
+      }
+      return res.status(404).json({
+        success: false,
+        error: result.error || 'BVN not found'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** Internal: wallet-ms Payonus — first 11-digit BVN for merchant owner (client-auth user id). */
+  static async getFirstShareholderBvnForPayonusInternal(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { ownerUserId } = req.params;
+      const result = await kycService.getFirstShareholderBvnForPayonusInternal(ownerUserId || '');
+      if (result.success && result.bvn) {
+        return res.status(200).json({ success: true, bvn: result.bvn });
+      }
+      return res.status(404).json({
+        success: false,
+        error: result.error || 'BVN not found'
+      });
     } catch (error) {
       next(error);
     }

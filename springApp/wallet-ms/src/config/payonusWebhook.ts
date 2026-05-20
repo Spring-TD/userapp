@@ -1,4 +1,5 @@
 import { MerchantWalletType } from '../models/Wallet';
+import { normalizeMerchantWalletType } from '../utils/merchantWalletType';
 
 function truthyEnv(v?: string): boolean {
   if (!v) return false;
@@ -7,10 +8,7 @@ function truthyEnv(v?: string): boolean {
 }
 
 function parseMerchantWalletType(value?: string): MerchantWalletType {
-  const v = (value || '').trim().toUpperCase();
-  if (v === MerchantWalletType.OPERATION) return MerchantWalletType.OPERATION;
-  if (v === MerchantWalletType.KYC) return MerchantWalletType.KYC;
-  return MerchantWalletType.TREASURY;
+  return normalizeMerchantWalletType(value) ?? MerchantWalletType.SETTLEMENT;
 }
 
 export const payonusWebhookConfig = {

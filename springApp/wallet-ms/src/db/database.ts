@@ -13,6 +13,7 @@ import {
   VirtualNubanAccountType,
   VirtualNubanProvisionStatus
 } from '../models/Wallet';
+import { merchantWalletTypesForLookup } from '../utils/merchantWalletType';
 
 function buildVirtualNuban(raw: Record<string, unknown>): VirtualNubanDetails | undefined {
   const accountNumber = raw.payonusNubanAccountNumber as string | undefined;
@@ -194,7 +195,7 @@ export const db = {
       walletType: 'MERCHANT',
       merchantId,
       ...(appId ? { appId } : {}),
-      merchantWalletType
+      merchantWalletType: { $in: merchantWalletTypesForLookup(merchantWalletType) as string[] }
     });
     return docToWallet(doc) as MerchantWallet | null;
   },
@@ -272,6 +273,11 @@ export const db = {
     referenceId?: string;
     balanceBefore?: number;
     balanceAfter?: number;
+    category?: string;
+    source?: string;
+    metadata?: Record<string, unknown>;
+    tags?: string[];
+    externalReference?: string;
   }): Promise<Transaction> {
     const doc = await TransactionModel.create(data);
     return docToTransaction(doc)!;
@@ -280,6 +286,20 @@ export const db = {
   async getTransactionById(transactionId: string): Promise<Transaction | null> {
     if (!mongoose.Types.ObjectId.isValid(transactionId)) return null;
     const doc = await TransactionModel.findById(transactionId);
+    return docToTransaction(doc);
+  },
+
+  async findCompletedTransactionByReference(
+    walletId: string,
+    referenceId: string
+  ): Promise<Transaction | null> {
+    const trimmed = referenceId.trim();
+    if (!trimmed) return null;
+    const doc = await TransactionModel.findOne({
+      walletId,
+      referenceId: trimmed,
+      status: TransactionStatus.COMPLETED
+    });
     return docToTransaction(doc);
   },
 

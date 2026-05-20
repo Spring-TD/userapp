@@ -21,7 +21,7 @@ async function testOperationKycTransfers() {
     
     // Fund the Operation wallet first
     console.log('Funding Operation wallet...');
-    const operationWallet = await WalletService.getOperationWallet(merchantId);
+    const operationWallet = await WalletService.getBillingWallet(merchantId);
     if (operationWallet.success && operationWallet.wallet) {
       const fundResult = await WalletService.updateWalletBalance(
         operationWallet.wallet.id, 
@@ -37,7 +37,7 @@ async function testOperationKycTransfers() {
     
     // Test transfer from Operation to KYC
     console.log('Testing transfer from Operation to KYC...');
-    const transfer1Result = await WalletService.transferFromOperationToKyc({
+    const transfer1Result = await WalletService.transferFromBillingToKyc({
       merchantId,
       amount: 500,
       description: 'Transfer from Operation to KYC'
@@ -54,7 +54,7 @@ async function testOperationKycTransfers() {
     
     // Test transfer from KYC to Operation
     console.log('Testing transfer from KYC to Operation...');
-    const transfer2Result = await WalletService.transferFromKycToOperation({
+    const transfer2Result = await WalletService.transferFromKycToBilling({
       merchantId,
       amount: 200,
       description: 'Transfer from KYC to Operation'
@@ -70,7 +70,7 @@ async function testOperationKycTransfers() {
     console.log('To wallet balance:', transfer2Result.toWallet?.balance);
     
     // Get final wallet balances
-    const finalOperationWallet = await WalletService.getOperationWallet(merchantId);
+    const finalOperationWallet = await WalletService.getBillingWallet(merchantId);
     const finalKycWallet = await WalletService.getKycWallet(merchantId);
     
     if (finalOperationWallet.success && finalOperationWallet.wallet && 

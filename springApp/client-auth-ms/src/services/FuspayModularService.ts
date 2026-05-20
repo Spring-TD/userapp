@@ -52,6 +52,21 @@ class FuspayModularService {
     return { Authorization: `Bearer ${config.fuspayModularApiKey}` };
   }
 
+  private assertFuspayCountry(country: string): { ok: true; code: string } | { ok: false; error: string } {
+    const code = country.trim().toUpperCase();
+    if (!/^[A-Z]{2}$/.test(code)) {
+      return { ok: false, error: 'Fuspay country must be a valid ISO 3166-1 alpha-2 code' };
+    }
+    const allowed = new Set(config.fuspayModularAllowedCountryCodes);
+    if (!allowed.has(code)) {
+      return {
+        ok: false,
+        error: `Country must be one of: ${[...allowed].sort().join(', ')}`
+      };
+    }
+    return { ok: true, code };
+  }
+
   async createUser(request: CreateFuspayUserRequest): Promise<{
     success: boolean;
     data?: CreateFuspayUserResponse;
@@ -65,13 +80,18 @@ class FuspayModularService {
         return { success: false, error: 'Fuspay modular is enabled but FUSPAY_MODULAR_APP_ID is not configured' };
       }
 
+      const countryCheck = this.assertFuspayCountry(request.country);
+      if (!countryCheck.ok) {
+        return { success: false, error: countryCheck.error };
+      }
+
       const response = await this.axiosInstance.post<CreateFuspayUserResponse>(
         '/api/v1/modular/user/',
         {
           email: request.email,
           phone: request.phone,
           app: config.fuspayModularAppId,
-          country: request.country,
+          country: countryCheck.code,
           user_ref: request.userRef
         },
         { headers: this.authHeaders() }

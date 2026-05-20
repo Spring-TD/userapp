@@ -21,7 +21,7 @@ async function testTreasuryDebit() {
 
     // Add some balance to Treasury Wallet
     console.log('\n2. Adding balance to Treasury Wallet...');
-    const treasuryResult = await WalletService.getTreasuryWallet('merchant_123');
+    const treasuryResult = await WalletService.getSettlementWallet('merchant_123');
     if (!treasuryResult.success || !treasuryResult.wallet) {
       console.log('✗ Failed to get Treasury wallet');
       return;
@@ -43,7 +43,7 @@ async function testTreasuryDebit() {
 
     // Debit the Treasury Wallet
     console.log('\n3. Debiting Treasury Wallet...');
-    const debitResult = await WalletService.debitTreasuryWallet({
+    const debitResult = await WalletService.debitSettlementWallet({
       merchantId: 'merchant_123',
       amount: 100,
       description: 'Service fee'

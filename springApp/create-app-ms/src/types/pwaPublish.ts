@@ -52,6 +52,19 @@ export interface PublishPwaRequest {
   publishMode?: 'apply-and-publish';
 }
 
+/** Result of a best-effort publish after template save (does not fail the save). */
+export interface PwaAutoPublishResult {
+  published: boolean;
+  publishId?: string;
+  version?: string;
+  manifestUrl?: string;
+  serviceWorkerUrl?: string;
+  pwaEntryUrl?: string;
+  publishedAt?: string;
+  validationErrors?: string[];
+  skippedReason?: string;
+}
+
 /** Public storefront hints when a PWA has been published (no auth). */
 export interface PublicPwaInstallBundle {
   manifestUrl: string;

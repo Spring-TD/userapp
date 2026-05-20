@@ -125,6 +125,8 @@ export interface Product {
   appId: string;
   status: 'complete' | 'incomplete';
   isActive: boolean;
+  /** Merchant storefront: highlight turned-on products; only meaningful when `isActive` is true. */
+  isFeatured?: boolean;
   createdAt: string;
   updatedAt: string;
   metadata?: Record<string, unknown>;
@@ -153,6 +155,7 @@ export interface CreateProductRequest {
   subType?: string;
   appId: string;
   isActive?: boolean;
+  isFeatured?: boolean;
   metadata?: Record<string, unknown>;
   structure?: ProductStructure;
   about?: LoanAbout;
@@ -174,6 +177,7 @@ export interface UpdateProductRequest {
   subType?: string;
   status?: 'complete' | 'incomplete';
   isActive?: boolean;
+  isFeatured?: boolean;
   metadata?: Record<string, unknown>;
   structure?: ProductStructure;
   about?: LoanAbout;

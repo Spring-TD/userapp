@@ -40,7 +40,7 @@ async function testFundingController() {
     console.log('Testing funding controller...');
     
     // Get initial balances
-    const treasuryWalletResult = await WalletService.getTreasuryWallet(merchantId);
+    const treasuryWalletResult = await WalletService.getSettlementWallet(merchantId);
     if (!treasuryWalletResult.success || !treasuryWalletResult.wallet) {
       console.error('Failed to get Treasury wallet:', treasuryWalletResult.error);
       return;

@@ -56,4 +56,49 @@ export class InternalWalletController {
       next(error);
     }
   }
+
+  static async provisionUserNuban(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = (req.params.userId || '').trim();
+      if (!userId) {
+        res.status(400).json({ success: false, error: 'userId is required' });
+        return;
+      }
+
+      const result = await WalletService.provisionUserWalletNuban(userId);
+
+      if (result.skipped) {
+        res.status(200).json({
+          success: true,
+          skipped: true,
+          message: 'NUBAN already provisioned',
+          data: { wallet: result.wallet }
+        });
+        return;
+      }
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: result.error || 'NUBAN provisioning failed',
+          data: result.wallet ? { wallet: result.wallet } : undefined
+        });
+        return;
+      }
+
+      logger.info('Internal API: user wallet NUBAN provisioned after KYC', {
+        userId,
+        walletId: result.wallet?.id
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'User wallet NUBAN provisioned',
+        data: { wallet: result.wallet }
+      });
+    } catch (error) {
+      logger.error('Internal API: provision user NUBAN failed', { error });
+      next(error);
+    }
+  }
 }

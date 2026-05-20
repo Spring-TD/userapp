@@ -14,7 +14,7 @@ async function testAutoProvisioning() {
       merchantId: 'merchant_123',
       name: 'Test Treasury Wallet',
       currency: 'USD',
-      merchantWalletType: MerchantWalletType.TREASURY
+      merchantWalletType: MerchantWalletType.SETTLEMENT
     });
 
     if (result.success) {
@@ -37,8 +37,8 @@ async function testAutoProvisioning() {
       console.log('  Wallet types:', walletTypes.join(', '));
       
       // Verify all three types exist
-      const hasTreasury = walletTypes.includes(MerchantWalletType.TREASURY);
-      const hasOperation = walletTypes.includes(MerchantWalletType.OPERATION);
+      const hasTreasury = walletTypes.includes(MerchantWalletType.SETTLEMENT);
+      const hasOperation = walletTypes.includes(MerchantWalletType.BILLING);
       const hasKYC = walletTypes.includes(MerchantWalletType.KYC);
       
       if (hasTreasury && hasOperation && hasKYC) {

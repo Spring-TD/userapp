@@ -31,7 +31,8 @@ function isIpAddress(host: string): boolean {
   return /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
 }
 
-function extractTenantSubdomain(host: string): string | null {
+/** Exported for CORS: allow browser origins on tenant PWA hosts (e.g. crbc.tryspring.io). */
+export function extractTenantSubdomainFromHost(host: string): string | null {
   if (!host || host === 'localhost' || isIpAddress(host)) {
     return null;
   }
@@ -46,29 +47,39 @@ function extractTenantSubdomain(host: string): string | null {
     return null;
   }
 
-  let label = host.slice(0, -suffix.length);
-  if (!label) {
+  const hostLabel = host.slice(0, -suffix.length);
+  if (!hostLabel) {
     return null;
   }
 
   const expectedPrefix = config.platformSubdomainPrefix.trim().toLowerCase();
+  let subdomain: string;
+
   if (expectedPrefix) {
     const prefixWithDot = `${expectedPrefix}.`;
-    if (!label.startsWith(prefixWithDot)) {
+    if (hostLabel.startsWith(prefixWithDot)) {
+      subdomain = hostLabel.slice(prefixWithDot.length);
+    } else if (!hostLabel.includes('.')) {
+      // Bare tenant host (e.g. crbc.tryspring.io) without www prefix
+      subdomain = hostLabel;
+    } else {
       return null;
     }
-    label = label.slice(prefixWithDot.length);
+  } else if (hostLabel.includes('.')) {
+    return null;
+  } else {
+    subdomain = hostLabel;
   }
 
-  if (!label || label.includes('.')) {
+  if (!subdomain || subdomain.includes('.')) {
     return null;
   }
 
-  if (config.reservedSubdomains.includes(label)) {
+  if (config.reservedSubdomains.includes(subdomain)) {
     return null;
   }
 
-  return label;
+  return subdomain;
 }
 
 export const tenantResolverMiddleware = async (
@@ -78,7 +89,7 @@ export const tenantResolverMiddleware = async (
 ): Promise<void> => {
   try {
     const host = extractHost(req);
-    const subdomain = extractTenantSubdomain(host);
+    const subdomain = extractTenantSubdomainFromHost(host);
 
     if (!subdomain) {
       return next();

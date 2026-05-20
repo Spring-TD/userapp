@@ -35,9 +35,9 @@ class ApplicationService {
                 throw new Error('Product is not active for this app. Only active products can be applied for.');
             }
 
-            // 3. Check if product requires approval
-            // Loan and Mortgage products require admin approval
-            const requiresApproval = ['Loan', 'Mortgage'].includes(product.type);
+            // 3. Check if product requires approval (LOAN / MORTGAGE from product-ms; legacy Title Case supported)
+            const normalizedType = String(product.type || '').trim().toUpperCase();
+            const requiresApproval = normalizedType === 'LOAN' || normalizedType === 'MORTGAGE';
 
             if (requiresApproval) {
                 const appInfo = await createAppService.getAppInfo(appId);

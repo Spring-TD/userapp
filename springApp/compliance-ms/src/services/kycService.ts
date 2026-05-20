@@ -20,6 +20,8 @@ import { BusinessInfoModel } from '../models/BusinessInfoModel';
 import { BusinessSurveyModel } from '../models/BusinessSurveyModel';
 import { BusinessDocumentModel } from '../models/BusinessDocumentModel';
 import { ShareholderModel } from '../models/ShareholderModel';
+import { KYCProfileModel } from '../models/KYCProfileModel';
+import { normalizeBvnTo11Digits } from '../utils/bvnNormalize';
 import { BusinessDocumentType, BUSINESS_DOCUMENT_DISPLAY_NAMES } from '../types/kycTypes';
 
 /** Map API shareholder shape to ShareholderModel document (document URLs stored in DO Spaces) */
@@ -86,6 +88,7 @@ import { cacService, CACVerificationResult } from './cacService';
 import { premblyService, PremblyIndividualKYCRequest, PremblyBusinessKYCRequest } from './premblyService';
 import { fuspayModularKycService } from './fuspayModularKycService';
 import { clientAuthService } from './clientAuthService';
+import { normalizeCountryToAlpha2 } from '../utils/countryCode';
 
 // Service class for KYC operations
 export class KYCService {
@@ -231,7 +234,16 @@ export class KYCService {
         const primaryShareholder = Array.isArray(data.shareholders) ? data.shareholders[0] : undefined;
         const email = preferredUser?.email || clientAuthProfile.data?.email || primaryShareholder?.email;
         const phone = preferredUser?.phone || clientAuthProfile.data?.phone || primaryShareholder?.phoneNumber;
-        const country = preferredUser?.country || clientAuthProfile.data?.country || data.businessSurvey?.country;
+        const countryRaw = preferredUser?.country || clientAuthProfile.data?.country || data.businessSurvey?.country;
+        const countryStr = typeof countryRaw === 'string' ? countryRaw.trim() : '';
+        const country = countryStr ? normalizeCountryToAlpha2(countryStr) : undefined;
+        if (countryStr && !country) {
+          return {
+            success: false,
+            error:
+              'Invalid or unrecognized country for Fuspay. Use a full English country name or ISO alpha-2 code (e.g. Nigeria or NG).'
+          };
+        }
         // user_ref: Fuspay expects our stable id for this person — canonical client-auth user id from JWT, then body.userId for service-style calls.
         const explicitRef =
           typeof preferredUser?.userRef === 'string' && preferredUser.userRef.trim().length > 0
@@ -790,6 +802,92 @@ export class KYCService {
       return { success: true, data };
     } catch (error) {
       return { success: false, error: 'Error retrieving shareholders' };
+    }
+  }
+
+  /**
+   * First shareholder with an 11-digit BVN for a merchant owner (ShareholderModel.userId = client-auth JWT userId).
+   * Used by wallet-ms Payonus virtual-account provisioning.
+   */
+  /**
+   * Retail user BVN from completed Fuspay modular KYC (webhook → fuspay.verification / personalInfo).
+   * Used by wallet-ms for per-user Payonus fixed virtual accounts.
+   */
+  async getUserBvnForPayonusInternal(userId: string): Promise<{
+    success: boolean;
+    bvn?: string;
+    error?: string;
+  }> {
+    const uid = (userId || '').trim();
+    if (!uid) {
+      return { success: false, error: 'userId is required' };
+    }
+    try {
+      const profile: any = await KYCProfileModel.findOne({
+        $or: [{ userId: uid }, { 'fuspay.userRef': uid }, { 'fuspay.customerId': uid }]
+      }).lean();
+
+      if (!profile) {
+        return { success: false, error: 'No KYC profile found for this user' };
+      }
+
+      const candidates = [
+        profile.fuspay?.verification?.bvnNormalized,
+        profile.fuspay?.verification?.bvn,
+        profile.fuspay?.verification?.details?.bvn,
+        profile.personalInfo?.bvn
+      ];
+      for (const raw of candidates) {
+        const digits = normalizeBvnTo11Digits(raw);
+        if (digits) {
+          return { success: true, bvn: digits };
+        }
+      }
+
+      return {
+        success: false,
+        error:
+          'No 11-digit BVN on profile. Complete Fuspay KYC (webhook must include full BVN in details).'
+      };
+    } catch {
+      return { success: false, error: 'User BVN lookup failed' };
+    }
+  }
+
+  async getFirstShareholderBvnForPayonusInternal(ownerUserId: string): Promise<{
+    success: boolean;
+    bvn?: string;
+    error?: string;
+  }> {
+    const uid = (ownerUserId || '').trim();
+    if (!uid) {
+      return { success: false, error: 'ownerUserId is required' };
+    }
+    try {
+      const docs = await ShareholderModel.find({ userId: uid }).sort({ createdAt: 1 }).lean();
+      for (const d of docs as { bvn?: string }[]) {
+        const raw = d.bvn;
+        if (typeof raw !== 'string') continue;
+        const digits = raw.replace(/\D/g, '');
+        if (digits.length === 11) {
+          return { success: true, bvn: digits };
+        }
+      }
+      const kycProfile: any = await MockKYCProfileModel.findOne({ userId: uid });
+      const embedded = kycProfile?.shareholders;
+      if (Array.isArray(embedded)) {
+        for (const s of embedded) {
+          const raw = s?.bvn;
+          if (typeof raw !== 'string') continue;
+          const digits = raw.replace(/\D/g, '');
+          if (digits.length === 11) {
+            return { success: true, bvn: digits };
+          }
+        }
+      }
+      return { success: false, error: 'No shareholder with 11-digit BVN for this owner' };
+    } catch {
+      return { success: false, error: 'Shareholder lookup failed' };
     }
   }
 

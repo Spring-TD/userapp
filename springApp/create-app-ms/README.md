@@ -10,7 +10,7 @@ Deployment URL: https://create-app-ms.fly.dev/
 - App status is **active** or **suspended**. Merchants can suspend or reactivate an app via `PATCH /api/v1/apps/{id}/status`.
 - Retrieve applications by ID or merchant ID
 - Retrieve all applications
-- Automatically create merchant wallets (TREASURY, OPERATION, KYC) for each application using the Wallet Microservice, with **`appId`** scoping, **`appName`** passed for Payonus labeling, and wallet **currency** from **`MERCHANT_WALLET_CURRENCY`** (default **NGN**, aligned with Payonus NUBAN defaults in wallet-ms)
+- Automatically create merchant wallets (Billing, KYC, Settlement) for each application using the Wallet Microservice, with **`appId`** scoping, **`appName`** passed for Payonus labeling, and wallet **currency** from **`MERCHANT_WALLET_CURRENCY`** (default **NGN**, aligned with Payonus NUBAN defaults in wallet-ms)
 - Update application information
 - Delete applications
 - Associate applications with products through product keys
@@ -35,7 +35,7 @@ Deployment URL: https://create-app-ms.fly.dev/
 ```
 POST /api/v1/apps
 ```
-Creates a new application and automatically creates merchant wallets for it (TREASURY, OPERATION, KYC) via wallet-ms using the new app’s **`id`** as **`appId`**, the app **`name`** as **`appName`**, and **`MERCHANT_WALLET_CURRENCY`** as **`currency`**. If wallet-ms has Payonus enabled and the currency matches `PAYONUS_NUBAN_CURRENCIES`, each wallet may include a **`virtualNuban`** with an account number. Requires JWT authentication; merchant ID is extracted from the authenticated user context.
+Creates a new application and automatically creates merchant wallets for it (Billing, KYC, Settlement) via wallet-ms using the new app’s **`id`** as **`appId`**, the app **`name`** as **`appName`**, and **`MERCHANT_WALLET_CURRENCY`** as **`currency`**. If wallet-ms has Payonus enabled and the currency matches `PAYONUS_NUBAN_CURRENCIES`, each wallet may include a **`virtualNuban`** with an account number. Requires JWT authentication; merchant ID is extracted from the authenticated user context.
 
 **Request Headers:**
 - `Authorization`: Bearer token obtained through authentication
@@ -94,9 +94,11 @@ Requires JWT authentication.
 GET /api/v1/apps/resolve/{subdomain}
 ```
 
-No authentication. Used by the **storefront** (or edge worker) to map the hostname label to an app and, when a PWA has been published, to obtain install artifact URLs.
+No authentication. Used by the **storefront** (or edge worker) to map the hostname label to an app and, when a PWA has been published, to obtain install artifact URLs and the runtime manifest JSON.
 
 **Response `data`:** `id`, `merchantId`, `subdomain`, `status`, `defaultAppUrl` (platform URL from `APP_URL_SCHEME` + `APP_SUBDOMAIN_PREFIX` + `APP_PLATFORM_BASE_DOMAIN` when `subdomain` is set).
+
+**Optional `data.pwaManifest`** (included when there is a **published** PWA): the same JSON object served by `GET /api/v1/apps/{id}/pwa/manifest.webmanifest` (`name`, `short_name`, `icons`, `theme_color`, `start_url`, `scope`, etc.). Omitted when nothing is published. Lets storefronts bootstrap branding in one request without fetching the manifest URL.
 
 **Optional `data.pwaInstall`** (included only when there is a **published** PWA and the request has a usable `Host` header so absolute URLs can be built):
 
@@ -107,7 +109,7 @@ No authentication. Used by the **storefront** (or edge worker) to map the hostna
 | `pwaEntryUrl` | Public app site URL from publish (same resolution rules as `start_url` / custom domain). |
 | `version` | Publish version string (ISO timestamp from publish). |
 
-If nothing is published, `pwaInstall` is omitted.
+If nothing is published, `pwaManifest` and `pwaInstall` are omitted.
 
 #### Storefront install UX (frontend implementation)
 
@@ -232,6 +234,8 @@ Manifest uploads accept `application/json`, `application/manifest+json`, `text/j
 
 Runtime publish artifacts are generated from the resolved template config and stored as versioned publish records (separate from editable template drafts).
 
+**Auto-publish:** After a successful `PATCH` on a PWA template, `POST …/apply`, or asset/onboarding image upload, the service attempts to publish that template (same as `POST …/pwa/publish` with `templateId`). The response includes a `publish` object (`published`, `version`, `validationErrors`, etc.). Saves always succeed; publish validation failures are reported in `publish` without failing the request. Set `CREATE_APP_SERVICE_PUBLIC_URL` when requests lack a `Host` header (e.g. some internal callers).
+
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/v1/apps/:appId/pwa/publish` | Publish runtime PWA artifacts. If `templateId` is provided in body, it is applied then published; otherwise the currently applied template is used. |
@@ -239,7 +243,7 @@ Runtime publish artifacts are generated from the resolved template config and st
 | `GET` | `/api/v1/apps/:appId/pwa/manifest.webmanifest` | Get latest published runtime web manifest JSON. |
 | `GET` | `/api/v1/apps/:appId/pwa/sw.js` | Get latest published service worker JS. |
 
-The **`GET /api/v1/apps/resolve/:subdomain`** response may include **`pwaInstall`** with the same `manifestUrl` and `serviceWorkerUrl` pattern for the resolved app id (see **Resolve app by subdomain** above).
+The **`GET /api/v1/apps/resolve/:subdomain`** response may include **`pwaManifest`** (inline manifest JSON, same as `GET …/pwa/manifest.webmanifest`) and **`pwaInstall`** with the same `manifestUrl` and `serviceWorkerUrl` pattern for the resolved app id (see **Resolve app by subdomain** above).
 
 **Publish request body (`POST /pwa/publish`):**
 
@@ -793,7 +797,7 @@ Retrieves all product keys associated with an application.
 ```
 GET /api/v1/apps/{id}/wallets
 ```
-Requires JWT authentication. Retrieves merchant wallets for the specified app (`TREASURY`, `OPERATION`, `KYC`). Wallet objects are returned as wallet-ms defines them; when Payonus provisioning has run, each may include **`virtualNuban`** (`accountNumber`, `bankName`, `provisionStatus`, etc.).
+Requires JWT authentication. Retrieves merchant wallets for the specified app (`BILLING`, `KYC`, `SETTLEMENT`). Wallet objects are returned as wallet-ms defines them; when Payonus provisioning has run, each may include **`virtualNuban`** (`accountNumber`, `bankName`, `provisionStatus`, etc.).
 
 - Merchant users can only view wallets for apps they own.
 - Admin users can view wallets for any app.
@@ -830,7 +834,7 @@ Retrieves a specific product by its ID.
 ```
 GET /api/v1/special/wallets/merchant/{merchantId}/balance/{walletType}
 ```
-Retrieves the balance of a merchant wallet (TREASURY, OPERATION, or KYC).
+Retrieves the balance of a merchant wallet (BILLING, KYC, or SETTLEMENT).
 
 #### 6. Get Merchant Wallet History
 ```
@@ -1029,9 +1033,9 @@ Example workflow:
 ## Integration with Wallet Microservice
 
 The Create App Microservice automatically creates merchant wallets for each application through integration with the Wallet Microservice. When an application is created, it calls **`POST /api/v1/wallets/merchant/all`** on wallet-ms (with the caller’s **`Authorization`** header) and provisions **app-scoped** merchant wallets for:
-- `TREASURY`
-- `OPERATION`
+- `BILLING`
 - `KYC`
+- `SETTLEMENT`
 
 The request body includes **`appId`** (the new application’s id), **`appName`** (the application name, for Payonus customer labeling), and **`currency`** from **`MERCHANT_WALLET_CURRENCY`** (default **NGN**). Use **`USD`** or another ISO code only if you intentionally do not use Payonus NUBAN for those wallets or you extend `PAYONUS_NUBAN_CURRENCIES` in wallet-ms to match.
 
@@ -1068,7 +1072,7 @@ curl -X GET "http://localhost:3002/api/v1/special/apps" \
 - `ACCOUNT_SERVICE_URL`: Base URL for **account-ms** (used by the product overview route to call **`GET /api/v1/applications`** with the caller’s JWT). Default in code: `http://localhost:4008`. In deployment, set this to wherever applications are served (often the same gateway host as account-ms).
 - `PRODUCT_SERVICE_URL`: URL for **product-ms** (product config on overview). Default in code: `http://localhost:4005` for local springApp stacks; override if your product service runs elsewhere.
 - `WALLET_SERVICE_URL`: URL for the Wallet Microservice (`POST .../merchant/all` on app create; see **Integration with Wallet Microservice**)
-- `MERCHANT_WALLET_CURRENCY`: ISO currency code for new app-scoped Treasury / Operation / KYC wallets (default **`NGN`**). Should match Payonus expectations when NUBAN provisioning is enabled in wallet-ms.
+- `MERCHANT_WALLET_CURRENCY`: ISO currency code for new app-scoped Billing / KYC / Settlement wallets (default **`NGN`**). Should match Payonus expectations when NUBAN provisioning is enabled in wallet-ms.
 - `SPECIAL_API_KEY`: Special API key for authenticating special endpoints
 - `PUBLIC_KEY`: Public key for authenticating special endpoints
 - `JWT_SECRET`: Secret key for JWT token verification

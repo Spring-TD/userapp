@@ -81,7 +81,7 @@ async function testUserWalletFeatures() {
     
     // Transfer money out from user wallet to merchant's treasury wallet
     console.log('Testing transfer out functionality...');
-    const treasuryResult = await WalletService.getTreasuryWallet(merchantId);
+    const treasuryResult = await WalletService.getSettlementWallet(merchantId);
     if (!treasuryResult.success || !treasuryResult.wallet) {
       console.error('Failed to get Treasury wallet:', treasuryResult.error);
       return;

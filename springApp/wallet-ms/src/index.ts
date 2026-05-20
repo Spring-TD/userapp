@@ -44,7 +44,7 @@ app.get('/', (req, res) => {
     },
     features: [
       'User Wallets',
-      'Merchant Wallets (Treasury, Operation, KYC)',
+      'Merchant Wallets (Billing, KYC, Settlement)',
       'Wallet Balance Management',
       'Transaction History',
       'Wallet Funding',

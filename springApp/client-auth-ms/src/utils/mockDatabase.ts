@@ -101,6 +101,19 @@ class MockDatabase {
     return result;
   }
 
+  async findMerchantOwnerByTenantMerchantId(tenantMerchantId: string): Promise<UserAccount | null> {
+    for (const user of this.users.values()) {
+      if (
+        'user_merchant_id' in user &&
+        user.user_merchant_id === tenantMerchantId &&
+        user.user_type === 'merchant'
+      ) {
+        return user;
+      }
+    }
+    return null;
+  }
+
   /**
    * Create a role
    */

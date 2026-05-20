@@ -5,6 +5,7 @@ import { payonusWebhookConfig } from '../config/payonusWebhook';
 import { logger } from '../utils/logger';
 import { validateInput, fundingCallbackSchema } from '../utils/validation';
 import { MerchantWalletType } from '../models/Wallet';
+import { normalizeMerchantWalletType } from '../utils/merchantWalletType';
 
 interface FundingCallbackData {
   id?: string;
@@ -79,7 +80,9 @@ function normalizeFundingCallback(data: FundingCallbackData): FundingCallbackDat
     paymentMethod: data.paymentMethod || mapPaymentMethod(data.paymentChannel),
     providerReference: data.providerReference || data.onusReference,
     merchantId: data.merchantId || data.businessId,
-    merchantWalletType: data.merchantWalletType || payonusWebhookConfig.defaultMerchantWalletType,
+    merchantWalletType:
+      normalizeMerchantWalletType(String(data.merchantWalletType || '')) ||
+      payonusWebhookConfig.defaultMerchantWalletType,
     description:
       data.description ||
       `PayOnUs ${data.type || 'transaction'} (${data.paymentStatus || data.status || 'PENDING'})`,

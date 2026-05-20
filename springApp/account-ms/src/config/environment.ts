@@ -20,6 +20,7 @@ interface EnvironmentConfig {
   platformBaseDomain: string;
   platformSubdomainPrefix: string;
   reservedSubdomains: string[];
+  /** Axios timeout for server-side GET .../apps/resolve/:subdomain (Fly auto-stop cold starts often exceed a few seconds). */
   tenantResolverTimeoutMs: number;
   /** Must match client-auth-ms JWT_SECRET for Bearer merchant tokens */
   jwtSecret: string;
@@ -29,7 +30,9 @@ export const config: EnvironmentConfig = {
   port: parseInt(process.env.PORT || '4008', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
   mongoUri: process.env.MONGO_URI || 'mongodb://localhost:27017/account_db',
-  corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000'],
+  corsOrigins: process.env.CORS_ORIGINS?.split(',').map((value) => value.trim()).filter(Boolean) || [
+    'http://localhost:3000'
+  ],
   logLevel: process.env.LOG_LEVEL || 'info',
   complianceServiceUrl: process.env.COMPLIANCE_SERVICE_URL || 'http://localhost:4003',
   billingServiceUrl: process.env.BILLING_SERVICE_URL || 'http://localhost:4006',
@@ -46,6 +49,6 @@ export const config: EnvironmentConfig = {
     .split(',')
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean),
-  tenantResolverTimeoutMs: parseInt(process.env.TENANT_RESOLVER_TIMEOUT_MS || '5000', 10),
+  tenantResolverTimeoutMs: parseInt(process.env.TENANT_RESOLVER_TIMEOUT_MS || '30000', 10),
   jwtSecret: process.env.JWT_SECRET || 'fallback-secret-key-for-development-purposes-only'
 };

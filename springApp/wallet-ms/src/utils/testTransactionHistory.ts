@@ -19,7 +19,7 @@ async function testTransactionHistory() {
     console.log('✓ Merchant wallets created');
     
     // Get Treasury wallet
-    const treasuryResult = await WalletService.getTreasuryWallet(merchantId);
+    const treasuryResult = await WalletService.getSettlementWallet(merchantId);
     if (!treasuryResult.success || !treasuryResult.wallet) {
       console.error('Failed to get Treasury wallet');
       return;
@@ -47,7 +47,7 @@ async function testTransactionHistory() {
     console.log('✓ Transaction 2: Added 500');
     
     // Transaction 3: Debit some amount
-    await WalletService.debitTreasuryWallet({
+    await WalletService.debitSettlementWallet({
       merchantId,
       amount: 200,
       description: 'Treasury debit test'
@@ -76,7 +76,7 @@ async function testTransactionHistory() {
     }
     
     // Get final wallet balance
-    const finalWalletResult = await WalletService.getTreasuryWallet(merchantId);
+    const finalWalletResult = await WalletService.getSettlementWallet(merchantId);
     if (finalWalletResult.success && finalWalletResult.wallet) {
       console.log('\n4. Final Treasury wallet balance:', finalWalletResult.wallet.balance);
     }

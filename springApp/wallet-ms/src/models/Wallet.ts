@@ -26,11 +26,11 @@ export interface BaseWallet {
   virtualNuban?: VirtualNubanDetails;
 }
 
-// Define wallet types for merchants
+// Define wallet types for merchants (one set per app at creation)
 export enum MerchantWalletType {
-  TREASURY = 'TREASURY',     // Treasury Wallet
-  OPERATION = 'OPERATION',   // Operation Wallet
-  KYC = 'KYC'                // KYC Wallet
+  BILLING = 'BILLING',         // Billing Wallet
+  KYC = 'KYC',                 // KYC Wallet
+  SETTLEMENT = 'SETTLEMENT'    // Settlement Wallet
 }
 
 export interface MerchantWallet extends BaseWallet {

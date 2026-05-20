@@ -1,6 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
 import recordService from '../services/recordService';
-import { CreateRecordRequest, TransactionType, FinancialCategory, FundRecordRequest, DebitRecordRequest } from '../types/record';
+import {
+  BeneficiaryFiatInfo,
+  CreateRecordRequest,
+  FinancialCategory,
+  FundRecordRequest,
+  DebitRecordRequest,
+  LedgerEntryType,
+  TransactionStatus,
+  TransactionType
+} from '../types/record';
 import logger from '../utils/logger';
 import Joi from 'joi';
 
@@ -655,6 +664,119 @@ export class RecordController {
       res.status(201).json(result);
     } catch (error) {
       logger.error('Error in debitRecord', { error });
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/records/internal/wallet-payout-ledger
+   * Internal wallet-ms hook: append a DEBIT ledger entry after wallet-ms completes a payout.
+   */
+  async recordWalletPayoutLedger(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const {
+        userId,
+        amount,
+        currency,
+        txnRef,
+        sessionId,
+        description,
+        thirdPartyRefId,
+        beneficiaryInfo,
+        feeBreakdown,
+        transactionType,
+        financialCategory
+      } = req.body as {
+        userId?: string;
+        amount?: number;
+        currency?: string;
+        txnRef?: string;
+        sessionId?: string;
+        description?: string;
+        thirdPartyRefId?: string;
+        beneficiaryInfo?: BeneficiaryFiatInfo;
+        feeBreakdown?: { payout_fee?: number; merchant_commission?: number; other_fee?: Array<{ name: string; amount: number }> };
+        transactionType?: TransactionType;
+        financialCategory?: FinancialCategory;
+      };
+
+      if (!userId || typeof userId !== 'string' || !userId.trim()) {
+        res.status(400).json({ success: false, error: 'userId is required' });
+        return;
+      }
+      if (typeof amount !== 'number' || amount <= 0) {
+        res.status(400).json({ success: false, error: 'amount must be a positive number' });
+        return;
+      }
+      if (!txnRef || typeof txnRef !== 'string' || !txnRef.trim()) {
+        res.status(400).json({ success: false, error: 'txnRef is required' });
+        return;
+      }
+
+      const record = await recordService.getRecordByUserId(userId.trim());
+      if (!record) {
+        res.status(404).json({ success: false, error: 'Payment record not found for user' });
+        return;
+      }
+      if (!record.isActive) {
+        res.status(400).json({ success: false, error: 'Payment record is not active' });
+        return;
+      }
+
+      const normalizedTxnRef = txnRef.trim();
+      const duplicate = await recordService.getLedgerEntryByTxnRef(record.recordId, normalizedTxnRef);
+      if (duplicate) {
+        res.status(200).json({
+          success: true,
+          duplicate: true,
+          data: { entry: duplicate, record }
+        });
+        return;
+      }
+
+      const entry = await recordService.addLedgerEntry(
+        record.recordId,
+        LedgerEntryType.DEBIT,
+        amount,
+        description || 'Wallet payout',
+        {
+          transactionType: transactionType || TransactionType.PAYOUT,
+          financialCategory: financialCategory || FinancialCategory.WALLET,
+          txnRef: normalizedTxnRef,
+          sessionId: sessionId || normalizedTxnRef,
+          fromCurrency: (currency || record.currency || 'NGN').toUpperCase(),
+          toCurrency: (currency || record.currency || 'NGN').toUpperCase(),
+          senderInfo: {
+            full_name: `${record.firstName || ''} ${record.lastName || ''}`.trim() || record.email,
+            email: record.email,
+            phone: record.phone || 'unknown'
+          },
+          feeBreakdown: {
+            payout_fee: feeBreakdown?.payout_fee ?? 0,
+            merchant_commission: feeBreakdown?.merchant_commission ?? 0,
+            other_fee: feeBreakdown?.other_fee
+          },
+          thirdPartyRefId,
+          beneficiaryInfo,
+          status: TransactionStatus.COMPLETED
+        }
+      );
+
+      if (!entry) {
+        res.status(500).json({ success: false, error: 'Failed to create ledger entry' });
+        return;
+      }
+
+      const updatedRecord = await recordService.getRecordById(record.recordId);
+      res.status(201).json({
+        success: true,
+        data: {
+          entry,
+          record: updatedRecord
+        }
+      });
+    } catch (error) {
+      logger.error('Error recording wallet payout ledger entry', { error });
       next(error);
     }
   }

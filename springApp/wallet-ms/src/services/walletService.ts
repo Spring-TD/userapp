@@ -3,6 +3,8 @@ import { logger } from '../utils/logger';
 import axios, { AxiosRequestConfig } from 'axios';
 import { db } from '../db/database';
 import { provisionPayonusNubanForWallet } from './payonusNubanProvisioning';
+import { initiateBankPayout } from './payonusNubanClient';
+import PaymentLedgerService from './paymentLedgerService';
 
 export interface CreateMerchantWalletData {
   merchantId: string;
@@ -60,6 +62,18 @@ export interface UserApiCallData {
   apiKey?: string;
 }
 
+export interface UserBankPayoutData {
+  userId: string;
+  accountNumber: string;
+  bankCode: string;
+  accountName: string;
+  bankName?: string;
+  amount: number;
+  currency?: string;
+  narration?: string;
+  reference?: string;
+}
+
 export class WalletService {
   /**
    * Create a new merchant wallet of specific type
@@ -99,10 +113,16 @@ export class WalletService {
       if (!skipAutoCreate) {
         const existingWallets = await this.getAllMerchantWallets(data.merchantId, data.appId);
         if (existingWallets.success && existingWallets.wallets) {
-          const hasTreasury = existingWallets.wallets.some(w => w.merchantWalletType === MerchantWalletType.TREASURY);
-          const hasOperation = existingWallets.wallets.some(w => w.merchantWalletType === MerchantWalletType.OPERATION);
+          const hasSettlement = existingWallets.wallets.some(
+            w =>
+              w.merchantWalletType === MerchantWalletType.SETTLEMENT || w.merchantWalletType === ('TREASURY' as MerchantWalletType)
+          );
+          const hasBilling = existingWallets.wallets.some(
+            w =>
+              w.merchantWalletType === MerchantWalletType.BILLING || w.merchantWalletType === ('OPERATION' as MerchantWalletType)
+          );
           const hasKYC = existingWallets.wallets.some(w => w.merchantWalletType === MerchantWalletType.KYC);
-          if (!hasTreasury || !hasOperation || !hasKYC) {
+          if (!hasSettlement || !hasBilling || !hasKYC) {
             const autoCreateResult = await this.createAllMerchantWallets(
               data.merchantId,
               data.currency,
@@ -145,7 +165,7 @@ export class WalletService {
   }
 
   /**
-   * Create all required merchant wallets (Treasury, Operation, KYC)
+   * Create all required merchant wallets (Billing, KYC, Settlement)
    */
   static async createAllMerchantWallets(
     merchantId: string,
@@ -163,9 +183,9 @@ export class WalletService {
     try {
       const wallets: MerchantWallet[] = [];
       const walletTypes = [
-        { type: MerchantWalletType.TREASURY, name: 'Treasury Wallet' },
-        { type: MerchantWalletType.OPERATION, name: 'Operation Wallet' },
-        { type: MerchantWalletType.KYC, name: 'KYC Wallet' }
+        { type: MerchantWalletType.BILLING, name: 'Billing Wallet' },
+        { type: MerchantWalletType.KYC, name: 'KYC Wallet' },
+        { type: MerchantWalletType.SETTLEMENT, name: 'Settlement Wallet' }
       ];
 
       for (const walletType of walletTypes) {
@@ -273,11 +293,68 @@ export class WalletService {
         currency: data.currency
       });
       logger.info('User wallet created', { walletId: newWallet.id, userId: data.userId, merchantId: data.merchantId });
-      const walletWithNuban = (await provisionPayonusNubanForWallet(newWallet)) as UserWallet;
-      return { success: true, wallet: walletWithNuban };
+      // PayOnUs fixed VA is provisioned after Fuspay KYC completes (compliance-ms webhook → internal provision API).
+      return { success: true, wallet: newWallet };
     } catch (error) {
       logger.error('Error creating user wallet', { error });
-      return { success: false, error: 'Failed to create user wallet' };
+      const mongo = error as { code?: number; keyPattern?: Record<string, unknown>; message?: string };
+      if (mongo?.code === 11000) {
+        return {
+          success: false,
+          error: `User wallet already exists or duplicate key: ${mongo.message || 'E11000'}`
+        };
+      }
+      const detail =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error
+            ? String((error as { message: unknown }).message)
+            : String(error);
+      return { success: false, error: `Failed to create user wallet: ${detail}` };
+    }
+  }
+
+  /**
+   * Provision PayOnUs reserved (fixed) NUBAN for an existing user wallet (post–Fuspay KYC).
+   */
+  static async provisionUserWalletNuban(userId: string): Promise<{
+    success: boolean;
+    wallet?: UserWallet;
+    skipped?: boolean;
+    error?: string;
+  }> {
+    try {
+      const existing = await db.getUserWallet(userId);
+      if (!existing) {
+        return { success: false, error: 'User wallet not found' };
+      }
+
+      if (
+        existing.virtualNuban?.provisionStatus === 'active' &&
+        existing.virtualNuban?.accountNumber
+      ) {
+        return { success: true, wallet: existing, skipped: true };
+      }
+
+      const walletWithNuban = (await provisionPayonusNubanForWallet(existing)) as UserWallet;
+      const active =
+        walletWithNuban.virtualNuban?.provisionStatus === 'active' &&
+        Boolean(walletWithNuban.virtualNuban?.accountNumber);
+
+      if (!active) {
+        return {
+          success: false,
+          wallet: walletWithNuban,
+          error:
+            walletWithNuban.virtualNuban?.provisionError ||
+            'PayOnUs did not return an account number'
+        };
+      }
+
+      return { success: true, wallet: walletWithNuban };
+    } catch (error) {
+      logger.error('Error provisioning user wallet NUBAN', { userId, error });
+      return { success: false, error: 'Failed to provision user wallet NUBAN' };
     }
   }
 
@@ -442,32 +519,32 @@ export class WalletService {
   }
 
   /**
-   * Filter Operation Wallet transactions by date range and type
+   * Filter Billing Wallet transactions by date range and type
    */
-  static async filterOperationTransactions(merchantId: string, filterData: FilterTransactionData): Promise<{ 
+  static async filterBillingTransactions(merchantId: string, filterData: FilterTransactionData): Promise<{ 
     success: boolean; 
     transactions?: Transaction[]; 
     error?: string 
   }> {
     try {
-      // Get Operation Wallet for the merchant
-      const operationResult = await this.getOperationWallet(merchantId);
-      if (!operationResult.success || !operationResult.wallet) {
+      // Get Billing Wallet for the merchant
+      const billingResult = await this.getBillingWallet(merchantId);
+      if (!billingResult.success || !billingResult.wallet) {
         return {
           success: false,
-          error: 'Operation wallet not found for merchant'
+          error: 'Billing wallet not found for merchant'
         };
       }
 
       // Filter transactions
-      const result = await this.filterWalletTransactions(operationResult.wallet.id, filterData);
+      const result = await this.filterWalletTransactions(billingResult.wallet.id, filterData);
 
       return result;
     } catch (error) {
-      logger.error('Error filtering operation transactions', { error });
+      logger.error('Error filtering billing transactions', { error });
       return {
         success: false,
-        error: 'Failed to filter operation transactions'
+        error: 'Failed to filter billing transactions'
       };
     }
   }
@@ -628,6 +705,191 @@ export class WalletService {
   }
 
   /**
+   * Send money from a user's PayOnUs-backed wallet to an external bank account.
+   */
+  static async payoutUserWalletToBank(payoutData: UserBankPayoutData): Promise<{
+    success: boolean;
+    wallet?: UserWallet;
+    transaction?: Transaction;
+    providerReference?: string;
+    providerStatus?: string;
+    payoutReference?: string;
+    error?: string;
+  }> {
+    try {
+      if (payoutData.amount <= 0) {
+        return { success: false, error: 'Amount must be greater than zero' };
+      }
+
+      const userWallet = await db.getUserWallet(payoutData.userId);
+      if (!userWallet) return { success: false, error: 'User wallet not found' };
+      if (userWallet.status !== WalletStatus.ACTIVE) return { success: false, error: 'User wallet is not active' };
+
+      const currency = (payoutData.currency || userWallet.currency).toUpperCase();
+      if (currency !== userWallet.currency.toUpperCase()) {
+        return { success: false, error: 'Payout currency must match wallet currency' };
+      }
+
+      const sourceAccountNumber = userWallet.virtualNuban?.accountNumber;
+      if (userWallet.virtualNuban?.provisionStatus !== 'active' || !sourceAccountNumber) {
+        return { success: false, error: 'User PayOnUs virtual account is not active' };
+      }
+
+      if (userWallet.mainBalance < payoutData.amount) {
+        return { success: false, error: 'Insufficient balance in user wallet' };
+      }
+
+      const payoutReference =
+        payoutData.reference?.trim() || `payout-${userWallet.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      const existingPayout = await db.findCompletedTransactionByReference(userWallet.id, payoutReference);
+      if (existingPayout) {
+        const wallet = await db.getWalletById(userWallet.id);
+        const ledgerResult = await PaymentLedgerService.recordWalletPayout({
+          userId: payoutData.userId,
+          amount: Math.abs(existingPayout.amount),
+          currency,
+          txnRef: payoutReference,
+          sessionId: existingPayout.id,
+          description: existingPayout.description,
+          thirdPartyRefId: existingPayout.externalReference,
+          beneficiaryInfo: {
+            beneficiary_fiat_ref: payoutData.accountNumber,
+            bank_name: payoutData.bankName || payoutData.bankCode,
+            bank_code: payoutData.bankCode,
+            account_number: payoutData.accountNumber,
+            account_holder_name: payoutData.accountName,
+            other_data: {
+              source: 'wallet-ms',
+              payoutReference,
+              duplicateWalletTransaction: true
+            }
+          }
+        });
+        if (!ledgerResult.success && !ledgerResult.skipped) {
+          logger.warn('Payment ledger entry failed for duplicate wallet payout', {
+            userId: payoutData.userId,
+            payoutReference,
+            error: ledgerResult.error
+          });
+        }
+        return {
+          success: true,
+          wallet: wallet as UserWallet,
+          transaction: existingPayout,
+          payoutReference,
+          providerReference: existingPayout.externalReference
+        };
+      }
+      const narration = payoutData.narration || 'User wallet bank payout';
+
+      const providerResult = await initiateBankPayout({
+        sourceAccountNumber,
+        destinationAccountNumber: payoutData.accountNumber,
+        destinationBankCode: payoutData.bankCode,
+        destinationAccountName: payoutData.accountName,
+        amount: payoutData.amount,
+        currency,
+        reference: payoutReference,
+        narration
+      });
+
+      if (!providerResult.ok) {
+        return {
+          success: false,
+          providerReference: providerResult.providerReference,
+          providerStatus: providerResult.providerStatus,
+          payoutReference,
+          error: providerResult.errorMessage || 'PayOnUs payout failed'
+        };
+      }
+
+      const balanceBefore = userWallet.mainBalance;
+      const newBalance = balanceBefore - payoutData.amount;
+      await db.updateWalletBalance(userWallet.id, {
+        mainBalance: newBalance,
+        ledgerBalance: userWallet.ledgerBalance - payoutData.amount
+      });
+
+      const transaction = await db.createTransaction({
+        walletId: userWallet.id,
+        amount: -payoutData.amount,
+        type: TransactionType.DEBIT,
+        status: TransactionStatus.COMPLETED,
+        description: `External bank payout: ${narration}`,
+        referenceId: payoutReference,
+        externalReference: providerResult.providerReference || payoutReference,
+        category: 'PAYOUT',
+        source: 'PAYONUS',
+        tags: ['payonus', 'bank-payout'],
+        metadata: {
+          providerStatus: providerResult.providerStatus,
+          httpStatus: providerResult.httpStatus,
+          destinationBankCode: payoutData.bankCode,
+          destinationAccountName: payoutData.accountName,
+          destinationAccountLast4: payoutData.accountNumber.slice(-4),
+          sourceAccountLast4: sourceAccountNumber.slice(-4)
+        },
+        balanceBefore,
+        balanceAfter: newBalance
+      });
+
+      const updated = await db.getWalletById(userWallet.id);
+      const ledgerResult = await PaymentLedgerService.recordWalletPayout({
+        userId: payoutData.userId,
+        amount: payoutData.amount,
+        currency,
+        txnRef: payoutReference,
+        sessionId: transaction.id,
+        description: `External bank payout: ${narration}`,
+        thirdPartyRefId: providerResult.providerReference || payoutReference,
+        beneficiaryInfo: {
+          beneficiary_fiat_ref: payoutData.accountNumber,
+          bank_name: payoutData.bankName || payoutData.bankCode,
+          bank_code: payoutData.bankCode,
+          account_number: payoutData.accountNumber,
+          account_holder_name: payoutData.accountName,
+          other_data: {
+            source: 'wallet-ms',
+            payoutReference,
+            walletTransactionId: transaction.id,
+            providerStatus: providerResult.providerStatus
+          }
+        }
+      });
+      if (!ledgerResult.success && !ledgerResult.skipped) {
+        logger.warn('Payment ledger entry failed after wallet payout', {
+          userId: payoutData.userId,
+          payoutReference,
+          walletTransactionId: transaction.id,
+          error: ledgerResult.error
+        });
+      }
+      logger.info('User wallet paid out to external bank account', {
+        walletId: userWallet.id,
+        userId: payoutData.userId,
+        amount: payoutData.amount,
+        currency,
+        payoutReference,
+        providerReference: providerResult.providerReference,
+        providerStatus: providerResult.providerStatus
+      });
+
+      return {
+        success: true,
+        wallet: updated as UserWallet,
+        transaction,
+        providerReference: providerResult.providerReference,
+        providerStatus: providerResult.providerStatus,
+        payoutReference
+      };
+    } catch (error) {
+      logger.error('Error paying out from user wallet to bank', { error });
+      return { success: false, error: 'Failed to pay out from user wallet' };
+    }
+  }
+
+  /**
    * Debit a user wallet (used for billing)
    */
   static async debitUserWallet(debitData: DebitWalletData): Promise<{ 
@@ -664,9 +926,9 @@ export class WalletService {
   }
 
   /**
-   * Transfer money from Operation Wallet to KYC Wallet
+   * Transfer money from Billing Wallet to KYC Wallet
    */
-  static async transferFromOperationToKyc(transferData: { 
+  static async transferFromBillingToKyc(transferData: { 
     merchantId: string, 
     amount: number, 
     description: string 
@@ -678,12 +940,12 @@ export class WalletService {
     error?: string 
   }> {
     try {
-      // Get the Operation Wallet for this merchant
-      const operationResult = await this.getMerchantWalletByType(transferData.merchantId, MerchantWalletType.OPERATION);
-      if (!operationResult.success || !operationResult.wallet) {
+      // Get the Billing Wallet for this merchant
+      const billingResult = await this.getMerchantWalletByType(transferData.merchantId, MerchantWalletType.BILLING);
+      if (!billingResult.success || !billingResult.wallet) {
         return {
           success: false,
-          error: 'Operation wallet not found for merchant'
+          error: 'Billing wallet not found for merchant'
         };
       }
 
@@ -698,7 +960,7 @@ export class WalletService {
 
       // Use the existing transferOut function to perform the transfer
       const transferResult = await this.transferOut({
-        fromWalletId: operationResult.wallet.id,
+        fromWalletId: billingResult.wallet.id,
         toWalletId: kycResult.wallet.id,
         amount: transferData.amount,
         description: transferData.description
@@ -723,18 +985,18 @@ export class WalletService {
         };
       }
     } catch (error) {
-      logger.error('Error transferring money from Operation to KYC wallet', { error });
+      logger.error('Error transferring money from Billing to KYC wallet', { error });
       return {
         success: false,
-        error: 'Failed to transfer money from Operation to KYC wallet'
+        error: 'Failed to transfer money from Billing to KYC wallet'
       };
     }
   }
 
   /**
-   * Transfer money from KYC Wallet to Operation Wallet
+   * Transfer money from KYC Wallet to Billing Wallet
    */
-  static async transferFromKycToOperation(transferData: { 
+  static async transferFromKycToBilling(transferData: { 
     merchantId: string, 
     amount: number, 
     description: string 
@@ -755,19 +1017,19 @@ export class WalletService {
         };
       }
 
-      // Get the Operation Wallet for this merchant
-      const operationResult = await this.getMerchantWalletByType(transferData.merchantId, MerchantWalletType.OPERATION);
-      if (!operationResult.success || !operationResult.wallet) {
+      // Get the Billing Wallet for this merchant
+      const billingResult = await this.getMerchantWalletByType(transferData.merchantId, MerchantWalletType.BILLING);
+      if (!billingResult.success || !billingResult.wallet) {
         return {
           success: false,
-          error: 'Operation wallet not found for merchant'
+          error: 'Billing wallet not found for merchant'
         };
       }
 
       // Use the existing transferOut function to perform the transfer
       const transferResult = await this.transferOut({
         fromWalletId: kycResult.wallet.id,
-        toWalletId: operationResult.wallet.id,
+        toWalletId: billingResult.wallet.id,
         amount: transferData.amount,
         description: transferData.description
       });
@@ -791,23 +1053,23 @@ export class WalletService {
         };
       }
     } catch (error) {
-      logger.error('Error transferring money from KYC to Operation wallet', { error });
+      logger.error('Error transferring money from KYC to Billing wallet', { error });
       return {
         success: false,
-        error: 'Failed to transfer money from KYC to Operation wallet'
+        error: 'Failed to transfer money from KYC to Billing wallet'
       };
     }
   }
 
   /**
-   * Get Operation Wallet for a merchant
+   * Get Billing Wallet for a merchant
    */
-  static async getOperationWallet(merchantId: string): Promise<{ 
-    success: boolean; 
-    wallet?: MerchantWallet; 
-    error?: string 
+  static async getBillingWallet(merchantId: string): Promise<{
+    success: boolean;
+    wallet?: MerchantWallet;
+    error?: string
   }> {
-    return this.getMerchantWalletByType(merchantId, MerchantWalletType.OPERATION);
+    return this.getMerchantWalletByType(merchantId, MerchantWalletType.BILLING);
   }
 
   /**
@@ -822,37 +1084,37 @@ export class WalletService {
   }
 
   /**
-   * Get Treasury Wallet for a merchant
+   * Get Settlement Wallet for a merchant
    */
-  static async getTreasuryWallet(merchantId: string): Promise<{ 
-    success: boolean; 
-    wallet?: MerchantWallet; 
-    error?: string 
+  static async getSettlementWallet(merchantId: string): Promise<{
+    success: boolean;
+    wallet?: MerchantWallet;
+    error?: string
   }> {
-    return this.getMerchantWalletByType(merchantId, MerchantWalletType.TREASURY);
+    return this.getMerchantWalletByType(merchantId, MerchantWalletType.SETTLEMENT);
   }
 
   /**
-   * Debit a merchant's Treasury Wallet (used for billing)
+   * Debit a merchant's Settlement Wallet
    */
-  static async debitTreasuryWallet(debitData: { merchantId: string, amount: number, description: string }): Promise<{ 
+  static async debitSettlementWallet(debitData: { merchantId: string, amount: number, description: string }): Promise<{
     success: boolean; 
     wallet?: MerchantWallet; 
     transaction?: Transaction; 
     error?: string 
   }> {
     try {
-      const treasuryResult = await this.getTreasuryWallet(debitData.merchantId);
-      if (!treasuryResult.success || !treasuryResult.wallet) return { success: false, error: 'Treasury wallet not found for merchant' };
-      const treasuryWallet = treasuryResult.wallet;
-      if (treasuryWallet.status !== WalletStatus.ACTIVE) return { success: false, error: 'Treasury wallet is not active' };
-      if (treasuryWallet.mainBalance < debitData.amount) return { success: false, error: 'Insufficient balance in Treasury wallet' };
+      const settlementResult = await this.getSettlementWallet(debitData.merchantId);
+      if (!settlementResult.success || !settlementResult.wallet) return { success: false, error: 'Settlement wallet not found for merchant' };
+      const settlementWallet = settlementResult.wallet;
+      if (settlementWallet.status !== WalletStatus.ACTIVE) return { success: false, error: 'Settlement wallet is not active' };
+      if (settlementWallet.mainBalance < debitData.amount) return { success: false, error: 'Insufficient balance in Settlement wallet' };
 
-      const balanceBefore = treasuryWallet.mainBalance;
+      const balanceBefore = settlementWallet.mainBalance;
       const newBalance = balanceBefore - debitData.amount;
-      await db.updateWalletBalance(treasuryWallet.id, { mainBalance: newBalance, ledgerBalance: treasuryWallet.ledgerBalance - debitData.amount });
+      await db.updateWalletBalance(settlementWallet.id, { mainBalance: newBalance, ledgerBalance: settlementWallet.ledgerBalance - debitData.amount });
       const transaction = await db.createTransaction({
-        walletId: treasuryWallet.id,
+        walletId: settlementWallet.id,
         amount: -debitData.amount,
         type: TransactionType.DEBIT,
         status: TransactionStatus.COMPLETED,
@@ -860,36 +1122,36 @@ export class WalletService {
         balanceBefore,
         balanceAfter: newBalance
       });
-      const updated = await db.getWalletById(treasuryWallet.id);
-      logger.info('Treasury wallet debited', { walletId: treasuryWallet.id, merchantId: debitData.merchantId, amount: debitData.amount });
+      const updated = await db.getWalletById(settlementWallet.id);
+      logger.info('Settlement wallet debited', { walletId: settlementWallet.id, merchantId: debitData.merchantId, amount: debitData.amount });
       return { success: true, wallet: updated as MerchantWallet, transaction };
     } catch (error) {
-      logger.error('Error debiting Treasury wallet', { error });
-      return { success: false, error: 'Failed to debit Treasury wallet' };
+      logger.error('Error debiting Settlement wallet', { error });
+      return { success: false, error: 'Failed to debit Settlement wallet' };
     }
   }
 
   /**
-   * Debit a merchant's Operation Wallet (used for billing)
+   * Debit a merchant's Billing Wallet
    */
-  static async debitOperationWallet(debitData: { merchantId: string, amount: number, description: string }): Promise<{ 
+  static async debitBillingWallet(debitData: { merchantId: string, amount: number, description: string }): Promise<{ 
     success: boolean; 
     wallet?: MerchantWallet; 
     transaction?: Transaction; 
     error?: string 
   }> {
     try {
-      const operationResult = await this.getOperationWallet(debitData.merchantId);
-      if (!operationResult.success || !operationResult.wallet) return { success: false, error: 'Operation wallet not found for merchant' };
-      const operationWallet = operationResult.wallet;
-      if (operationWallet.status !== WalletStatus.ACTIVE) return { success: false, error: 'Operation wallet is not active' };
-      if (operationWallet.mainBalance < debitData.amount) return { success: false, error: 'Insufficient balance in Operation wallet' };
+      const billingResult = await this.getBillingWallet(debitData.merchantId);
+      if (!billingResult.success || !billingResult.wallet) return { success: false, error: 'Billing wallet not found for merchant' };
+      const billingWallet = billingResult.wallet;
+      if (billingWallet.status !== WalletStatus.ACTIVE) return { success: false, error: 'Billing wallet is not active' };
+      if (billingWallet.mainBalance < debitData.amount) return { success: false, error: 'Insufficient balance in Billing wallet' };
 
-      const balanceBefore = operationWallet.mainBalance;
+      const balanceBefore = billingWallet.mainBalance;
       const newBalance = balanceBefore - debitData.amount;
-      await db.updateWalletBalance(operationWallet.id, { mainBalance: newBalance, ledgerBalance: operationWallet.ledgerBalance - debitData.amount });
+      await db.updateWalletBalance(billingWallet.id, { mainBalance: newBalance, ledgerBalance: billingWallet.ledgerBalance - debitData.amount });
       const transaction = await db.createTransaction({
-        walletId: operationWallet.id,
+        walletId: billingWallet.id,
         amount: -debitData.amount,
         type: TransactionType.DEBIT,
         status: TransactionStatus.COMPLETED,
@@ -897,12 +1159,12 @@ export class WalletService {
         balanceBefore,
         balanceAfter: newBalance
       });
-      const updated = await db.getWalletById(operationWallet.id);
-      logger.info('Operation wallet debited', { walletId: operationWallet.id, merchantId: debitData.merchantId, amount: debitData.amount });
+      const updated = await db.getWalletById(billingWallet.id);
+      logger.info('Billing wallet debited', { walletId: billingWallet.id, merchantId: debitData.merchantId, amount: debitData.amount });
       return { success: true, wallet: updated as MerchantWallet, transaction };
     } catch (error) {
-      logger.error('Error debiting Operation wallet', { error });
-      return { success: false, error: 'Failed to debit Operation wallet' };
+      logger.error('Error debiting Billing wallet', { error });
+      return { success: false, error: 'Failed to debit Billing wallet' };
     }
   }
 

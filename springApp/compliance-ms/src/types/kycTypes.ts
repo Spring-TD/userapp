@@ -64,6 +64,16 @@ export interface KYCProfile {
     country?: string;
     email?: string;
     phone?: string;
+    webhook?: {
+      lastEvent?: string;
+      lastPayload?: Record<string, unknown>;
+      lastReceivedAt?: Date;
+      history?: Array<{
+        receivedAt: Date;
+        event?: string;
+        payload: Record<string, unknown>;
+      }>;
+    };
     verification?: {
       verificationId?: string;
       verificationUrl?: string;
@@ -73,6 +83,13 @@ export interface KYCProfile {
       completedChecks?: number;
       totalChecks?: number;
       lastSyncedAt?: Date;
+      lastEvent?: string;
+      verificationType?: string;
+      /** Raw BVN from Fuspay (may be masked). */
+      bvn?: string;
+      /** 11-digit BVN when extractable from webhook details. */
+      bvnNormalized?: string;
+      details?: Record<string, unknown>;
     };
   };
   submittedAt?: Date;
@@ -99,12 +116,14 @@ export interface KYCProfile {
   shareholders?: Array<Shareholder>;
   // Additional fields for comprehensive KYC profiles
   personalInfo?: {
-    firstName: string;
-    lastName: string;
-    dateOfBirth: Date;
-    nationality: string;
-    occupation: string;
-    sourceOfFunds: string;
+    firstName?: string;
+    lastName?: string;
+    dateOfBirth?: Date;
+    /** From Fuspay BVN verification (11 digits). */
+    bvn?: string;
+    nationality?: string;
+    occupation?: string;
+    sourceOfFunds?: string;
   };
   riskAssessment?: {
     politicallyExposed: boolean;

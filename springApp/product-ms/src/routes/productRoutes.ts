@@ -13,6 +13,7 @@ const productController = new ProductController(productService);
 // router.post('/select-type', productController.selectProductType);
 // router.post('/create-after-type', productController.createProductAfterType);
 router.get('/', productController.getAllProducts);
+router.put('/featured/:appId', productController.setAppFeaturedProducts);
 router.get('/:id', productController.getProductById);
 router.put('/:id', productController.updateProduct);
 router.delete('/:id', productController.deleteProduct);

@@ -50,6 +50,8 @@ export interface User extends BaseUser {
   country: string;
   role_id?: string; // ID of the role assigned to this user
   user_ref?: string; // External user reference (required when password is not set)
+  /** create-app-ms app id when registered via tenant subdomain (account-ms forwards x-tenant-app-id). */
+  app_id?: string;
 }
 
 export interface Merchant extends BaseUser {

@@ -114,7 +114,7 @@ export class AppController {
         detail: app.subdomain ? `Default URL: ${buildDefaultAppUrl(app.subdomain)}` : ''
       });
 
-      // Create merchant internal wallets for this app (TREASURY, OPERATION, KYC)
+      // Create merchant internal wallets for this app (Billing, KYC, Settlement)
       const merchantWalletsResult = await WalletService.createAllMerchantWallets(app.id, authHeader, app.name);
       // App creation succeeds even if wallet provisioning fails; handle retries separately.
       if (!merchantWalletsResult.success) {
@@ -203,9 +203,7 @@ export class AppController {
       }
 
       const apiBase = tryGetApiBaseUrl(req);
-      const pwaInstall = apiBase
-        ? await this.pwaPublishService.getPublicInstallBundle(app.id, apiBase)
-        : null;
+      const { pwaManifest, pwaInstall } = await this.pwaPublishService.getResolvePwaPayload(app.id, apiBase);
 
       res.json({
         success: true,
@@ -215,6 +213,7 @@ export class AppController {
           subdomain: app.subdomain,
           status: app.status,
           defaultAppUrl: app.subdomain ? buildDefaultAppUrl(app.subdomain) : undefined,
+          ...(pwaManifest ? { pwaManifest } : {}),
           ...(pwaInstall ? { pwaInstall } : {})
         }
       });

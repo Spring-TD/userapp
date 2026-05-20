@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import recordController from '../controllers/recordController';
 import { authenticate } from '../middleware/auth';
+import { requirePaymentInternalToken } from '../middleware/internalAuth';
 
 const router = Router();
 
@@ -9,6 +10,15 @@ const router = Router();
  * This endpoint is called by service-auth-ms after successful account verification
  */
 router.post('/webhook/create', recordController.createRecordWebhook.bind(recordController));
+
+/**
+ * Internal wallet-ms hook - No user JWT, shared service token required.
+ */
+router.post(
+  '/internal/wallet-payout-ledger',
+  requirePaymentInternalToken,
+  recordController.recordWalletPayoutLedger.bind(recordController)
+);
 
 /**
  * Protected endpoints - Require authentication

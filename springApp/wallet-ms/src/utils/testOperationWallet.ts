@@ -21,7 +21,7 @@ async function testOperationWalletFeatures() {
     
     // Fund the Operation wallet
     console.log('Funding Operation wallet...');
-    const operationWallet = await WalletService.getOperationWallet(merchantId);
+    const operationWallet = await WalletService.getBillingWallet(merchantId);
     if (operationWallet.success && operationWallet.wallet) {
       const fundResult = await WalletService.updateWalletBalance(
         operationWallet.wallet.id, 
@@ -37,7 +37,7 @@ async function testOperationWalletFeatures() {
     
     // Test filtering transactions by type (before any transactions)
     console.log('Testing transaction filtering by type (CREDIT)...');
-    const filterResult1 = await WalletService.filterOperationTransactions(merchantId, {
+    const filterResult1 = await WalletService.filterBillingTransactions(merchantId, {
       type: TransactionType.CREDIT
     });
     
@@ -50,7 +50,7 @@ async function testOperationWalletFeatures() {
     
     // Test filtering transactions by type (DEBIT)
     console.log('Testing transaction filtering by type (DEBIT)...');
-    const filterResult2 = await WalletService.filterOperationTransactions(merchantId, {
+    const filterResult2 = await WalletService.filterBillingTransactions(merchantId, {
       type: TransactionType.DEBIT
     });
     
@@ -63,7 +63,7 @@ async function testOperationWalletFeatures() {
     
     // Test debiting the Operation wallet
     console.log('Testing debit functionality...');
-    const debitResult = await WalletService.debitOperationWallet({
+    const debitResult = await WalletService.debitBillingWallet({
       merchantId,
       amount: 100,
       description: 'Test debit'
@@ -79,7 +79,7 @@ async function testOperationWalletFeatures() {
     
     // Test filtering transactions by type (DEBIT) after debit
     console.log('Testing transaction filtering by type (DEBIT) after debit...');
-    const filterResult3 = await WalletService.filterOperationTransactions(merchantId, {
+    const filterResult3 = await WalletService.filterBillingTransactions(merchantId, {
       type: TransactionType.DEBIT
     });
     
@@ -93,7 +93,7 @@ async function testOperationWalletFeatures() {
     // Test date range filtering (get all transactions)
     console.log('Testing date range filtering...');
     const now = new Date();
-    const filterResult4 = await WalletService.filterOperationTransactions(merchantId, {
+    const filterResult4 = await WalletService.filterBillingTransactions(merchantId, {
       startDate: new Date(now.getTime() - 24 * 60 * 60 * 1000), // 24 hours ago
       endDate: new Date(now.getTime() + 24 * 60 * 60 * 1000) // 24 hours from now
     });

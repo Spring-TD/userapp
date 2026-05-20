@@ -38,7 +38,10 @@ const WalletSchema = new Schema<IWalletDoc>(
     appName: { type: String, required: false },
     payonusSubaccountCode: { type: String, required: false },
     userId: { type: String },
-    merchantWalletType: { type: String, enum: Object.values(MerchantWalletType) },
+    merchantWalletType: {
+      type: String,
+      enum: [...Object.values(MerchantWalletType), 'TREASURY', 'OPERATION']
+    },
     name: { type: String, required: true },
     balance: { type: Number, required: true, default: 0 },
     mainBalance: { type: Number, required: true, default: 0 },
@@ -57,7 +60,15 @@ const WalletSchema = new Schema<IWalletDoc>(
   { timestamps: true }
 );
 
-WalletSchema.index({ merchantId: 1, appId: 1, merchantWalletType: 1 }, { unique: true, sparse: true });
+/**
+ * Uniqueness for billing / settlement / KYC merchant wallets per (merchant, app, type).
+ * MUST be partial so USER wallets (same merchantId, null appId, null merchantWalletType) are excluded —
+ * otherwise only one retail user wallet per merchant would be allowed.
+ */
+WalletSchema.index(
+  { merchantId: 1, appId: 1, merchantWalletType: 1 },
+  { unique: true, partialFilterExpression: { walletType: 'MERCHANT' } }
+);
 WalletSchema.index({ userId: 1 }, { unique: true, sparse: true });
 WalletSchema.index({ payonusNubanAccountNumber: 1 }, { sparse: true });
 

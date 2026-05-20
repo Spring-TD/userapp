@@ -13,6 +13,7 @@ export interface UserDocument extends Document {
     phone_verified: boolean;
     user_merchant_id: string;
     country: string;
+    app_id?: string;
     role_id?: string;
     user_ref?: string;
     callback_url?: string;
@@ -46,6 +47,7 @@ const userSchema = new Schema<UserDocument>(
         phone_verified: { type: Boolean, required: true, default: false },
         user_merchant_id: { type: String },
         country: { type: String },
+        app_id: { type: String },
         role_id: { type: String },
         user_ref: { type: String },
         callback_url: { type: String },

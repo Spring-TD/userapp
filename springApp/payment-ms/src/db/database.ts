@@ -114,6 +114,13 @@ export const db = {
     return docToLedgerEntry(doc)!;
   },
 
+  async findLedgerEntryByTxnRef(recordId: string, txnRef: string): Promise<LedgerEntry | null> {
+    const normalized = txnRef.trim();
+    if (!normalized) return null;
+    const doc = await LedgerEntryModel.findOne({ recordId, txn_ref: normalized });
+    return docToLedgerEntry(doc as RecordDoc | null);
+  },
+
   async getLedgerEntries(query: LedgerQueryParams): Promise<LedgerEntry[]> {
     const filter: Record<string, unknown> = { recordId: query.recordId };
     if (query.entryType) filter.entryType = query.entryType;

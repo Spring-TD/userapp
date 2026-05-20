@@ -68,6 +68,8 @@ export const payonusNubanConfig = {
    */
   merchantPath: process.env.PAYONUS_MERCHANT_NUBAN_PATH || '/api/v1/virtual-accounts/fixed-account',
   userPath: process.env.PAYONUS_USER_NUBAN_PATH || '/api/v1/virtual-accounts/fixed-account',
+  /** Bank payout / transfer endpoint. Override with the exact PayOnUs path for your account. */
+  payoutPath: process.env.PAYONUS_PAYOUT_PATH || '/api/v1/transfers/bank',
   timeoutMs: Math.max(1000, parseInt(process.env.PAYONUS_TIMEOUT_MS || '30000', 10)),
   /** Only wallets in these ISO currencies trigger provisioning (default NGN). */
   currencies: (process.env.PAYONUS_NUBAN_CURRENCIES || 'NGN')
@@ -76,6 +78,7 @@ export const payonusNubanConfig = {
     .filter(Boolean),
   merchantExtraBody: parseJsonObjectEnv('PAYONUS_MERCHANT_EXTRA_JSON'),
   userExtraBody: parseJsonObjectEnv('PAYONUS_USER_EXTRA_JSON'),
+  payoutExtraBody: parseJsonObjectEnv('PAYONUS_PAYOUT_EXTRA_JSON'),
   /** Defaults for documented virtual account create body (BVN, phone, email domain, etc.) */
   vaEmailDomain: process.env.PAYONUS_VA_EMAIL_DOMAIN || 'wallet.local',
   vaBvn: process.env.PAYONUS_VA_BVN || '',
@@ -140,6 +143,28 @@ export const payonusNubanConfig = {
     'data.reference',
     'virtual_account_id',
     'data.virtual_account_id'
+  ]),
+  payoutReferencePaths: parsePathList('PAYONUS_PAYOUT_RESPONSE_REFERENCE_PATHS', [
+    'data.id',
+    'data.reference',
+    'data.transactionReference',
+    'data.transaction_reference',
+    'data.transferReference',
+    'data.transfer_reference',
+    'id',
+    'reference',
+    'transactionReference',
+    'transaction_reference',
+    'transferReference',
+    'transfer_reference'
+  ]),
+  payoutStatusPaths: parsePathList('PAYONUS_PAYOUT_RESPONSE_STATUS_PATHS', [
+    'data.status',
+    'data.paymentStatus',
+    'data.payment_status',
+    'status',
+    'paymentStatus',
+    'payment_status'
   ])
 };
 
@@ -151,3 +176,5 @@ export function isPayonusNubanReady(): boolean {
   }
   return Boolean(apiKey);
 }
+
+export const isPayonusPayoutReady = isPayonusNubanReady;

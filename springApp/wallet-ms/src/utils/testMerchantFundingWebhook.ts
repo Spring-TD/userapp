@@ -14,7 +14,7 @@ async function testMerchantFundingWebhook() {
   // Simulate a webhook call from a payment provider
   const webhookPayload = {
     merchantId: merchantId,
-    merchantWalletType: 'TREASURY',
+    merchantWalletType: 'SETTLEMENT',
     amount: 2500,
     currency: 'USD',
     transactionId: 'txn_ext_98765',

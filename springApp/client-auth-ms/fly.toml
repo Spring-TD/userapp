@@ -13,6 +13,10 @@ primary_region = 'fra'
   SERVICE_AUTH_URL = 'http://service-auth-ms.internal:3000'
   NOTIFICATIONS_SERVICE_URL = 'https://notifications-ms.fly.dev'
   SERVICE_AUTH_HTTP_TIMEOUT_MS = '90000'
+  CREATE_APP_SERVICE_URL = 'https://create-app-ms.fly.dev'
+  PLATFORM_BASE_DOMAIN = 'tryspring.io'
+  PLATFORM_SUBDOMAIN_PREFIX = 'www'
+  TENANT_RESOLVER_TIMEOUT_MS = '30000'
 
 [build]
 

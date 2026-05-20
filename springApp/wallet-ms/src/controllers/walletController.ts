@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { WalletService } from '../services';
 import { logger } from '../utils/logger';
-import { validateInput, createMerchantWalletSchema, createUserWalletSchema, updateWalletBalanceSchema, filterTransactionSchema, transferOutSchema, debitWalletSchema, debitTreasurySchema, operationToKycTransferSchema, kycToOperationTransferSchema, userApiCallSchema } from '../utils/validation';
+import { validateInput, createMerchantWalletSchema, createUserWalletSchema, updateWalletBalanceSchema, filterTransactionSchema, transferOutSchema, debitWalletSchema, debitTreasurySchema, billingToKycTransferSchema, kycToBillingTransferSchema, userApiCallSchema, userBankPayoutSchema } from '../utils/validation';
+import { normalizeMerchantWalletType } from '../utils/merchantWalletType';
 import { MerchantWalletType, TransactionType } from '../models/Wallet';
 
 // Define interfaces for the validated data
@@ -50,17 +51,17 @@ interface DebitTreasuryData {
   description: string;
 }
 
-interface OperationToKycTransferData {
+interface BillingToKycTransferData {
   amount: number;
   description: string;
 }
 
-interface KycToOperationTransferData {
+interface KycToBillingTransferData {
   amount: number;
   description: string;
 }
 
-interface OperationDebitData {
+interface BillingDebitData {
   amount: number;
   description: string;
 }
@@ -97,6 +98,17 @@ interface UserApiCallData {
   apiKey?: string;
 }
 
+interface UserBankPayoutData {
+  accountNumber: string;
+  bankCode: string;
+  accountName: string;
+  bankName?: string;
+  amount: number;
+  currency?: string;
+  narration?: string;
+  reference?: string;
+}
+
 export class WalletController {
   /**
    * POST /api/v1/wallets/merchant
@@ -126,6 +138,11 @@ export class WalletController {
       const merchantId = req.user.merchantId || req.user.userId;
       const { appId, appName, payonusSubaccountCode, complianceShareholderUserId, name, currency, merchantWalletType } =
         value!;
+      const normalizedType = normalizeMerchantWalletType(merchantWalletType);
+      if (!normalizedType) {
+        res.status(400).json({ success: false, error: 'Invalid merchant wallet type' });
+        return;
+      }
 
       const result = await WalletService.createMerchantWallet({
         merchantId,
@@ -133,9 +150,9 @@ export class WalletController {
         appId,
         appName,
         payonusSubaccountCode,
-        name: name || `${merchantWalletType} Wallet`,
+        name: name || `${normalizedType} Wallet`,
         currency: currency || 'USD',
-        merchantWalletType
+        merchantWalletType: normalizedType
       });
 
       if (!result.success) {
@@ -168,7 +185,7 @@ export class WalletController {
 
   /**
    * POST /api/v1/wallets/merchant/all
-   * Create all required merchant wallets (Treasury, Operation, KYC)
+   * Create all required merchant wallets (Billing, KYC, Settlement)
    */
   static async createAllMerchantWallets(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -245,8 +262,8 @@ export class WalletController {
         return;
       }
 
-      // Validate wallet type
-      if (!Object.values(MerchantWalletType).includes(walletType as MerchantWalletType)) {
+      const normalizedType = normalizeMerchantWalletType(walletType);
+      if (!normalizedType) {
         res.status(400).json({
           success: false,
           error: 'Invalid merchant wallet type'
@@ -254,7 +271,7 @@ export class WalletController {
         return;
       }
 
-      const result = await WalletService.getMerchantWalletByType(merchantId, walletType as MerchantWalletType);
+      const result = await WalletService.getMerchantWalletByType(merchantId, normalizedType);
 
       if (!result.success) {
         res.status(404).json({
@@ -792,10 +809,91 @@ export class WalletController {
   }
 
   /**
+   * POST /api/v1/wallets/user/:userId/payout
+   * Send money from a user's PayOnUs-backed wallet to an external bank account
+   */
+  static async payoutUserWalletToBank(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { userId } = req.params;
+
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      if (req.user.userId !== userId) {
+        res.status(403).json({
+          success: false,
+          error: 'Access denied. Only wallet owner can pay out from this wallet.'
+        });
+        return;
+      }
+
+      const { error, value } = validateInput<UserBankPayoutData>(userBankPayoutSchema, req.body);
+      if (error) {
+        res.status(400).json({
+          success: false,
+          error: 'Validation failed',
+          details: error
+        });
+        return;
+      }
+
+      const result = await WalletService.payoutUserWalletToBank({
+        userId,
+        accountNumber: value!.accountNumber,
+        bankCode: value!.bankCode,
+        accountName: value!.accountName,
+        bankName: value!.bankName,
+        amount: value!.amount,
+        currency: value!.currency,
+        narration: value!.narration,
+        reference: value!.reference
+      });
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: result.error,
+          providerReference: result.providerReference,
+          providerStatus: result.providerStatus,
+          payoutReference: result.payoutReference
+        });
+        return;
+      }
+
+      logger.info('External bank payout initiated from user wallet', {
+        userId,
+        amount: value!.amount,
+        payoutReference: result.payoutReference,
+        providerReference: result.providerReference
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Payout processed successfully',
+        data: {
+          wallet: result.wallet,
+          transaction: result.transaction,
+          payoutReference: result.payoutReference,
+          providerReference: result.providerReference,
+          providerStatus: result.providerStatus
+        }
+      });
+    } catch (error) {
+      logger.error('Error paying out from user wallet', { error });
+      next(error);
+    }
+  }
+
+  /**
    * GET /api/v1/wallets/treasury/:merchantId/transactions
    * Filter Treasury Wallet transactions by date range and type
    */
-  static async filterTreasuryTransactions(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async filterSettlementTransactions(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { merchantId } = req.params;
       const { startDate, endDate, type } = req.query;
@@ -828,12 +926,12 @@ export class WalletController {
         return;
       }
 
-      // Get Treasury Wallet for the merchant
-      const treasuryResult = await WalletService.getTreasuryWallet(merchantId);
-      if (!treasuryResult.success || !treasuryResult.wallet) {
+      // Get Settlement Wallet for the merchant
+      const settlementResult = await WalletService.getSettlementWallet(merchantId);
+      if (!settlementResult.success || !settlementResult.wallet) {
         res.status(404).json({
           success: false,
-          error: 'Treasury wallet not found'
+          error: 'Settlement wallet not found'
         });
         return;
       }
@@ -845,7 +943,7 @@ export class WalletController {
         type: type as TransactionType
       };
 
-      const result = await WalletService.filterWalletTransactions(treasuryResult.wallet.id, filterData);
+      const result = await WalletService.filterWalletTransactions(settlementResult.wallet.id, filterData);
 
       if (!result.success) {
         res.status(400).json({
@@ -855,7 +953,7 @@ export class WalletController {
         return;
       }
 
-      logger.info('Treasury wallet transactions filtered', {
+      logger.info('Settlement wallet transactions filtered', {
         merchantId,
         transactionCount: result.transactions?.length
       });
@@ -867,7 +965,7 @@ export class WalletController {
         }
       });
     } catch (error) {
-      logger.error('Error filtering treasury transactions', { error });
+      logger.error('Error filtering settlement transactions', { error });
       next(error);
     }
   }
@@ -876,7 +974,7 @@ export class WalletController {
    * POST /api/v1/wallets/treasury/transfer
    * Transfer money out from Treasury Wallet to another wallet
    */
-  static async transferOutFromTreasury(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async transferOutFromSettlement(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {
         res.status(401).json({
@@ -901,20 +999,20 @@ export class WalletController {
 
       const { fromWalletId, toWalletId, amount, description } = value!;
 
-      // Verify that the fromWallet is the Treasury Wallet of this merchant
-      const treasuryResult = await WalletService.getTreasuryWallet(merchantId);
-      if (!treasuryResult.success || !treasuryResult.wallet) {
+      // Verify that the fromWallet is the Settlement Wallet of this merchant
+      const settlementResult = await WalletService.getSettlementWallet(merchantId);
+      if (!settlementResult.success || !settlementResult.wallet) {
         res.status(404).json({
           success: false,
-          error: 'Treasury wallet not found'
+          error: 'Settlement wallet not found'
         });
         return;
       }
 
-      if (treasuryResult.wallet.id !== fromWalletId) {
+      if (settlementResult.wallet.id !== fromWalletId) {
         res.status(403).json({
           success: false,
-          error: 'You can only transfer from your Treasury Wallet'
+          error: 'You can only transfer from your Settlement Wallet'
         });
         return;
       }
@@ -935,7 +1033,7 @@ export class WalletController {
         return;
       }
 
-      logger.info('Money transferred from Treasury Wallet', {
+      logger.info('Money transferred from Settlement Wallet', {
         merchantId,
         fromWalletId,
         toWalletId,
@@ -952,7 +1050,7 @@ export class WalletController {
         }
       });
     } catch (error) {
-      logger.error('Error transferring money from Treasury Wallet', { error });
+      logger.error('Error transferring money from Settlement Wallet', { error });
       next(error);
     }
   }
@@ -961,7 +1059,7 @@ export class WalletController {
    * POST /api/v1/wallets/operation-to-kyc
    * Transfer money from Operation Wallet to KYC Wallet
    */
-  static async transferFromOperationToKyc(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async transferFromBillingToKyc(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {
         res.status(401).json({
@@ -974,7 +1072,7 @@ export class WalletController {
       const merchantId = req.user.merchantId || req.user.userId;
 
       // Validate input data
-      const { error, value } = validateInput<OperationToKycTransferData>(operationToKycTransferSchema, req.body);
+      const { error, value } = validateInput<BillingToKycTransferData>(billingToKycTransferSchema, req.body);
       if (error) {
         res.status(400).json({
           success: false,
@@ -987,7 +1085,7 @@ export class WalletController {
       const { amount, description } = value!;
 
       // Perform the transfer
-      const result = await WalletService.transferFromOperationToKyc({
+      const result = await WalletService.transferFromBillingToKyc({
         merchantId,
         amount,
         description
@@ -1001,14 +1099,14 @@ export class WalletController {
         return;
       }
 
-      logger.info('Money transferred from Operation to KYC Wallet', {
+      logger.info('Money transferred from Billing to KYC Wallet', {
         merchantId,
         amount
       });
 
       res.status(200).json({
         success: true,
-        message: 'Money transferred successfully from Operation to KYC Wallet',
+        message: 'Money transferred successfully from Billing to KYC Wallet',
         data: {
           fromWallet: result.fromWallet,
           toWallet: result.toWallet,
@@ -1016,7 +1114,7 @@ export class WalletController {
         }
       });
     } catch (error) {
-      logger.error('Error transferring money from Operation to KYC Wallet', { error });
+      logger.error('Error transferring money from Billing to KYC Wallet', { error });
       next(error);
     }
   }
@@ -1025,7 +1123,7 @@ export class WalletController {
    * POST /api/v1/wallets/kyc-to-operation
    * Transfer money from KYC Wallet to Operation Wallet
    */
-  static async transferFromKycToOperation(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async transferFromKycToBilling(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {
         res.status(401).json({
@@ -1038,7 +1136,7 @@ export class WalletController {
       const merchantId = req.user.merchantId || req.user.userId;
 
       // Validate input data
-      const { error, value } = validateInput<KycToOperationTransferData>(kycToOperationTransferSchema, req.body);
+      const { error, value } = validateInput<KycToBillingTransferData>(kycToBillingTransferSchema, req.body);
       if (error) {
         res.status(400).json({
           success: false,
@@ -1051,7 +1149,7 @@ export class WalletController {
       const { amount, description } = value!;
 
       // Perform the transfer
-      const result = await WalletService.transferFromKycToOperation({
+      const result = await WalletService.transferFromKycToBilling({
         merchantId,
         amount,
         description
@@ -1065,14 +1163,14 @@ export class WalletController {
         return;
       }
 
-      logger.info('Money transferred from KYC to Operation Wallet', {
+      logger.info('Money transferred from KYC to Billing Wallet', {
         merchantId,
         amount
       });
 
       res.status(200).json({
         success: true,
-        message: 'Money transferred successfully from KYC to Operation Wallet',
+        message: 'Money transferred successfully from KYC to Billing Wallet',
         data: {
           fromWallet: result.fromWallet,
           toWallet: result.toWallet,
@@ -1080,7 +1178,7 @@ export class WalletController {
         }
       });
     } catch (error) {
-      logger.error('Error transferring money from KYC to Operation Wallet', { error });
+      logger.error('Error transferring money from KYC to Billing Wallet', { error });
       next(error);
     }
   }
@@ -1089,7 +1187,7 @@ export class WalletController {
    * GET /api/v1/wallets/operation/:merchantId/transactions
    * Filter Operation Wallet transactions by date range and type
    */
-  static async filterOperationTransactions(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async filterBillingTransactions(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { merchantId } = req.params;
       const { startDate, endDate, type } = req.query;
@@ -1129,7 +1227,7 @@ export class WalletController {
         type: type as TransactionType
       };
 
-      const result = await WalletService.filterOperationTransactions(merchantId, filterData);
+      const result = await WalletService.filterBillingTransactions(merchantId, filterData);
 
       if (!result.success) {
         res.status(400).json({
@@ -1139,7 +1237,7 @@ export class WalletController {
         return;
       }
 
-      logger.info('Operation wallet transactions filtered', {
+      logger.info('Billing wallet transactions filtered', {
         merchantId,
         transactionCount: result.transactions?.length
       });
@@ -1231,7 +1329,7 @@ export class WalletController {
    * POST /api/v1/wallets/operation/debit
    * Debit the merchant's own Operation Wallet (used for billing)
    */
-  static async debitOperationWallet(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async debitBillingWallet(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {
         res.status(401).json({
@@ -1244,7 +1342,7 @@ export class WalletController {
       const merchantId = req.user.merchantId || req.user.userId;
 
       // Validate input data
-      const { error, value } = validateInput<OperationDebitData>(debitTreasurySchema, req.body);
+      const { error, value } = validateInput<BillingDebitData>(debitTreasurySchema, req.body);
       if (error) {
         res.status(400).json({
           success: false,
@@ -1256,8 +1354,8 @@ export class WalletController {
 
       const { amount, description } = value!;
 
-      // Perform the debit on the Operation Wallet
-      const result = await WalletService.debitOperationWallet({
+      // Perform the debit on the Billing Wallet
+      const result = await WalletService.debitBillingWallet({
         merchantId,
         amount,
         description
@@ -1271,21 +1369,21 @@ export class WalletController {
         return;
       }
 
-      logger.info('Operation wallet debited by merchant', {
+      logger.info('Billing wallet debited by merchant', {
         merchantId,
         amount
       });
 
       res.status(200).json({
         success: true,
-        message: 'Operation wallet debited successfully',
+        message: 'Billing wallet debited successfully',
         data: {
           wallet: result.wallet,
           transaction: result.transaction
         }
       });
     } catch (error) {
-      logger.error('Error debiting Operation wallet', { error });
+      logger.error('Error debiting Billing wallet', { error });
       next(error);
     }
   }
@@ -1502,7 +1600,7 @@ export class WalletController {
    * POST /api/v1/wallets/treasury/debit-merchant
    * Debit the merchant's own Treasury Wallet (used for billing)
    */
-  static async debitTreasuryWallet(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async debitSettlementWallet(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {
         res.status(401).json({
@@ -1531,13 +1629,13 @@ export class WalletController {
       if (value!.merchantId !== merchantId) {
         res.status(403).json({
           success: false,
-          error: 'You can only debit your own Treasury Wallet'
+          error: 'You can only debit your own Settlement Wallet'
         });
         return;
       }
 
-      // Perform the debit on the Treasury Wallet
-      const result = await WalletService.debitTreasuryWallet({
+      // Perform the debit on the Settlement Wallet
+      const result = await WalletService.debitSettlementWallet({
         merchantId,
         amount,
         description
@@ -1551,21 +1649,21 @@ export class WalletController {
         return;
       }
 
-      logger.info('Treasury wallet debited by merchant', {
+      logger.info('Settlement wallet debited by merchant', {
         merchantId,
         amount
       });
 
       res.status(200).json({
         success: true,
-        message: 'Treasury wallet debited successfully',
+        message: 'Settlement wallet debited successfully',
         data: {
           wallet: result.wallet,
           transaction: result.transaction
         }
       });
     } catch (error) {
-      logger.error('Error debiting Treasury wallet', { error });
+      logger.error('Error debiting Settlement wallet', { error });
       next(error);
     }
   }

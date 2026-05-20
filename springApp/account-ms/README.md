@@ -12,6 +12,8 @@ This microservice handles account management functionality for the SpringTD plat
 - Handle billing checks and account pricing calculations
 - Act as API Gateway for all SpringTD microservices
 
+**Tenant storefront (subdomain PWA):** See [STOREFRONT_PWA_INTEGRATION.md](../STOREFRONT_PWA_INTEGRATION.md) for per-screen API contracts (resolve tenant, login, product catalog, detail, apply, wallet/KYC).
+
 ## Tech Stack
 
 - Node.js with Express
@@ -215,6 +217,10 @@ All endpoints require `Authorization: Bearer <jwt-token>` unless noted. Replace 
 | Create User Wallet            | POST   | `https://account-ms.fly.dev/api/v1/wallets/user`                              | —                                              |
 | Fetch Merchant wallet details | GET    | `https://account-ms.fly.dev/api/v1/wallets/merchant/:merchantId/all`          | Returns Treasury, Operation, & KYC wallets     |
 | Fetch Merchant wallet history | GET    | `https://account-ms.fly.dev/api/v1/wallets/treasury/:merchantId/transactions` | Replace **treasury** with `operation` or `kyc` |
-| Fetch user wallet details     | GET    | `https://account-ms.fly.dev/api/v1/wallets/user/:userId`                      | —                                              |
+| Fetch user wallet details     | GET    | `https://account-ms.fly.dev/api/v1/wallets/user/:userId`                      | Poll after Fuspay KYC for `virtualNuban`       |
 | Fetch user wallet history     | GET    | `https://account-ms.fly.dev/api/v1/wallets/user/:userId/transactions`         | —                                              |
+
+Wallet routes proxy to **wallet-ms**. **Retail user PayOnUs (fixed) NUBAN** is **not** created at `POST /api/v1/registration/user`; it is provisioned after Fuspay modular KYC completes (`POST /api/v1/kyc/modular/webhook` → compliance-ms → wallet-ms). See `springApp/wallet-ms/README.md` and `springApp/compliance-ms/README.md`.
+
+| Fuspay KYC webhook (configure in Fuspay dashboard) | POST | `https://account-ms.fly.dev/api/v1/kyc/modular/webhook` | Proxied to compliance-ms; triggers NUBAN for `individual` profiles |
 

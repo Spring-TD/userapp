@@ -17,7 +17,7 @@ describe('SpecialService', () => {
 
   describe('getMerchantWalletBalance', () => {
     it('should return null for non-existent wallet', async () => {
-      const wallet = await SpecialService.getMerchantWalletBalance('non-existent-id', 'TREASURY');
+      const wallet = await SpecialService.getMerchantWalletBalance('non-existent-id', 'SETTLEMENT');
       expect(wallet).toBeNull();
     });
   });

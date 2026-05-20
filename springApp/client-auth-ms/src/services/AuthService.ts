@@ -10,6 +10,7 @@ import { SessionService } from './SessionService';
 import { fuspayModularService } from './FuspayModularService';
 import { complianceService } from './ComplianceService';
 import { provisionUserWalletAfterSignup, type ProvisionedUserWallet } from './WalletMsService';
+import { normalizeCountryToAlpha2 } from '../utils/countryCode';
 
 // Type for user response without password
 export type UserResponse = Omit<UserAccount, 'password'>;
@@ -34,6 +35,8 @@ export interface UserRegistrationData {
   user_merchant_id?: string;
   country: string;
   user_ref?: string;
+  /** Set from `x-tenant-app-id` by registration controller when present; not accepted from public body alone. */
+  app_id?: string;
 }
 
 export interface MerchantRegistrationData {
@@ -144,6 +147,15 @@ export class AuthService {
         };
       }
 
+      const countryCode = normalizeCountryToAlpha2(userData.country);
+      if (!countryCode) {
+        return {
+          success: false,
+          error:
+            'Invalid country. Use a recognized English country name or ISO code (e.g. Nigeria or NG).'
+        };
+      }
+
       // Hash the password when provided; otherwise use a non-login placeholder for user_ref-only accounts
       const hashedPassword = hasPassword
         ? await hashPassword(userData.password!)
@@ -161,8 +173,9 @@ export class AuthService {
         email_verified: false,
         phone_verified: false,
         user_merchant_id: userData.user_merchant_id || '',
-        country: userData.country,
+        country: countryCode,
         ...(userData.user_ref && { user_ref: userData.user_ref }),
+        ...(userData.app_id?.trim() ? { app_id: userData.app_id.trim() } : {}),
         created_at: new Date(),
         updated_at: new Date(),
         last_login_at: undefined,
@@ -223,10 +236,12 @@ export class AuthService {
       let wallet: ProvisionedUserWallet | undefined;
       let walletProvisioningError: string | undefined;
       if (user.user_merchant_id) {
+        const merchantOwner = await mockDb.findMerchantOwnerByTenantMerchantId(user.user_merchant_id);
         const walletResult = await provisionUserWalletAfterSignup({
           userId: user.id,
           merchantId: user.user_merchant_id,
-          displayName: `${user.first_name} ${user.last_name}`.trim() || user.email
+          displayName: `${user.first_name} ${user.last_name}`.trim() || user.email,
+          ...(merchantOwner?.id ? { complianceShareholderUserId: merchantOwner.id } : {})
         });
         if (walletResult.success && walletResult.wallet) {
           wallet = walletResult.wallet;
@@ -294,6 +309,15 @@ export class AuthService {
         };
       }
 
+      const merchantCountryCode = normalizeCountryToAlpha2(merchantData.country);
+      if (!merchantCountryCode) {
+        return {
+          success: false,
+          error:
+            'Invalid country. Use a recognized English country name or ISO code (e.g. Nigeria or NG).'
+        };
+      }
+
       // Hash the password
       const hashedPassword = await hashPassword(merchantData.password);
 
@@ -309,7 +333,7 @@ export class AuthService {
         email_verified: false,
         phone_verified: false,
         user_merchant_id: merchantData.user_merchant_id,
-        country: merchantData.country,
+        country: merchantCountryCode,
         callback_url: undefined,
         error_logs_url: undefined,
         created_at: new Date(),
@@ -387,6 +411,15 @@ export class AuthService {
         };
       }
 
+      const adminCountryCode = normalizeCountryToAlpha2(adminData.country);
+      if (!adminCountryCode) {
+        return {
+          success: false,
+          error:
+            'Invalid country. Use a recognized English country name or ISO code (e.g. Nigeria or NG).'
+        };
+      }
+
       // Hash the password
       const hashedPassword = await hashPassword(adminData.password);
 
@@ -402,7 +435,7 @@ export class AuthService {
         email_verified: true, // Admins are verified by default
         phone_verified: false,
         user_merchant_id: 'admin', // Fixed value for admins
-        country: adminData.country,
+        country: adminCountryCode,
         created_at: new Date(),
         updated_at: new Date(),
         last_login_at: undefined,
@@ -938,8 +971,19 @@ export class AuthService {
         ...(profileData.first_name !== undefined ? { first_name: profileData.first_name } : {}),
         ...(profileData.last_name !== undefined ? { last_name: profileData.last_name } : {}),
         ...(profileData.phone !== undefined ? { phone: profileData.phone } : {}),
-        ...(profileData.country !== undefined ? { country: profileData.country } : {}),
       };
+
+      if (profileData.country !== undefined) {
+        const resolvedCountry = normalizeCountryToAlpha2(profileData.country);
+        if (!resolvedCountry) {
+          return {
+            success: false,
+            error:
+              'Invalid country. Use a recognized English country name or ISO code (e.g. Nigeria or NG).'
+          };
+        }
+        updateData.country = resolvedCountry;
+      }
 
       await mockDb.updateUser(userId, updateData);
 

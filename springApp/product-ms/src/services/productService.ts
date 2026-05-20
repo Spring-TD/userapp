@@ -10,8 +10,6 @@ import { config } from '../config/environment';
 import { ProductModel, toProduct } from '../models/ProductModel';
 import { normalizeProductType } from '../utils/productType';
 import { ApiError } from '../middleware/errorHandler';
-import type { SubMerchantActivationContext } from '../types/subMerchantActivation';
-
 export class ProductService {
   private toNumeric(value: unknown): number {
     if (typeof value === 'number' && Number.isFinite(value)) {
@@ -174,52 +172,6 @@ export class ProductService {
     }
   }
 
-  private resolveCatalogProductId(product: Product, pathProductId: string): string {
-    const upstream = product.upstreamProductId?.trim();
-    return upstream && upstream.length > 0 ? upstream : pathProductId;
-  }
-
-  private async postPlataSubMerchantActivation(
-    appId: string,
-    catalogProductId: string,
-    product: Product,
-    ctx: SubMerchantActivationContext
-  ): Promise<void> {
-    const url = `${config.plataAccountServiceUrl}/api/v1/products/sub-merchant-activations`;
-    const productName = ctx.productName ?? product.name;
-    const payload: Record<string, unknown> = {
-      appId,
-      productId: catalogProductId,
-      merchantId: ctx.merchantId,
-      merchantName: ctx.merchantName,
-      subMerchant: ctx.subMerchant,
-      status: 'active'
-    };
-    if (productName && String(productName).trim().length > 0) {
-      payload.productName = String(productName).trim();
-    }
-
-    try {
-      await axios.post(url, payload, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...this.getUpstreamAuthHeaders()
-        }
-      });
-    } catch (error) {
-      this.logUpstreamError('Plata sub-merchant-activation failed:', error);
-      if (axios.isAxiosError(error)) {
-        const data = error.response?.data as Record<string, unknown> | undefined;
-        const msg =
-          (typeof data?.message === 'string' && data.message) ||
-          (typeof data?.error === 'string' && data.error) ||
-          error.message;
-        throw new ApiError(502, `Upstream activation failed: ${msg}`);
-      }
-      throw new ApiError(502, 'Upstream activation failed');
-    }
-  }
-
   private async fetchUpstreamProductById(id: string): Promise<Product | null> {
     try {
       const response = await axios.get(`${config.plataAccountServiceUrl}/api/v1/products/${id}`, {
@@ -254,6 +206,7 @@ export class ProductService {
       appId,
       status: product.status ?? 'incomplete',
       isActive,
+      isFeatured: false,
       createdAt: product.createdAt || now,
       updatedAt: now,
       metadata: product.metadata,
@@ -283,6 +236,7 @@ export class ProductService {
       'subType',
       'status',
       'isActive',
+      'isFeatured',
       'metadata',
       'structure',
       'about',
@@ -428,46 +382,19 @@ export class ProductService {
   }
 
   // Activating clones the upstream product into the local products collection for that app.
-  // When turning on from inactive, notifies Plata via POST .../sub-merchant-activations (rollback on failure).
-  async toggleProductActivation(
-    appId: string,
-    productId: string,
-    activate: boolean,
-    activationContext?: SubMerchantActivationContext
-  ): Promise<Product | null> {
-    if (activate && !activationContext) {
-      throw new ApiError(
-        400,
-        'merchantId, merchantName, and subMerchant are required when activating a product'
-      );
-    }
-
+  async toggleProductActivation(appId: string, productId: string, activate: boolean): Promise<Product | null> {
     const localProduct = await this.getMerchantProductConfiguration(appId, productId);
 
     if (localProduct) {
-      const previousIsActive = localProduct.isActive;
-      const updated = await ProductModel.findByIdAndUpdate(
-        localProduct.id,
-        { $set: { isActive: activate, updatedAt: new Date().toISOString() } },
-        { new: true }
-      );
-      const product = updated ? toProduct(updated) : null;
-      if (!product) {
-        return null;
+      const setDoc: Record<string, unknown> = {
+        isActive: activate,
+        updatedAt: new Date().toISOString()
+      };
+      if (!activate) {
+        setDoc.isFeatured = false;
       }
-
-      if (activate && activationContext && !previousIsActive) {
-        const catalogProductId = this.resolveCatalogProductId(product, productId);
-        try {
-          await this.postPlataSubMerchantActivation(appId, catalogProductId, product, activationContext);
-        } catch (err) {
-          await ProductModel.findByIdAndUpdate(localProduct.id, {
-            $set: { isActive: false, updatedAt: new Date().toISOString() }
-          });
-          throw err;
-        }
-      }
-      return product;
+      const updated = await ProductModel.findByIdAndUpdate(localProduct.id, { $set: setDoc }, { new: true });
+      return updated ? toProduct(updated) : null;
     }
 
     if (!activate) {
@@ -479,18 +406,53 @@ export class ProductService {
       return null;
     }
 
-       const created = await ProductModel.create(this.buildLocalProductPayload(upstreamProduct, appId, true));
-    const product = toProduct(created);
+    const created = await ProductModel.create(this.buildLocalProductPayload(upstreamProduct, appId, true));
+    return toProduct(created);
+  }
 
-    const catalogProductId = this.resolveCatalogProductId(product, productId);
-    try {
-      await this.postPlataSubMerchantActivation(appId, catalogProductId, product, activationContext!);
-    } catch (err) {
-      await ProductModel.deleteOne({ _id: created._id });
-      throw err;
+  /**
+   * Replace featured flags for an app: only **active** (`isActive`) local products may be featured.
+   * Pass an empty array to clear all. Unknown ids or inactive products return 400.
+   */
+  async setFeaturedProductsForApp(appId: string, productIds: unknown): Promise<Product[]> {
+    if (!Array.isArray(productIds)) {
+      throw new ApiError(400, 'Request body must include a productIds array');
+    }
+    const ids = [...new Set(productIds.map((id) => String(id).trim()).filter(Boolean))];
+    const allAppDocs = await ProductModel.find({ appId });
+    if (allAppDocs.length === 0) {
+      if (ids.length > 0) {
+        throw new ApiError(400, 'No products configured for this app');
+      }
+      return [];
+    }
+    const byId = new Map(allAppDocs.map((d) => [d._id.toString(), d]));
+    for (const pid of ids) {
+      const doc = byId.get(pid);
+      if (!doc) {
+        throw new ApiError(400, `Unknown product id for this app: ${pid}`);
+      }
+      if (doc.isActive === false) {
+        throw new ApiError(400, `Cannot feature a product that is not turned on: ${pid}`);
+      }
     }
 
-    return product;
+    const now = new Date().toISOString();
+    const featuredSet = new Set(ids);
+    await ProductModel.bulkWrite(
+      allAppDocs.map((doc) => {
+        const idStr = doc._id.toString();
+        const nextFeatured = featuredSet.has(idStr) && doc.isActive !== false;
+        return {
+          updateOne: {
+            filter: { _id: doc._id },
+            update: { $set: { isFeatured: nextFeatured, updatedAt: now } }
+          }
+        };
+      })
+    );
+
+    return this.getProductsByMerchant(appId);
   }
 
   // Updates the locally persisted app product document with Plata-shaped fields.
@@ -504,13 +466,24 @@ export class ProductService {
       return null;
     }
 
+    const willBeActive =
+      updateData.isActive !== undefined ? updateData.isActive !== false : localProduct.isActive;
+    if (updateData.isFeatured === true && !willBeActive) {
+      throw new ApiError(400, 'Cannot mark an inactive product as featured');
+    }
+
+    const body = { ...updateData };
+    if (updateData.isActive === false) {
+      body.isFeatured = false;
+    }
+
     const baseFeesAndCharges = localProduct.baseFeesAndCharges ?? localProduct.feesAndCharges;
     const merchantFeeAdditions = this.sanitizeMerchantFeeAdditions(
       updateData.merchantFeeAdditions ?? localProduct.merchantFeeAdditions
     );
     const totalFeesAndCharges = this.computeTotalFeesAndCharges(baseFeesAndCharges, merchantFeeAdditions);
 
-    const sanitizedUpdate = this.sanitizeProductUpdate(updateData);
+    const sanitizedUpdate = this.sanitizeProductUpdate(body);
     delete sanitizedUpdate.feesAndCharges;
     delete sanitizedUpdate.baseFeesAndCharges;
 

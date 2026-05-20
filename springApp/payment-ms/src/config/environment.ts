@@ -10,6 +10,8 @@ interface EnvironmentConfig {
   serviceAuthUrl: string;
   billingServiceUrl: string;
   walletServiceUrl: string;
+  /** Shared secret for wallet-ms -> payment-ms internal ledger calls. */
+  paymentInternalToken: string;
   corsOrigins: string[];
   logLevel: string;
   jwtSecret: string;
@@ -29,6 +31,7 @@ export const config: EnvironmentConfig = {
   serviceAuthUrl: process.env.SERVICE_AUTH_URL || 'http://localhost:4000',
   billingServiceUrl: process.env.BILLING_SERVICE_URL || 'http://localhost:4006',
   walletServiceUrl: process.env.WALLET_SERVICE_URL || 'http://localhost:4004',
+  paymentInternalToken: (process.env.PAYMENT_INTERNAL_TOKEN || '').trim(),
   corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:4001'],
   logLevel: process.env.LOG_LEVEL || 'info',
   jwtSecret: process.env.JWT_SECRET || 'payment-secret-key',

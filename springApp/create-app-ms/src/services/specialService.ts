@@ -141,11 +141,13 @@ export class SpecialService {
     try {
       let url = '';
       switch (walletType) {
+        case 'SETTLEMENT':
         case 'TREASURY':
-          url = `${this.WALLET_SERVICE_URL}/api/v1/wallets/treasury/${merchantId}/transactions`;
+          url = `${this.WALLET_SERVICE_URL}/api/v1/wallets/settlement/${merchantId}/transactions`;
           break;
+        case 'BILLING':
         case 'OPERATION':
-          url = `${this.WALLET_SERVICE_URL}/api/v1/wallets/operation/${merchantId}/transactions`;
+          url = `${this.WALLET_SERVICE_URL}/api/v1/wallets/billing/${merchantId}/transactions`;
           break;
         case 'KYC':
           url = `${this.WALLET_SERVICE_URL}/api/v1/wallets/kyc/${merchantId}/transactions`;

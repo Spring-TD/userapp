@@ -113,6 +113,7 @@ export class FuspayModularKycService {
   private readonly appId: string;
   private readonly apiKey: string;
   private readonly enabled: boolean;
+  private readonly allowedFuspayCountryCodes: Set<string>;
 
   constructor() {
     let rawBase =
@@ -127,6 +128,9 @@ export class FuspayModularKycService {
     this.appId = process.env.FUSPAY_MODULAR_APP_ID || '';
     this.apiKey = process.env.FUSPAY_MODULAR_API_KEY || '';
     this.enabled = (process.env.FUSPAY_MODULAR_KYC_ENABLED || 'false').toLowerCase() === 'true';
+    this.allowedFuspayCountryCodes = FuspayModularKycService.parseAllowedCountryCodes(
+      process.env.FUSPAY_MODULAR_ALLOWED_COUNTRIES
+    );
 
     this.axiosInstance = axios.create({
       baseURL: this.baseUrl,
@@ -143,6 +147,30 @@ export class FuspayModularKycService {
 
   isConfigured(): boolean {
     return Boolean(this.appId);
+  }
+
+  private static parseAllowedCountryCodes(raw?: string): Set<string> {
+    const src = (raw ?? 'NG,TZ,GH,KE').trim();
+    const codes = src
+      .split(',')
+      .map((s) => s.trim().toUpperCase())
+      .filter((s) => /^[A-Z]{2}$/.test(s));
+    const list = codes.length ? codes : ['NG', 'TZ', 'GH', 'KE'];
+    return new Set(list);
+  }
+
+  private assertFuspayCountry(country: string): { ok: true; code: string } | { ok: false; error: string } {
+    const code = country.trim().toUpperCase();
+    if (!/^[A-Z]{2}$/.test(code)) {
+      return { ok: false, error: 'Fuspay country must be a valid ISO 3166-1 alpha-2 code' };
+    }
+    if (!this.allowedFuspayCountryCodes.has(code)) {
+      return {
+        ok: false,
+        error: `Country must be one of: ${[...this.allowedFuspayCountryCodes].sort().join(', ')}`
+      };
+    }
+    return { ok: true, code };
   }
 
   /** Payonus/Fuspay rejects create-verification without `callback`. */
@@ -199,7 +227,6 @@ export class FuspayModularKycService {
           phone: true,
           email: true
         },
-        liveliness: true,
         address_verification: {
           enabled: true,
           upload_proof_of_address: true
@@ -306,17 +333,22 @@ export class FuspayModularKycService {
         return { success: false, error: 'Fuspay modular KYC is enabled but FUSPAY_MODULAR_APP_ID is not set' };
       }
 
+      const countryCheck = this.assertFuspayCountry(request.country);
+      if (!countryCheck.ok) {
+        return { success: false, error: countryCheck.error };
+      }
+
       const payload: FuspayCreateUserPayload = {
         email: request.email,
         phone: request.phone,
         app: this.appId,
-        country: request.country,
+        country: countryCheck.code,
         user_ref: request.userRef
       };
 
       auditLogger('FUSPAY_CREATE_USER_REQUEST', 'system', {
         userRef: request.userRef,
-        country: request.country
+        country: countryCheck.code
       });
 
       const response = await this.axiosInstance.post<FuspayCreateUserResponse>(
@@ -397,6 +429,11 @@ export class FuspayModularKycService {
         body.country = (typeof body.country === 'string' && body.country.trim().length > 0)
           ? body.country
           : this.defaultCountry();
+        const countryRes = this.assertFuspayCountry(String(body.country));
+        if (!countryRes.ok) {
+          return { success: false, error: countryRes.error };
+        }
+        body.country = countryRes.code;
         body.callback = cr.callback;
         body.redirect = cr.redirect ?? cr.callback;
 
@@ -424,6 +461,13 @@ export class FuspayModularKycService {
         if ('error' in cr) {
           return { success: false, error: cr.error };
         }
+        const defaultCountryRes = this.assertFuspayCountry(this.defaultCountry());
+        if (!defaultCountryRes.ok) {
+          return {
+            success: false,
+            error: `FUSPAY_MODULAR_DEFAULT_COUNTRY must be one of: ${[...this.allowedFuspayCountryCodes].sort().join(', ')}`
+          };
+        }
         const kycType = up.kyc_type || 'individual';
         const defaults = this.defaultChecks(kycType);
         body = {
@@ -432,7 +476,7 @@ export class FuspayModularKycService {
           kyc_type: kycType,
           callback: cr.callback,
           redirect: cr.redirect,
-          country: this.defaultCountry(),
+          country: defaultCountryRes.code,
           branding: this.defaultBranding(),
           ...(up.individual_checks ? { individual_checks: up.individual_checks } : defaults.individual_checks ? { individual_checks: defaults.individual_checks } : {}),
           ...(up.business_checks

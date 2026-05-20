@@ -32,27 +32,36 @@ Deployment URL: https://client-auth-ms.fly.dev/
 - **✅ API Gateway**: Centralized routing and validation
 - **✅ CORS Support**: Configured for frontend integration
 - **✅ Health Check**: Service monitoring endpoint
-- **✅ Retail user wallets**: After successful `POST /api/v1/registration/user` (and compliance profile), optionally provisions a **wallet-ms** user wallet (including **Payonus NUBAN** when wallet-ms is configured). Requires **`WALLET_SERVICE_URL`**, **`WALLET_INTERNAL_TOKEN`** (same value as wallet-ms), and **`USER_WALLET_DEFAULT_CURRENCY`** (default `NGN`). See [Environment Variables](#environment-variables).
+- **✅ Retail user wallets**: After successful `POST /api/v1/registration/user`, optionally creates a **wallet-ms** user wallet (**without** PayOnUs NUBAN at signup). **PayOnUs fixed virtual account** is provisioned later when the user completes **Fuspay modular KYC** and compliance-ms receives the webhook. Requires **`WALLET_SERVICE_URL`**, **`WALLET_INTERNAL_TOKEN`** (same value as wallet-ms), and **`USER_WALLET_DEFAULT_CURRENCY`** (default `NGN`). See [Environment Variables](#environment-variables).
 
 ## Fuspay + Compliance Registration Sync
 
 `POST /api/v1/registration/user` now performs these additional steps during signup (when enabled):
 
-1. Create local user in `client-auth-ms`.
+1. Create local user in `client-auth-ms` (optional **`app_id`** from `x-tenant-app-id` when that header is present).
 2. Create Fuspay Modular user via `POST /api/v1/modular/user/` using:
    - `email`, `phone`, `country`
    - `app` from `FUSPAY_MODULAR_APP_ID` (env only)
    - `user_ref` as canonical local user id
 3. Create minimal KYC profile in `compliance-ms` (`POST /api/v1/kyc/profile/:userId`) and persist Fuspay identifiers.
-4. **Wallet (optional):** If `WALLET_SERVICE_URL` and `WALLET_INTERNAL_TOKEN` are set (matching **wallet-ms** `WALLET_INTERNAL_TOKEN`), calls **`POST /api/v1/internal/wallets/user`** on wallet-ms to create the user’s wallet and run **Payonus** provisioning for the configured currency.
+4. **Wallet (optional):** If `WALLET_SERVICE_URL` and `WALLET_INTERNAL_TOKEN` are set (matching **wallet-ms** `WALLET_INTERNAL_TOKEN`), calls **`POST /api/v1/internal/wallets/user`** on wallet-ms to create the user’s wallet row only (**no PayOnUs call at signup**).
+
+5. **PayOnUs NUBAN (after KYC):** When the user finishes Fuspay modular KYC, Fuspay sends a webhook to **compliance-ms** (`POST /api/v1/kyc/modular/webhook`). compliance-ms stores the full payload (including BVN), then calls wallet-ms **`POST /api/v1/internal/wallets/user/:userId/provision-nuban`** to create the fixed virtual account. See **compliance-ms** README, section *Fuspay modular webhook*.
+
+```text
+Signup → wallet created (balances 0, usually no virtualNuban yet)
+KYC complete → webhook → NUBAN provisioned → GET wallet shows virtualNuban
+```
 
 Registration response includes:
 
 - `fuspayProfileCreated`
 - `fuspayUserId` (Fuspay `customer_id` / `data.id`)
 - `fuspayUserRef` (your canonical local user id)
-- **`wallet`** — created wallet object from wallet-ms when provisioning succeeded (may include `virtualNuban` when Payonus is active)
-- **`walletProvisioningError`** — present when wallet-ms was configured but the create call failed (user account is still created; retry or alert)
+- **`wallet`** — wallet from wallet-ms when create succeeded (`virtualNuban` typically **absent** until KYC webhook runs; may show `provisionStatus: "failed"` only if something called provision early)
+- **`walletProvisioningError`** — present when wallet-ms create failed (user account is still created)
+
+**Frontend:** After signup, direct the user to Fuspay KYC; poll **`GET /api/v1/wallets/user/:userId`** (via account-ms gateway) after KYC to show account number and balance.
 
 If Fuspay or compliance profile creation fails, registration is rolled back so partial onboarding is not left behind.
 
@@ -101,6 +110,15 @@ Content-Type: application/json
   "password": "SecurePass123!"
 }
 ```
+
+**Tenant / subdomain signup (via account-ms):** When requests are proxied through **account-ms** with host-based tenant resolution, the gateway may send:
+
+| Header | Effect on `POST /api/v1/registration/user` |
+|--------|---------------------------------------------|
+| `x-tenant-merchant-id` | Used as `user_merchant_id` when the JSON body omits it (same as today). |
+| `x-tenant-app-id` | When present (non-empty), persisted on the new **user** document as optional **`app_id`** (the create-app-ms app id). This value is **not** read from the JSON body; only the header is used. |
+
+If **client-auth-ms** is reachable directly from the internet, treat tenant headers as trusted only when your reverse proxy or private network strips/forges them; otherwise a caller could set `x-tenant-app-id` arbitrarily.
 
 #### Admin Registration
 ```
@@ -979,10 +997,10 @@ Authorization: Bearer <merchant-or-admin-jwt-token>
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `WALLET_SERVICE_URL` | string | *(empty)* | Base URL of **wallet-ms** (no trailing slash), e.g. `http://localhost:4004` or `https://wallet-ms.fly.dev`. If empty, user signup **does not** create a wallet. |
-| `WALLET_INTERNAL_TOKEN` | string | *(empty)* | Shared secret with **wallet-ms** `WALLET_INTERNAL_TOKEN`. Sent as `X-Internal-Token` to `POST /api/v1/internal/wallets/user`. **Must match** wallet-ms. If **`WALLET_SERVICE_URL`** or **`WALLET_INTERNAL_TOKEN`** is empty, signup skips wallet creation. |
-| `USER_WALLET_DEFAULT_CURRENCY` | string | `NGN` | ISO currency for the new user wallet (use `NGN` to align with Payonus `PAYONUS_NUBAN_CURRENCIES` defaults on wallet-ms). |
-| `WALLET_SERVICE_HTTP_TIMEOUT_MS` | number | `30000` | HTTP timeout for wallet-ms internal calls. |
+| `WALLET_SERVICE_URL` | string | *(empty)* | Base URL of **wallet-ms** (no trailing slash), e.g. `http://localhost:4004` or `https://wallet-ms.fly.dev`. If empty, user signup **does not** create a wallet. Used only for **`POST /api/v1/internal/wallets/user`** at signup (not for PayOnUs; that runs from compliance-ms after KYC). |
+| `WALLET_INTERNAL_TOKEN` | string | *(empty)* | Shared secret with **wallet-ms** `WALLET_INTERNAL_TOKEN`. Sent as `X-Internal-Token` to internal wallet routes. **Must match** wallet-ms and **compliance-ms** `WALLET_INTERNAL_TOKEN`. |
+| `USER_WALLET_DEFAULT_CURRENCY` | string | `NGN` | ISO currency for the new user wallet (use `NGN` to align with Payonus `PAYONUS_NUBAN_CURRENCIES` on wallet-ms). |
+| `WALLET_SERVICE_HTTP_TIMEOUT_MS` | number | `30000` | HTTP timeout for wallet-ms internal create-wallet call at signup. |
 
 ### Security & CORS
 | Variable | Type | Default | Description |
@@ -1045,7 +1063,7 @@ interface MerchantRegistrationForm {
 #### User Registration Data Model
 ``typescript
 interface UserRegistrationForm {
-  user_merchant_id: string; // Maps to User.user_merchant_id
+  user_merchant_id: string; // Maps to User.user_merchant_id (optional in body if x-tenant-merchant-id is set)
   first_name: string;       // Maps to BaseUser.first_name
   last_name: string;        // Maps to BaseUser.last_name
   email: string;            // Maps to BaseUser.email
@@ -1054,6 +1072,8 @@ interface UserRegistrationForm {
   password: string;         // Maps to BaseUser.password (hashed by service)
 }
 ```
+
+`User.app_id` is not part of this form; it is set from the `x-tenant-app-id` header when present (see [User Registration](#user-registration) above).
 
 #### Admin Registration Data Model
 ``typescript
@@ -1091,6 +1111,9 @@ interface User extends BaseUser {
   user_type: UserType.USER;
   user_merchant_id: string;
   country: string;
+  app_id?: string;          // Optional: create-app-ms app id when registered with x-tenant-app-id
+  user_ref?: string;        // External reference when using passwordless flows
+  role_id?: string;         // Assigned role id (e.g. after invitation)
 }
 
 // Merchant extends BaseUser
@@ -1118,6 +1141,8 @@ interface Admin extends BaseUser {
 | `password` | `BaseUser.password` | Hashed by service-auth-ms |
 | `country` | `User/Merchant/Admin.country` | Direct mapping |
 | `user_merchant_id` | `User.user_merchant_id` | For users: provided by form<br/>For merchants: auto-generated<br/>For admins: fixed as 'admin' |
+| `x-tenant-merchant-id` (header) | `User.user_merchant_id` | When the body omits `user_merchant_id`, registration uses this header (e.g. account-ms tenant proxy). |
+| `x-tenant-app-id` (header) | `User.app_id` | Optional; set only from this header when non-empty. Not taken from JSON body. |
 
 ## Validation Rules
 - Email must be valid format and unique

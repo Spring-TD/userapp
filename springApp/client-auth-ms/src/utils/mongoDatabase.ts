@@ -95,6 +95,19 @@ class MongoDatabase {
         return docs.map((d) => ({ ...d, id: (d._id as any).toString() } as UserAccount));
     }
 
+    /**
+     * Merchant account whose `user_merchant_id` equals the tenant id shared by retail users.
+     * Used so wallet-ms can resolve Payonus BVN from compliance shareholders (keyed by merchant JWT userId).
+     */
+    async findMerchantOwnerByTenantMerchantId(tenantMerchantId: string): Promise<UserAccount | null> {
+        const doc = await UserModel.findOne({
+            user_merchant_id: tenantMerchantId,
+            user_type: 'merchant'
+        }).lean();
+        if (!doc) return null;
+        return { ...doc, id: (doc._id as any).toString() } as UserAccount;
+    }
+
     // ── Roles ─────────────────────────────────────────────────────────────────
 
     /**

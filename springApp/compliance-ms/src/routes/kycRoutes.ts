@@ -154,6 +154,7 @@ import multer from 'multer';
 import { validateKYCSubmission } from '../middleware/kycValidation';
 import { authenticate } from '../middleware/auth';
 import { authenticateService } from '../middleware/serviceAuth';
+import { walletInternalTokenAuth } from '../middleware/walletInternalAuth';
 import { auditLog } from '../middleware/audit';
 import { KYCController } from '../controllers/kycController';
 import { getMaxUploadSizeBytes } from '../services/spacesService';
@@ -174,6 +175,20 @@ router.use(auditLog);
 
 // Apply service authentication middleware to allow service-to-service requests
 router.use(authenticateService);
+
+/** Wallet-ms: retail user BVN from Fuspay modular KYC webhook. */
+router.get(
+  '/internal/payonus/user-bvn/:userId',
+  walletInternalTokenAuth,
+  KYCController.getUserBvnForPayonusInternal
+);
+
+/** Wallet-ms: resolve first shareholder BVN (merchant owner = client-auth JWT userId). */
+router.get(
+  '/internal/payonus/first-shareholder-bvn/:ownerUserId',
+  walletInternalTokenAuth,
+  KYCController.getFirstShareholderBvnForPayonusInternal
+);
 
 // Separate routes for different customer types
 router.use('/individual', individualKycRoutes);

@@ -39,6 +39,11 @@ interface Config {
   notificationsServiceUrl: string;
   /** Wallet currency for app-scoped merchant wallets (NGN aligns with Payonus NUBAN defaults). */
   merchantWalletCurrency: string;
+  /**
+   * Public base URL for this service (scheme + host), used when auto-publishing PWA artifacts
+   * and the incoming request has no Host header. Example: https://springtd-create-app-ms.fly.dev
+   */
+  createAppServicePublicUrl: string;
 }
 
 const pwaAssetMaxMb = parseInt(process.env.PWA_ASSET_MAX_UPLOAD_MB || '2', 10);
@@ -70,7 +75,8 @@ export const config: Config = {
   notificationsServiceUrl:
     process.env.NOTIFICATIONS_SERVICE_URL ||
     (process.env.NODE_ENV === 'production' ? 'https://springtd-notifications-ms.fly.dev' : 'http://localhost:4009'),
-  merchantWalletCurrency: (process.env.MERCHANT_WALLET_CURRENCY || 'NGN').trim().toUpperCase() || 'NGN'
+  merchantWalletCurrency: (process.env.MERCHANT_WALLET_CURRENCY || 'NGN').trim().toUpperCase() || 'NGN',
+  createAppServicePublicUrl: (process.env.CREATE_APP_SERVICE_PUBLIC_URL || '').trim().replace(/\/+$/, '')
 };
 
 /** Full default URL for an app on the platform origin, e.g. https://my-store.springtd.com */

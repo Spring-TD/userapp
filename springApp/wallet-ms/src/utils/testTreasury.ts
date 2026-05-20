@@ -23,7 +23,7 @@ async function testTreasuryFunctionality() {
     }
 
     // Get the Treasury Wallet
-    const treasuryResult = await WalletService.getTreasuryWallet('merchant_123');
+    const treasuryResult = await WalletService.getSettlementWallet('merchant_123');
     if (!treasuryResult.success || !treasuryResult.wallet) {
       console.log('✗ Failed to get Treasury Wallet');
       return;

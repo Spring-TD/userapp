@@ -1,5 +1,5 @@
 import express from 'express';
-import cors from 'cors';
+import { corsMiddleware } from './middleware/corsMiddleware';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import axios from 'axios';
@@ -15,15 +15,15 @@ import mortgageRoutes from './routes/mortgageRoutes';
 import apiKeyRoutes from './routes/apiKeyRoutes';
 import { setupProxies } from './middleware/proxyMiddleware';
 import { tenantResolverMiddleware } from './middleware/tenantResolverMiddleware';
+import type { TenantRequest } from './types/tenant';
+import { tenantManifestWebmanifest, tenantRootOrGatewayStatus } from './handlers/tenantPublicPwaHandler';
 
 const app = express();
 const PORT = config.port;
 
 // Middleware
 app.use(helmet());
-app.use(cors({
-  origin: config.corsOrigins
-}));
+app.use(corsMiddleware);
 app.use(morgan(config.logLevel));
 app.use(tenantResolverMiddleware);
 
@@ -79,18 +79,14 @@ const swaggerOptions = {
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(undefined, swaggerOptions));
 app.use('/api-docs/', swaggerUi.serve, swaggerUi.setup(undefined, swaggerOptions));
 
-// Root route (for verifying service is running)
-app.get('/', (req, res) => {
-  res.status(200).json({
-    service: 'Account Management Microservice',
-    status: 'Running',
-    timestamp: new Date().toISOString(),
-    endpoints: {
-      health: '/health',
-      api: '/api/v1',
-      apiDocs: '/api-docs'
-    }
-  });
+// Tenant app origin (e.g. www.{subdomain}.{platform}): same-origin manifest JSON.
+app.get('/manifest.webmanifest', (req, res, next) => {
+  void tenantManifestWebmanifest(req as express.Request & TenantRequest, res).catch(next);
+});
+
+// Root: gateway status JSON on non-tenant hosts; published manifest JSON on tenant hosts (after resolution).
+app.get('/', (req, res, next) => {
+  void tenantRootOrGatewayStatus(req as express.Request & TenantRequest, res).catch(next);
 });
 
 // Health check endpoint

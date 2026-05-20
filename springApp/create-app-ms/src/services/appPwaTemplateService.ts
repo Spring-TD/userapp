@@ -9,9 +9,11 @@ import {
 } from './spacesService';
 import {
   AppPwaTemplate,
+  AppPwaTemplateSaveResult,
   CreateAppPwaTemplateRequest,
   UpdateAppPwaTemplateRequest
 } from '../types/pwaTemplate';
+import { AppPwaPublishService } from './appPwaPublishService';
 import {
   coerceAppPwaTemplateConfig,
   mergeAppPwaTemplateConfig,
@@ -50,6 +52,18 @@ function validateUpdateBody(data: UpdateAppPwaTemplateRequest): void {
 }
 
 export class AppPwaTemplateService {
+  constructor(private readonly publishService: AppPwaPublishService) {}
+
+  private async autoPublishAfterSave(
+    appId: string,
+    templateId: string,
+    template: AppPwaTemplate,
+    apiBaseUrl?: string | null
+  ): Promise<AppPwaTemplateSaveResult> {
+    const publish = await this.publishService.tryPublishTemplate(appId, templateId, apiBaseUrl);
+    return { template, publish };
+  }
+
   private static readonly PWA_ASSET_MIME: Record<string, string> = {
     'image/jpeg': 'jpg',
     'image/jpg': 'jpg',
@@ -69,8 +83,9 @@ export class AppPwaTemplateService {
     templateId: string,
     kind: 'logo' | 'splash',
     buffer: Buffer,
-    mimeType: string
-  ): Promise<AppPwaTemplate> {
+    mimeType: string,
+    apiBaseUrl?: string | null
+  ): Promise<AppPwaTemplateSaveResult> {
     if (!isSpacesConfigured()) {
       throw new ApiError(
         503,
@@ -126,7 +141,12 @@ export class AppPwaTemplateService {
       void deleteFromSpaces(oldKey);
     }
 
-    return this.withCoercedConfig(updated);
+    return this.autoPublishAfterSave(
+      appId,
+      templateId,
+      this.withCoercedConfig(updated),
+      apiBaseUrl
+    );
   }
 
   /**
@@ -138,8 +158,9 @@ export class AppPwaTemplateService {
     templateId: string,
     screenIndex: number,
     buffer: Buffer,
-    mimeType: string
-  ): Promise<AppPwaTemplate> {
+    mimeType: string,
+    apiBaseUrl?: string | null
+  ): Promise<AppPwaTemplateSaveResult> {
     if (!Number.isInteger(screenIndex) || screenIndex < 0) {
       throw new ApiError(400, 'screenIndex must be a non-negative integer');
     }
@@ -205,7 +226,12 @@ export class AppPwaTemplateService {
       void deleteFromSpaces(oldKey);
     }
 
-    return this.withCoercedConfig(updated);
+    return this.autoPublishAfterSave(
+      appId,
+      templateId,
+      this.withCoercedConfig(updated),
+      apiBaseUrl
+    );
   }
 
   async create(appId: string, body: CreateAppPwaTemplateRequest): Promise<AppPwaTemplate> {
@@ -257,8 +283,9 @@ export class AppPwaTemplateService {
   async update(
     templateId: string,
     appId: string,
-    body: UpdateAppPwaTemplateRequest
-  ): Promise<AppPwaTemplate | null> {
+    body: UpdateAppPwaTemplateRequest,
+    apiBaseUrl?: string | null
+  ): Promise<AppPwaTemplateSaveResult | null> {
     validateUpdateBody(body);
     const existing = await AppPwaTemplateModel.getByIdAndAppId(templateId, appId);
     if (!existing) {
@@ -279,16 +306,31 @@ export class AppPwaTemplateService {
     }
 
     const updated = await AppPwaTemplateModel.update(templateId, appId, patch);
-    return updated ? this.withCoercedConfig(updated) : null;
+    if (!updated) {
+      return null;
+    }
+    return this.autoPublishAfterSave(
+      appId,
+      templateId,
+      this.withCoercedConfig(updated),
+      apiBaseUrl
+    );
   }
 
   async delete(templateId: string, appId: string): Promise<boolean> {
     return AppPwaTemplateModel.delete(templateId, appId);
   }
 
-  async apply(templateId: string, appId: string): Promise<AppPwaTemplate | null> {
+  async apply(
+    templateId: string,
+    appId: string,
+    apiBaseUrl?: string | null
+  ): Promise<AppPwaTemplateSaveResult | null> {
     const t = await AppPwaTemplateModel.setApplied(templateId, appId);
-    return t ? this.withCoercedConfig(t) : null;
+    if (!t) {
+      return null;
+    }
+    return this.autoPublishAfterSave(appId, templateId, this.withCoercedConfig(t), apiBaseUrl);
   }
 
   async deleteAllForApp(appId: string): Promise<number> {

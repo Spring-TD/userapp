@@ -8,6 +8,10 @@ primary_region = 'fra'
 
 [env]
   PORT = '4008'
+  PLATFORM_BASE_DOMAIN = 'tryspring.io'
+  PLATFORM_SUBDOMAIN_PREFIX = 'www'
+  # Tenant middleware calls create-app-ms; auto_stop cold starts often exceed 5s
+  TENANT_RESOLVER_TIMEOUT_MS = '30000'
 
 [build]
 

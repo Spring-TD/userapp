@@ -45,9 +45,12 @@ const descriptionSchema = Joi.string().min(1).max(500).optional().messages({
   'string.max': 'Description must not exceed 500 characters'
 });
 
-const merchantWalletTypeSchema = Joi.string().valid('TREASURY', 'OPERATION', 'KYC').optional().messages({
-  'any.only': 'Merchant wallet type must be one of TREASURY, OPERATION, or KYC'
-});
+const merchantWalletTypeSchema = Joi.string()
+  .valid('BILLING', 'KYC', 'SETTLEMENT', 'TREASURY', 'OPERATION')
+  .optional()
+  .messages({
+    'any.only': 'Merchant wallet type must be one of BILLING, KYC, SETTLEMENT (legacy: TREASURY, OPERATION)'
+  });
 
 const dateSchema = Joi.date().iso().optional().messages({
   'date.iso': 'Date must be in ISO format'
@@ -78,6 +81,21 @@ const transactionIdSchema = Joi.string().min(1).max(100).required().messages({
   'string.min': 'Transaction ID must not be empty',
   'string.max': 'Transaction ID must not exceed 100 characters',
   'any.required': 'Transaction ID is required'
+});
+
+const bankAccountNumberSchema = Joi.string().pattern(/^\d{10}$/).required().messages({
+  'string.pattern.base': 'Account number must be 10 digits',
+  'any.required': 'Account number is required'
+});
+
+const bankCodeSchema = Joi.string().pattern(/^\d{3,10}$/).required().messages({
+  'string.pattern.base': 'Bank code must be 3 to 10 digits',
+  'any.required': 'Bank code is required'
+});
+
+const payoutReferenceSchema = Joi.string().min(1).max(120).optional().messages({
+  'string.min': 'Reference must not be empty',
+  'string.max': 'Reference must not exceed 120 characters'
 });
 
 const statusSchema = Joi.string().valid('SUCCESS', 'COMPLETED', 'PENDING', 'FAILED', 'CANCELLED').required().messages({
@@ -161,15 +179,21 @@ export const debitTreasurySchema = Joi.object({
 });
 
 // Operation-KYC Wallet validation schemas
-export const operationToKycTransferSchema = Joi.object({
+export const billingToKycTransferSchema = Joi.object({
   amount: amountSchema,
   description: descriptionSchema
 });
 
-export const kycToOperationTransferSchema = Joi.object({
+/** @deprecated use billingToKycTransferSchema */
+export const operationToKycTransferSchema = billingToKycTransferSchema;
+
+export const kycToBillingTransferSchema = Joi.object({
   amount: amountSchema,
   description: descriptionSchema
 });
+
+/** @deprecated use kycToBillingTransferSchema */
+export const kycToOperationTransferSchema = kycToBillingTransferSchema;
 
 // User Wallet 3rd Party API Call validation schema
 export const userApiCallSchema = Joi.object({
@@ -182,6 +206,21 @@ export const userApiCallSchema = Joi.object({
   amount: amountSchema,
   description: descriptionSchema,
   apiKey: apiKeySchema
+});
+
+export const userBankPayoutSchema = Joi.object({
+  accountNumber: bankAccountNumberSchema,
+  bankCode: bankCodeSchema,
+  accountName: Joi.string().min(1).max(120).required().messages({
+    'string.min': 'Account name must not be empty',
+    'string.max': 'Account name must not exceed 120 characters',
+    'any.required': 'Account name is required'
+  }),
+  bankName: Joi.string().min(1).max(120).optional(),
+  amount: amountSchema,
+  currency: currencySchema.optional(),
+  narration: descriptionSchema,
+  reference: payoutReferenceSchema
 });
 
 // Funding callback validation schema

@@ -327,6 +327,18 @@ export class RecordService {
   }
 
   /**
+   * Find one ledger entry by idempotency reference.
+   */
+  async getLedgerEntryByTxnRef(recordId: string, txnRef: string): Promise<LedgerEntry | null> {
+    try {
+      return await db.findLedgerEntryByTxnRef(recordId, txnRef);
+    } catch (error) {
+      logger.error('Error retrieving ledger entry by txnRef', { error, recordId, txnRef });
+      return null;
+    }
+  }
+
+  /**
    * Get ledger summary for a record
    */
   async getLedgerSummary(recordId: string): Promise<LedgerSummary | null> {

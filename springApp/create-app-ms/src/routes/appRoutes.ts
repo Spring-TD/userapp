@@ -392,7 +392,7 @@ const router = Router();
 const appService = new AppService();
 const appPwaPublishService = new AppPwaPublishService();
 const appController = new AppController(appService, appPwaPublishService);
-const pwaTemplateService = new AppPwaTemplateService();
+const pwaTemplateService = new AppPwaTemplateService(appPwaPublishService);
 const appPwaTemplateController = new AppPwaTemplateController(appService, pwaTemplateService);
 const appPwaPublishController = new AppPwaPublishController(appService, appPwaPublishService);
 
@@ -501,7 +501,7 @@ router.post('/:id/product-key', appController.addProductKey);
 // Get product keys for app
 router.get('/:id/product-keys', appController.getProductKeys);
 
-// Get merchant wallets for app (TREASURY, OPERATION, KYC)
+// Get merchant wallets for app (BILLING, KYC, SETTLEMENT)
 router.get('/:id/wallets', authenticate, merchantOnly, appController.getAppWallets);
 
 // App-level manifest files (independent from PWA templates)

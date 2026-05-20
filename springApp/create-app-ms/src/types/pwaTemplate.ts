@@ -1,3 +1,5 @@
+import type { PwaAutoPublishResult } from './pwaPublish';
+
 /**
  * PWA builder templates: per-app JSON for App Creator sections.
  * Separate from core app fields / mock seed data in create-default-merchant-apps.js.
@@ -205,6 +207,11 @@ export interface AppPwaTemplate {
   isApplied: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AppPwaTemplateSaveResult {
+  template: AppPwaTemplate;
+  publish: PwaAutoPublishResult;
 }
 
 export interface CreateAppPwaTemplateRequest {

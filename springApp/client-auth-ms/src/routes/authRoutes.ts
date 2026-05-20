@@ -64,12 +64,16 @@
  */
 import { Router } from 'express';
 import { AuthController } from '../controllers/authController';
+import { RegistrationController } from '../controllers/registrationController';
 import { authenticate } from '../middleware/auth';
 
 const router = Router();
 
 // Account verification (public - triggered from email link)
 router.post('/verify-account', AuthController.verifyAccount);
+
+// Retail signup alias used by tenant PWAs (same handler as POST /api/v1/registration/user)
+router.post('/register', RegistrationController.registerUser);
 
 // Authentication routes
 // Login and refresh are public entry points

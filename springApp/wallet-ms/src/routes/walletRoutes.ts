@@ -12,17 +12,25 @@ router.get('/merchant/:merchantId/type/:walletType', authenticate, WalletControl
 router.get('/merchant/:merchantId/all', authenticate, WalletController.getAllMerchantWallets);
 router.put('/merchant/balance', authenticate, authorizeMerchant, WalletController.updateMerchantWalletBalance);
 
-// Treasury Wallet specific routes
-router.get('/treasury/:merchantId/transactions', authenticate, authorizeMerchant, WalletController.filterTreasuryTransactions);
-router.post('/treasury/transfer', authenticate, authorizeMerchant, WalletController.transferOutFromTreasury);
+// Settlement Wallet routes (legacy /treasury/* aliases retained)
+router.get('/settlement/:merchantId/transactions', authenticate, authorizeMerchant, WalletController.filterSettlementTransactions);
+router.get('/treasury/:merchantId/transactions', authenticate, authorizeMerchant, WalletController.filterSettlementTransactions);
+router.post('/settlement/transfer', authenticate, authorizeMerchant, WalletController.transferOutFromSettlement);
+router.post('/treasury/transfer', authenticate, authorizeMerchant, WalletController.transferOutFromSettlement);
+router.post('/settlement/debit', authenticate, authorizeMerchant, WalletController.debitUserWallet);
 router.post('/treasury/debit', authenticate, authorizeMerchant, WalletController.debitUserWallet);
-router.post('/treasury/debit-merchant', authenticate, authorizeMerchant, WalletController.debitTreasuryWallet);
+router.post('/settlement/debit-merchant', authenticate, authorizeMerchant, WalletController.debitSettlementWallet);
+router.post('/treasury/debit-merchant', authenticate, authorizeMerchant, WalletController.debitSettlementWallet);
 
-// Operation Wallet specific routes
-router.get('/operation/:merchantId/transactions', authenticate, authorizeMerchant, WalletController.filterOperationTransactions);
-router.post('/operation-to-kyc', authenticate, authorizeMerchant, WalletController.transferFromOperationToKyc);
-router.post('/kyc-to-operation', authenticate, authorizeMerchant, WalletController.transferFromKycToOperation);
-router.post('/operation/debit', authenticate, authorizeMerchant, WalletController.debitOperationWallet);
+// Billing Wallet routes (legacy /operation/* aliases retained)
+router.get('/billing/:merchantId/transactions', authenticate, authorizeMerchant, WalletController.filterBillingTransactions);
+router.get('/operation/:merchantId/transactions', authenticate, authorizeMerchant, WalletController.filterBillingTransactions);
+router.post('/billing-to-kyc', authenticate, authorizeMerchant, WalletController.transferFromBillingToKyc);
+router.post('/operation-to-kyc', authenticate, authorizeMerchant, WalletController.transferFromBillingToKyc);
+router.post('/kyc-to-billing', authenticate, authorizeMerchant, WalletController.transferFromKycToBilling);
+router.post('/kyc-to-operation', authenticate, authorizeMerchant, WalletController.transferFromKycToBilling);
+router.post('/billing/debit', authenticate, authorizeMerchant, WalletController.debitBillingWallet);
+router.post('/operation/debit', authenticate, authorizeMerchant, WalletController.debitBillingWallet);
 
 // KYC Wallet specific routes
 router.get('/kyc/:merchantId/transactions', authenticate, authorizeMerchant, WalletController.filterKycTransactions);
@@ -35,6 +43,7 @@ router.get('/user/:userId', authenticate, WalletController.getUserWallet);
 router.put('/user/:userId/balance', authenticate, authorizeUser, WalletController.updateUserWalletBalance);
 router.get('/user/:userId/transactions', authenticate, WalletController.filterUserTransactions);
 router.post('/user/:userId/transfer', authenticate, authorizeUser, WalletController.transferOutFromUser);
+router.post('/user/:userId/payout', authenticate, authorizeUser, WalletController.payoutUserWalletToBank);
 router.post('/user/:userId/api-call', authenticate, authorizeUser, WalletController.makeUserApiCall);
 
 // Funding routes (public endpoints for payment provider callbacks)

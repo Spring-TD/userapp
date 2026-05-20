@@ -7,6 +7,7 @@ import {
 } from '../types/pwaTemplate';
 import { ApiError } from '../middleware/errorHandler';
 import { App } from '../types/app';
+import { tryGetApiBaseUrl } from '../utils/requestBaseUrl';
 
 declare const console: any;
 
@@ -100,14 +101,17 @@ export class AppPwaTemplateController {
       }
       await this.loadAppOrThrow(appId, req);
       const body = req.body as UpdateAppPwaTemplateRequest;
-      const template = await this.templateService.update(templateId, appId, body);
-      if (!template) {
+      const result = await this.templateService.update(templateId, appId, body, tryGetApiBaseUrl(req));
+      if (!result) {
         throw new ApiError(404, 'Template not found');
       }
       res.json({
         success: true,
-        message: 'PWA template updated',
-        data: template
+        message: result.publish.published
+          ? 'PWA template updated and published'
+          : 'PWA template updated',
+        data: result.template,
+        publish: result.publish
       });
     } catch (error) {
       this.handleError(res, error, 'update PWA template');
@@ -138,14 +142,17 @@ export class AppPwaTemplateController {
         throw new ApiError(400, 'App ID and template ID are required');
       }
       await this.loadAppOrThrow(appId, req);
-      const template = await this.templateService.apply(templateId, appId);
-      if (!template) {
+      const result = await this.templateService.apply(templateId, appId, tryGetApiBaseUrl(req));
+      if (!result) {
         throw new ApiError(404, 'Template not found');
       }
       res.json({
         success: true,
-        message: 'PWA template applied for this app',
-        data: template
+        message: result.publish.published
+          ? 'PWA template applied and published'
+          : 'PWA template applied for this app',
+        data: result.template,
+        publish: result.publish
       });
     } catch (error) {
       this.handleError(res, error, 'apply PWA template');
@@ -163,17 +170,21 @@ export class AppPwaTemplateController {
       if (!file?.buffer) {
         throw new ApiError(400, 'Image file is required (multipart field name: file)');
       }
-      const template = await this.templateService.uploadPwaAssetImage(
+      const result = await this.templateService.uploadPwaAssetImage(
         appId,
         templateId,
         'logo',
         file.buffer,
-        file.mimetype
+        file.mimetype,
+        tryGetApiBaseUrl(req)
       );
       res.json({
         success: true,
-        message: 'Logo uploaded to Spaces and saved on the template',
-        data: template
+        message: result.publish.published
+          ? 'Logo uploaded and PWA published'
+          : 'Logo uploaded to Spaces and saved on the template',
+        data: result.template,
+        publish: result.publish
       });
     } catch (error) {
       this.handleError(res, error, 'upload PWA logo');
@@ -191,17 +202,21 @@ export class AppPwaTemplateController {
       if (!file?.buffer) {
         throw new ApiError(400, 'Image file is required (multipart field name: file)');
       }
-      const template = await this.templateService.uploadPwaAssetImage(
+      const result = await this.templateService.uploadPwaAssetImage(
         appId,
         templateId,
         'splash',
         file.buffer,
-        file.mimetype
+        file.mimetype,
+        tryGetApiBaseUrl(req)
       );
       res.json({
         success: true,
-        message: 'Splash image uploaded to Spaces and saved on the template',
-        data: template
+        message: result.publish.published
+          ? 'Splash image uploaded and PWA published'
+          : 'Splash image uploaded to Spaces and saved on the template',
+        data: result.template,
+        publish: result.publish
       });
     } catch (error) {
       this.handleError(res, error, 'upload PWA splash image');
@@ -223,17 +238,21 @@ export class AppPwaTemplateController {
       if (!file?.buffer) {
         throw new ApiError(400, 'Image file is required (multipart field name: file)');
       }
-      const template = await this.templateService.uploadOnboardingScreenImage(
+      const result = await this.templateService.uploadOnboardingScreenImage(
         appId,
         templateId,
         screenIndex,
         file.buffer,
-        file.mimetype
+        file.mimetype,
+        tryGetApiBaseUrl(req)
       );
       res.json({
         success: true,
-        message: 'Onboarding screen image uploaded to Spaces and saved on the template',
-        data: template
+        message: result.publish.published
+          ? 'Onboarding screen image uploaded and PWA published'
+          : 'Onboarding screen image uploaded to Spaces and saved on the template',
+        data: result.template,
+        publish: result.publish
       });
     } catch (error) {
       this.handleError(res, error, 'upload onboarding screen image');

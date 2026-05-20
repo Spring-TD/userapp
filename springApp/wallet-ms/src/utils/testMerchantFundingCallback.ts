@@ -20,7 +20,7 @@ async function testMerchantFundingCallback() {
     console.log('Merchant wallets created successfully');
     
     // Get the Treasury wallet to check initial balance
-    const treasuryWalletResult = await WalletService.getTreasuryWallet(merchantId);
+    const treasuryWalletResult = await WalletService.getSettlementWallet(merchantId);
     if (!treasuryWalletResult.success || !treasuryWalletResult.wallet) {
       console.error('Failed to get Treasury wallet:', treasuryWalletResult.error);
       return;
@@ -35,7 +35,7 @@ async function testMerchantFundingCallback() {
     // for merchant wallet funding
     const fundingData = {
       merchantId: merchantId,
-      merchantWalletType: MerchantWalletType.TREASURY,
+      merchantWalletType: MerchantWalletType.SETTLEMENT,
       amount: 1000,
       currency: 'USD',
       transactionId: 'txn_merchant_funding_12345',

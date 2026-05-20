@@ -12,7 +12,7 @@ const testCases = [
     name: 'Fund Merchant Treasury Wallet',
     data: {
       merchantId: 'merchant-test-001',
-      merchantWalletType: 'TREASURY',
+      merchantWalletType: 'SETTLEMENT',
       amount: 1000.00,
       currency: 'USD',
       transactionId: `txn-test-${Date.now()}-1`,
@@ -26,7 +26,7 @@ const testCases = [
     name: 'Fund Merchant Operation Wallet',
     data: {
       merchantId: 'merchant-test-001',
-      merchantWalletType: 'OPERATION',
+      merchantWalletType: 'BILLING',
       amount: 500.00,
       currency: 'USD',
       transactionId: `txn-test-${Date.now()}-2`,

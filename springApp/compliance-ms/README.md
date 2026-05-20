@@ -154,7 +154,83 @@ Verification routes map 1:1 to Fuspay Modular endpoints:
 - `POST /api/v1/kyc/modular/submit/:verificationId` → submit check payloads
 - `GET /api/v1/kyc/modular/status/:verificationId` → fetch verification status
 - `POST /api/v1/kyc/modular/complete/:verificationId` → request completion
-- `POST /api/v1/kyc/modular/webhook` → receive Fuspay webhook and update `KYCProfile`
+- `POST /api/v1/kyc/modular/webhook` → receive Fuspay webhook, persist full payload on `KYCProfile`, and trigger PayOnUs fixed VA for retail users (see below)
+
+#### Fuspay modular webhook (`verification.completed`) and PayOnUs
+
+Configure Fuspay to call your gateway or compliance-ms directly:
+
+```text
+POST https://account-ms.fly.dev/api/v1/kyc/modular/webhook
+```
+
+(or `https://<compliance-ms>/api/v1/kyc/modular/webhook`)
+
+**On each webhook**, compliance-ms:
+
+1. Stores the **full JSON body** on the matched profile (`fuspay.webhook.lastPayload`, plus last 30 entries in `fuspay.webhook.history`).
+2. Maps verification fields: `data.reference`, `data.status`, `data.verification_type`, `data.details` (name, dob, **bvn**), and `event` (e.g. `verification.completed`).
+3. Sets profile `status` to **approved** when status/event indicates completion.
+4. For **`userType: individual`** profiles, when KYC is complete, calls **wallet-ms**  
+   `POST /api/v1/internal/wallets/user/:userId/provision-nuban` to create the PayOnUs **fixed (reserved)** virtual account (uses retail BVN from the webhook when 11 digits are available).
+
+**Example webhook body (Fuspay):**
+
+```json
+{
+  "event": "verification.completed",
+  "data": {
+    "reference": "v_ref_123456789",
+    "status": "completed",
+    "user_id": "usr_98765",
+    "verification_type": "bvn",
+    "details": {
+      "first_name": "David",
+      "last_name": "Titus",
+      "dob": "1995-12-04",
+      "bvn": "22345678901"
+    }
+  }
+}
+```
+
+**Webhook HTTP 200 response** (abbreviated):
+
+```json
+{
+  "success": true,
+  "matched": 1,
+  "modified": 1,
+  "bvnStored": true,
+  "nubanProvisionTriggered": true,
+  "nubanProvision": {
+    "success": true,
+    "skipped": false
+  }
+}
+```
+
+`matched: 0` means no `KYCProfile` matched `fuspay.customerId` / `fuspay.userRef` / `userId` to `data.user_id` — fix ids at registration or create-verification time.
+
+**Profile matching:** `data.user_id` (or `customer_id`) should match `fuspay.customerId` on the minimal profile created at signup. `data.reference` is also stored and used for lookup.
+
+**Internal APIs (wallet-ms, header `X-Internal-Token: COMPLIANCE_WALLET_INTERNAL_TOKEN`):**
+
+| Route | Purpose |
+|-------|---------|
+| `GET /api/v1/kyc/internal/payonus/user-bvn/:userId` | Retail user's 11-digit BVN from Fuspay KYC webhook |
+| `GET /api/v1/kyc/internal/payonus/first-shareholder-bvn/:ownerUserId` | Merchant shareholder BVN (fallback for PayOnUs) |
+
+**compliance-ms env (post–KYC wallet call):**
+
+```env
+WALLET_SERVICE_URL=https://wallet-ms.fly.dev
+WALLET_INTERNAL_TOKEN=<same as wallet-ms WALLET_INTERNAL_TOKEN>
+COMPLIANCE_WALLET_INTERNAL_TOKEN=<same; wallet-ms uses this to read BVN>
+WALLET_SERVICE_HTTP_TIMEOUT_MS=90000
+```
+
+Optional: `FUSPAY_MODULAR_WEBHOOK_SECRET` — require header `x-fuspay-webhook-secret` or `x-webhook-secret`.
 
 #### Create verification payload (customer-based)
 

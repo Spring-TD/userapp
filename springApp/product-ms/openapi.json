@@ -13,43 +13,11 @@
   ],
   "components": {
     "schemas": {
-      "SubMerchantTogglePayload": {
-        "type": "object",
-        "required": ["id", "name", "email", "phone"],
-        "properties": {
-          "id": { "type": "string", "minLength": 1, "maxLength": 200 },
-          "name": { "type": "string", "minLength": 1, "maxLength": 200 },
-          "email": { "type": "string", "format": "email", "maxLength": 320 },
-          "phone": { "type": "string", "minLength": 3, "maxLength": 40 }
-        }
-      },
       "ToggleActivationRequest": {
         "type": "object",
         "required": ["activate"],
         "properties": {
-          "activate": { "type": "boolean", "description": "True to activate, false to deactivate" },
-          "merchantId": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200,
-            "description": "Required when activate is true; forwarded to Plata sub-merchant-activations"
-          },
-          "merchantName": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200,
-            "description": "Required when activate is true"
-          },
-          "productName": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 300,
-            "description": "Optional; defaults to product name from catalog/local document"
-          },
-          "subMerchant": {
-            "allOf": [{ "$ref": "#/components/schemas/SubMerchantTogglePayload" }],
-            "description": "Required when activate is true; the merchant turning the product on"
-          }
+          "activate": { "type": "boolean", "description": "True to activate, false to deactivate" }
         }
       },
       "MerchantProductConfigRequest": {
@@ -148,12 +116,12 @@
         "responses": { "200": { "description": "Configuration updated" } }
       }
     },
-    "/api/v1/products/toggle/{merchantId}/{productId}": {
+    "/api/v1/products/toggle/{appId}/{productId}": {
       "put": {
-        "summary": "Toggle product activation for merchant",
+        "summary": "Toggle product activation for app",
         "tags": ["Products"],
         "parameters": [
-          { "in": "path", "name": "merchantId", "required": true, "schema": { "type": "string" } },
+          { "in": "path", "name": "appId", "required": true, "schema": { "type": "string" } },
           { "in": "path", "name": "productId", "required": true, "schema": { "type": "string" } }
         ],
         "requestBody": {
@@ -166,8 +134,7 @@
         },
         "responses": {
           "200": { "description": "Activation toggled" },
-          "400": { "description": "Validation error" },
-          "502": { "description": "Plata sub-merchant-activation failed (local changes rolled back when applicable)" }
+          "400": { "description": "Validation error" }
         }
       }
     },

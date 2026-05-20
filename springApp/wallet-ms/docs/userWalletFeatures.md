@@ -10,6 +10,7 @@ User Wallets now support five key features:
 3. **Debit Wallet** - Allow money to be debited via billing (already implemented)
 4. **3rd Party API Calls** - Make API calls to external services and debit the wallet
 5. **Funding Callbacks** - Receive notifications when wallet is funded via external payment methods
+6. **Bank Payouts** - Send money from a PayOnUs-backed user wallet to an external bank account
 
 ## API Endpoints
 
@@ -112,6 +113,27 @@ Merchants can debit user wallets for billing purposes. This endpoint already exi
   "description": "Monthly service fee"
 }
 ```
+
+### 3b. Bank Payout
+
+#### POST `/api/v1/wallets/user/:userId/payout`
+
+Send money from the user's active PayOnUs virtual account wallet to an external bank account.
+
+**Request Body:**
+```json
+{
+  "accountNumber": "0123456789",
+  "bankCode": "044",
+  "accountName": "Jane Smith",
+  "amount": 50,
+  "currency": "NGN",
+  "narration": "Withdrawal to bank",
+  "reference": "optional-client-reference"
+}
+```
+
+Only the wallet owner can call this endpoint. The service checks the user's wallet balance and active `virtualNuban`, asks PayOnUs to initiate the payout, then debits the wallet and records a `DEBIT` transaction with provider metadata.
 
 ### 4. 3rd Party API Calls
 
