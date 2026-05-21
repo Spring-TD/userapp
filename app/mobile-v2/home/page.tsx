@@ -27,7 +27,12 @@ import { isVirtualNubanActive } from '@/lib/userWallet';
 import { HomeStorefrontProducts } from '@/components/mobile-v2/HomeStorefrontProducts';
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
 import { useMobileProducts } from '@/hooks/useMobileProducts';
-import { storefrontProductTypeRoute, type StorefrontProductType } from '@/lib/storefrontProducts';
+import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
+import {
+    getDisplayProductType,
+    storefrontProductTypeRoute,
+    type StorefrontProductType,
+} from '@/lib/storefrontProducts';
 
 function profileAvatarUrl(user: AuthUserProfile | null): string | null {
     if (!user) return null
@@ -82,7 +87,7 @@ export default function HomePage() {
         springAppId: appId ?? undefined,
         tenantReady,
     });
-    const enabledTypes = new Set(appProducts.map((p) => p.type));
+    const enabledTypes = new Set(appProducts.map((p) => getDisplayProductType(p)));
     const productQuickLinks: QuickActionItem[] = PRODUCT_QUICK_ACTIONS.filter(
         (a) => appProducts.length === 0 || enabledTypes.has(a.type),
     ).map((a) => ({
@@ -235,14 +240,14 @@ export default function HomePage() {
                 </button>
             </div>
 
-            <HomeStorefrontProducts
+            {/* <HomeStorefrontProducts
                 products={appProducts}
                 loading={productsLoading}
                 error={productsError}
                 tenantReady={tenantReady}
                 appId={appId}
                 tenantError={tenantError}
-            />
+            /> */}
 
             {/* Promo/Sort Card */}
             <div className="px-6 mb-8">
@@ -404,27 +409,7 @@ export default function HomePage() {
                 </div>
             )}
 
-            {/* Bottom Nav */}
-            <div className="absolute bottom-6 left-6 right-6 h-[72px] bg-white rounded-[24px] shadow-[0_4px_30px_rgba(0,0,0,0.08)] flex items-center justify-around px-2 z-40">
-                <button className="flex flex-col items-center gap-1 text-[var(--sf-button,#1E40AF)]">
-                    <Home className="w-6 h-6 fill-current" />
-                    <span className="text-[10px] font-bold">Home</span>
-                </button>
-                {/* Linked to Accounts Page */}
-                <Link href="/mobile-v2/accounts" className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition-colors">
-                    <User className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">Account</span>
-                </Link>
-                {/* Linked to Mortgage/Product Page */}
-                <Link href="/mobile-v2/products/mortgage" className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition-colors">
-                    <Briefcase className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">Product</span>
-                </Link>
-                <Link href="/mobile-v2/profile" className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition-colors">
-                    <User className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">Profile</span>
-                </Link>
-            </div>
+            <MobileV2BottomNav active="home" />
 
         </div>
     );

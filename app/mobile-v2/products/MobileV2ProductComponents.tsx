@@ -110,7 +110,7 @@ function LoadingState() {
 
 // ─── Loan Product Card ────────────────────────────────────────────────────────
 export function LoanProductCard({ product }: { product: MobileProduct }) {
-    const applyRoute = `${APPLY_ROUTES['Loan']}?productId=${product.id}`;
+    const detailRoute = `/mobile-v2/products/loan/${encodeURIComponent(product.id)}`;
 
     return (
         <div className="bg-[var(--sf-ink,#1E1B4B)] rounded-[24px] p-5 text-white shadow-lg relative overflow-hidden flex flex-col justify-between min-h-[220px]">
@@ -151,7 +151,7 @@ export function LoanProductCard({ product }: { product: MobileProduct }) {
             )}
 
             <div className="flex items-center justify-end mt-auto">
-                <Link href={applyRoute}>
+                <Link href={detailRoute}>
                     <Button className="h-9 rounded-xl bg-[var(--sf-primary,#2563EB)] hover:bg-[var(--sf-primary,#2563EB)] text-white text-[11px] font-semibold px-4 shadow-lg shadow-blue-500/20">
                         Apply for Loan
                     </Button>
@@ -294,6 +294,38 @@ export function SavingsProductCard({ product, index }: { product: MobileProduct;
     );
 }
 
+// ─── Invest Product Card ───────────────────────────────────────────────────────
+export function InvestProductCard({ product }: { product: MobileProduct }) {
+    const detailHref = `/mobile-v2/products/invest/${encodeURIComponent(product.id)}`;
+    const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?q=80&w=2070&auto=format&fit=crop';
+
+    return (
+        <div className="bg-white rounded-[24px] p-3 shadow-sm border border-gray-100">
+            <div
+                className="relative w-full aspect-[4/3] rounded-[20px] mb-4 overflow-hidden bg-gray-100"
+                style={{ backgroundImage: `url(${product.image || DEFAULT_IMAGE})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+            />
+            <div className="px-1 space-y-2">
+                <h3 className="text-sm font-bold text-[var(--sf-ink,#1E1B4B)] line-clamp-2">{product.name}</h3>
+                <p className="text-[10px] text-gray-500 line-clamp-2">{product.description}</p>
+                {product.duration ? (
+                    <p className="text-[10px] font-medium text-gray-600">{product.duration}</p>
+                ) : null}
+                {product.interestRate ? (
+                    <p className="text-xs font-bold text-[var(--sf-button,#1E40AF)]">
+                        {product.interestRate.includes('%') ? product.interestRate : `${product.interestRate}%`} returns
+                    </p>
+                ) : null}
+                <Link href={detailHref}>
+                    <Button className="w-full h-10 rounded-full bg-[var(--sf-primary,#2563EB)] hover:bg-[var(--sf-primary,#2563EB)] text-white text-xs font-semibold mt-2">
+                        View investment
+                    </Button>
+                </Link>
+            </div>
+        </div>
+    );
+}
+
 // ─── Commodity Product Card ────────────────────────────────────────────────────
 export function CommodityProductCard({ product }: { product: MobileProduct }) {
     const applyRoute = `${APPLY_ROUTES['Commodity']}?productId=${product.id}`;
@@ -427,6 +459,18 @@ export function MobileV2ProductList({ productType }: MobileV2ProductListProps) {
         );
     }
 
-    // Invest — show empty state (no special layout yet)
-    return <EmptyState type={productType} />;
+    if (productType === 'Invest') {
+        return (
+            <div className="space-y-4">
+                <h2 className="font-bold text-[#1E293B]">Investment products</h2>
+                <div className="grid grid-cols-2 gap-4">
+                    {filteredProducts.map((product) => (
+                        <InvestProductCard key={product.id} product={product} />
+                    ))}
+                </div>
+            </div>
+        );
+    }
+
+    return <EmptyState type={productType} fetchError={error} tenantAppId={springAppId ?? null} tenantError={tenantError} />;
 }

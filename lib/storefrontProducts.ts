@@ -48,6 +48,36 @@ export function filterActiveAppProducts<T extends { isActive?: boolean }>(rows: 
   return rows.filter((p) => p.isActive === true)
 }
 
+/** Tab for list UI — e.g. API `LOAN` + name contains "Mortgage" → Mortgage tab. */
+export function getDisplayProductType(product: Pick<MobileProduct, "type" | "name">): StorefrontProductType {
+  if (product.type === "Loan" && /\bmortgage\b/i.test(product.name)) {
+    return "Mortgage"
+  }
+  return product.type
+}
+
+export function productMatchesTab(
+  product: Pick<MobileProduct, "type" | "name">,
+  tab: StorefrontProductType,
+): boolean {
+  return getDisplayProductType(product) === tab
+}
+
+function formatAboutDuration(about: Record<string, unknown>): string | undefined {
+  if (typeof about.duration === "string" && about.duration.trim()) {
+    return about.duration.trim()
+  }
+  const tenure = about.tenure
+  if (typeof tenure === "string" && tenure.trim()) return tenure.trim()
+  if (tenure && typeof tenure === "object") {
+    const t = tenure as { label?: string; value?: number; unit?: string; min?: number; max?: number }
+    if (typeof t.label === "string" && t.label.trim()) return t.label.trim()
+    if (t.min != null && t.max != null) return `${t.min}–${t.max} mo`
+    if (t.value != null && t.unit) return `${t.value} ${t.unit}`
+  }
+  return undefined
+}
+
 /** Map Product MS row → {@link MobileProduct} for mobile v2 UI. */
 export function mapApiProductToMobileProduct(row: Record<string, unknown>): MobileProduct | null {
   const id = String(row.id ?? row._id ?? "").trim()
@@ -71,9 +101,26 @@ export function mapApiProductToMobileProduct(row: Record<string, unknown>): Mobi
     row.about && typeof row.about === "object" ? (row.about as Record<string, unknown>) : {}
 
   const loanAmount = structure.loanAmount as { min?: number; max?: number } | undefined
-  const interestRate = structure.interestRate
+  const investmentAmount = structure.investmentAmount as { min?: number; max?: number } | undefined
+  const returnsOnInvestment = structure.returnsOnInvestment
 
-  return {
+  let interestRate: string | undefined
+  if (structure.interestRate != null) {
+    interestRate = String(structure.interestRate)
+  } else if (returnsOnInvestment != null) {
+    interestRate = `${returnsOnInvestment}%`
+  }
+
+  const previewAssetUrl =
+    typeof about.previewAssetUrl === "string" && about.previewAssetUrl.trim()
+      ? about.previewAssetUrl.trim()
+      : typeof row.image === "string"
+        ? row.image
+        : undefined
+
+  const duration = formatAboutDuration(about)
+
+  const mapped: MobileProduct = {
     id,
     referenceNumber: String(row.referenceNumber ?? row.reference_number ?? ""),
     name: String(row.name ?? "Product"),
@@ -83,11 +130,9 @@ export function mapApiProductToMobileProduct(row: Record<string, unknown>): Mobi
     appId: String(row.appId ?? row.app_id ?? ""),
     status: String(row.status ?? ""),
     isActive: row.isActive !== false,
-    interestRate: interestRate != null ? String(interestRate) : undefined,
-    duration:
-      about.tenure && typeof about.tenure === "object"
-        ? `${(about.tenure as { min?: number }).min ?? ""}–${(about.tenure as { max?: number }).max ?? ""} mo`
-        : undefined,
+    image: previewAssetUrl,
+    interestRate,
+    duration,
     price:
       typeof structure.price === "number"
         ? structure.price
@@ -107,14 +152,19 @@ export function mapApiProductToMobileProduct(row: Record<string, unknown>): Mobi
     createdAt: String(row.createdAt ?? ""),
     updatedAt: String(row.updatedAt ?? ""),
     ...(loanAmount?.max != null ? { propertyValue: loanAmount.max } : {}),
+    ...(investmentAmount?.min != null && loanAmount?.max == null
+      ? { propertyValue: investmentAmount.min }
+      : {}),
   }
+
+  return mapped
 }
 
 export function storefrontProductDetailHref(product: Pick<MobileProduct, "id" | "type">): string {
   const id = encodeURIComponent(product.id)
   switch (product.type) {
     case "Loan":
-      return `/mobile-v2/products/loan/apply?productId=${id}`
+      return `/mobile-v2/products/loan/${id}`
     case "Mortgage":
       return `/mobile-v2/products/mortgage/${id}`
     case "Savings":

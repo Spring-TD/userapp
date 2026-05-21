@@ -5,12 +5,9 @@ import Link from 'next/link';
 import {
     ChevronLeft,
     X,
-    Home,
-    User,
-    Briefcase
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
 
 export default function FlexNairaPage() {
     const [showAddMoneyModal, setShowAddMoneyModal] = useState(false);
@@ -185,25 +182,7 @@ export default function FlexNairaPage() {
                 </div>
             )}
 
-            {/* Bottom Nav */}
-            <div className="absolute bottom-6 left-6 right-6 h-[72px] bg-white rounded-[24px] shadow-[0_4px_30px_rgba(0,0,0,0.08)] flex items-center justify-around px-2 z-40">
-                <Link href="/mobile-v2/home" className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition-colors">
-                    <Home className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">Home</span>
-                </Link>
-                <Link href="/mobile-v2/accounts" className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition-colors">
-                    <User className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">Account</span>
-                </Link>
-                <button className="flex flex-col items-center gap-1 text-[var(--sf-button,#1E40AF)]">
-                    <Briefcase className="w-6 h-6 fill-current" />
-                    <span className="text-[10px] font-bold">Product</span>
-                </button>
-                <button className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition-colors">
-                    <User className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">Profile</span>
-                </button>
-            </div>
+            <MobileV2BottomNav active="products" />
 
         </div>
     );

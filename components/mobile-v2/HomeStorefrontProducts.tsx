@@ -5,6 +5,7 @@ import { ChevronRight } from 'lucide-react';
 import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeletons';
 import type { MobileProduct } from '@/lib/storefrontProducts';
 import {
+  productMatchesTab,
   storefrontProductDetailHref,
   storefrontProductTypeRoute,
   type StorefrontProductType,
@@ -72,7 +73,7 @@ export function HomeStorefrontProducts({
 
   const byType = TYPE_ORDER.map((t) => ({
     type: t,
-    items: products.filter((p) => p.type === t),
+    items: products.filter((p) => productMatchesTab(p, t)),
   })).filter((g) => g.items.length > 0);
 
   return (

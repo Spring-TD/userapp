@@ -7,6 +7,7 @@ import { getAccessToken } from '@/lib/cookieAuth';
 import {
   filterActiveAppProducts,
   mapApiProductToMobileProduct,
+  productMatchesTab,
   type MobileProduct,
   type StorefrontProductType,
 } from '@/lib/storefrontProducts';
@@ -97,9 +98,9 @@ export function useMobileProducts(options: UseMobileProductsOptions = {}): UseMo
   );
 
   const getProductsByType = useCallback(
-    (productType: string): MobileProduct[] => {
-      const want = productType.toLowerCase();
-      return products.filter((p) => String(p.type ?? '').toLowerCase() === want);
+    (productType: StorefrontProductType | string): MobileProduct[] => {
+      const tab = productType as StorefrontProductType;
+      return products.filter((p) => productMatchesTab(p, tab));
     },
     [products],
   );

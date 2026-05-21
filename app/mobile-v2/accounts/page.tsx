@@ -2,12 +2,9 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
     Bell,
-    Home,
-    User,
-    Briefcase,
-    Plus,
     Eye,
     Wallet,
 } from 'lucide-react';
@@ -19,6 +16,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useUserWallet } from '@/hooks/useUserWallet';
 import { fetchAuthUserProfile, type AuthUserProfile } from '@/lib/userProfileClient';
 import { maskAccountNumber } from '@/lib/userWallet';
+import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
+
+const ACCOUNT_FILTERS = ['Mortgage', 'Loan', 'Savings', 'Invest', 'Commodity'] as const;
+type AccountFilter = typeof ACCOUNT_FILTERS[number];
+const ACCOUNT_LOGO_SRC = '/images/mobile/WhatsApp%20Image%202026-05-20%20at%201.34.41%20PM.jpeg';
 
 function displayNameFromProfile(user: AuthUserProfile | null): string {
     if (!user) return '';
@@ -30,9 +32,73 @@ function displayNameFromProfile(user: AuthUserProfile | null): string {
     return '';
 }
 
+function ProductAccountCard({
+    activeFilter,
+    walletLabel,
+    formattedBalance,
+    statusLabel,
+    currency,
+    masked,
+}: {
+    activeFilter: AccountFilter;
+    walletLabel: string;
+    formattedBalance: string;
+    statusLabel: string;
+    currency?: string;
+    masked: string;
+}) {
+    const showMortgageImage = activeFilter === 'Mortgage';
+
+    return (
+        <div className="w-full bg-[#EFF6FF] rounded-[24px] p-6 relative overflow-hidden min-h-[156px]">
+            <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                    <div className="mb-4 h-9 w-[118px] overflow-hidden rounded-md bg-white/70">
+                        <Image
+                            src={ACCOUNT_LOGO_SRC}
+                            alt="AG Mortgage Bank"
+                            width={118}
+                            height={40}
+                            className="h-full w-full object-contain"
+                        />
+                    </div>
+                    <p className="text-sm text-[#1E293B] mb-1 font-medium">{walletLabel}</p>
+                    <h3 className="text-2xl font-bold text-[var(--sf-ink,#1E1B4B)]">
+                        {formattedBalance}
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-1">{statusLabel} · {currency || 'NGN'}</p>
+                </div>
+
+                {showMortgageImage ? (
+                    <Link
+                        href="/mobile-v2/products/mortgage"
+                        className="relative h-20 w-24 shrink-0 overflow-hidden rounded-2xl bg-white shadow-sm"
+                        aria-label="Open mortgage products"
+                    >
+                        <Image
+                            src="/mortgage-feature.png"
+                            alt="Mortgage product"
+                            fill
+                            sizes="96px"
+                            className="object-cover"
+                        />
+                    </Link>
+                ) : null}
+            </div>
+
+            {/* <div className="absolute bottom-6 right-6 flex items-center gap-2">
+                <span className="text-xs text-gray-500 font-medium tracking-wider">{masked}</span>
+                <Eye className="w-4 h-4 text-gray-400" />
+                <div className="w-2 h-2 rounded-full bg-green-500" />
+            </div> */}
+        </div>
+    );
+}
+
 export default function AccountsPage() {
     const [profile, setProfile] = useState<AuthUserProfile | null>(null);
     const [profileLoading, setProfileLoading] = useState(true);
+    const [activeFilter, setActiveFilter] = useState<AccountFilter>('Mortgage');
     const { wallet, formattedBalance, loading: walletLoading, error: walletError } = useUserWallet();
 
     useEffect(() => {
@@ -85,6 +151,25 @@ export default function AccountsPage() {
                     </button>
                 </div>
 
+                <div className="px-6 mb-6">
+                    <div className="w-full bg-[#F3F4F6] p-1.5 rounded-full flex items-center justify-between overflow-x-auto no-scrollbar">
+                        {ACCOUNT_FILTERS.map((filter) => (
+                            <button
+                                key={filter}
+                                type="button"
+                                onClick={() => setActiveFilter(filter)}
+                                className={`flex-1 text-center py-2.5 px-4 rounded-full text-xs font-semibold transition-all whitespace-nowrap ${
+                                    filter === activeFilter
+                                        ? 'bg-white text-[var(--sf-button,#1E40AF)] shadow-sm'
+                                        : 'text-gray-400 hover:text-gray-600 bg-transparent'
+                                }`}
+                            >
+                                {filter}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
                 <div className="px-6 mb-8">
                     {walletLoading && !wallet ? (
                         <WalletBalanceCardSkeleton />
@@ -116,7 +201,7 @@ export default function AccountsPage() {
                 </div>
 
                 <div className="px-6 flex justify-between items-center mb-4">
-                    <h2 className="font-bold text-[#1E293B]">Accounts</h2>
+                    <h2 className="font-bold text-[#1E293B]">{activeFilter} Accounts</h2>
                     {walletLoading ? (
                         <Skeleton className="h-4 w-16 rounded-md bg-gray-200/90" />
                     ) : (
@@ -130,66 +215,24 @@ export default function AccountsPage() {
                     {walletLoading && !wallet ? (
                         <WalletAccountRowSkeleton />
                     ) : wallet ? (
-                        <div className="w-full bg-[#EFF6FF] rounded-[24px] p-6 relative">
-                            <div className="mb-4">
-                                <div className="w-8 h-8 text-[var(--sf-ink,#1E1B4B)]">
-                                    <Wallet className="w-8 h-8" />
-                                </div>
-                            </div>
-                            <p className="text-sm text-[#1E293B] mb-1 font-medium">{walletLabel}</p>
-                            <h3 className="text-2xl font-bold text-[var(--sf-ink,#1E1B4B)]">
-                                {formattedBalance}
-                            </h3>
-                            <p className="text-xs text-gray-500 mt-1">{statusLabel} · {wallet.currency || 'NGN'}</p>
-                            <div className="absolute bottom-6 right-6 flex items-center gap-2">
-                                <span className="text-xs text-gray-500 font-medium tracking-wider">{masked}</span>
-                                <Eye className="w-4 h-4 text-gray-400" />
-                                <div className="w-2 h-2 rounded-full bg-green-500" />
-                            </div>
-                        </div>
+                        <ProductAccountCard
+                            activeFilter={activeFilter}
+                            walletLabel={walletLabel}
+                            formattedBalance={formattedBalance}
+                            statusLabel={statusLabel}
+                            currency={wallet.currency}
+                            masked={masked}
+                        />
                     ) : (
                         <p className="text-sm text-gray-500 px-2">
-                            {walletError || 'No wallet linked to this account yet.'}
+                            {walletError || `No active ${activeFilter.toLowerCase()} account yet.`}
                         </p>
                     )}
 
-                    <Link href="/mobile-v2/products/mortgage" className="block opacity-60 pointer-events-none">
-                        <div className="w-full bg-[#E0F2FE] rounded-[24px] p-6 relative">
-                            <p className="text-sm text-[#1E293B] mb-1 font-medium">Product accounts</p>
-                            <p className="text-xs text-gray-500">Mortgage & savings — coming soon</p>
-                        </div>
-                    </Link>
-
-                    <button
-                        type="button"
-                        disabled
-                        className="w-full h-[120px] rounded-[24px] border-2 border-dashed border-blue-300 bg-[#EFF6FF]/50 flex flex-col items-center justify-center gap-2 text-[var(--sf-primary,#2563EB)] opacity-50"
-                    >
-                        <Plus className="w-8 h-8" />
-                        <span className="text-sm font-bold">Add New Account</span>
-                        <span className="text-xs text-gray-400 font-normal">Coming soon</span>
-                    </button>
                 </div>
             </div>
 
-            <div className="absolute bottom-6 left-6 right-6 h-[72px] bg-white rounded-[24px] shadow-[0_4px_30px_rgba(0,0,0,0.08)] flex items-center justify-around px-2 z-50">
-                <Link href="/mobile-v2/home" className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition-colors">
-                    <Home className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">Home</span>
-                </Link>
-                <button type="button" className="flex flex-col items-center gap-1 text-[var(--sf-button,#1E40AF)]">
-                    <User className="w-6 h-6 fill-current" />
-                    <span className="text-[10px] font-bold">Account</span>
-                </button>
-                <Link href="/mobile-v2/products/mortgage" className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition-colors">
-                    <Briefcase className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">Product</span>
-                </Link>
-                <Link href="/mobile-v2/profile" className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition-colors">
-                    <User className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">Profile</span>
-                </Link>
-            </div>
+            <MobileV2BottomNav active="account" />
         </div>
     );
 }
