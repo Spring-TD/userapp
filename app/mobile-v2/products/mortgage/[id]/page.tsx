@@ -2,7 +2,7 @@
 
 import React, { Suspense, useMemo } from 'react'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useMobileProducts } from '@/hooks/useMobileProducts'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
@@ -30,8 +30,10 @@ function formatNgn(amount?: number | null): string {
 
 function MortgageDetailInner() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const rawId = params?.id
   const productId = typeof rawId === 'string' ? decodeURIComponent(rawId) : ''
+  const initialTab = searchParams.get('tab') === 'details' ? 'product' : 'history'
 
   const { appId: tenantAppId, ready: tenantReady } = useMobileV2Tenant()
   const springAppId = tenantAppId ?? undefined
@@ -86,6 +88,7 @@ function MortgageDetailInner() {
       key={productId}
       kind="mortgage"
       productId={productId}
+      initialTab={initialTab}
       title={product?.name || 'Mortgage'}
       amount={formatNgn(amount)}
       description={

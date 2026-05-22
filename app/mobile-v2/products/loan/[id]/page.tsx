@@ -2,7 +2,7 @@
 
 import React, { Suspense, useMemo } from 'react'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeletons'
@@ -16,8 +16,10 @@ import { ProductDetailsScreen } from '@/components/mobile-v2/application/Product
 
 function LoanDetailInner() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const rawId = params?.id
   const productId = typeof rawId === 'string' ? decodeURIComponent(rawId) : ''
+  const initialTab = searchParams.get('tab') === 'details' ? 'product' : 'history'
 
   const { appId, ready: tenantReady } = useMobileV2Tenant()
   const { loading, getProductById } = useMobileProducts({
@@ -69,6 +71,7 @@ function LoanDetailInner() {
       key={productId}
       kind="loan"
       productId={productId}
+      initialTab={initialTab}
       title={loan.title}
       amount={loan.amountDisplay}
       description={loan.description}

@@ -17,7 +17,9 @@ import { useUserWallet } from '@/hooks/useUserWallet';
 import { fetchAuthUserProfile, type AuthUserProfile } from '@/lib/userProfileClient';
 import { maskAccountNumber } from '@/lib/userWallet';
 import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
+import { DUMMY_FEATURED_LOAN } from '@/lib/loanCatalogDummy';
 import { DUMMY_FEATURED_MORTGAGE } from '@/lib/mortgageCatalogDummy';
+import { loanDetailHref } from '@/lib/loanApplyRoutes';
 import { mortgageDetailHref } from '@/lib/mortgageApplyRoutes';
 
 const ACCOUNT_FILTERS = ['Mortgage', 'Loan', 'Savings', 'Invest', 'Commodity'] as const;
@@ -50,9 +52,14 @@ function ProductAccountCard({
     masked: string;
 }) {
     const showMortgageImage = activeFilter === 'Mortgage';
-    const mortgageDetailsHref = mortgageDetailHref(DUMMY_FEATURED_MORTGAGE.id);
+    const accountDetailsHref =
+        activeFilter === 'Mortgage'
+            ? mortgageDetailHref(DUMMY_FEATURED_MORTGAGE.id)
+            : activeFilter === 'Loan'
+              ? loanDetailHref(DUMMY_FEATURED_LOAN.id)
+              : null;
 
-    return (
+    const card = (
         <div className="w-full bg-[#EFF6FF] rounded-[24px] p-6 relative overflow-hidden min-h-[156px]">
             <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
@@ -73,11 +80,7 @@ function ProductAccountCard({
                 </div>
 
                 {showMortgageImage ? (
-                    <Link
-                        href={mortgageDetailsHref}
-                        className="relative h-20 w-24 shrink-0 overflow-hidden rounded-2xl bg-white shadow-sm"
-                        aria-label="Open mortgage details"
-                    >
+                    <div className="relative h-20 w-24 shrink-0 overflow-hidden rounded-2xl bg-white shadow-sm">
                         <Image
                             src="/mortgage-feature.png"
                             alt="Mortgage product"
@@ -85,7 +88,7 @@ function ProductAccountCard({
                             sizes="96px"
                             className="object-cover"
                         />
-                    </Link>
+                    </div>
                 ) : null}
             </div>
 
@@ -95,6 +98,14 @@ function ProductAccountCard({
                 <div className="w-2 h-2 rounded-full bg-green-500" />
             </div> */}
         </div>
+    );
+
+    if (!accountDetailsHref) return card;
+
+    return (
+        <Link href={accountDetailsHref} aria-label={`Open ${activeFilter.toLowerCase()} details`}>
+            {card}
+        </Link>
     );
 }
 

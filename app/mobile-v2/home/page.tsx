@@ -173,11 +173,8 @@ export default function HomePage() {
                 {walletLoading && !wallet ? (
                     <WalletBalanceCardSkeleton />
                 ) : (
-                <div className="relative w-full h-[220px] rounded-[30px] overflow-hidden shadow-xl shadow-blue-900/10">
-                    {/* Background Image/Pattern */}
-                    <div className="absolute inset-0 bg-[var(--sf-button,#1E40AF)]">
-                        <div className="absolute inset-0 opacity-10 bg-[url('/home-card-bg.png')] bg-cover bg-center mix-blend-overlay"></div>
-                    </div>
+                <div className="relative isolate w-full h-[220px] rounded-[30px] overflow-hidden bg-[var(--sf-button,#1E40AF)] shadow-xl shadow-blue-900/10">
+                    <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/10" />
 
                     <div className="relative z-10 flex flex-col items-center justify-center h-full text-white pt-4">
                         {/* Avatar in Card */}
