@@ -24,6 +24,15 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useUserWallet } from '@/hooks/useUserWallet';
 import { fetchAuthUserProfile, type AuthUserProfile } from '@/lib/userProfileClient';
 import { isVirtualNubanActive } from '@/lib/userWallet';
+import { HomeStorefrontProducts } from '@/components/mobile-v2/HomeStorefrontProducts';
+import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
+import { useMobileProducts } from '@/hooks/useMobileProducts';
+import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
+import {
+    getDisplayProductType,
+    storefrontProductTypeRoute,
+    type StorefrontProductType,
+} from '@/lib/storefrontProducts';
 
 function profileAvatarUrl(user: AuthUserProfile | null): string | null {
     if (!user) return null
@@ -51,7 +60,49 @@ function profileInitials(user: AuthUserProfile | null): string {
     return fromName ? fromName.slice(0, 2) : ''
 }
 
+type QuickActionItem = {
+    icon: React.ReactNode;
+    label: string;
+    link?: string;
+};
+
+const PRODUCT_QUICK_ACTIONS: {
+    type: StorefrontProductType;
+    icon: React.ReactNode;
+    label: string;
+}[] = [
+    { type: 'Loan', icon: <Briefcase className="w-6 h-6" />, label: 'Loan' },
+    { type: 'Mortgage', icon: <Home className="w-6 h-6" />, label: 'Mortgage' },
+    { type: 'Savings', icon: <Landmark className="w-6 h-6" />, label: 'Saving' },
+    { type: 'Commodity', icon: <ShoppingCart className="w-6 h-6" />, label: 'Shop' },
+];
+
 export default function HomePage() {
+    const { appId, ready: tenantReady, error: tenantError } = useMobileV2Tenant();
+    const {
+        products: appProducts,
+        loading: productsLoading,
+        error: productsError,
+    } = useMobileProducts({
+        springAppId: appId ?? undefined,
+        tenantReady,
+    });
+    const enabledTypes = new Set(appProducts.map((p) => getDisplayProductType(p)));
+    const productQuickLinks: QuickActionItem[] = PRODUCT_QUICK_ACTIONS.filter(
+        (a) => appProducts.length === 0 || enabledTypes.has(a.type),
+    ).map((a) => ({
+        icon: a.icon,
+        label: a.label,
+        link: storefrontProductTypeRoute(a.type),
+    }));
+    const utilityQuickActions: QuickActionItem[] = [
+        { icon: <Plus className="w-6 h-6" />, label: 'Top Up' },
+        { icon: <SendIcon className="w-6 h-6" />, label: 'Send' },
+        { icon: <CreditCard className="w-6 h-6" />, label: 'Add card' },
+        { icon: <FileText className="w-6 h-6" />, label: 'Orders' },
+    ];
+    const quickActions: QuickActionItem[] = [...productQuickLinks, ...utilityQuickActions];
+
     const [activeModal, setActiveModal] = useState<'none' | 'fund_options' | 'fund_bank' | 'account_details'>('none');
     const [profile, setProfile] = useState<AuthUserProfile | null>(null);
     const [profileLoading, setProfileLoading] = useState(true);
@@ -189,6 +240,15 @@ export default function HomePage() {
                 </button>
             </div>
 
+            {/* <HomeStorefrontProducts
+                products={appProducts}
+                loading={productsLoading}
+                error={productsError}
+                tenantReady={tenantReady}
+                appId={appId}
+                tenantError={tenantError}
+            /> */}
+
             {/* Promo/Sort Card */}
             <div className="px-6 mb-8">
                 <div className="w-full h-[80px] bg-[var(--sf-button,#1E40AF)] rounded-[24px] flex items-center px-4 relative overflow-hidden shadow-lg shadow-blue-900/5">
@@ -210,17 +270,7 @@ export default function HomePage() {
             <div className="px-6">
                 <h3 className="font-bold text-[#1E293B] mb-4">Quick Actions</h3>
                 <div className="grid grid-cols-4 gap-y-6 gap-x-2">
-                    {[
-                        { icon: <Briefcase className="w-6 h-6" />, label: "Loan", color: "text-[var(--sf-primary,#2563EB)]", link: "/mobile-v2/products/loan" },
-                        { icon: <Home className="w-6 h-6" />, label: "Mortgage", color: "text-[var(--sf-primary,#2563EB)]", link: "/mobile-v2/products/mortgage" },
-                        { icon: <Landmark className="w-6 h-6" />, label: "Saving", color: "text-[var(--sf-primary,#2563EB)]", link: "/mobile-v2/products/savings" },
-                        { icon: <ShoppingCart className="w-6 h-6" />, label: "Shop", color: "text-[var(--sf-primary,#2563EB)]" },
-
-                        { icon: <Plus className="w-6 h-6" />, label: "Top Up", color: "text-[var(--sf-primary,#2563EB)]" },
-                        { icon: <SendIcon className="w-6 h-6" />, label: "Send", color: "text-[var(--sf-primary,#2563EB)]" },
-                        { icon: <CreditCard className="w-6 h-6" />, label: "Add card", color: "text-[var(--sf-primary,#2563EB)]" },
-                        { icon: <FileText className="w-6 h-6" />, label: "Orders", color: "text-[var(--sf-primary,#2563EB)]" },
-                    ].map((item, idx) => {
+                    {quickActions.map((item, idx) => {
                         const Content = (
                             <>
                                 <div className="w-[50px] h-[50px] rounded-[18px] bg-white border border-gray-100 shadow-sm flex items-center justify-center text-[var(--sf-primary,#2563EB)] group-hover:bg-[var(--sf-tint,#E0E7FF)] transition-colors">
@@ -359,27 +409,7 @@ export default function HomePage() {
                 </div>
             )}
 
-            {/* Bottom Nav */}
-            <div className="absolute bottom-6 left-6 right-6 h-[72px] bg-white rounded-[24px] shadow-[0_4px_30px_rgba(0,0,0,0.08)] flex items-center justify-around px-2 z-40">
-                <button className="flex flex-col items-center gap-1 text-[var(--sf-button,#1E40AF)]">
-                    <Home className="w-6 h-6 fill-current" />
-                    <span className="text-[10px] font-bold">Home</span>
-                </button>
-                {/* Linked to Accounts Page */}
-                <Link href="/mobile-v2/accounts" className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition-colors">
-                    <User className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">Account</span>
-                </Link>
-                {/* Linked to Mortgage/Product Page */}
-                <Link href="/mobile-v2/products/mortgage" className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition-colors">
-                    <Briefcase className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">Product</span>
-                </Link>
-                <Link href="/mobile-v2/profile" className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition-colors">
-                    <User className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">Profile</span>
-                </Link>
-            </div>
+            <MobileV2BottomNav active="home" />
 
         </div>
     );

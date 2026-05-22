@@ -332,6 +332,11 @@ export const ENDPOINTS = {
    * Modular KYC — proxied via `/api/v1/kyc/*` → compliance-ms.
    * Flow: POST `modularVerification` (Bearer; `fuspay.customerId` from signup). Optional GET `modularVerificationUrl`.
    */
+  /** Storefront catalog — app-enabled products only (not full Plata catalog). */
+  products: {
+    byAppId: (appId: string) => `/v1/products/app/${encodeURIComponent(appId)}`,
+    byId: (productId: string) => `/v1/products/${encodeURIComponent(productId)}`,
+  },
   kyc: {
     modularVerification: `${KYC_V1}/modular/verification`,
     modularVerificationUrl: `${KYC_V1}/modular/verification-url`,

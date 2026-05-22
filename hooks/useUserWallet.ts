@@ -57,23 +57,23 @@ export function useUserWallet(explicitUserId?: string | null): UseUserWalletRetu
     try {
       const { wallet: fetched, error: fetchError, status } = await fetchUserWallet(userId)
 
-      if (fetchError) {
-        if (status === 404) {
-          if (cachedWallet) {
-            setWallet(cachedWallet)
-            setNotFound(false)
-            setError(null)
-          } else {
-            setNotFound(true)
-            setError("User wallet not found")
-            setWallet(null)
-          }
-        } else {
-          setError(fetchError)
-          if (cachedWallet) setWallet(cachedWallet)
-        }
-        return
-      }
+      // if (fetchError) {
+      //   if (status === 404) {
+      //     if (cachedWallet) {
+      //       setWallet(cachedWallet)
+      //       setNotFound(false)
+      //       setError(null)
+      //     } else {
+      //       setNotFound(true)
+      //       setError("User wallet not found")
+      //       setWallet(null)
+      //     }
+      //   } else {
+      //     setError(fetchError)
+      //     if (cachedWallet) setWallet(cachedWallet)
+      //   }
+      //   return
+      // }
 
       if (fetched) {
         setWallet(fetched)

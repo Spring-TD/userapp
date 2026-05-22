@@ -3,6 +3,8 @@ import axios from "axios"
 import https from "https"
 import dns from "dns"
 
+import { forwardStorefrontHeaders } from "@/lib/server/forwardStorefrontHeaders"
+
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
@@ -33,15 +35,13 @@ export async function GET(
 ) {
   const { appId } = await params
   const authHeader = request.headers.get("authorization")
-
-  if (!authHeader) {
-    return NextResponse.json({ success: false, error: "Authorization required" }, { status: 401 })
-  }
+  const headers: Record<string, string> = { ...forwardStorefrontHeaders(request) }
+  if (authHeader) headers.Authorization = authHeader
 
   const appUrl = `${PRODUCT_SERVICE_URL}/api/v1/products/app/${encodeURIComponent(appId)}`
 
   try {
-    const appResp = await http.get(appUrl, { headers: { Authorization: authHeader } })
+    const appResp = await http.get(appUrl, { headers })
 
     if (appResp.status >= 200 && appResp.status < 300) {
       return NextResponse.json(appResp.data)

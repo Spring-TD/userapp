@@ -1,9 +1,9 @@
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
-import { Home, User, Briefcase } from 'lucide-react';
-import { MobileV2TabBar, MobileV2ProductList } from '../MobileV2ProductComponents';
+import { MobileV2TabBar } from '../MobileV2ProductComponents';
+import { MobileV2MortgageCatalog } from '@/components/mobile-v2/mortgage/MobileV2MortgageCatalog';
+import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
 
 export default function MortgageProductPage() {
     return (
@@ -20,29 +20,11 @@ export default function MortgageProductPage() {
                 </div>
 
                 <div className="p-6">
-                    <MobileV2ProductList productType="Mortgage" />
+                    <MobileV2MortgageCatalog />
                 </div>
             </div>
 
-            {/* Bottom Nav */}
-            <div className="absolute bottom-6 left-6 right-6 h-[72px] bg-white rounded-[24px] shadow-[0_4px_30px_rgba(0,0,0,0.08)] flex items-center justify-around px-2 z-40">
-                <Link href="/mobile-v2/home" className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition-colors">
-                    <Home className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">Home</span>
-                </Link>
-                <Link href="/mobile-v2/accounts" className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition-colors">
-                    <User className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">Account</span>
-                </Link>
-                <button className="flex flex-col items-center gap-1 text-[var(--sf-button,#1E40AF)]">
-                    <Briefcase className="w-6 h-6 fill-current" />
-                    <span className="text-[10px] font-bold">Product</span>
-                </button>
-                <Link href="/mobile-v2/profile" className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition-colors">
-                    <User className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">Profile</span>
-                </Link>
-            </div>
+            <MobileV2BottomNav active="products" />
         </div>
     );
 }

@@ -16,8 +16,6 @@ import {
     LogOut,
     ChevronRight,
     BadgeCheck,
-    Home,
-    Briefcase,
     ScanFace
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -25,6 +23,7 @@ import { cn } from '@/lib/utils';
 import { useAppDispatch } from '@/store/hooks';
 import { logoutThunk } from '@/store/authSlice';
 import { toast } from 'sonner';
+import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
 
 export default function ProfilePage() {
     const router = useRouter();
@@ -144,25 +143,7 @@ export default function ProfilePage() {
                 </div>
             </div>
 
-            {/* Bottom Nav */}
-            <div className="absolute bottom-6 left-6 right-6 h-[72px] bg-white rounded-[24px] shadow-[0_4px_30px_rgba(0,0,0,0.08)] flex items-center justify-around px-2 z-40">
-                <Link href="/mobile-v2/home" className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition-colors">
-                    <Home className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">Home</span>
-                </Link>
-                <Link href="/mobile-v2/accounts" className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition-colors">
-                    <User className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">Account</span>
-                </Link>
-                <Link href="/mobile-v2/products/savings" className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition-colors">
-                    <Briefcase className="w-6 h-6" />
-                    <span className="text-[10px] font-medium">Product</span>
-                </Link>
-                <button className="flex flex-col items-center gap-1 text-[var(--sf-button,#1E40AF)]">
-                    <User className="w-6 h-6 fill-current" />
-                    <span className="text-[10px] font-bold">Profile</span>
-                </button>
-            </div>
+            <MobileV2BottomNav active="profile" />
 
             {/* Logout Modal */}
             {showLogoutModal && (
