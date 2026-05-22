@@ -6,6 +6,10 @@ export function loanDetailHref(productId: string) {
   return `/mobile-v2/products/loan/${encodeURIComponent(productId)}`
 }
 
+export function loanProductApplyDetailHref(productId: string) {
+  return `${loanDetailHref(productId)}?tab=details`
+}
+
 export function loanApplyStartHref(productId: string) {
   return `/mobile-v2/products/loan/apply/start?productId=${encodeURIComponent(productId)}`
 }

@@ -12,7 +12,7 @@ import { buildLoanCatalogFromProducts } from '@/lib/mapProductToLoanCatalog'
 import type { LoanCatalogItem } from '@/types/loanCatalog'
 import { cn } from '@/lib/utils'
 
-import { loanDetailHref } from '@/lib/loanApplyRoutes'
+import { loanProductApplyDetailHref } from '@/lib/loanApplyRoutes'
 
 function FeaturedLoanCard({ item }: { item: LoanCatalogItem }) {
   const [slide, setSlide] = useState(0)
@@ -73,7 +73,7 @@ function FeaturedLoanCard({ item }: { item: LoanCatalogItem }) {
               />
               <span className="text-[11px] font-semibold truncate">{item.providerName}</span>
             </div>
-            <Link href={loanDetailHref(item.id)}>
+            <Link href={loanProductApplyDetailHref(item.id)}>
               <Button className="h-9 shrink-0 rounded-xl bg-[var(--sf-primary,#2563EB)] hover:bg-[var(--sf-primary,#2563EB)] text-white text-[11px] font-semibold px-4 shadow-lg shadow-blue-500/30">
                 Apply for Loan
               </Button>
@@ -127,7 +127,7 @@ function HotLoanCard({ item }: { item: LoanCatalogItem }) {
             {item.interestRate}
           </span>
         </div>
-        <Link href={loanDetailHref(item.id)}>
+        <Link href={loanProductApplyDetailHref(item.id)}>
           <Button className="w-full h-10 rounded-full bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white text-xs font-semibold mt-auto">
             Apply for Loan
           </Button>

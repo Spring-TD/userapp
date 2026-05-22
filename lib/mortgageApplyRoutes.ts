@@ -10,6 +10,10 @@ export function mortgageDetailHref(productId: string) {
   return `/mobile-v2/products/mortgage/${encodeURIComponent(productId)}`
 }
 
+export function mortgageProductApplyDetailHref(productId: string) {
+  return `${mortgageDetailHref(productId)}?tab=details`
+}
+
 export function mortgageAccountSuccessHref(productId: string) {
   return `/mobile-v2/products/mortgage/account-success?productId=${encodeURIComponent(productId)}`
 }

@@ -8,6 +8,8 @@ import { useMobileProducts, MobileProduct } from '@/hooks/useMobileProducts';
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
 import { cn } from '@/lib/utils';
 import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeletons';
+import { loanProductApplyDetailHref } from '@/lib/loanApplyRoutes';
+import { mortgageProductApplyDetailHref } from '@/lib/mortgageApplyRoutes';
 
 // ─── Tab bar shared across all V2 product pages ───────────────────────────────
 const ALL_TABS = ['Mortgage', 'Loan', 'Savings', 'Invest', 'Commodity'] as const;
@@ -28,9 +30,6 @@ const APPLY_ROUTES: Record<string, string> = {
     Commodity: '/mobile-v2/products/commodity/apply',
     Invest: '/mobile-v2/products/invest/apply',
 };
-
-const mortgageDetailHref = (productId: string) =>
-    `/mobile-v2/products/mortgage/${encodeURIComponent(productId)}`;
 
 // ─── Tab Bar ──────────────────────────────────────────────────────────────────
 export function MobileV2TabBar({ activeTab }: { activeTab: ProductTab }) {
@@ -110,7 +109,7 @@ function LoadingState() {
 
 // ─── Loan Product Card ────────────────────────────────────────────────────────
 export function LoanProductCard({ product }: { product: MobileProduct }) {
-    const detailRoute = `/mobile-v2/products/loan/${encodeURIComponent(product.id)}`;
+    const detailRoute = loanProductApplyDetailHref(product.id);
 
     return (
         <div className="bg-[var(--sf-ink,#1E1B4B)] rounded-[24px] p-5 text-white shadow-lg relative overflow-hidden flex flex-col justify-between min-h-[220px]">
@@ -163,7 +162,7 @@ export function LoanProductCard({ product }: { product: MobileProduct }) {
 
 // ─── Featured mortgage (carousel dots + Get Started → detail) ───────────────
 export function FeaturedMortgageCard({ product }: { product: MobileProduct }) {
-    const detailHref = mortgageDetailHref(product.id);
+    const detailHref = mortgageProductApplyDetailHref(product.id);
     const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=2070&auto=format&fit=crop';
     const [slide, setSlide] = React.useState(0);
     const price =
@@ -228,7 +227,7 @@ export function FeaturedMortgageCard({ product }: { product: MobileProduct }) {
 
 // ─── Mortgage Product Card ─────────────────────────────────────────────────────
 export function MortgageProductCard({ product, compact }: { product: MobileProduct; compact?: boolean }) {
-    const detailHref = mortgageDetailHref(product.id);
+    const detailHref = mortgageProductApplyDetailHref(product.id);
     const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=2070&auto=format&fit=crop';
     const imgH = compact ? 'h-[100px]' : 'h-[140px]';
 

@@ -15,6 +15,7 @@ const ACCOUNT_LOGO_SRC = '/images/mobile/WhatsApp%20Image%202026-05-20%20at%201.
 type ProductDetailsScreenProps = {
   kind: DetailKind
   productId: string
+  initialTab?: DetailTab
   title: string
   amount: string
   description: string
@@ -255,17 +256,18 @@ function ProductPanel({
 }
 
 export function ProductDetailsScreen(props: ProductDetailsScreenProps) {
-  const { kind, backHref, productId, provider } = props
+  const { kind, backHref, productId, provider, initialTab = 'history' } = props
   const tabs = kind === 'mortgage'
     ? (['history', 'schedule', 'property', 'product'] as DetailTab[])
     : (['history', 'schedule', 'product'] as DetailTab[])
-  const [activeTab, setActiveTab] = useState<DetailTab>('history')
+  const resolvedInitialTab = tabs.includes(initialTab) ? initialTab : 'history'
+  const [activeTab, setActiveTab] = useState<DetailTab>(resolvedInitialTab)
   const [searchTerm, setSearchTerm] = useState('')
 
   useEffect(() => {
-    setActiveTab('history')
+    setActiveTab(resolvedInitialTab)
     setSearchTerm('')
-  }, [kind, productId])
+  }, [kind, productId, resolvedInitialTab])
 
   const labels: Record<DetailTab, string> = {
     history: 'History',
