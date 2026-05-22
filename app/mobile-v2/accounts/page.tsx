@@ -17,6 +17,8 @@ import { useUserWallet } from '@/hooks/useUserWallet';
 import { fetchAuthUserProfile, type AuthUserProfile } from '@/lib/userProfileClient';
 import { maskAccountNumber } from '@/lib/userWallet';
 import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
+import { DUMMY_FEATURED_MORTGAGE } from '@/lib/mortgageCatalogDummy';
+import { mortgageDetailHref } from '@/lib/mortgageApplyRoutes';
 
 const ACCOUNT_FILTERS = ['Mortgage', 'Loan', 'Savings', 'Invest', 'Commodity'] as const;
 type AccountFilter = typeof ACCOUNT_FILTERS[number];
@@ -48,6 +50,7 @@ function ProductAccountCard({
     masked: string;
 }) {
     const showMortgageImage = activeFilter === 'Mortgage';
+    const mortgageDetailsHref = mortgageDetailHref(DUMMY_FEATURED_MORTGAGE.id);
 
     return (
         <div className="w-full bg-[#EFF6FF] rounded-[24px] p-6 relative overflow-hidden min-h-[156px]">
@@ -71,9 +74,9 @@ function ProductAccountCard({
 
                 {showMortgageImage ? (
                     <Link
-                        href="/mobile-v2/products/mortgage"
+                        href={mortgageDetailsHref}
                         className="relative h-20 w-24 shrink-0 overflow-hidden rounded-2xl bg-white shadow-sm"
-                        aria-label="Open mortgage products"
+                        aria-label="Open mortgage details"
                     >
                         <Image
                             src="/mortgage-feature.png"
@@ -174,10 +177,8 @@ export default function AccountsPage() {
                     {walletLoading && !wallet ? (
                         <WalletBalanceCardSkeleton />
                     ) : (
-                        <div className="relative w-full h-[220px] rounded-[30px] overflow-hidden shadow-xl shadow-blue-900/10">
-                            <div className="absolute inset-0 bg-[var(--sf-button,#1E40AF)]">
-                                <div className="absolute inset-0 opacity-10 bg-[url('/home-card-bg.png')] bg-cover bg-center mix-blend-overlay" />
-                            </div>
+                        <div className="relative isolate w-full h-[220px] rounded-[30px] overflow-hidden bg-[var(--sf-button,#1E40AF)] shadow-xl shadow-blue-900/10">
+                            <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/10" />
                             <div className="relative z-10 flex flex-col items-center justify-center h-full text-white pt-4 px-4">
                                 <div className="w-12 h-12 rounded-full border-2 border-green-400/30 p-0.5 mb-3 bg-white/10 backdrop-blur-sm flex items-center justify-center">
                                     <Wallet className="w-6 h-6 text-white/90" />
