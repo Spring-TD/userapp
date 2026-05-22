@@ -33,7 +33,8 @@ function MortgageDetailInner() {
   const searchParams = useSearchParams()
   const rawId = params?.id
   const productId = typeof rawId === 'string' ? decodeURIComponent(rawId) : ''
-  const initialTab = searchParams.get('tab') === 'details' ? 'product' : 'history'
+  const detailsOnly = searchParams.get('tab') === 'details'
+  const initialTab = detailsOnly ? 'product' : 'history'
 
   const { appId: tenantAppId, ready: tenantReady } = useMobileV2Tenant()
   const springAppId = tenantAppId ?? undefined
@@ -89,6 +90,7 @@ function MortgageDetailInner() {
       kind="mortgage"
       productId={productId}
       initialTab={initialTab}
+      detailsOnly={detailsOnly}
       title={product?.name || 'Mortgage'}
       amount={formatNgn(amount)}
       description={
