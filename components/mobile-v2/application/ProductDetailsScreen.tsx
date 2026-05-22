@@ -16,6 +16,7 @@ type ProductDetailsScreenProps = {
   kind: DetailKind
   productId: string
   initialTab?: DetailTab
+  detailsOnly?: boolean
   title: string
   amount: string
   description: string
@@ -256,7 +257,7 @@ function ProductPanel({
 }
 
 export function ProductDetailsScreen(props: ProductDetailsScreenProps) {
-  const { kind, backHref, productId, provider, initialTab = 'history' } = props
+  const { kind, backHref, productId, provider, initialTab = 'history', detailsOnly = false } = props
   const tabs = kind === 'mortgage'
     ? (['history', 'schedule', 'property', 'product'] as DetailTab[])
     : (['history', 'schedule', 'product'] as DetailTab[])
@@ -289,50 +290,56 @@ export function ProductDetailsScreen(props: ProductDetailsScreenProps) {
           <Filter className="h-4 w-4 text-gray-700" />
         </div>
 
-        <AccountSummaryCard kind={kind} provider={provider} />
+        {detailsOnly ? (
+          <ProductPanel {...props} />
+        ) : (
+          <>
+            <AccountSummaryCard kind={kind} provider={provider} />
 
-        <div className="my-6 flex gap-2 overflow-x-auto no-scrollbar">
-          {tabs.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setActiveTab(tab)}
-              className={cn(
-                'shrink-0 rounded-full border px-5 py-2 text-xs font-medium',
-                activeTab === tab
-                  ? 'border-gray-700 bg-white text-[#1E293B] shadow-sm'
-                  : 'border-transparent bg-white/70 text-gray-400',
-              )}
-            >
-              {labels[tab]}
-            </button>
-          ))}
-        </div>
-
-        {activeTab === 'history' ? (
-          <HistoryList
-            kind={kind}
-            searchTerm={searchTerm}
-            onSearchTermChange={setSearchTerm}
-          />
-        ) : null}
-        {activeTab === 'schedule' ? (
-          <ScheduleList searchTerm={searchTerm} onSearchTermChange={setSearchTerm} />
-        ) : null}
-        {activeTab === 'property' ? (
-          <div className="space-y-4">
-            <div
-              className="h-[112px] rounded-xl bg-gray-300 bg-cover bg-center"
-              style={{ backgroundImage: "url('/mortgage-feature.png')" }}
-            />
-            <div className="flex justify-center gap-1.5">
-              <span className="h-1.5 w-5 rounded-full bg-gray-600" />
-              <span className="h-1.5 w-2 rounded-full bg-gray-400" />
-              <span className="h-1.5 w-2 rounded-full bg-gray-400" />
+            <div className="my-6 flex gap-2 overflow-x-auto no-scrollbar">
+              {tabs.map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setActiveTab(tab)}
+                  className={cn(
+                    'shrink-0 rounded-full border px-5 py-2 text-xs font-medium',
+                    activeTab === tab
+                      ? 'border-gray-700 bg-white text-[#1E293B] shadow-sm'
+                      : 'border-transparent bg-white/70 text-gray-400',
+                  )}
+                >
+                  {labels[tab]}
+                </button>
+              ))}
             </div>
-          </div>
-        ) : null}
-        {activeTab === 'product' ? <ProductPanel {...props} /> : null}
+
+            {activeTab === 'history' ? (
+              <HistoryList
+                kind={kind}
+                searchTerm={searchTerm}
+                onSearchTermChange={setSearchTerm}
+              />
+            ) : null}
+            {activeTab === 'schedule' ? (
+              <ScheduleList searchTerm={searchTerm} onSearchTermChange={setSearchTerm} />
+            ) : null}
+            {activeTab === 'property' ? (
+              <div className="space-y-4">
+                <div
+                  className="h-[112px] rounded-xl bg-gray-300 bg-cover bg-center"
+                  style={{ backgroundImage: "url('/mortgage-feature.png')" }}
+                />
+                <div className="flex justify-center gap-1.5">
+                  <span className="h-1.5 w-5 rounded-full bg-gray-600" />
+                  <span className="h-1.5 w-2 rounded-full bg-gray-400" />
+                  <span className="h-1.5 w-2 rounded-full bg-gray-400" />
+                </div>
+              </div>
+            ) : null}
+            {activeTab === 'product' ? <ProductPanel {...props} /> : null}
+          </>
+        )}
       </div>
 
     </div>

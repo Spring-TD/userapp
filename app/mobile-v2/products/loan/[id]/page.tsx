@@ -19,7 +19,8 @@ function LoanDetailInner() {
   const searchParams = useSearchParams()
   const rawId = params?.id
   const productId = typeof rawId === 'string' ? decodeURIComponent(rawId) : ''
-  const initialTab = searchParams.get('tab') === 'details' ? 'product' : 'history'
+  const detailsOnly = searchParams.get('tab') === 'details'
+  const initialTab = detailsOnly ? 'product' : 'history'
 
   const { appId, ready: tenantReady } = useMobileV2Tenant()
   const { loading, getProductById } = useMobileProducts({
@@ -72,6 +73,7 @@ function LoanDetailInner() {
       kind="loan"
       productId={productId}
       initialTab={initialTab}
+      detailsOnly={detailsOnly}
       title={loan.title}
       amount={loan.amountDisplay}
       description={loan.description}
