@@ -139,15 +139,21 @@ function HotLoanCard({ item }: { item: LoanCatalogItem }) {
 
 export function MobileV2LoanCatalog() {
   const { appId, ready: tenantReady } = useMobileV2Tenant()
-  const { loading } = useMobileProducts({
+  const { loading, getProductsByType } = useMobileProducts({
     springAppId: appId ?? undefined,
     tenantReady,
   })
 
-  /** Static mock catalog for now (matches product design). */
+  const loanProducts = getProductsByType('Loan')
+  const orderedProducts = useMemo(() => {
+    const featuredProduct = loanProducts.find((product) => product.isFeatured)
+    if (!featuredProduct) return loanProducts
+    return [featuredProduct, ...loanProducts.filter((product) => product.id !== featuredProduct.id)]
+  }, [loanProducts])
+
   const { featured, hot } = useMemo(
-    () => buildLoanCatalogFromProducts([], true, DUMMY_FEATURED_LOAN, DUMMY_HOT_LOANS),
-    [],
+    () => buildLoanCatalogFromProducts(orderedProducts, true, DUMMY_FEATURED_LOAN, DUMMY_HOT_LOANS),
+    [orderedProducts],
   )
 
   if (!tenantReady || loading) {

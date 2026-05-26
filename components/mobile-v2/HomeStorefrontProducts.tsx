@@ -73,7 +73,9 @@ export function HomeStorefrontProducts({
 
   const byType = TYPE_ORDER.map((t) => ({
     type: t,
-    items: products.filter((p) => productMatchesTab(p, t)),
+    items: products
+      .filter((p) => productMatchesTab(p, t))
+      .sort((a, b) => Number(b.isFeatured) - Number(a.isFeatured)),
   })).filter((g) => g.items.length > 0);
 
   return (
@@ -103,7 +105,7 @@ export function HomeStorefrontProducts({
                 className="w-[200px] shrink-0 rounded-[20px] border border-gray-100 bg-white p-4 shadow-sm hover:border-[var(--sf-primary,#2563EB)]/30 transition-colors"
               >
                 <span className="inline-block rounded-md bg-[var(--sf-tint,#E0E7FF)] px-2 py-0.5 text-[10px] font-bold uppercase text-[var(--sf-primary,#2563EB)]">
-                  {product.subType || product.type}
+                  {product.isFeatured ? 'Featured' : product.subType || product.type}
                 </span>
                 <h5 className="mt-2 text-sm font-bold text-[#1E293B] line-clamp-2">{product.name}</h5>
                 <p className="mt-1 text-[11px] text-gray-500 line-clamp-2">{product.description}</p>

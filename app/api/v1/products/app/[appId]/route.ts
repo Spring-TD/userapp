@@ -3,12 +3,13 @@ import axios from "axios"
 import https from "https"
 import dns from "dns"
 
+import { getApiBaseUrl } from "@/lib/apiBaseUrl"
 import { forwardStorefrontHeaders } from "@/lib/server/forwardStorefrontHeaders"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-const PRODUCT_SERVICE_URL = (process.env.NEXT_PUBLIC_API_URL || "https://account-ms.fly.dev").replace(/\/$/, "")
+const PRODUCT_SERVICE_URL = getApiBaseUrl()
 
 const agent = new https.Agent({
   keepAlive: true,
@@ -26,7 +27,8 @@ const http = axios.create({
 })
 
 /**
- * GET /api/v1/products/app/:appId — **only** products turned on / active for this app (Product MS).
+ * GET /api/v1/products/app/:appId — app-scoped products from Product MS.
+ * The client filters `isActive === true`; this endpoint may include inactive rows.
  * Does **not** fall back to the full catalog; use GET /api/v1/products for all products.
  */
 export async function GET(

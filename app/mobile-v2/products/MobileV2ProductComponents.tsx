@@ -275,7 +275,7 @@ const SAVINGS_COLORS = [
 
 export function SavingsProductCard({ product, index }: { product: MobileProduct; index: number }) {
     const color = SAVINGS_COLORS[index % SAVINGS_COLORS.length];
-    const applyRoute = `${APPLY_ROUTES['Savings']}?productId=${product.id}`;
+    const detailHref = `/mobile-v2/products/savings/flex-naira?productId=${encodeURIComponent(product.id)}`;
 
     return (
         <div className={`${color.bg} rounded-[24px] p-5 flex flex-col gap-3`}>
@@ -284,7 +284,7 @@ export function SavingsProductCard({ product, index }: { product: MobileProduct;
             {product.interestRate && (
                 <span className="text-xs font-bold text-gray-800">{product.interestRate} p.a.</span>
             )}
-            <Link href={applyRoute}>
+            <Link href={detailHref}>
                 <Button className={`w-full h-9 rounded-full text-white text-xs font-semibold ${color.btn}`}>
                     Start Saving
                 </Button>
@@ -363,13 +363,15 @@ interface MobileV2ProductListProps {
 export function MobileV2ProductList({ productType }: MobileV2ProductListProps) {
     const { appId: tenantAppId, ready: tenantReady, error: tenantError } = useMobileV2Tenant();
     const springAppId = tenantAppId ?? undefined;
-    const { products, loading, error, getProductsByType } = useMobileProducts({
+    const { loading, error, getProductsByType } = useMobileProducts({
         springAppId: springAppId || undefined,
         autoFetch: true,
         tenantReady,
     });
 
-    const filteredProducts = getProductsByType(productType);
+    const filteredProducts = getProductsByType(productType).sort(
+        (a, b) => Number(b.isFeatured) - Number(a.isFeatured),
+    );
 
     if (!tenantReady) return <LoadingState />;
     if (loading) return <LoadingState />;
@@ -402,7 +404,8 @@ export function MobileV2ProductList({ productType }: MobileV2ProductListProps) {
     }
 
     if (productType === 'Mortgage') {
-        const [featured, ...hot] = filteredProducts;
+        const featured = filteredProducts.find((product) => product.isFeatured) ?? filteredProducts[0];
+        const hot = filteredProducts.filter((product) => product.id !== featured?.id);
         return (
             <div className="space-y-6">
                 <div className="flex items-center justify-between">

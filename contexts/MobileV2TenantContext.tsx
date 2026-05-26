@@ -40,10 +40,11 @@ const MobileV2TenantContext = createContext<MobileV2TenantContextValue | undefin
 
 /** Proxies `GET /api/v1/apps/resolve/{subdomain}` — includes `pwaManifest` + optional `pwaInstall`. */
 async function resolveSubdomain(slug: string) {
-  const res = await fetch(`/api/apps/resolve-subdomain/${encodeURIComponent(slug)}`)
+  const res = await fetch(`/api/v1/apps/resolve/${encodeURIComponent(slug)}`)
   const json = (await res.json()) as {
     success?: boolean
     data?: {
+      id?: string
       appId?: string
       merchantId?: string
       subdomain?: string
@@ -52,15 +53,17 @@ async function resolveSubdomain(slug: string) {
     }
     error?: string
   }
-  if (!res.ok || !json.success || !json.data?.appId) {
+  const data = json.data
+  const appId = data?.id || data?.appId
+  if (!res.ok || !json.success || !data || !appId) {
     throw new Error(json.error || "Could not resolve store")
   }
   return {
-    appId: json.data.appId,
-    merchantId: json.data.merchantId?.trim() || null,
-    subdomain: json.data.subdomain?.trim().toLowerCase() || slug,
-    pwaInstall: json.data.pwaInstall && typeof json.data.pwaInstall === "object" ? json.data.pwaInstall : null,
-    pwaManifest: parseWebAppManifestBranding(json.data.pwaManifest),
+    appId,
+    merchantId: data.merchantId?.trim() || null,
+    subdomain: data.subdomain?.trim().toLowerCase() || slug,
+    pwaInstall: data.pwaInstall && typeof data.pwaInstall === "object" ? data.pwaInstall : null,
+    pwaManifest: parseWebAppManifestBranding(data.pwaManifest),
   }
 }
 
