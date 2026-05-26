@@ -9,8 +9,24 @@ import { cn } from '@/lib/utils'
 
 type DetailKind = 'loan' | 'mortgage'
 type DetailTab = 'history' | 'schedule' | 'property' | 'product'
+type MortgageProductTab = 'mortgage' | 'property'
 
 const ACCOUNT_LOGO_SRC = '/images/mobile/WhatsApp%20Image%202026-05-20%20at%201.34.41%20PM.jpeg'
+const MORTGAGE_FACILITIES: Array<[string, boolean]> = [
+  ['Solar energy system', true],
+  ['Reliable water supply', true],
+  ['Gated estate', true],
+  ['24/7 security', true],
+  ['CCTV surveillance', true],
+  ['Estate park / playground', true],
+  ['Estate gym', true],
+  ['Outdoor pool', true],
+  ['Car garage 5 Cars', true],
+  ['Estate Waste management', true],
+  ['Boys quarter', true],
+  ['Gateman quarter', true],
+  ['Indoor Cinema', true],
+]
 
 type ProductDetailsScreenProps = {
   kind: DetailKind
@@ -26,6 +42,8 @@ type ProductDetailsScreenProps = {
   imageUrl: string
   applyHref: string
   backHref: string
+  detailRows?: Array<{ label: string; value: React.ReactNode }>
+  propertyRows?: Array<{ label: string; value: React.ReactNode }>
 }
 
 function NairaAmount({ children }: { children: React.ReactNode }) {
@@ -196,56 +214,136 @@ function ProductPanel({
   provider,
   imageUrl,
   applyHref,
+  detailRows,
+  propertyRows,
 }: ProductDetailsScreenProps) {
+  const [mortgageProductTab, setMortgageProductTab] = useState<MortgageProductTab>('mortgage')
+  const showMortgageTabs = kind === 'mortgage'
+
   return (
     <div className="space-y-5">
-      <div
-        className="h-[170px] rounded-2xl bg-gray-200 bg-cover bg-center"
-        style={{ backgroundImage: `url(${imageUrl})` }}
-      />
-      <div className="flex justify-center gap-1.5">
-        <span className="h-1.5 w-5 rounded-full bg-gray-600" />
-        <span className="h-1.5 w-2 rounded-full bg-gray-400" />
-        <span className="h-1.5 w-2 rounded-full bg-gray-400" />
-      </div>
+      {showMortgageTabs ? (
+        <div className="grid grid-cols-2 rounded-full bg-white p-1 text-xs font-semibold shadow-sm">
+          {[
+            ['mortgage', 'Mortgage Details'],
+            ['property', 'Property Details'],
+          ].map(([tab, label]) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setMortgageProductTab(tab as MortgageProductTab)}
+              className={cn(
+                'rounded-full px-3 py-2 transition',
+                mortgageProductTab === tab
+                  ? 'bg-[var(--sf-button,#1E40AF)] text-white'
+                  : 'text-gray-500',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
-      <div className="flex items-start justify-between gap-3">
-        <h2 className="text-sm font-medium text-[#1E293B]">{title}</h2>
-        <NairaAmount>{amount}</NairaAmount>
-      </div>
-      <p className="text-[11px] leading-relaxed text-gray-500">{description}</p>
-      <div className="flex gap-6 text-xs font-semibold text-gray-600">
-        <span className="inline-flex items-center gap-2">
-          <Calendar className="h-3.5 w-3.5 text-gray-400" />
-          {duration}
-        </span>
-        <span className="inline-flex items-center gap-2">
-          <Percent className="h-3.5 w-3.5 text-gray-400" />
-          {rate}
-        </span>
-      </div>
+      {mortgageProductTab === 'property' && kind === 'mortgage' ? (
+        <div className="space-y-5">
+          <div
+            className="h-[170px] rounded-2xl bg-gray-200 bg-cover bg-center"
+            style={{ backgroundImage: `url(${imageUrl})` }}
+          />
+          <div>
+            <h2 className="mb-4 text-sm font-bold uppercase tracking-wide text-[#1E293B]">
+              Facility Details
+            </h2>
+            <div className="grid grid-cols-1 gap-3">
+              {(propertyRows?.length
+                ? propertyRows.map((row) => [row.label, row.value] as const)
+                : MORTGAGE_FACILITIES.map(([facility, available]) => [
+                    facility,
+                    available ? 'Yes' : 'No',
+                  ] as const)
+              ).map(([facility, value]) => (
+                <div
+                  key={facility}
+                  className="flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-sm font-medium text-[#1E293B] shadow-sm"
+                >
+                  <span>{facility}</span>
+                  <span
+                    className={cn(
+                      'shrink-0 rounded-full px-3 py-1 text-[10px] font-bold uppercase',
+                      String(value).toLowerCase() === 'yes'
+                        ? 'bg-green-50 text-green-600'
+                        : String(value).toLowerCase() === 'no'
+                          ? 'bg-red-50 text-red-500'
+                          : 'bg-gray-50 text-gray-600',
+                    )}
+                  >
+                    {value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          {kind === 'loan' ? (
+            <>
+              <div
+                className="h-[170px] rounded-2xl bg-gray-200 bg-cover bg-center"
+                style={{ backgroundImage: `url(${imageUrl})` }}
+              />
+              <div className="flex justify-center gap-1.5">
+                <span className="h-1.5 w-5 rounded-full bg-gray-600" />
+                <span className="h-1.5 w-2 rounded-full bg-gray-400" />
+                <span className="h-1.5 w-2 rounded-full bg-gray-400" />
+              </div>
+            </>
+          ) : null}
 
-      <div className="space-y-5 pt-3">
-        {kind === 'mortgage' ? (
-          <>
-            <InfoRow label="Property type" value="Residential" />
-            <InfoRow label="Mortgage type" value="Fixed Rate" />
-            <InfoRow label="Loan Tenure" value="7years" />
-            <InfoRow label="Down payment" value="10%" />
-          </>
-        ) : (
-          <>
-            <InfoRow label="Loan type" value={title} />
-            <InfoRow label="Maximum amount" value={amount} />
-            <InfoRow label="Loan Tenure" value={duration} />
-            <InfoRow label="Collateral" value="Required where applicable" />
-          </>
-        )}
-        <InfoRow label="Fees & charges" value="Nil" />
-        <InfoRow label="Interest Rate" value={rate} />
-        <InfoRow label="Automation" value="Monthly" />
-        <InfoRow label="Powered by:" value={provider} />
-      </div>
+          <div className="flex items-start justify-between gap-3">
+            <h2 className="text-sm font-medium text-[#1E293B]">{title}</h2>
+            <NairaAmount>{amount}</NairaAmount>
+          </div>
+          <p className="text-[11px] leading-relaxed text-gray-500">{description}</p>
+          <div className="flex gap-6 text-xs font-semibold text-gray-600">
+            <span className="inline-flex items-center gap-2">
+              <Calendar className="h-3.5 w-3.5 text-gray-400" />
+              {duration}
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <Percent className="h-3.5 w-3.5 text-gray-400" />
+              {rate}
+            </span>
+          </div>
+
+          <div className="space-y-5 pt-3">
+            {detailRows?.length ? (
+              detailRows.map((row) => (
+                <InfoRow key={row.label} label={row.label} value={row.value} />
+              ))
+            ) : kind === 'mortgage' ? (
+              <>
+                <InfoRow label="Property type" value="Residential" />
+                <InfoRow label="Mortgage type" value="Fixed Rate" />
+                <InfoRow label="Loan Tenure" value="7years" />
+                <InfoRow label="Down payment" value="10%" />
+              </>
+            ) : (
+              <>
+                <InfoRow label="Loan type" value={title} />
+                <InfoRow label="Maximum amount" value={amount} />
+                <InfoRow label="Loan Tenure" value={duration} />
+                <InfoRow label="Collateral" value="Required where applicable" />
+              </>
+            )}
+            <InfoRow label="Fees & charges" value="Nil" />
+            <InfoRow label="Interest Rate" value={rate} />
+            <InfoRow label="Automation" value="Monthly" />
+            <InfoRow label="Powered by:" value={provider} />
+          </div>
+        </>
+      )}
 
       <Link href={applyHref} className="block pt-2">
         <Button className="h-12 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-sm font-semibold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]">

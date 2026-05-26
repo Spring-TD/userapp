@@ -2,188 +2,159 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import {
+    CalendarDays,
+    ChevronDown,
     ChevronLeft,
-    X,
+    Percent,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
+import { ProductFundingFlowSheet } from '@/components/mobile-v2/application/ProductFundingFlowSheet';
+import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeletons';
+import { useMobileProductDetail } from '@/hooks/useMobileProductDetail';
+import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
+import { amountRange, feeSummary, rateLabel } from '@/lib/mobileProductDetailDisplay';
+
+const SAVINGS_DETAILS = [
+    ['Name of savings', 'Flex Naira Savings'],
+    ['Purpose', 'Emergency savings'],
+    ['Duration', '1 year'],
+    ['Frequency', 'Weekly'],
+    ['Amount to save', 'N10,000,000'],
+    ['Accept terms & conditions', 'Required'],
+];
 
 export default function FlexNairaPage() {
-    const [showAddMoneyModal, setShowAddMoneyModal] = useState(false);
-    const [showInfoBanner, setShowInfoBanner] = useState(true);
+    const searchParams = useSearchParams();
+    const productId = searchParams.get('productId') || '';
+    const { ready: tenantReady } = useMobileV2Tenant();
+    const { product, loading } = useMobileProductDetail({
+        productId,
+        enabled: tenantReady && Boolean(productId),
+    });
+    const [isFundingFlowOpen, setIsFundingFlowOpen] = useState(false);
+    const title = product?.name || 'Flex Naira';
+    const duration = product?.duration || '1 year';
+    const rate = product ? rateLabel(product) : '12% per annum';
+    const description =
+        product?.description || 'Flexible savings for emergencies. Free transfers, withdrawals etc. 8% p.a';
+    const details = product
+        ? [
+            ['Name of savings', product.name],
+            ['Purpose', product.subType || product.description || 'Savings plan'],
+            ['Duration', duration],
+            ['Frequency', product.withdrawalFlexibility || 'Weekly'],
+            ['Amount to save', amountRange(product)],
+            ['Fees & charges', feeSummary(product)],
+            ['Accept terms & conditions', 'Required'],
+        ]
+        : SAVINGS_DETAILS;
+
+    if (productId && (!tenantReady || loading)) {
+        return (
+            <div className="flex h-full flex-col bg-[#F4F7FF] px-6 pt-12">
+                <MobileV2ProductListSkeleton />
+            </div>
+        );
+    }
 
     return (
-        <div className="flex flex-col h-full bg-[#FAFAFA] relative">
-            <div className="flex-1 overflow-y-auto no-scrollbar pb-32">
+        <div className="relative flex h-full flex-col overflow-hidden bg-[#F4F7FF]">
+            <div className="no-scrollbar flex-1 overflow-y-auto px-6 pb-8 pt-12">
+                <Link
+                    href="/mobile-v2/products/savings"
+                    className="mb-10 flex h-9 w-9 items-center justify-center rounded-full bg-white text-[#1E293B] shadow-sm"
+                    aria-label="Back to savings"
+                >
+                    <ChevronLeft className="h-5 w-5" />
+                </Link>
 
-                {/* Header */}
-                <div className="pt-12 px-6 mb-6 flex items-center">
-                    <Link href="/mobile-v2/products/savings" className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-gray-700 hover:bg-gray-50 transition-colors">
-                        <ChevronLeft className="w-5 h-5" />
-                    </Link>
-                </div>
+                <section className="rounded-[8px] bg-[#262728] px-4 py-7 text-white">
+                    <div className="mb-5 flex items-start justify-between gap-4">
+                        <h1 className="text-[32px] font-bold leading-none text-[var(--sf-button,#2563EB)]">
+                            {title}
+                        </h1>
+                        <span className="mt-1 shrink-0 rounded-full bg-white px-4 py-2 text-[10px] font-semibold text-gray-600">
+                            By AG Mortgage
+                        </span>
+                    </div>
+                    <p className="max-w-[270px] text-[13px] font-medium leading-relaxed text-white/90">
+                        {description}
+                    </p>
+                </section>
 
-                <div className="px-6 space-y-6">
-                    {/* Balance Card */}
-                    <div className="bg-[#BFDBFE] rounded-[24px] p-6 text-center text-[var(--sf-ink,#1E1B4B)] relative overflow-hidden">
-                        <p className="text-sm font-medium mb-1">Flex Naira Balance</p>
-                        <h2 className="text-3xl font-bold mb-6">₦500,039.12</h2>
-
-                        <div className="flex justify-between items-center gap-4">
-                            <div className="bg-[var(--sf-button,#1E40AF)] text-white text-[10px] font-bold px-3 py-1.5 rounded-lg">
-                                12% per annum
-                            </div>
-                            <div className="bg-[var(--sf-button,#1E40AF)] text-white text-[10px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1">
-                                AG BANK: 1234567890
-                            </div>
-                        </div>
+                <section className="mt-7">
+                    <div className="mb-4 flex items-start justify-between gap-4">
+                        <h2 className="text-base font-medium text-[#4B5563]">{title}</h2>
+                        <p className="shrink-0 text-sm font-bold text-[#1F2937]">Up to {rate} returns</p>
                     </div>
 
-                    {/* Info Banner - Moved Up */}
-                    {showInfoBanner && (
-                        <div className="bg-[var(--sf-tint,#E0E7FF)] rounded-[20px] p-5 relative">
-                            <button
-                                onClick={() => setShowInfoBanner(false)}
-                                className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
-                            >
-                                <X className="w-4 h-4" />
-                            </button>
+                    <p className="mb-5 text-[12px] leading-relaxed text-[#4B5563]">
+                        {description}
+                    </p>
 
-                            <h3 className="text-xs font-bold text-[var(--sf-ink,#1E1B4B)] mb-3">What is new on Flex Naira?</h3>
-                            <ul className="space-y-3">
-                                <li className="flex gap-2 text-[10px] text-gray-600 leading-relaxed">
-                                    <span className="text-gray-400">•</span>
-                                    Click Add Money to generate a PocketApp account number. It is the fastest and most reliable way to fund your Flex Naira wallet
-                                </li>
-                                <li className="flex gap-2 text-[10px] text-gray-600 leading-relaxed">
-                                    <span className="text-gray-400">•</span>
-                                    Search for PocketApp on your bank app and enter your new PocketApp account number
-                                </li>
-                                <li className="flex gap-2 text-[10px] text-gray-600 leading-relaxed">
-                                    <span className="text-gray-400">•</span>
-                                    Send funds and it'll be credited to your Flex Naira wallet in seconds
-                                </li>
-                            </ul>
-                        </div>
-                    )}
-
-                    {/* Action Buttons - Moved Down */}
-                    <div className="flex gap-4">
-                        <Button
-                            onClick={() => setShowAddMoneyModal(true)}
-                            className="flex-1 h-12 rounded-full bg-[#1E1B1B] hover:bg-black text-white font-semibold text-sm shadow-md"
-                        >
-                            Add Money
-                        </Button>
-                        <Button
-                            className="flex-1 h-12 rounded-full bg-white hover:bg-gray-50 text-[#1E1B1B] font-semibold text-sm shadow-sm border border-gray-100"
-                        >
-                            Withdraw
-                        </Button>
+                    <div className="mb-10 flex items-center gap-4 text-[13px] font-bold text-[#5F6368]">
+                        <span className="inline-flex items-center gap-2">
+                            <span className="flex h-5 w-5 items-center justify-center rounded bg-gray-300 text-white">
+                                <CalendarDays className="h-3.5 w-3.5" />
+                            </span>
+                            {duration}
+                        </span>
+                        <span className="inline-flex items-center gap-2">
+                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-gray-300 text-white">
+                                <Percent className="h-3.5 w-3.5" />
+                            </span>
+                            {rate}
+                        </span>
                     </div>
 
-                    {/* History Section */}
-                    <div>
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="font-bold text-[#1E293B]">History</h3>
-                            <button className="text-[10px] font-bold text-[var(--sf-primary,#2563EB)]">See all</button>
-                        </div>
+                    <div className="space-y-9">
+                        {details.map(([label, value]) => {
+                            const showDropdown = ['Frequency', 'Duration'].includes(label);
 
-                        <div className="space-y-3">
-                            {/* Transaction Items */}
-                            <div className="bg-white rounded-[20px] p-4 flex justify-between items-center">
-                                <div>
-                                    <p className="text-[10px] text-gray-500 mb-0.5">Receive</p>
-                                    <p className="text-sm font-bold text-[var(--sf-ink,#1E1B4B)]">Charles Boss</p>
+                            return (
+                                <div key={label} className="flex items-center justify-between gap-6">
+                                    <span className="text-base font-medium text-gray-500">{label}</span>
+                                    <span className="inline-flex items-center gap-2 text-right text-base font-bold text-[#4B4F58]">
+                                        {value}
+                                        {showDropdown ? <ChevronDown className="h-4 w-4 text-[#4B4F58]" /> : null}
+                                    </span>
                                 </div>
-                                <div className="text-right">
-                                    <p className="text-sm font-bold text-[#16A34A]">N10,000.00</p>
-                                    <p className="text-[10px] text-gray-400">12.00 pm</p>
-                                </div>
-                            </div>
-
-                            <div className="bg-white rounded-[20px] p-4 flex justify-between items-center">
-                                <div>
-                                    <p className="text-[10px] text-gray-500 mb-0.5">Transfer</p>
-                                    <p className="text-sm font-bold text-[var(--sf-ink,#1E1B4B)]">Chidi David</p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-sm font-bold text-[#DC2626]">N3000.00</p>
-                                    <p className="text-[10px] text-gray-400">12.00 pm</p>
-                                </div>
-                            </div>
-
-                            <div className="bg-white rounded-[20px] p-4 flex justify-between items-center">
-                                <div>
-                                    <p className="text-[10px] text-gray-500 mb-0.5">Receive</p>
-                                    <p className="text-sm font-bold text-[var(--sf-ink,#1E1B4B)]">Charles Boss</p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-sm font-bold text-[#16A34A]">N10,000.00</p>
-                                    <p className="text-[10px] text-gray-400">12.00 pm</p>
-                                </div>
-                            </div>
-
-                            <div className="bg-white rounded-[20px] p-4 flex justify-between items-center">
-                                <div>
-                                    <p className="text-[10px] text-gray-500 mb-0.5">Receive</p>
-                                    <p className="text-sm font-bold text-[var(--sf-ink,#1E1B4B)]">Charles Boss</p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-sm font-bold text-[#16A34A]">N10,000.00</p>
-                                    <p className="text-[10px] text-gray-400">12.00 pm</p>
-                                </div>
-                            </div>
-                        </div>
+                            );
+                        })}
                     </div>
-                </div>
+
+                    <Button
+                        onClick={() => setIsFundingFlowOpen(true)}
+                        className="mt-7 h-12 w-full rounded-full bg-[var(--sf-button,#2563EB)] text-sm font-bold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]"
+                    >
+                        Continue
+                    </Button>
+                </section>
             </div>
 
-            {/* Add Money Modal (Bottom Sheet) */}
-            {showAddMoneyModal && (
-                <div className="absolute inset-0 z-50 flex items-end justify-center">
-                    {/* Backdrop */}
-                    <div
-                        className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
-                        onClick={() => setShowAddMoneyModal(false)}
-                    />
-
-                    {/* Bottom Sheet - Create Account View (Mocking the flow) */}
-                    <div className="relative bg-white w-full rounded-t-[30px] p-6 pb-12 animate-in slide-in-from-bottom duration-300 z-10 flex flex-col items-center text-center">
-                        {/* Handle Bar */}
-                        <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-10" />
-
-                        {/* Icon */}
-                        <div className="w-20 h-20 mb-6 relative">
-                            {/* Placeholder for 3D Chess Piece */}
-                            <div className="absolute inset-0 bg-blue-100 rounded-full flex items-center justify-center">
-                                <div className="text-4xl">♟️</div>
-                            </div>
-                        </div>
-
-                        <h2 className="text-xl font-bold text-[#1E293B] mb-2 px-8 leading-tight">
-                            Create an Account Number <br />
-                            To receive cash into your Flex <br />
-                            Naira Account
-                        </h2>
-
-                        <div className="w-full mt-8 mb-8 text-left">
-                            <label className="text-xs text-gray-400 mb-2 block pl-1">Select Your Preferred Bank</label>
-                            <div className="h-14 bg-[#FAFAFA] rounded-xl flex items-center px-4 border border-gray-100 text-gray-400 text-sm">
-                                Preferred Bank
-                            </div>
-                        </div>
-
-                        <Button className="w-full h-14 rounded-full bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white font-semibold text-base shadow-xl shadow-blue-900/10">
-                            Create Account
-                        </Button>
-                    </div>
-                </div>
-            )}
-
-            <MobileV2BottomNav active="products" />
-
+            <ProductFundingFlowSheet
+                open={isFundingFlowOpen}
+                onClose={() => setIsFundingFlowOpen(false)}
+                productName={title}
+                productKindLabel="savings"
+                termsTitle="Create a Savings Account"
+                termsDescription={
+                    <>
+                        Before you can proceed with <strong>{title}</strong> offered by{' '}
+                        <strong>AG Mortgage Bank</strong>, you are required to open a bank account with{' '}
+                        <strong>AG Mortgage Bank</strong>.
+                    </>
+                }
+                formTitle="Start Flex Savings"
+                namePlaceholder="Name of savings"
+                amountPlaceholder="Amount to save"
+                actionLabel="Start Saving"
+                successTitle="Savings Started"
+                successMessage="Your savings plan has been created successfully."
+                failureMessage="Your central wallet balance is not sufficient for this savings amount. Please fund your wallet and try again."
+            />
         </div>
     );
 }

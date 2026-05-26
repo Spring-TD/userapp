@@ -4,7 +4,7 @@ import React, { Suspense, useMemo } from 'react'
 import Link from 'next/link'
 import { useParams, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { useMobileProducts } from '@/hooks/useMobileProducts'
+import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 import { MortgageDetailSkeleton } from '@/components/mobile-v2/data-skeletons'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -14,6 +14,7 @@ import {
   DUMMY_HOT_MORTGAGES,
 } from '@/lib/mortgageCatalogDummy'
 import { ProductDetailsScreen } from '@/components/mobile-v2/application/ProductDetailsScreen'
+import { amountRange, feeSummary, formatNgn, rateLabel, requirementSummary } from '@/lib/mobileProductDetailDisplay'
 
 const DUMMY_MORTGAGE_BY_ID = [DUMMY_FEATURED_MORTGAGE, ...DUMMY_HOT_MORTGAGES].reduce(
   (acc, p) => {
@@ -23,11 +24,6 @@ const DUMMY_MORTGAGE_BY_ID = [DUMMY_FEATURED_MORTGAGE, ...DUMMY_HOT_MORTGAGES].r
   {} as Record<string, (typeof DUMMY_FEATURED_MORTGAGE)>,
 )
 
-function formatNgn(amount?: number | null): string {
-  if (amount == null || Number.isNaN(amount)) return '—'
-  return `NGN${amount.toLocaleString('en-NG')}`
-}
-
 function MortgageDetailInner() {
   const params = useParams()
   const searchParams = useSearchParams()
@@ -36,20 +32,16 @@ function MortgageDetailInner() {
   const detailsOnly = searchParams.get('tab') === 'details'
   const initialTab = detailsOnly ? 'product' : 'history'
 
-  const { appId: tenantAppId, ready: tenantReady } = useMobileV2Tenant()
-  const springAppId = tenantAppId ?? undefined
-
-  const { products, loading, getProductById } = useMobileProducts({
-    type: 'Mortgage',
-    springAppId: springAppId || undefined,
-    autoFetch: true,
-    tenantReady,
+  const { ready: tenantReady } = useMobileV2Tenant()
+  const { product: detailProduct, loading } = useMobileProductDetail({
+    productId,
+    enabled: tenantReady && Boolean(productId),
   })
 
   const product = useMemo(() => {
     if (!productId) return undefined
-    return getProductById(productId) ?? DUMMY_MORTGAGE_BY_ID[productId]
-  }, [getProductById, productId])
+    return detailProduct ?? DUMMY_MORTGAGE_BY_ID[productId]
+  }, [detailProduct, productId])
 
   const lender = 'AG Mortgage Bank'
   const imageUrl =
@@ -82,6 +74,7 @@ function MortgageDetailInner() {
   // }
 
   const amount = product?.propertyValue ?? null
+  const property = detailProduct?.properties?.[0]
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -92,17 +85,43 @@ function MortgageDetailInner() {
       initialTab={initialTab}
       detailsOnly={detailsOnly}
       title={product?.name || 'Mortgage'}
-      amount={formatNgn(amount)}
+      amount={detailProduct ? amountRange(detailProduct) : formatNgn(amount)}
       description={
         product?.description ||
         'Explore this mortgage option tailored for your property goals. Review the key facts below before you apply.'
       }
       duration={product?.duration || '12 months'}
-      rate={product?.interestRate || '3% p.a'}
+      rate={detailProduct ? rateLabel(detailProduct) : product?.interestRate || '3% p.a'}
       provider={lender}
       imageUrl={imageUrl}
       applyHref={product?.id ? mortgageApplyStartHref(product.id) : '/mobile-v2/products/mortgage'}
       backHref="/mobile-v2/products/mortgage"
+      detailRows={
+        detailProduct
+          ? [
+              { label: 'Property type', value: property?.propertyType || detailProduct.subType || 'Residential' },
+              { label: 'Mortgage type', value: detailProduct.subType || detailProduct.name },
+              { label: 'Loan amount', value: amountRange(detailProduct) },
+              { label: 'Loan Tenure', value: detailProduct.duration || 'Not specified' },
+              { label: 'Repayment Frequency', value: detailProduct.repaymentFrequency || 'Not specified' },
+              { label: 'Equity Contribution', value: detailProduct.equityContribution != null ? `${detailProduct.equityContribution}%` : 'Not specified' },
+              { label: 'Requirements', value: requirementSummary(detailProduct) },
+              { label: 'Fees & charges', value: feeSummary(detailProduct) },
+              { label: 'Interest Rate', value: rateLabel(detailProduct) },
+              { label: 'Powered by:', value: lender },
+            ]
+          : undefined
+      }
+      propertyRows={
+        detailProduct
+          ? [
+              { label: 'Property Name', value: property?.name || detailProduct.name },
+              { label: 'Property Type', value: property?.propertyType || 'Not specified' },
+              { label: 'Property Value', value: formatNgn(property?.value ?? detailProduct.propertyValue ?? null) },
+              { label: 'Location', value: property?.location || 'Not specified' },
+            ]
+          : undefined
+      }
     />
     </div>
   )

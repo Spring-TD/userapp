@@ -6,13 +6,14 @@ import { useParams, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeletons'
-import { useMobileProducts } from '@/hooks/useMobileProducts'
+import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 import { getDummyLoanById } from '@/lib/loanCatalogDummy'
 import { mapMobileProductToLoanCatalog } from '@/lib/mapProductToLoanCatalog'
 import { loanApplyStartHref } from '@/lib/loanApplyRoutes'
 import type { LoanCatalogItem } from '@/types/loanCatalog'
 import { ProductDetailsScreen } from '@/components/mobile-v2/application/ProductDetailsScreen'
+import { amountRange, feeSummary, requirementSummary } from '@/lib/mobileProductDetailDisplay'
 
 function LoanDetailInner() {
   const params = useParams()
@@ -22,20 +23,17 @@ function LoanDetailInner() {
   const detailsOnly = searchParams.get('tab') === 'details'
   const initialTab = detailsOnly ? 'product' : 'history'
 
-  const { appId, ready: tenantReady } = useMobileV2Tenant()
-  const { loading, getProductById } = useMobileProducts({
-    type: 'Loan',
-    springAppId: appId ?? undefined,
-    autoFetch: true,
-    tenantReady,
+  const { ready: tenantReady } = useMobileV2Tenant()
+  const { product, loading } = useMobileProductDetail({
+    productId,
+    enabled: tenantReady && Boolean(productId),
   })
 
   const loan = useMemo<LoanCatalogItem | undefined>(() => {
     if (!productId) return undefined
-    const apiProduct = getProductById(productId)
-    if (apiProduct) return mapMobileProductToLoanCatalog(apiProduct)
+    if (product) return mapMobileProductToLoanCatalog(product)
     return getDummyLoanById(productId)
-  }, [getProductById, productId])
+  }, [product, productId])
 
   if (!tenantReady || loading) {
     return (
@@ -83,6 +81,21 @@ function LoanDetailInner() {
       imageUrl={imageUrl}
       applyHref={loanApplyStartHref(loan.id)}
       backHref="/mobile-v2/products/loan"
+      detailRows={
+        product
+          ? [
+              { label: 'Loan type', value: product.subType || product.name },
+              { label: 'Amount', value: amountRange(product) },
+              { label: 'Loan Tenure', value: product.duration || loan.duration },
+              { label: 'Repayment Frequency', value: product.repaymentFrequency || 'Not specified' },
+              { label: 'Collateral', value: requirementSummary(product) },
+              { label: 'Fees & charges', value: feeSummary(product) },
+              { label: 'Interest Rate', value: loan.interestRate },
+              { label: 'Interest Method', value: product.interestMethod || 'Not specified' },
+              { label: 'Powered by:', value: loan.providerName },
+            ]
+          : undefined
+      }
     />
     </div>
   )

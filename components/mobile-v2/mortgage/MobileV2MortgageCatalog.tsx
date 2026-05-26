@@ -13,13 +13,19 @@ import { buildMortgageCatalogFromProducts } from '@/lib/mortgageCatalogDummy'
 
 export function MobileV2MortgageCatalog() {
   const { appId, ready: tenantReady } = useMobileV2Tenant()
-  const { loading } = useMobileProducts({
+  const { loading, getProductsByType } = useMobileProducts({
     springAppId: appId ?? undefined,
     tenantReady,
   })
 
-  /** Design mock for now; swaps to API mortgages when the catalog is wired. */
-  const { featured, hot } = useMemo(() => buildMortgageCatalogFromProducts([]), [])
+  const mortgageProducts = getProductsByType('Mortgage')
+  const orderedProducts = useMemo(() => {
+    const featuredProduct = mortgageProducts.find((product) => product.isFeatured)
+    if (!featuredProduct) return mortgageProducts
+    return [featuredProduct, ...mortgageProducts.filter((product) => product.id !== featuredProduct.id)]
+  }, [mortgageProducts])
+
+  const { featured, hot } = useMemo(() => buildMortgageCatalogFromProducts(orderedProducts), [orderedProducts])
 
   if (!tenantReady || loading) {
     return <MobileV2ProductListSkeleton />

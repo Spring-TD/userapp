@@ -5,6 +5,7 @@ const base = {
   appId: "demo",
   status: "complete",
   isActive: true,
+  isFeatured: false,
   createdAt: new Date(0).toISOString(),
   updatedAt: new Date(0).toISOString(),
 }
@@ -103,11 +104,14 @@ export const DUMMY_COMMODITIES: CommodityCatalogProduct[] = [
 
 export function asCommodityCatalogProduct(product: MobileProduct): CommodityCatalogProduct {
   const amount = product.price ?? product.propertyValue ?? 60_000_000
-  const roi = product.interestRate?.includes("ROI")
+  const roi = product.roi
+    ? `${product.roi} ROI`
+    : product.interestRate?.includes("ROI")
     ? product.interestRate
     : product.interestRate
       ? `${product.interestRate} ROI`
       : "3% ROI"
+  const minPurchase = product.minimumQuantity != null ? amount * product.minimumQuantity : product.amountMin ?? amount
 
   return {
     ...product,
@@ -115,7 +119,7 @@ export function asCommodityCatalogProduct(product: MobileProduct): CommodityCata
     propertyValue: amount,
     duration: product.duration || "06 months",
     interestRate: roi,
-    minPurchase: amount,
+    minPurchase,
     roi: roi.replace(" ROI", ""),
     startDate: "Mar 2026",
     maturityDate: "Mar 2027",

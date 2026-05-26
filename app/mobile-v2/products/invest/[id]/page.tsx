@@ -1,197 +1,180 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
+import { useParams } from 'next/navigation';
 import {
     ChevronLeft,
-    Calendar,
+    CalendarDays,
     Percent,
-    Check
+    ChevronDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeletons';
+import { useMobileProductDetail } from '@/hooks/useMobileProductDetail';
+import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
+import { ProductFundingFlowSheet } from '@/components/mobile-v2/application/ProductFundingFlowSheet';
+import { amountRange, feeSummary, formatNgn, rateLabel } from '@/lib/mobileProductDetailDisplay';
 
-export default function InvestDetailPage({ params }: { params: { id: string } }) {
-    const [purchaseStep, setPurchaseStep] = useState<'details' | 'pin' | 'success'>('details');
-    const [pin, setPin] = useState(['', '', '', '']);
+export default function InvestDetailPage() {
+    const params = useParams();
+    const rawId = params?.id;
+    const productId = typeof rawId === 'string' ? decodeURIComponent(rawId) : '';
+    const { ready: tenantReady } = useMobileV2Tenant();
+    const { product, loading } = useMobileProductDetail({
+        productId,
+        enabled: tenantReady && Boolean(productId),
+    });
 
-    const handleCreatePin = (value: string, index: number) => {
-        const newPin = [...pin];
-        newPin[index] = value;
-        setPin(newPin);
-    };
+    const [isFundingFlowOpen, setIsFundingFlowOpen] = useState(false);
 
-    if (purchaseStep === 'success') {
+    const amountValue = product?.propertyValue ?? product?.price;
+    const amountDisplay =
+        product?.amountMin != null && product?.amountMax != null ? (
+            <span className="flex flex-col items-end gap-1 leading-tight">
+                <span>
+                    <span className="text-gray-400">Min: </span>
+                    {formatNgn(product.amountMin)}
+                </span>
+                <span>
+                    <span className="text-gray-400">Max: </span>
+                    {formatNgn(product.amountMax)}
+                </span>
+            </span>
+        ) : product ? amountRange(product) : amountValue != null ? `NGN${amountValue.toLocaleString('en-NG')}` : 'Flexible amount';
+    const returnDisplay = product ? `${rateLabel(product)} returns` : 'Returns available';
+    const durationDisplay = product?.duration || 'Flexible duration';
+
+    const investmentDetails = useMemo(
+        () => [
+            ['Name of investment', product?.name || 'Investment Product'],
+            ['Purpose', product?.subType || 'Wealth growth'],
+            ['Duration', durationDisplay],
+            ['Frequency', 'Monthly'],
+            ['Amount to invest', amountDisplay],
+            ['Fees & charges', product ? feeSummary(product) : 'Nil'],
+            ['Accept terms & conditions', 'Required'],
+        ],
+        [amountDisplay, durationDisplay, product?.name, product?.subType],
+    );
+
+    if (!tenantReady || loading) {
         return (
-            <div className="flex flex-col h-full bg-[#FAFAFA] relative items-center justify-center p-6">
-                <div className="bg-white rounded-[30px] p-8 flex flex-col items-center shadow-lg w-full max-w-[320px]">
-                    <div className="w-24 h-24 relative mb-6">
-                        <Image
-                            src="/success-check.png"
-                            alt="Success"
-                            fill
-                            className="object-contain"
-                        />
-                    </div>
-                    <h2 className="text-lg font-bold text-[#1E293B] text-center mb-1">Payment Done Successfully</h2>
-
-                    <Link href="/mobile-v2/products/invest" className="w-full mt-8">
-                        <Button className="w-full h-12 rounded-full bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white font-semibold">
-                            Done
-                        </Button>
-                    </Link>
-                </div>
+            <div className="flex h-full flex-col bg-[#FAFAFA] px-6 pt-12">
+                <MobileV2ProductListSkeleton />
             </div>
         );
     }
 
-    if (purchaseStep === 'pin') {
+    if (!product) {
         return (
-            <div className="flex flex-col h-full bg-[#FAFAFA] relative">
-                <div className="pt-12 px-6 mb-8">
-                    <button onClick={() => setPurchaseStep('details')} className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-gray-700 hover:bg-gray-50">
-                        <ChevronLeft className="w-5 h-5" />
-                    </button>
-                </div>
-
-                <div className="flex-1 flex flex-col items-center px-8">
-                    <h2 className="text-lg font-medium text-[#1E293B] mb-12">Enter your transaction pin</h2>
-
-                    <div className="flex gap-4 mb-12">
-                        {[0, 1, 2, 3].map((i) => (
-                            <div key={i} className="w-14 h-14 rounded-2xl bg-[#EEF2FF] border border-[#E0E7FF] flex items-center justify-center text-xl font-bold text-[var(--sf-ink,#1E1B4B)]">
-                                {pin[i] ? '•' : ''}
-                            </div>
-                        ))}
-                    </div>
-
-                    <Button
-                        onClick={() => setPurchaseStep('success')}
-                        className="w-full h-14 rounded-full bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white font-semibold text-base shadow-xl shadow-blue-900/10 mb-8"
-                    >
-                        Pay Now
+            <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 bg-[#FAFAFA] px-6 text-center">
+                <p className="text-sm text-gray-600">This investment product could not be found.</p>
+                <Link href="/mobile-v2/products/invest">
+                    <Button className="rounded-full bg-[var(--sf-button,#1E40AF)] text-white">
+                        Back to investments
                     </Button>
-
-                    {/* Numeric Keypad Simulation */}
-                    <div className="w-full grid grid-cols-3 gap-2 mt-auto pb-4">
-                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, '', 0, 'del'].map((key, idx) => (
-                            <button
-                                key={idx}
-                                onClick={() => {
-                                    if (typeof key === 'number') {
-                                        const nextIndex = pin.findIndex(p => p === '');
-                                        if (nextIndex !== -1) handleCreatePin(key.toString(), nextIndex);
-                                    } else if (key === 'del') {
-                                        // Logic to delete last digit
-                                        const lastIndex = pin.findLastIndex(p => p !== '');
-                                        if (lastIndex !== -1) handleCreatePin('', lastIndex);
-                                    }
-                                }}
-                                className={cn(
-                                    "h-14 rounded-lg flex flex-col items-center justify-center bg-white shadow-sm active:bg-gray-50",
-                                    key === '' ? "invisible" : ""
-                                )}
-                            >
-                                {key === 'del' ? '⌫' : (
-                                    <>
-                                        <span className="text-xl font-medium text-[#1E293B]">{key}</span>
-                                    </>
-                                )}
-                            </button>
-                        ))}
-                    </div>
-                </div>
+                </Link>
             </div>
         );
     }
 
     return (
-        <div className="flex flex-col h-full bg-[#FAFAFA] relative">
-            <div className="flex-1 overflow-y-auto no-scrollbar pb-32">
-                {/* Header */}
-                <div className="pt-12 px-6 mb-6 flex items-center">
-                    <Link href="/mobile-v2/products/invest" className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-gray-700 hover:bg-gray-50 transition-colors">
-                        <ChevronLeft className="w-5 h-5" />
-                    </Link>
-                </div>
+        <div className="relative flex h-full flex-col overflow-hidden bg-[#F4F7FF]">
+            <div className="no-scrollbar flex-1 overflow-y-auto px-6 pb-8 pt-12">
+                <Link
+                    href="/mobile-v2/products/invest"
+                    className="mb-10 flex h-9 w-9 items-center justify-center rounded-full bg-white text-[#1E293B] shadow-sm"
+                    aria-label="Back to investments"
+                >
+                    <ChevronLeft className="h-5 w-5" />
+                </Link>
 
-                <div className="px-6 space-y-6">
-                    {/* Main Card */}
-                    <div className="bg-white rounded-[24px] p-0 shadow-sm overflow-hidden">
-                        <div className="relative w-full h-[200px] bg-gray-200">
-                            <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-full text-[10px] font-bold text-gray-700 z-10">
-                                By AG Mortgage
-                            </div>
-                            <Image
-                                src="/commodity-maize.jpg"
-                                alt="Maize Investment"
-                                fill
-                                className="object-cover"
-                            />
-                        </div>
+                <section className="rounded-[8px] bg-[#262728] px-4 py-7 text-white">
+                    <div className="mb-5 flex items-start justify-between gap-4">
+                        <h1 className="text-[32px] font-bold leading-none text-[var(--sf-button,#2563EB)]">
+                            {product.name}
+                        </h1>
+                        <span className="mt-1 shrink-0 rounded-full bg-white px-4 py-2 text-[10px] font-semibold text-gray-600">
+                            By AG Mortgage
+                        </span>
+                    </div>
+                    <p className="max-w-[270px] text-[13px] font-medium leading-relaxed text-white/90">
+                        {product.description || 'Investment product designed to help you grow your wealth.'}
+                    </p>
+                </section>
 
-                        <div className="p-4 space-y-4">
-                            <div className="flex justify-between items-start">
-                                <h2 className="text-base font-bold text-[#1E293B]">Maize Investment....</h2>
-                                <span className="text-base font-bold text-[var(--sf-ink,#1E1B4B)]">NGN60,000,000</span>
-                            </div>
-
-                            <p className="text-xs text-gray-500 leading-relaxed">
-                                Lorem ipsum dolor sit amet consectetur. Malesuada volutpat risus adipiscing nunc amet dolor eu fermentum. Sollicitu...
-                            </p>
-
-                            <div className="flex gap-6 pb-2 border-b border-gray-100">
-                                <div className="flex items-center gap-2 text-gray-500">
-                                    <Calendar className="w-4 h-4" />
-                                    <span className="text-xs font-medium">06 months</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-gray-500">
-                                    <Percent className="w-4 h-4" />
-                                    <span className="text-xs font-medium">3% ROI</span>
-                                </div>
-                            </div>
-                        </div>
+                <section className="mt-7">
+                    <div className="mb-4 flex items-start justify-between gap-4">
+                        <h2 className="text-base font-medium text-[#4B5563]">{product.name}</h2>
+                        <p className="shrink-0 text-sm font-bold text-[#1F2937]">{returnDisplay}</p>
                     </div>
 
-                    {/* Order Payment Details */}
-                    <div>
-                        <h3 className="font-bold text-[#1E293B] mb-4">Order Payment Details</h3>
+                    <p className="mb-5 text-[12px] leading-relaxed text-[#4B5563]">
+                        {product.description || 'Review this investment and continue when you are ready to proceed.'}
+                    </p>
 
-                        <div className="bg-white rounded-[24px] p-6 space-y-4 shadow-sm">
-                            <div className="flex justify-between items-center text-sm">
-                                <span className="text-gray-600">Order Amounts</span>
-                                <span className="font-bold text-[var(--sf-ink,#1E1B4B)]">N16M</span>
-                            </div>
-                            <div className="flex justify-between items-center text-sm">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-gray-600">Convenience</span>
-                                    <span className="text-[10px] text-blue-500 font-medium">Know More</span>
-                                </div>
-                                <button className="text-[10px] text-blue-600 font-bold">Apply Coupon</button>
-                            </div>
-                            <div className="flex justify-between items-center text-sm">
-                                <span className="text-gray-600">Delivery Fee</span>
-                                <span className="font-bold text-blue-600 text-xs">Free</span>
-                            </div>
-
-                            <div className="border-t border-gray-100 my-2" />
-
-                            <div className="flex justify-between items-center text-base">
-                                <span className="font-bold text-[#1E293B]">Order Total</span>
-                                <span className="font-bold text-[var(--sf-ink,#1E1B4B)]">N16M</span>
-                            </div>
-
-                            <Button
-                                onClick={() => setPurchaseStep('pin')}
-                                className="w-full h-12 rounded-full bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white font-semibold mt-4"
-                            >
-                                Invest
-                            </Button>
-                        </div>
+                    <div className="mb-10 flex items-center gap-4 text-[13px] font-bold text-[#5F6368]">
+                        <span className="inline-flex items-center gap-2">
+                            <span className="flex h-5 w-5 items-center justify-center rounded bg-gray-300 text-white">
+                                <CalendarDays className="h-3.5 w-3.5" />
+                            </span>
+                            {durationDisplay}
+                        </span>
+                        <span className="inline-flex items-center gap-2">
+                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-gray-300 text-white">
+                                <Percent className="h-3.5 w-3.5" />
+                            </span>
+                            {returnDisplay}
+                        </span>
                     </div>
-                </div>
+
+                    <div className="space-y-9">
+                        {investmentDetails.map(([label, value]) => {
+                            const showDropdown = ['Frequency', 'Duration'].includes(label);
+
+                            return (
+                                <div key={label} className="flex items-center justify-between gap-6">
+                                    <span className="text-base font-medium text-gray-500">{label}</span>
+                                    <span className="inline-flex items-center gap-2 text-right text-base font-bold text-[#4B4F58]">
+                                        {value}
+                                        {showDropdown ? <ChevronDown className="h-4 w-4 text-[#4B4F58]" /> : null}
+                                    </span>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    <Button
+                        onClick={() => setIsFundingFlowOpen(true)}
+                        className="mt-7 h-12 w-full rounded-full bg-[var(--sf-button,#2563EB)] text-sm font-bold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]"
+                    >
+                        Continue
+                    </Button>
+                </section>
             </div>
+
+            <ProductFundingFlowSheet
+                open={isFundingFlowOpen}
+                onClose={() => setIsFundingFlowOpen(false)}
+                productName={product.name}
+                productKindLabel="investment"
+                termsTitle="Create an Investment Account"
+                termsDescription={
+                    <>
+                        Before you can proceed with <strong>{product.name}</strong> offered by{' '}
+                        <strong>AG Mortgage Bank</strong>, you are required to open a bank account with{' '}
+                        <strong>AG Mortgage Bank</strong>.
+                    </>
+                }
+                formTitle="Start Investment"
+                namePlaceholder="Name of investment"
+                amountPlaceholder="Amount to invest"
+                actionLabel="Start Investing"
+                successTitle="Investment Started"
+                successMessage="Your investment has been created successfully."
+                failureMessage="Your central wallet balance is not sufficient for this investment amount. Please fund your wallet and try again."
+            />
         </div>
     );
 }

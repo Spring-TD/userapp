@@ -5,6 +5,7 @@ const base = {
   appId: "demo",
   status: "complete",
   isActive: true,
+  isFeatured: false,
   createdAt: new Date(0).toISOString(),
   updatedAt: new Date(0).toISOString(),
 }
@@ -12,6 +13,7 @@ const base = {
 /** Design mock — matches Feature / Hot Mortgage screens. */
 export const DUMMY_FEATURED_MORTGAGE: MobileProduct = {
   ...base,
+  isFeatured: true,
   id: "dummy-featured-mortgage",
   referenceNumber: "MRT-DEMO-1",
   name: "2 Bedroom Flat Duplex",

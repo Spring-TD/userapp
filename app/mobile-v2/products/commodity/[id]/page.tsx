@@ -5,8 +5,9 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { Calendar, Check, ChevronDown, ChevronLeft, Minus, Percent, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useMobileProducts } from '@/hooks/useMobileProducts'
+import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
+import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeletons'
 import {
   asCommodityCatalogProduct,
   getDummyCommodityById,
@@ -78,18 +79,17 @@ function PinKey({ value, onClick }: { value: number | 'del' | ''; onClick: () =>
 export default function CommodityDetailPage() {
   const params = useParams()
   const productId = typeof params?.id === 'string' ? decodeURIComponent(params.id) : ''
-  const { appId, ready: tenantReady } = useMobileV2Tenant()
-  const { loading, getProductById } = useMobileProducts({
-    springAppId: appId ?? undefined,
-    tenantReady,
+  const { ready: tenantReady } = useMobileV2Tenant()
+  const { product: detailProduct, loading } = useMobileProductDetail({
+    productId,
+    enabled: tenantReady && Boolean(productId),
   })
 
   const product = useMemo<CommodityCatalogProduct | undefined>(() => {
     if (!productId) return undefined
-    const apiProduct = getProductById(productId)
-    if (apiProduct) return asCommodityCatalogProduct(apiProduct)
+    if (detailProduct) return asCommodityCatalogProduct(detailProduct)
     return getDummyCommodityById(productId)
-  }, [getProductById, productId])
+  }, [detailProduct, productId])
 
   const [quantity, setQuantity] = useState(1)
   const [sheet, setSheet] = useState<'details' | 'account' | null>(null)
@@ -115,7 +115,11 @@ export default function CommodityDetailPage() {
   }
 
   if (!tenantReady || loading) {
-    return <div className="h-full bg-[#FAFAFA]" />
+    return (
+      <div className="flex h-full flex-col bg-[#FAFAFA] px-6 pt-12">
+        <MobileV2ProductListSkeleton />
+      </div>
+    )
   }
 
   if (step === 'success') {
