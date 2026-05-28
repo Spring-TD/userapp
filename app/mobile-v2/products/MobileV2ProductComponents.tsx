@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeletons';
 import { loanProductApplyDetailHref } from '@/lib/loanApplyRoutes';
 import { mortgageProductApplyDetailHref } from '@/lib/mortgageApplyRoutes';
+import { amountRange, rateLabel } from '@/lib/mobileProductDetailDisplay';
 
 // ─── Tab bar shared across all V2 product pages ───────────────────────────────
 const ALL_TABS = ['Mortgage', 'Loan', 'Savings', 'Invest', 'Commodity'] as const;
@@ -21,14 +22,6 @@ const TAB_ROUTES: Record<ProductTab, string> = {
     Savings: '/mobile-v2/products/savings',
     Invest: '/mobile-v2/products/invest',
     Commodity: '/mobile-v2/products/commodity',
-};
-
-const APPLY_ROUTES: Record<string, string> = {
-    Loan: '/mobile-v2/products/loan/apply',
-    Mortgage: '/mobile-v2/products/mortgage/apply',
-    Savings: '/mobile-v2/products/savings/apply',
-    Commodity: '/mobile-v2/products/commodity/apply',
-    Invest: '/mobile-v2/products/invest/apply',
 };
 
 // ─── Tab Bar ──────────────────────────────────────────────────────────────────
@@ -110,12 +103,15 @@ function LoadingState() {
 // ─── Loan Product Card ────────────────────────────────────────────────────────
 export function LoanProductCard({ product }: { product: MobileProduct }) {
     const detailRoute = loanProductApplyDetailHref(product.id);
+    const amount = amountRange(product);
+    const rate = rateLabel(product);
 
     return (
         <div className="bg-[var(--sf-ink,#1E1B4B)] rounded-[24px] p-5 text-white shadow-lg relative overflow-hidden flex flex-col justify-between min-h-[220px]">
             <div className="flex flex-col mb-4">
                 <span className="text-[10px] text-blue-200 mb-1 font-medium block">Loan Amount</span>
-                <h2 className="text-xl font-bold tracking-tight mb-4">{product.name}</h2>
+                <h2 className="text-xl font-bold tracking-tight">{amount}</h2>
+                <p className="mt-1 line-clamp-1 text-xs font-semibold text-blue-100">{product.name}</p>
 
                 <div className="flex gap-4">
                     {product.duration && (
@@ -129,17 +125,15 @@ export function LoanProductCard({ product }: { product: MobileProduct }) {
                             </div>
                         </div>
                     )}
-                    {product.interestRate && (
-                        <div className="flex items-center gap-1.5">
-                            <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
-                                <Percent className="w-3.5 h-3.5 text-blue-200" />
-                            </div>
-                            <div className="flex flex-col leading-none">
-                                <span className="text-[9px] text-blue-300 mb-0.5">Interest</span>
-                                <span className="text-[11px] font-bold">{product.interestRate}</span>
-                            </div>
+                    <div className="flex items-center gap-1.5">
+                        <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+                            <Percent className="w-3.5 h-3.5 text-blue-200" />
                         </div>
-                    )}
+                        <div className="flex flex-col leading-none">
+                            <span className="text-[9px] text-blue-300 mb-0.5">Interest</span>
+                            <span className="text-[11px] font-bold">{rate}</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -165,12 +159,7 @@ export function FeaturedMortgageCard({ product }: { product: MobileProduct }) {
     const detailHref = mortgageProductApplyDetailHref(product.id);
     const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=2070&auto=format&fit=crop';
     const [slide, setSlide] = React.useState(0);
-    const price =
-        product.propertyValue != null
-            ? `NGN${product.propertyValue.toLocaleString('en-NG')}`
-            : product.referenceNumber
-              ? `Ref ${product.referenceNumber}`
-              : '';
+    const price = amountRange(product);
 
     return (
         <div className="overflow-hidden rounded-[24px] bg-white shadow-md border border-gray-100">
@@ -189,7 +178,7 @@ export function FeaturedMortgageCard({ product }: { product: MobileProduct }) {
             <div className="p-4">
                 <div className="mb-1 flex items-start justify-between gap-2">
                     <h3 className="line-clamp-1 text-base font-bold text-[var(--sf-ink,#1E1B4B)]">{product.name}</h3>
-                    {price ? <span className="shrink-0 text-sm font-bold text-[var(--sf-ink,#1E1B4B)]">{price}</span> : null}
+                    <span className="shrink-0 text-right text-sm font-bold text-[var(--sf-ink,#1E1B4B)]">{price}</span>
                 </div>
                 <p className="mb-4 line-clamp-2 text-[11px] leading-relaxed text-gray-500">
                     {product.description || 'Explore competitive rates and flexible repayment on this mortgage.'}
@@ -201,7 +190,7 @@ export function FeaturedMortgageCard({ product }: { product: MobileProduct }) {
                     </div>
                     <div className="flex items-center gap-1.5">
                         <Percent className="h-3.5 w-3.5 text-[var(--sf-primary,#2563EB)]" />
-                        <span>{product.interestRate || '3% p.a'}</span>
+                        <span>{rateLabel(product)}</span>
                     </div>
                 </div>
                 <Link href={detailHref}>
@@ -242,14 +231,8 @@ export function MortgageProductCard({ product, compact }: { product: MobileProdu
                 {!compact && (
                     <p className="line-clamp-2 text-[10px] text-gray-500">{product.description}</p>
                 )}
-                {product.propertyValue != null && (
-                    <div className="text-xs font-bold text-[var(--sf-ink,#1E1B4B)]">
-                        NGN{product.propertyValue.toLocaleString('en-NG')}
-                    </div>
-                )}
-                {product.interestRate && (
-                    <div className="text-[10px] font-semibold text-[var(--sf-button,#1E40AF)]">{product.interestRate} p.a.</div>
-                )}
+                <div className="text-xs font-bold text-[var(--sf-ink,#1E1B4B)]">{amountRange(product)}</div>
+                <div className="text-[10px] font-semibold text-[var(--sf-button,#1E40AF)]">{rateLabel(product)}</div>
                 <Link href={detailHref}>
                     <Button
                         className={cn(
@@ -281,9 +264,10 @@ export function SavingsProductCard({ product, index }: { product: MobileProduct;
         <div className={`${color.bg} rounded-[24px] p-5 flex flex-col gap-3`}>
             <h3 className={`text-sm font-bold ${color.title}`}>{product.name}</h3>
             <p className="text-xs text-gray-500 leading-relaxed flex-1 line-clamp-3">{product.description}</p>
-            {product.interestRate && (
-                <span className="text-xs font-bold text-gray-800">{product.interestRate} p.a.</span>
-            )}
+            <span className="text-xs font-bold text-gray-800">{amountRange(product)}</span>
+            <span className="text-[11px] font-semibold text-gray-600">
+                {rateLabel(product)}{product.duration ? ` · ${product.duration}` : ''}
+            </span>
             <Link href={detailHref}>
                 <Button className={`w-full h-9 rounded-full text-white text-xs font-semibold ${color.btn}`}>
                     Start Saving
@@ -310,11 +294,8 @@ export function InvestProductCard({ product }: { product: MobileProduct }) {
                 {product.duration ? (
                     <p className="text-[10px] font-medium text-gray-600">{product.duration}</p>
                 ) : null}
-                {product.interestRate ? (
-                    <p className="text-xs font-bold text-[var(--sf-button,#1E40AF)]">
-                        {product.interestRate.includes('%') ? product.interestRate : `${product.interestRate}%`} returns
-                    </p>
-                ) : null}
+                <p className="text-xs font-bold text-[var(--sf-ink,#1E1B4B)]">{amountRange(product)}</p>
+                <p className="text-xs font-bold text-[var(--sf-button,#1E40AF)]">{rateLabel(product)} returns</p>
                 <Link href={detailHref}>
                     <Button className="w-full h-10 rounded-full bg-[var(--sf-primary,#2563EB)] hover:bg-[var(--sf-primary,#2563EB)] text-white text-xs font-semibold mt-2">
                         View investment
@@ -327,7 +308,7 @@ export function InvestProductCard({ product }: { product: MobileProduct }) {
 
 // ─── Commodity Product Card ────────────────────────────────────────────────────
 export function CommodityProductCard({ product }: { product: MobileProduct }) {
-    const applyRoute = `${APPLY_ROUTES['Commodity']}?productId=${product.id}`;
+    const detailRoute = `/mobile-v2/products/commodity/${encodeURIComponent(product.id)}`;
     const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1551754655-cd27e38d2076?q=80&w=2070&auto=format&fit=crop';
 
     return (
@@ -339,15 +320,17 @@ export function CommodityProductCard({ product }: { product: MobileProduct }) {
             <div className="px-1 space-y-2">
                 <h3 className="text-sm font-bold text-[var(--sf-ink,#1E1B4B)]">{product.name}</h3>
                 <p className="text-[10px] text-gray-500 line-clamp-2">{product.description}</p>
-                {product.price && (
-                    <div className="text-sm font-bold text-[var(--sf-ink,#1E1B4B)]">
-                        ₦{product.price.toLocaleString()}
-                        {product.unitOfMeasure && <span className="text-xs font-normal text-gray-500"> / {product.unitOfMeasure}</span>}
-                    </div>
-                )}
-                <Link href={applyRoute}>
+                <div className="text-sm font-bold text-[var(--sf-ink,#1E1B4B)]">
+                    {amountRange(product)}
+                    {product.minimumQuantity ? (
+                        <span className="block text-xs font-normal text-gray-500">
+                            Min quantity: {product.minimumQuantity.toLocaleString()}
+                        </span>
+                    ) : null}
+                </div>
+                <Link href={detailRoute}>
                     <Button className="w-full h-10 rounded-full bg-[var(--sf-primary,#2563EB)] hover:bg-[var(--sf-primary,#2563EB)] text-white text-xs font-semibold mt-2">
-                        Buy Now
+                        View commodity
                     </Button>
                 </Link>
             </div>

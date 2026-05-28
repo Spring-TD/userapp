@@ -9,7 +9,6 @@ import {
   FeaturedMortgageCard,
   MortgageProductCard,
 } from '@/app/mobile-v2/products/MobileV2ProductComponents'
-import { buildMortgageCatalogFromProducts } from '@/lib/mortgageCatalogDummy'
 
 export function MobileV2MortgageCatalog() {
   const { appId, ready: tenantReady } = useMobileV2Tenant()
@@ -25,10 +24,20 @@ export function MobileV2MortgageCatalog() {
     return [featuredProduct, ...mortgageProducts.filter((product) => product.id !== featuredProduct.id)]
   }, [mortgageProducts])
 
-  const { featured, hot } = useMemo(() => buildMortgageCatalogFromProducts(orderedProducts), [orderedProducts])
+  const featured = orderedProducts[0]
+  const hot = orderedProducts.slice(1)
 
   if (!tenantReady || loading) {
     return <MobileV2ProductListSkeleton />
+  }
+
+  if (!featured) {
+    return (
+      <div className="rounded-2xl bg-white p-6 text-center shadow-sm">
+        <p className="text-sm font-semibold text-[#1E293B]">No mortgage products available</p>
+        <p className="mt-1 text-xs text-gray-500">Mortgage products will appear here once they are published for this app.</p>
+      </div>
+    )
   }
 
   return (
@@ -47,14 +56,20 @@ export function MobileV2MortgageCatalog() {
 
       <div>
         <h2 className="mb-3 text-base font-bold text-[#1E293B]">Hot Mortgage</h2>
-        <div className="-mx-1 flex gap-3 overflow-x-auto pb-2 pl-1 pr-4 no-scrollbar">
-          {hot.map((product) => (
-            <div key={product.id} className="w-[200px] shrink-0">
-              <p className="mb-2 pl-0.5 text-[10px] text-gray-500">By AG Mortgage Bank</p>
-              <MortgageProductCard product={product} compact />
-            </div>
-          ))}
-        </div>
+        {hot.length > 0 ? (
+          <div className="-mx-1 flex gap-3 overflow-x-auto pb-2 pl-1 pr-4 no-scrollbar">
+            {hot.map((product) => (
+              <div key={product.id} className="w-[200px] shrink-0">
+                <p className="mb-2 pl-0.5 text-[10px] text-gray-500">By AG Mortgage Bank</p>
+                <MortgageProductCard product={product} compact />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="rounded-2xl bg-white p-4 text-xs text-gray-500 shadow-sm">
+            No additional mortgage products available.
+          </p>
+        )}
       </div>
     </div>
   )

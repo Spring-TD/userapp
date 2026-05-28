@@ -17,7 +17,3 @@ export function mortgageProductApplyDetailHref(productId: string) {
 export function mortgageAccountSuccessHref(productId: string) {
   return `/mobile-v2/products/mortgage/account-success?productId=${encodeURIComponent(productId)}`
 }
-
-export function isDummyMortgageProductId(productId: string | null | undefined) {
-  return Boolean(productId?.startsWith("dummy-"))
-}

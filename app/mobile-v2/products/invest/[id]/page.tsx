@@ -29,19 +29,18 @@ export default function InvestDetailPage() {
     const [isFundingFlowOpen, setIsFundingFlowOpen] = useState(false);
 
     const amountValue = product?.propertyValue ?? product?.price;
-    const amountDisplay =
-        product?.amountMin != null && product?.amountMax != null ? (
-            <span className="flex flex-col items-end gap-1 leading-tight">
-                <span>
-                    <span className="text-gray-400">Min: </span>
-                    {formatNgn(product.amountMin)}
-                </span>
-                <span>
-                    <span className="text-gray-400">Max: </span>
-                    {formatNgn(product.amountMax)}
-                </span>
-            </span>
-        ) : product ? amountRange(product) : amountValue != null ? `NGN${amountValue.toLocaleString('en-NG')}` : 'Flexible amount';
+    const amountRows =
+        product?.amountMin != null && product?.amountMax != null
+            ? [
+                ['Minimum amount', formatNgn(product.amountMin)],
+                ['Maximum amount', formatNgn(product.amountMax)],
+            ]
+            : [
+                [
+                    'Amount to invest',
+                    product ? amountRange(product) : amountValue != null ? `NGN${amountValue.toLocaleString('en-NG')}` : 'Flexible amount',
+                ],
+            ];
     const returnDisplay = product ? `${rateLabel(product)} returns` : 'Returns available';
     const durationDisplay = product?.duration || 'Flexible duration';
 
@@ -51,11 +50,10 @@ export default function InvestDetailPage() {
             ['Purpose', product?.subType || 'Wealth growth'],
             ['Duration', durationDisplay],
             ['Frequency', 'Monthly'],
-            ['Amount to invest', amountDisplay],
+            ...amountRows,
             ['Fees & charges', product ? feeSummary(product) : 'Nil'],
-            ['Accept terms & conditions', 'Required'],
         ],
-        [amountDisplay, durationDisplay, product?.name, product?.subType],
+        [amountRows, durationDisplay, product, product?.name, product?.subType],
     );
 
     if (!tenantReady || loading) {

@@ -1,8 +1,7 @@
 'use client';
 
 import React from 'react';
-import { MobileV2TabBar } from '../MobileV2ProductComponents';
-import { MobileV2LoanCatalog } from '@/components/mobile-v2/loan/MobileV2LoanCatalog';
+import { MobileV2ProductList, MobileV2TabBar } from '../MobileV2ProductComponents';
 import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
 import Link from 'next/link';
 
@@ -25,7 +24,7 @@ export default function LoanProductPage() {
                 </div>
 
                 <div className="p-6">
-                    <MobileV2LoanCatalog />
+                    <MobileV2ProductList productType="Loan" />
                 </div>
             </div>
 

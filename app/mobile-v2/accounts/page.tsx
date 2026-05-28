@@ -17,10 +17,6 @@ import { useUserWallet } from '@/hooks/useUserWallet';
 import { fetchAuthUserProfile, type AuthUserProfile } from '@/lib/userProfileClient';
 import { maskAccountNumber } from '@/lib/userWallet';
 import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
-import { DUMMY_FEATURED_LOAN } from '@/lib/loanCatalogDummy';
-import { DUMMY_FEATURED_MORTGAGE } from '@/lib/mortgageCatalogDummy';
-import { loanDetailHref } from '@/lib/loanApplyRoutes';
-import { mortgageDetailHref } from '@/lib/mortgageApplyRoutes';
 
 const ACCOUNT_FILTERS = ['Mortgage', 'Loan', 'Savings', 'Invest', 'Commodity'] as const;
 type AccountFilter = typeof ACCOUNT_FILTERS[number];
@@ -54,9 +50,9 @@ function ProductAccountCard({
     const showMortgageImage = activeFilter === 'Mortgage';
     const accountDetailsHref =
         activeFilter === 'Mortgage'
-            ? mortgageDetailHref(DUMMY_FEATURED_MORTGAGE.id)
+            ? '/mobile-v2/products/mortgage'
             : activeFilter === 'Loan'
-              ? loanDetailHref(DUMMY_FEATURED_LOAN.id)
+              ? '/mobile-v2/products/loan'
               : null;
 
     const card = (

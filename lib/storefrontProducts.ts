@@ -222,7 +222,7 @@ export function mapApiProductToMobileProduct(row: Record<string, unknown>): Mobi
   const id = String(row.id ?? row._id ?? "").trim()
   if (!id) return null
 
-  const uiType = normalizeStorefrontProductType(row.type)
+  const uiType = normalizeStorefrontProductType(row.type ?? row.productType ?? row.category)
   if (!uiType) return null
 
   const subType =
@@ -236,10 +236,24 @@ export function mapApiProductToMobileProduct(row: Record<string, unknown>): Mobi
   const about = asRecord(row.about)
   const requirementsPayload = asRecord(row.requirements)
   const feesAndCharges = asRecord(row.feesAndCharges)
+  const merchantFeeAdditions = asRecord(row.merchantFeeAdditions)
 
   const loanAmount = asRange(structure.loanAmount)
   const investmentAmount = asRange(structure.investmentAmount)
   const savingsAmount = asRange(structure.savingsAmount)
+  const unitPrice =
+    asNumber(structure.price) ??
+    asNumber(row.price) ??
+    asNumber(asRecord(structure.unitAmount).amount) ??
+    asNumber(structure.unitAmount)
+  const minimumQuantity =
+    asNumber(row.minimumQuantity) ??
+    asNumber(structure.minQuantityPurchase) ??
+    asNumber(asRecord(structure.unitAmount).minQuantity)
+  const commodityAmount = {
+    min: unitPrice != null && minimumQuantity != null ? unitPrice * minimumQuantity : undefined,
+    max: asNumber(structure.maxAmount),
+  }
   const returnsOnInvestment = structure.returnsOnInvestment
   const unitAmount = asRecord(structure.unitAmount)
 
@@ -270,12 +284,25 @@ export function mapApiProductToMobileProduct(row: Record<string, unknown>): Mobi
       ? loanAmount
       : investmentAmount.min != null || investmentAmount.max != null
         ? investmentAmount
-        : savingsAmount
+        : savingsAmount.min != null || savingsAmount.max != null
+          ? savingsAmount
+          : commodityAmount
   const fees = mapFees(feesAndCharges.fees)
   const lateRepayment = asRecord(feesAndCharges.lateRepayment)
   const forcefulPenalties = mapFees(feesAndCharges.forcefulWithdrawalPenalties)
   const penalties = mapFees(lateRepayment.penalties)
-  const allFees = [...fees, ...forcefulPenalties, ...penalties]
+  const merchantFees = mapFees(merchantFeeAdditions.fees)
+  const merchantLateRepayment = asRecord(merchantFeeAdditions.lateRepayment)
+  const merchantForcefulPenalties = mapFees(merchantFeeAdditions.forcefulWithdrawalPenalties)
+  const merchantPenalties = mapFees(merchantLateRepayment.penalties)
+  const allFees = [
+    ...fees,
+    ...forcefulPenalties,
+    ...penalties,
+    ...merchantFees,
+    ...merchantForcefulPenalties,
+    ...merchantPenalties,
+  ]
 
   const mapped: MobileProduct = {
     id,
@@ -298,11 +325,7 @@ export function mapApiProductToMobileProduct(row: Record<string, unknown>): Mobi
     amountMin: amountRange.min,
     amountMax: amountRange.max,
     price:
-      typeof structure.price === "number"
-        ? structure.price
-        : typeof row.price === "number"
-          ? row.price
-          : undefined,
+      unitPrice,
     unitOfMeasure:
       typeof structure.unitOfMeasure === "string"
         ? structure.unitOfMeasure
@@ -314,9 +337,7 @@ export function mapApiProductToMobileProduct(row: Record<string, unknown>): Mobi
     equityContribution:
       asNumber(row.equityContribution) ?? asNumber(structure.equityContribution),
     minimumQuantity:
-      asNumber(row.minimumQuantity) ??
-      asNumber(structure.minQuantityPurchase) ??
-      asNumber(unitAmount.minQuantity),
+      minimumQuantity,
     unitAmount: asNumber(unitAmount.amount ?? structure.unitAmount),
     roi: formatPercent(returnsOnInvestment),
     termsAndCondition:
@@ -341,9 +362,9 @@ export function mapApiProductToMobileProduct(row: Record<string, unknown>): Mobi
   return mapped
 }
 
-export function storefrontProductDetailHref(product: Pick<MobileProduct, "id" | "type">): string {
+export function storefrontProductDetailHref(product: Pick<MobileProduct, "id" | "type" | "name">): string {
   const id = encodeURIComponent(product.id)
-  switch (product.type) {
+  switch (getDisplayProductType(product)) {
     case "Loan":
       return `/mobile-v2/products/loan/${id}`
     case "Mortgage":

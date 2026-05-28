@@ -8,12 +8,11 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeletons'
 import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
-import { getDummyLoanById } from '@/lib/loanCatalogDummy'
 import { mapMobileProductToLoanCatalog } from '@/lib/mapProductToLoanCatalog'
 import { loanApplyStartHref } from '@/lib/loanApplyRoutes'
 import type { LoanCatalogItem } from '@/types/loanCatalog'
 import { ProductDetailsScreen } from '@/components/mobile-v2/application/ProductDetailsScreen'
-import { amountRange, feeSummary, requirementSummary } from '@/lib/mobileProductDetailDisplay'
+import { amountRange, feeSummary, formatNgn, requirementSummary } from '@/lib/mobileProductDetailDisplay'
 
 function LoanDetailInner() {
   const params = useParams()
@@ -32,7 +31,7 @@ function LoanDetailInner() {
   const loan = useMemo<LoanCatalogItem | undefined>(() => {
     if (!productId) return undefined
     if (product) return mapMobileProductToLoanCatalog(product)
-    return getDummyLoanById(productId)
+    return undefined
   }, [product, productId])
 
   if (!tenantReady || loading) {
@@ -85,7 +84,12 @@ function LoanDetailInner() {
         product
           ? [
               { label: 'Loan type', value: product.subType || product.name },
-              { label: 'Amount', value: amountRange(product) },
+              ...(product.amountMin != null && product.amountMax != null
+                ? [
+                    { label: 'Minimum amount', value: formatNgn(product.amountMin) },
+                    { label: 'Maximum amount', value: formatNgn(product.amountMax) },
+                  ]
+                : [{ label: 'Amount', value: amountRange(product) }]),
               { label: 'Loan Tenure', value: product.duration || loan.duration },
               { label: 'Repayment Frequency', value: product.repaymentFrequency || 'Not specified' },
               { label: 'Collateral', value: requirementSummary(product) },

@@ -10,9 +10,8 @@ import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeletons'
 import {
   asCommodityCatalogProduct,
-  getDummyCommodityById,
   type CommodityCatalogProduct,
-} from '@/lib/commodityCatalogDummy'
+} from '@/lib/commodityCatalog'
 
 function formatNgn(amount?: number | null) {
   if (amount == null || Number.isNaN(amount)) return 'NGN—'
@@ -88,15 +87,13 @@ export default function CommodityDetailPage() {
   const product = useMemo<CommodityCatalogProduct | undefined>(() => {
     if (!productId) return undefined
     if (detailProduct) return asCommodityCatalogProduct(detailProduct)
-    return getDummyCommodityById(productId)
+    return undefined
   }, [detailProduct, productId])
 
   const [quantity, setQuantity] = useState(1)
   const [sheet, setSheet] = useState<'details' | 'account' | null>(null)
   const [step, setStep] = useState<'details' | 'pin' | 'success'>('details')
   const [pin, setPin] = useState<string[]>(['3', '8', '9', '8'])
-
-  const displayProduct = product ?? getDummyCommodityById('dummy-commodity-maize')!
 
   const pushPin = (digit: number) => {
     const firstEmpty = pin.findIndex((p) => !p)
@@ -118,6 +115,19 @@ export default function CommodityDetailPage() {
     return (
       <div className="flex h-full flex-col bg-[#FAFAFA] px-6 pt-12">
         <MobileV2ProductListSkeleton />
+      </div>
+    )
+  }
+
+  if (!product) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 bg-[#FAFAFA] px-6 text-center">
+        <p className="text-sm text-gray-600">This commodity product could not be found.</p>
+        <Link href="/mobile-v2/products/commodity">
+          <Button className="rounded-full bg-[var(--sf-button,#1E40AF)] text-white">
+            Back to commodities
+          </Button>
+        </Link>
       </div>
     )
   }
@@ -205,7 +215,7 @@ export default function CommodityDetailPage() {
         <div className="px-6 pt-8">
           <div
             className="relative h-[190px] overflow-hidden rounded-[18px] bg-gray-100 bg-cover bg-center"
-            style={{ backgroundImage: `url(${displayProduct.image})` }}
+            style={{ backgroundImage: `url(${product.image})` }}
           >
             <span className="absolute left-3 top-3 rounded-full bg-white/95 px-4 py-1.5 text-[10px] font-medium text-gray-700 shadow-sm">
               By AG Mortgage
@@ -214,31 +224,31 @@ export default function CommodityDetailPage() {
 
           <div className="mt-5 flex items-start justify-between gap-4">
             <h1 className="line-clamp-1 text-sm font-medium text-[#1E293B]">
-              {displayProduct.name}.....
+              {product.name}.....
             </h1>
             <div className="shrink-0 text-right">
               <p className="text-[8px] text-gray-500">Current Price</p>
-              <p className="text-sm font-bold text-[#1E293B]">{formatNgn(displayProduct.price)}</p>
+              <p className="text-sm font-bold text-[#1E293B]">{formatNgn(product.price)}</p>
             </div>
           </div>
 
           <p className="mt-3 text-[11px] leading-relaxed text-gray-600">
-            {displayProduct.description}
+            {product.description}
           </p>
 
           <div className="mt-4 flex gap-6 text-[11px] font-semibold text-gray-600">
             <span className="inline-flex items-center gap-2">
               <Calendar className="h-3.5 w-3.5 text-gray-400" />
-              {displayProduct.duration}
+              {product.duration}
             </span>
             <span className="inline-flex items-center gap-2">
               <Percent className="h-3.5 w-3.5 text-gray-400" />
-              {displayProduct.interestRate}
+              {product.interestRate}
             </span>
           </div>
 
           <div className="mt-10 space-y-8">
-            <InfoRow label="Min purchase" value={formatNaira(displayProduct.minPurchase)} />
+            <InfoRow label="Min purchase" value={formatNaira(product.minPurchase)} />
             <InfoRow
               label="Buy more"
               value={
@@ -265,7 +275,7 @@ export default function CommodityDetailPage() {
               label="Start Date"
               value={
                 <span className="inline-flex items-center gap-1">
-                  {displayProduct.startDate}
+                  {product.startDate}
                   <ChevronDown className="h-4 w-4" />
                 </span>
               }
@@ -280,7 +290,7 @@ export default function CommodityDetailPage() {
               }
             />
             <InfoRow label="Powered by:" value="AG Mortgage Bank" />
-            <InfoRow label="Total" value={formatNaira(displayProduct.total)} />
+            <InfoRow label="Total" value={formatNaira(product.total)} />
           </div>
 
           <Button
@@ -298,12 +308,12 @@ export default function CommodityDetailPage() {
             Details
           </h2>
           <div className="space-y-7">
-            <InfoRow label="Min purchase" value={formatNaira(displayProduct.minPurchase)} />
+            <InfoRow label="Min purchase" value={formatNaira(product.minPurchase)} />
             <InfoRow label="Unit" value={quantity + 1} />
-            <InfoRow label="R.O.I" value={displayProduct.roi} />
-            <InfoRow label="Start Date" value={displayProduct.startDate} />
-            <InfoRow label="Maturity Date" value={displayProduct.maturityDate} />
-            <InfoRow label="Ref No:" value={displayProduct.refNo} />
+            <InfoRow label="R.O.I" value={product.roi} />
+            <InfoRow label="Start Date" value={product.startDate} />
+            <InfoRow label="Maturity Date" value={product.maturityDate} />
+            <InfoRow label="Ref No:" value={product.refNo} />
             <InfoRow label="Powered by:" value="AG Mortgage Bank" />
           </div>
           <Button

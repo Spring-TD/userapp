@@ -9,20 +9,8 @@ import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 import { MortgageDetailSkeleton } from '@/components/mobile-v2/data-skeletons'
 import { Skeleton } from '@/components/ui/skeleton'
 import { mortgageApplyStartHref } from '@/lib/mortgageApplyRoutes'
-import {
-  DUMMY_FEATURED_MORTGAGE,
-  DUMMY_HOT_MORTGAGES,
-} from '@/lib/mortgageCatalogDummy'
 import { ProductDetailsScreen } from '@/components/mobile-v2/application/ProductDetailsScreen'
 import { amountRange, feeSummary, formatNgn, rateLabel, requirementSummary } from '@/lib/mobileProductDetailDisplay'
-
-const DUMMY_MORTGAGE_BY_ID = [DUMMY_FEATURED_MORTGAGE, ...DUMMY_HOT_MORTGAGES].reduce(
-  (acc, p) => {
-    acc[p.id] = p
-    return acc
-  },
-  {} as Record<string, (typeof DUMMY_FEATURED_MORTGAGE)>,
-)
 
 function MortgageDetailInner() {
   const params = useParams()
@@ -40,7 +28,7 @@ function MortgageDetailInner() {
 
   const product = useMemo(() => {
     if (!productId) return undefined
-    return detailProduct ?? DUMMY_MORTGAGE_BY_ID[productId]
+    return detailProduct ?? undefined
   }, [detailProduct, productId])
 
   const lender = 'AG Mortgage Bank'
@@ -62,16 +50,18 @@ function MortgageDetailInner() {
     )
   }
 
-  // if (!product) {
-  //   return (
-  //     <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 bg-[#FAFAFA] px-6 text-center">
-  //       <p className="text-sm text-gray-600">Product not found.</p>
-  //       <Button className="rounded-full bg-[var(--sf-button,#1E40AF)] text-white" onClick={() => router.push('/mobile-v2/products/mortgage')}>
-  //         Back
-  //       </Button>
-  //     </div>
-  //   )
-  // }
+  if (!product) {
+    return (
+      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 bg-[#FAFAFA] px-6 text-center">
+        <p className="text-sm text-gray-600">This mortgage product could not be found.</p>
+        <Link href="/mobile-v2/products/mortgage">
+          <Button className="rounded-full bg-[var(--sf-button,#1E40AF)] text-white">
+            Back to mortgages
+          </Button>
+        </Link>
+      </div>
+    )
+  }
 
   const amount = product?.propertyValue ?? null
   const property = detailProduct?.properties?.[0]
@@ -101,7 +91,12 @@ function MortgageDetailInner() {
           ? [
               { label: 'Property type', value: property?.propertyType || detailProduct.subType || 'Residential' },
               { label: 'Mortgage type', value: detailProduct.subType || detailProduct.name },
-              { label: 'Loan amount', value: amountRange(detailProduct) },
+              ...(detailProduct.amountMin != null && detailProduct.amountMax != null
+                ? [
+                    { label: 'Minimum amount', value: formatNgn(detailProduct.amountMin) },
+                    { label: 'Maximum amount', value: formatNgn(detailProduct.amountMax) },
+                  ]
+                : [{ label: 'Loan amount', value: amountRange(detailProduct) }]),
               { label: 'Loan Tenure', value: detailProduct.duration || 'Not specified' },
               { label: 'Repayment Frequency', value: detailProduct.repaymentFrequency || 'Not specified' },
               { label: 'Equity Contribution', value: detailProduct.equityContribution != null ? `${detailProduct.equityContribution}%` : 'Not specified' },

@@ -8,9 +8,9 @@ import { useMobileProducts } from '@/hooks/useMobileProducts'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeletons'
 import {
-  buildCommodityCatalogFromProducts,
+  asCommodityCatalogProduct,
   type CommodityCatalogProduct,
-} from '@/lib/commodityCatalogDummy'
+} from '@/lib/commodityCatalog'
 import { commodityDetailHref } from '@/lib/commodityApplyRoutes'
 import { cn } from '@/lib/utils'
 
@@ -122,12 +122,21 @@ export function MobileV2CommodityCatalog() {
 
   const apiCommodities = getProductsByType('Commodity')
 
-  const { featured, commodities } = useMemo(() => {
-    return buildCommodityCatalogFromProducts(apiCommodities)
-  }, [apiCommodities])
+  const commodities = useMemo(() => apiCommodities.map(asCommodityCatalogProduct), [apiCommodities])
+  const featured = commodities[0]
+  const otherCommodities = commodities.slice(1)
 
   if (!tenantReady || loading) {
     return <MobileV2ProductListSkeleton />
+  }
+
+  if (!featured) {
+    return (
+      <div className="rounded-2xl bg-white p-6 text-center shadow-sm">
+        <p className="text-sm font-semibold text-[#1E293B]">No commodity products available</p>
+        <p className="mt-1 text-xs text-gray-500">Commodity products will appear here once they are published for this app.</p>
+      </div>
+    )
   }
 
   return (
@@ -139,11 +148,17 @@ export function MobileV2CommodityCatalog() {
 
       <div>
         <h2 className="mb-4 text-base font-bold text-[#1E293B]">Commodity</h2>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-14">
-          {commodities.map((product) => (
-            <CommodityGridCard key={product.id} product={product} />
-          ))}
-        </div>
+        {otherCommodities.length > 0 ? (
+          <div className="grid grid-cols-2 gap-x-4 gap-y-14">
+            {otherCommodities.map((product) => (
+              <CommodityGridCard key={product.id} product={product} />
+            ))}
+          </div>
+        ) : (
+          <p className="rounded-2xl bg-white p-4 text-xs text-gray-500 shadow-sm">
+            No additional commodity products available.
+          </p>
+        )}
       </div>
     </div>
   )
