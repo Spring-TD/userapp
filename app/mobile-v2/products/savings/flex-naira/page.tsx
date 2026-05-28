@@ -14,16 +14,7 @@ import { ProductFundingFlowSheet } from '@/components/mobile-v2/application/Prod
 import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeletons';
 import { useMobileProductDetail } from '@/hooks/useMobileProductDetail';
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
-import { amountRange, feeSummary, rateLabel } from '@/lib/mobileProductDetailDisplay';
-
-const SAVINGS_DETAILS = [
-    ['Name of savings', 'Flex Naira Savings'],
-    ['Purpose', 'Emergency savings'],
-    ['Duration', '1 year'],
-    ['Frequency', 'Weekly'],
-    ['Amount to save', 'N10,000,000'],
-    ['Accept terms & conditions', 'Required'],
-];
+import { amountRange, feeSummary, formatNgn, rateLabel } from '@/lib/mobileProductDetailDisplay';
 
 export default function FlexNairaPage() {
     const searchParams = useSearchParams();
@@ -34,23 +25,6 @@ export default function FlexNairaPage() {
         enabled: tenantReady && Boolean(productId),
     });
     const [isFundingFlowOpen, setIsFundingFlowOpen] = useState(false);
-    const title = product?.name || 'Flex Naira';
-    const duration = product?.duration || '1 year';
-    const rate = product ? rateLabel(product) : '12% per annum';
-    const description =
-        product?.description || 'Flexible savings for emergencies. Free transfers, withdrawals etc. 8% p.a';
-    const details = product
-        ? [
-            ['Name of savings', product.name],
-            ['Purpose', product.subType || product.description || 'Savings plan'],
-            ['Duration', duration],
-            ['Frequency', product.withdrawalFlexibility || 'Weekly'],
-            ['Amount to save', amountRange(product)],
-            ['Fees & charges', feeSummary(product)],
-            ['Accept terms & conditions', 'Required'],
-        ]
-        : SAVINGS_DETAILS;
-
     if (productId && (!tenantReady || loading)) {
         return (
             <div className="flex h-full flex-col bg-[#F4F7FF] px-6 pt-12">
@@ -58,6 +32,39 @@ export default function FlexNairaPage() {
             </div>
         );
     }
+
+    if (!product) {
+        return (
+            <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 bg-[#F4F7FF] px-6 text-center">
+                <p className="text-sm text-gray-600">This savings product could not be found.</p>
+                <Link href="/mobile-v2/products/savings">
+                    <Button className="rounded-full bg-[var(--sf-button,#1E40AF)] text-white">
+                        Back to savings
+                    </Button>
+                </Link>
+            </div>
+        );
+    }
+
+    const title = product.name;
+    const duration = product.duration || 'Not specified';
+    const rate = rateLabel(product);
+    const description = product.description || 'Savings product';
+    const amountRows =
+        product.amountMin != null && product.amountMax != null
+            ? [
+                ['Minimum amount', formatNgn(product.amountMin)],
+                ['Maximum amount', formatNgn(product.amountMax)],
+            ]
+            : [['Amount to save', amountRange(product)]];
+    const details = [
+        ['Name of savings', product.name],
+        ['Purpose', product.subType || product.description || 'Savings plan'],
+        ['Duration', duration],
+        ['Frequency', product.withdrawalFlexibility || 'Not specified'],
+        ...amountRows,
+        ['Fees & charges', feeSummary(product)],
+    ];
 
     return (
         <div className="relative flex h-full flex-col overflow-hidden bg-[#F4F7FF]">

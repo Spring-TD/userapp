@@ -36,28 +36,3 @@ export function mapMobileProductToLoanCatalog(
       : "14% p.a",
   }
 }
-
-export function buildLoanCatalogFromProducts(
-  products: MobileProduct[],
-  useDummyWhenEmpty: boolean,
-  dummyFeatured: LoanCatalogItem,
-  dummyHot: LoanCatalogItem[],
-): { featured: LoanCatalogItem; hot: LoanCatalogItem[] } {
-  if (products.length === 0 && useDummyWhenEmpty) {
-    return { featured: dummyFeatured, hot: dummyHot }
-  }
-
-  const mapped = products.map((p) => mapMobileProductToLoanCatalog(p))
-  const featured = mapped[0] ?? dummyFeatured
-  const hot = mapped.length > 1 ? mapped.slice(1) : mapped.length === 1 ? dummyHot : mapped
-
-  if (mapped.length === 0 && useDummyWhenEmpty) {
-    return { featured: dummyFeatured, hot: dummyHot }
-  }
-
-  if (hot.length === 0 && dummyHot.length > 0) {
-    return { featured, hot: dummyHot }
-  }
-
-  return { featured, hot }
-}

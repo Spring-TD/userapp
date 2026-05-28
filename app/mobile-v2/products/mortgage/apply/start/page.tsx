@@ -7,10 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Check, ChevronLeft, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ensureMortgageAccount } from '@/lib/mortgageApplyClient'
-import {
-  isDummyMortgageProductId,
-  mortgageAccountSuccessHref,
-} from '@/lib/mortgageApplyRoutes'
+import { mortgageAccountSuccessHref } from '@/lib/mortgageApplyRoutes'
 
 function MortgageApplyStartInner() {
   const router = useRouter()
@@ -30,12 +27,6 @@ function MortgageApplyStartInner() {
     setProcessing(true)
     setError(null)
     try {
-      if (isDummyMortgageProductId(productId)) {
-        await new Promise((r) => setTimeout(r, 900))
-        router.replace(mortgageAccountSuccessHref(productId))
-        return
-      }
-
       const result = await ensureMortgageAccount(productId)
       if (!result.ok) {
         setError(result.error || 'Could not set up your mortgage account.')

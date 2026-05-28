@@ -1,8 +1,7 @@
 'use client';
 
 import React from 'react';
-import { MobileV2TabBar } from '../MobileV2ProductComponents';
-import { MobileV2MortgageCatalog } from '@/components/mobile-v2/mortgage/MobileV2MortgageCatalog';
+import { MobileV2ProductList, MobileV2TabBar } from '../MobileV2ProductComponents';
 import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
 import Link from 'next/link';
 
@@ -25,7 +24,7 @@ export default function MortgageProductPage() {
                 </div>
 
                 <div className="p-6">
-                    <MobileV2MortgageCatalog />
+                    <MobileV2ProductList productType="Mortgage" />
                 </div>
             </div>
 

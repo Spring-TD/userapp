@@ -7,8 +7,7 @@ import { Button } from '@/components/ui/button'
 import { useMobileProducts } from '@/hooks/useMobileProducts'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeletons'
-import { DUMMY_FEATURED_LOAN, DUMMY_HOT_LOANS } from '@/lib/loanCatalogDummy'
-import { buildLoanCatalogFromProducts } from '@/lib/mapProductToLoanCatalog'
+import { mapMobileProductToLoanCatalog } from '@/lib/mapProductToLoanCatalog'
 import type { LoanCatalogItem } from '@/types/loanCatalog'
 import { cn } from '@/lib/utils'
 
@@ -151,13 +150,21 @@ export function MobileV2LoanCatalog() {
     return [featuredProduct, ...loanProducts.filter((product) => product.id !== featuredProduct.id)]
   }, [loanProducts])
 
-  const { featured, hot } = useMemo(
-    () => buildLoanCatalogFromProducts(orderedProducts, true, DUMMY_FEATURED_LOAN, DUMMY_HOT_LOANS),
-    [orderedProducts],
-  )
+  const catalog = useMemo(() => orderedProducts.map((product) => mapMobileProductToLoanCatalog(product)), [orderedProducts])
+  const featured = catalog[0]
+  const hot = catalog.slice(1)
 
   if (!tenantReady || loading) {
     return <MobileV2ProductListSkeleton />
+  }
+
+  if (!featured) {
+    return (
+      <div className="rounded-2xl bg-white p-6 text-center shadow-sm">
+        <p className="text-sm font-semibold text-[#1E293B]">No loan products available</p>
+        <p className="mt-1 text-xs text-gray-500">Loan products will appear here once they are published for this app.</p>
+      </div>
+    )
   }
 
   return (
@@ -176,11 +183,17 @@ export function MobileV2LoanCatalog() {
 
       <div>
         <h2 className="font-bold text-[#1E293B] text-base mb-4">Hot Loan</h2>
-        <div className="grid grid-cols-2 gap-4">
-          {hot.map((item) => (
-            <HotLoanCard key={item.id} item={item} />
-          ))}
-        </div>
+        {hot.length > 0 ? (
+          <div className="grid grid-cols-2 gap-4">
+            {hot.map((item) => (
+              <HotLoanCard key={item.id} item={item} />
+            ))}
+          </div>
+        ) : (
+          <p className="rounded-2xl bg-white p-4 text-xs text-gray-500 shadow-sm">
+            No additional loan products available.
+          </p>
+        )}
       </div>
     </div>
   )

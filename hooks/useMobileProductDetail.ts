@@ -18,6 +18,49 @@ type UseMobileProductDetailOptions = {
   enabled?: boolean;
 };
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
+}
+
+function extractDetailRow(payload: unknown, productId: string): Record<string, unknown> | null {
+  const direct = asRecord(payload);
+  if (!direct) return null;
+
+  const data = direct.data;
+  if (Array.isArray(data)) {
+    return (
+      data
+        .map((item) => asRecord(item))
+        .find((item) => {
+          if (!item) return false;
+          return [item.id, item._id, item.upstreamProductId, item.productId, item.product_id]
+            .some((candidate) => String(candidate ?? '').trim() === productId);
+        }) ?? null
+    );
+  }
+
+  const dataRecord = asRecord(data);
+  if (dataRecord) {
+    if (Array.isArray(dataRecord.products)) {
+      return (
+        dataRecord.products
+          .map((item) => asRecord(item))
+          .find((item) => {
+            if (!item) return false;
+            return [item.id, item._id, item.upstreamProductId, item.productId, item.product_id]
+              .some((candidate) => String(candidate ?? '').trim() === productId);
+          }) ?? null
+      );
+    }
+
+    const nestedProduct = asRecord(dataRecord.product);
+    return nestedProduct ? { ...nestedProduct, ...dataRecord, product: undefined } : dataRecord;
+  }
+
+  const nestedProduct = asRecord(direct.product);
+  return nestedProduct ? { ...nestedProduct, ...direct, product: undefined } : direct;
+}
+
 export function useMobileProductDetail({
   productId,
   enabled = true,
@@ -48,7 +91,7 @@ export function useMobileProductDetail({
         throw new Error(res.data?.error || res.data?.message || `Failed to fetch product (${res.status})`);
       }
 
-      const row = res.data.data && typeof res.data.data === 'object' ? res.data.data as Record<string, unknown> : null;
+      const row = extractDetailRow(res.data, productId.trim());
       const mapped = row ? mapApiProductToMobileProduct(row) : null;
       if (!mapped) {
         throw new Error('Invalid product detail response');

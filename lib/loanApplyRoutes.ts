@@ -17,7 +17,3 @@ export function loanApplyStartHref(productId: string) {
 export function loanAccountSuccessHref(productId: string) {
   return `/mobile-v2/products/loan/account-success?productId=${encodeURIComponent(productId)}`
 }
-
-export function isDummyLoanProductId(productId: string | null | undefined) {
-  return Boolean(productId?.startsWith("dummy-"))
-}

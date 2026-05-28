@@ -1,8 +1,7 @@
 'use client';
 
 import React from 'react';
-import { MobileV2TabBar } from '../MobileV2ProductComponents';
-import { MobileV2CommodityCatalog } from '@/components/mobile-v2/commodity/MobileV2CommodityCatalog';
+import { MobileV2ProductList, MobileV2TabBar } from '../MobileV2ProductComponents';
 import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
 
 export default function CommodityProductPage() {
@@ -20,7 +19,7 @@ export default function CommodityProductPage() {
                 </div>
 
                 <div className="p-6">
-                    <MobileV2CommodityCatalog />
+                    <MobileV2ProductList productType="Commodity" />
                 </div>
             </div>
 

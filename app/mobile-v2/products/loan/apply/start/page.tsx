@@ -7,17 +7,13 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Check, ChevronLeft, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ensureLoanAccount } from '@/lib/loanApplyClient'
-import { getDummyLoanById } from '@/lib/loanCatalogDummy'
-import {
-  isDummyLoanProductId,
-  loanAccountSuccessHref,
-} from '@/lib/loanApplyRoutes'
+import { loanAccountSuccessHref } from '@/lib/loanApplyRoutes'
 
 function LoanApplyStartInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const productId = searchParams.get('productId')?.trim() || ''
-  const providerName = getDummyLoanById(productId)?.providerName ?? 'your loan provider'
+  const providerName = 'your loan provider'
   const [error, setError] = useState<string | null>(null)
   const [termsAccepted, setTermsAccepted] = useState(true)
   const [privacyAccepted, setPrivacyAccepted] = useState(true)
@@ -32,12 +28,6 @@ function LoanApplyStartInner() {
     setProcessing(true)
     setError(null)
     try {
-      if (isDummyLoanProductId(productId)) {
-        await new Promise((r) => setTimeout(r, 900))
-        router.replace(loanAccountSuccessHref(productId))
-        return
-      }
-
       const result = await ensureLoanAccount(productId)
       if (!result.ok) {
         setError(result.error || 'Could not set up your loan account.')
