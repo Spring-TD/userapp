@@ -109,3 +109,51 @@ export const createProductAfterTypeSchema = Joi.object({
     'string.max': 'Product description cannot exceed 1000 characters'
   })
 });
+
+const requirementSubmissionSchema = Joi.object({
+  requirementId: Joi.string().trim().optional(),
+  requirementType: Joi.string().trim().optional(),
+  label: Joi.string().trim().optional(),
+  type: Joi.string().valid('document', 'text', 'number', 'boolean', 'json').optional(),
+  value: Joi.any().optional(),
+  fileUrl: Joi.string().uri().optional(),
+  fileName: Joi.string().trim().optional(),
+  fileType: Joi.string().trim().optional(),
+  fileSize: Joi.number().positive().optional(),
+  metadata: Joi.object().unknown(true).optional()
+});
+
+export const createProductApplicationSchema = Joi.object({
+  userId: Joi.string().trim().required(),
+  productId: Joi.string().trim().required(),
+  amount: Joi.number().positive().required(),
+  currency: Joi.string().trim().uppercase().min(3).max(10).required(),
+  email: Joi.string().email().optional(),
+  merchantId: Joi.string().trim().optional(),
+  appId: Joi.string().trim().optional(),
+  applicantName: Joi.string().trim().min(1).max(200).optional(),
+  phone: Joi.string().trim().min(3).max(40).optional(),
+  bvn: Joi.string().trim().pattern(/^\d{11}$/).optional().messages({
+    'string.pattern.base': 'bvn must be exactly 11 digits'
+  }),
+  offeringMerchantName: Joi.string().trim().min(1).max(200).optional(),
+  country: Joi.string().trim().uppercase().length(2).optional(),
+  integratorMerchantId: Joi.string().trim().min(1).max(200).optional(),
+  integratorMerchantName: Joi.string().trim().min(1).max(200).optional(),
+  productCreatorMerchantName: Joi.string().trim().min(1).max(200).optional(),
+  subMerchant: Joi.object({
+    id: Joi.string().trim().required(),
+    name: Joi.string().trim().required(),
+    email: Joi.string().email().required(),
+    phone: Joi.string().trim().min(3).max(40).required(),
+    bvn: Joi.string().trim().pattern(/^\d{11}$/).optional()
+  }).optional(),
+  subMerchantContactEmail: Joi.string().email().optional(),
+  subMerchantContactPhone: Joi.string().trim().min(3).max(40).optional(),
+  requirementSubmissions: Joi.array().items(requirementSubmissionSchema).default([])
+});
+
+export const updateProductApplicationStatusSchema = Joi.object({
+  status: Joi.string().valid('APPROVED', 'REJECTED', 'BLACKLISTED').required(),
+  reason: Joi.string().trim().optional()
+});

@@ -17,6 +17,8 @@ router.put('/featured/:appId', productController.setAppFeaturedProducts);
 router.get('/:id', productController.getProductById);
 router.put('/:id', productController.updateProduct);
 router.delete('/:id', productController.deleteProduct);
+router.get('/app/:appId/product-overview/by-type/:productType', productController.getProductOverviewByType);
+router.get('/app/:appId/product-overview', productController.getProductOverview);
 router.get('/app/:appId', productController.getProductsByMerchant);
 router.get('/merchant/:appId', productController.getProductsByMerchant);
 // Endpoints for app-scoped product management

@@ -7,7 +7,7 @@ import { config } from './config/environment';
 import swaggerSpec from './config/swagger';
 import { corsMiddleware } from './middleware';
 import { errorHandler, notFoundHandler } from './middleware';
-import { productRoutes, configurationRoutes } from './routes';
+import { productRoutes, configurationRoutes, productApplicationRoutes, applicationRoutes } from './routes';
 
 const app = express();
 
@@ -39,7 +39,11 @@ app.get('/', (_req, res) => {
       apiDocs: '/api-docs',
       openApiSpec: '/api-docs.json',
       products: '/api/v1/products',
-      configurations: '/api/v1/configurations'
+      productOverview: '/api/v1/products/app/:appId/product-overview',
+      productOverviewByType: '/api/v1/products/app/:appId/product-overview/by-type/:productType',
+      configurations: '/api/v1/configurations',
+      applications: '/api/v1/applications',
+      productApplications: '/api/v1/product-applications'
     },
     features: [
       'Loan Products',
@@ -66,6 +70,8 @@ app.get('/health', (_req, res) => {
 // API routes
 app.use('/api/v1/products', productRoutes);
 app.use('/api/v1/configurations', configurationRoutes);
+app.use('/api/v1/applications', applicationRoutes);
+app.use('/api/v1/product-applications', productApplicationRoutes);
 
 // Error handling middleware
 app.use(notFoundHandler);

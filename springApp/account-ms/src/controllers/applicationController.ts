@@ -2,11 +2,36 @@ import { Request, Response } from 'express';
 import applicationService from '../services/applicationService';
 import { AuthRequest } from '../middleware/authMiddleware';
 
+function errorStatus(error: any): number {
+    if (typeof error?.statusCode === 'number') {
+        return error.statusCode;
+    }
+    return 500;
+}
+
 class ApplicationController {
     // Apply for a product
     async applyForProduct(req: Request, res: Response) {
         try {
-            const { userId, productId, amount, currency, email } = req.body;
+            const {
+                userId,
+                productId,
+                amount,
+                currency,
+                email,
+                applicantName,
+                phone,
+                bvn,
+                offeringMerchantName,
+                country,
+                integratorMerchantId,
+                integratorMerchantName,
+                productCreatorMerchantName,
+                subMerchant,
+                subMerchantContactEmail,
+                subMerchantContactPhone,
+                requirementSubmissions
+            } = req.body;
 
             if (!userId || !productId || !amount || !currency) {
                 return res.status(400).json({
@@ -20,7 +45,19 @@ class ApplicationController {
                 productId,
                 amount,
                 currency,
-                email
+                email,
+                applicantName,
+                phone,
+                bvn,
+                offeringMerchantName,
+                country,
+                integratorMerchantId,
+                integratorMerchantName,
+                productCreatorMerchantName,
+                subMerchant,
+                subMerchantContactEmail,
+                subMerchantContactPhone,
+                requirementSubmissions
             });
 
             res.status(201).json(result);
@@ -28,7 +65,7 @@ class ApplicationController {
         } catch (error: any) {
             console.error('Error in applyForProduct:', error);
             const isForbidden = error?.message?.includes('not active for this merchant');
-            res.status(isForbidden ? 403 : 500).json({
+            res.status(typeof error?.statusCode === 'number' ? error.statusCode : isForbidden ? 403 : 500).json({
                 success: false,
                 error: error.message || 'Internal server error'
             });
@@ -56,7 +93,7 @@ class ApplicationController {
             return;
         } catch (error: any) {
             console.error('Error in approveApplication:', error);
-            res.status(500).json({
+            res.status(errorStatus(error)).json({
                 success: false,
                 error: error.message || 'Internal server error'
             });
@@ -91,7 +128,7 @@ class ApplicationController {
             return;
         } catch (error: any) {
             console.error('Error in rejectApplication:', error);
-            res.status(500).json({
+            res.status(errorStatus(error)).json({
                 success: false,
                 error: error.message || 'Internal server error'
             });
@@ -111,7 +148,7 @@ class ApplicationController {
             return;
         } catch (error: any) {
             console.error('Error in getAllApplications:', error);
-            res.status(500).json({
+            res.status(errorStatus(error)).json({
                 success: false,
                 error: error.message || 'Internal server error'
             });
@@ -131,7 +168,7 @@ class ApplicationController {
             return;
         } catch (error: any) {
             console.error('Error in getPendingApplications:', error);
-            res.status(500).json({
+            res.status(errorStatus(error)).json({
                 success: false,
                 error: error.message || 'Internal server error'
             });
@@ -151,7 +188,7 @@ class ApplicationController {
             return;
         } catch (error: any) {
             console.error('Error in getUserApplications:', error);
-            res.status(500).json({
+            res.status(errorStatus(error)).json({
                 success: false,
                 error: error.message || 'Internal server error'
             });
@@ -171,7 +208,7 @@ class ApplicationController {
             return;
         } catch (error: any) {
             console.error('Error in getUserLoanApplications:', error);
-            res.status(500).json({
+            res.status(errorStatus(error)).json({
                 success: false,
                 error: error.message || 'Internal server error'
             });
@@ -191,7 +228,7 @@ class ApplicationController {
             return;
         } catch (error: any) {
             console.error('Error in getUserMortgageApplications:', error);
-            res.status(500).json({
+            res.status(errorStatus(error)).json({
                 success: false,
                 error: error.message || 'Internal server error'
             });
@@ -211,7 +248,7 @@ class ApplicationController {
             return;
         } catch (error: any) {
             console.error('Error in getBlacklistedMortgageApplications:', error);
-            res.status(500).json({
+            res.status(errorStatus(error)).json({
                 success: false,
                 error: error.message || 'Internal server error'
             });
@@ -246,7 +283,7 @@ class ApplicationController {
             return;
         } catch (error: any) {
             console.error('Error in blacklistMortgageApplication:', error);
-            res.status(500).json({
+            res.status(errorStatus(error)).json({
                 success: false,
                 error: error.message || 'Internal server error'
             });
@@ -274,7 +311,7 @@ class ApplicationController {
             return;
         } catch (error: any) {
             console.error('Error in getApplicationById:', error);
-            res.status(500).json({
+            res.status(errorStatus(error)).json({
                 success: false,
                 error: error.message || 'Internal server error'
             });

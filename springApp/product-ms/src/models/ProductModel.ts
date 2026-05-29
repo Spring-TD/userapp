@@ -156,8 +156,7 @@ const loanDiscriminatorSchema = new Schema(
   {
     about: { type: loanAboutSchema },
     structure: { type: loanStructureTabSchema },
-    requirements: { type: loanRequirementsSchema },
-    feesAndCharges: { type: loanFeesAndChargesSchema }
+    requirements: { type: loanRequirementsSchema }
   },
   { _id: false, id: false }
 );
@@ -178,7 +177,6 @@ const mortgageDiscriminatorSchema = new Schema(
     about: { type: loanAboutSchema },
     structure: { type: loanStructureTabSchema },
     requirements: { type: loanRequirementsSchema },
-    feesAndCharges: { type: loanFeesAndChargesSchema },
     properties: { type: [mortgagePropertyItemSchema], default: undefined },
     equityContribution: { type: Number },
     propertyValue: { type: Number }
@@ -189,8 +187,7 @@ const mortgageDiscriminatorSchema = new Schema(
 const savingsDiscriminatorSchema = new Schema(
   {
     about: { type: loanAboutSchema },
-    structure: { type: savingsStructureTabSchema },
-    feesAndCharges: { type: loanFeesAndChargesSchema }
+    structure: { type: savingsStructureTabSchema }
   },
   { _id: false, id: false }
 );
@@ -219,8 +216,7 @@ const investmentStructureTabSchema = new Schema(
 const investmentDiscriminatorSchema = new Schema(
   {
     about: { type: loanAboutSchema },
-    structure: { type: investmentStructureTabSchema },
-    feesAndCharges: { type: loanFeesAndChargesSchema }
+    structure: { type: investmentStructureTabSchema }
   },
   { _id: false, id: false }
 );
@@ -256,7 +252,6 @@ const commodityDiscriminatorSchema = new Schema(
   {
     about: { type: loanAboutSchema },
     structure: { type: commodityStructureTabSchema },
-    feesAndCharges: { type: loanFeesAndChargesSchema },
     commodityPrices: { type: [commodityPriceEntrySchema], default: undefined },
     price: { type: Number },
     minimumQuantity: { type: Number },
@@ -286,6 +281,7 @@ const baseProductSchema = new Schema<IProductDocument>(
     createdAt: { type: String, required: true },
     updatedAt: { type: String, required: true },
     metadata: { type: Schema.Types.Mixed },
+    feesAndCharges: { type: loanFeesAndChargesSchema },
     baseFeesAndCharges: { type: loanFeesAndChargesSchema },
     merchantFeeAdditions: { type: loanFeesAndChargesSchema }
   },

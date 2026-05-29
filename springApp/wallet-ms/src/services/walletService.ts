@@ -26,6 +26,18 @@ export interface CreateUserWalletData {
   currency: string;
 }
 
+export interface EnsureProductUserWalletData {
+  userId: string;
+  merchantId: string;
+  complianceShareholderUserId?: string;
+  applicationId: string;
+  productId: string;
+  productName?: string;
+  productType: string;
+  appId?: string;
+  currency: string;
+}
+
 export interface UpdateWalletBalanceData {
   walletId: string;
   amount: number;
@@ -311,6 +323,130 @@ export class WalletService {
             ? String((error as { message: unknown }).message)
             : String(error);
       return { success: false, error: `Failed to create user wallet: ${detail}` };
+    }
+  }
+
+  static async ensureProductUserWallet(data: EnsureProductUserWalletData): Promise<{
+    success: boolean;
+    wallet?: UserWallet;
+    reusedUpstreamAccount?: boolean;
+    skipped?: boolean;
+    error?: string;
+  }> {
+    try {
+      const existingProductWallet = await db.getProductUserWallet(data.userId, data.applicationId);
+      if (existingProductWallet) {
+        if (
+          existingProductWallet.virtualNuban?.provisionStatus === 'active' &&
+          existingProductWallet.virtualNuban.accountNumber
+        ) {
+          return {
+            success: true,
+            wallet: existingProductWallet,
+            skipped: true,
+            reusedUpstreamAccount: true
+          };
+        }
+
+        const existingUpstreamAccount = await db.findUserWalletWithActivePayonusAccount(data.userId, data.merchantId);
+        if (
+          existingUpstreamAccount?.virtualNuban?.accountNumber &&
+          existingUpstreamAccount.id !== existingProductWallet.id
+        ) {
+          const linked = (await db.patchWalletPayonusNuban(existingProductWallet.id, {
+            payonusNubanAccountNumber: existingUpstreamAccount.virtualNuban.accountNumber,
+            payonusNubanBankName: existingUpstreamAccount.virtualNuban.bankName,
+            payonusNubanBankCode: existingUpstreamAccount.virtualNuban.bankCode,
+            payonusNubanProviderReference: existingUpstreamAccount.virtualNuban.providerReference,
+            payonusNubanAccountType: existingUpstreamAccount.virtualNuban.accountType,
+            payonusNubanProvisionStatus: existingUpstreamAccount.virtualNuban.provisionStatus,
+            payonusNubanProvisionError: null,
+            payonusNubanProvisionedAt: existingUpstreamAccount.virtualNuban.provisionedAt ?? new Date()
+          })) as UserWallet | null;
+          return { success: true, wallet: linked ?? existingProductWallet, skipped: true, reusedUpstreamAccount: true };
+        }
+
+        const provisioned = (await provisionPayonusNubanForWallet(existingProductWallet)) as UserWallet;
+        const active = provisioned.virtualNuban?.provisionStatus === 'active' && Boolean(provisioned.virtualNuban.accountNumber);
+        return active
+          ? { success: true, wallet: provisioned, skipped: true, reusedUpstreamAccount: false }
+          : {
+              success: false,
+              wallet: provisioned,
+              error: provisioned.virtualNuban?.provisionError || 'Upstream account was not provisioned for product wallet'
+            };
+      }
+
+      const wallet = await db.createUserWallet({
+        userId: data.userId,
+        merchantId: data.merchantId,
+        complianceShareholderUserId: data.complianceShareholderUserId,
+        walletPurpose: 'PRODUCT',
+        productApplicationId: data.applicationId,
+        productId: data.productId,
+        productType: data.productType,
+        appId: data.appId,
+        name: data.productName ? `${data.productName} Wallet` : `${data.productType} Application Wallet`,
+        currency: data.currency
+      });
+
+      const existingUpstreamAccount = await db.findUserWalletWithActivePayonusAccount(data.userId, data.merchantId);
+      if (existingUpstreamAccount?.virtualNuban?.accountNumber) {
+        const updated = (await db.patchWalletPayonusNuban(wallet.id, {
+          payonusNubanAccountNumber: existingUpstreamAccount.virtualNuban.accountNumber,
+          payonusNubanBankName: existingUpstreamAccount.virtualNuban.bankName,
+          payonusNubanBankCode: existingUpstreamAccount.virtualNuban.bankCode,
+          payonusNubanProviderReference: existingUpstreamAccount.virtualNuban.providerReference,
+          payonusNubanAccountType: existingUpstreamAccount.virtualNuban.accountType,
+          payonusNubanProvisionStatus: existingUpstreamAccount.virtualNuban.provisionStatus,
+          payonusNubanProvisionError: null,
+          payonusNubanProvisionedAt: existingUpstreamAccount.virtualNuban.provisionedAt ?? new Date()
+        })) as UserWallet | null;
+
+        logger.info('Product wallet linked to existing upstream account', {
+          walletId: wallet.id,
+          sourceWalletId: existingUpstreamAccount.id,
+          userId: data.userId,
+          applicationId: data.applicationId
+        });
+
+        return {
+          success: true,
+          wallet: updated ?? wallet,
+          reusedUpstreamAccount: true
+        };
+      }
+
+      const walletWithNuban = (await provisionPayonusNubanForWallet(wallet)) as UserWallet;
+      const active =
+        walletWithNuban.virtualNuban?.provisionStatus === 'active' &&
+        Boolean(walletWithNuban.virtualNuban?.accountNumber);
+
+      if (!active) {
+        return {
+          success: false,
+          wallet: walletWithNuban,
+          error:
+            walletWithNuban.virtualNuban?.provisionError ||
+            'Upstream account was not provisioned for product wallet'
+        };
+      }
+
+      return {
+        success: true,
+        wallet: walletWithNuban,
+        reusedUpstreamAccount: false
+      };
+    } catch (error) {
+      const mongo = error as { code?: number };
+      if (mongo?.code === 11000) {
+        const existing = await db.getProductUserWallet(data.userId, data.applicationId);
+        if (existing) {
+          return { success: true, wallet: existing, skipped: true };
+        }
+      }
+      logger.error('Error ensuring product user wallet', { error, applicationId: data.applicationId });
+      return { success: false, error: 'Failed to ensure product wallet' };
     }
   }
 

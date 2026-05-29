@@ -29,7 +29,7 @@ export class ProductService {
     baseItems: Array<{ name: string; feeType?: string; value?: string }> = [],
     merchantItems: Array<{ name: string; feeType?: string; value?: string }> = []
   ): Array<{ name: string; feeType?: string; value?: string }> {
-    const additionsByKey = new Map<string, number>();
+    const additionsByKey = new Map<string, { item: { name: string; feeType?: string; value?: string }; delta: number }>();
     for (const item of merchantItems) {
       const name = item.name.trim();
       const feeType = (item.feeType ?? '').trim();
@@ -38,27 +38,41 @@ export class ProductService {
       if (delta < 0) {
         throw new Error(`Merchant addition cannot be negative for fee "${name}"`);
       }
-      additionsByKey.set(`${name.toLowerCase()}|${feeType.toLowerCase()}`, delta);
+      additionsByKey.set(`${name.toLowerCase()}|${feeType.toLowerCase()}`, { item, delta });
     }
 
-    return baseItems.map((baseItem) => {
+    const matchedBaseKeys = new Set<string>();
+    const mergedBaseItems = baseItems.map((baseItem) => {
       const name = baseItem.name.trim();
       const feeType = (baseItem.feeType ?? '').trim();
       const key = `${name.toLowerCase()}|${feeType.toLowerCase()}`;
       const baseValue = this.toNumeric(baseItem.value);
-      const merchantDelta = additionsByKey.get(key) ?? 0;
+      const merchantDelta = additionsByKey.get(key)?.delta ?? 0;
+      matchedBaseKeys.add(key);
       return {
         ...baseItem,
         value: String(baseValue + merchantDelta)
       };
     });
+
+    const merchantOnlyItems = Array.from(additionsByKey.entries())
+      .filter(([key]) => !matchedBaseKeys.has(key))
+      .map(([, addition]) => ({
+        ...addition.item,
+        value: String(addition.delta)
+      }));
+
+    return [...mergedBaseItems, ...merchantOnlyItems];
   }
 
   private mergePenaltyItems(
     baseItems: Array<{ name?: string; penaltyType?: string; value?: string; triggerDurationDays?: number }> = [],
     merchantItems: Array<{ name?: string; penaltyType?: string; value?: string; triggerDurationDays?: number }> = []
   ): Array<{ name?: string; penaltyType?: string; value?: string; triggerDurationDays?: number }> {
-    const additionsByKey = new Map<string, number>();
+    const additionsByKey = new Map<
+      string,
+      { item: { name?: string; penaltyType?: string; value?: string; triggerDurationDays?: number }; delta: number }
+    >();
     for (const item of merchantItems) {
       const name = (item.name ?? '').trim();
       const penaltyType = (item.penaltyType ?? '').trim();
@@ -68,21 +82,32 @@ export class ProductService {
       if (delta < 0) {
         throw new Error(`Merchant addition cannot be negative for penalty "${name}"`);
       }
-      additionsByKey.set(`${name.toLowerCase()}|${penaltyType.toLowerCase()}|${trigger}`, delta);
+      additionsByKey.set(`${name.toLowerCase()}|${penaltyType.toLowerCase()}|${trigger}`, { item, delta });
     }
 
-    return baseItems.map((baseItem) => {
+    const matchedBaseKeys = new Set<string>();
+    const mergedBaseItems = baseItems.map((baseItem) => {
       const name = (baseItem.name ?? '').trim();
       const penaltyType = (baseItem.penaltyType ?? '').trim();
       const trigger = baseItem.triggerDurationDays ?? 0;
       const key = `${name.toLowerCase()}|${penaltyType.toLowerCase()}|${trigger}`;
       const baseValue = this.toNumeric(baseItem.value);
-      const merchantDelta = additionsByKey.get(key) ?? 0;
+      const merchantDelta = additionsByKey.get(key)?.delta ?? 0;
+      matchedBaseKeys.add(key);
       return {
         ...baseItem,
         value: String(baseValue + merchantDelta)
       };
     });
+
+    const merchantOnlyItems = Array.from(additionsByKey.entries())
+      .filter(([key]) => !matchedBaseKeys.has(key))
+      .map(([, addition]) => ({
+        ...addition.item,
+        value: String(addition.delta)
+      }));
+
+    return [...mergedBaseItems, ...merchantOnlyItems];
   }
 
   private computeTotalFeesAndCharges(
@@ -96,11 +121,11 @@ export class ProductService {
     return {
       ...baseFees,
       fees: this.mergeFeeItems(baseFees.fees, merchantAdditions?.fees),
-      lateRepayment: baseFees.lateRepayment
+      lateRepayment: baseFees.lateRepayment || merchantAdditions?.lateRepayment
         ? {
-            ...baseFees.lateRepayment,
+            ...(baseFees.lateRepayment ?? merchantAdditions?.lateRepayment),
             penalties: this.mergePenaltyItems(
-              baseFees.lateRepayment.penalties,
+              baseFees.lateRepayment?.penalties,
               merchantAdditions?.lateRepayment?.penalties
             )
           }

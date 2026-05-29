@@ -373,19 +373,65 @@ Use **`user.id`** from login and **`product.id`** from detail.
   "productId": "6790abc123def45678901234",
   "amount": 50000,
   "currency": "NGN",
-  "email": "jane@example.com"
+  "email": "jane@example.com",
+  "applicantName": "Jane Smith",
+  "phone": "+2348012345678",
+  "bvn": "22123456789",
+  "country": "NG",
+  "requirementSubmissions": [
+    {
+      "requirementId": "valid-id",
+      "requirementType": "identity",
+      "label": "Valid ID",
+      "type": "document",
+      "fileUrl": "https://springtd-product-documents.nyc3.digitaloceanspaces.com/id.pdf",
+      "fileName": "id.pdf",
+      "fileType": "application/pdf",
+      "fileSize": 123456
+    }
+  ]
 }
 ```
+
+For loan and mortgage products, render the product detail `requirements` as the end-user application checklist. Upload binaries first through `/api/v1/applications/upload`, then send the returned URL as `fileUrl` in `requirementSubmissions`.
+
+**Application document upload:**
+
+```http
+POST /api/v1/applications/upload
+Content-Type: multipart/form-data
+```
+
+Use `file` for the binary field. You can also include `userId` as a form field so `product-ms` namespaces the Spaces object key by user. The response is:
+
+```json
+{
+  "success": true,
+  "url": "https://springtd-product-documents.nyc3.digitaloceanspaces.com/product-applications/user-uuid/file.pdf",
+  "key": "product-applications/user-uuid/file.pdf",
+  "fileName": "id.pdf",
+  "fileType": "application/pdf",
+  "fileSize": 123456
+}
+```
+
+Any `requirements.otherRequirements[]` item with `uploadRequired: true` or `required: true` must have a matching submission. Matching is by `requirementId`, `requirementType`, or `label`.
 
 ### By product type
 
 | `type` | Method | Path | Notes |
 |--------|--------|------|--------|
-| `LOAN` | `POST` | `/api/v1/loans/apply` | Or `/api/v1/applications/apply` |
-| `MORTGAGE` | `POST` | `/api/v1/mortgages/apply` | Same handler as applications |
+| `LOAN` | `POST` | `/api/v1/applications/apply` | Canonical apply path; proxied to `product-ms` |
+| `MORTGAGE` | `POST` | `/api/v1/applications/apply` | Canonical apply path; proxied to `product-ms` |
 | `COMMODITY` | `POST` | `/api/v1/commodities/buy` | Validates commodity type |
 | `SAVINGS` | `POST` | `/api/v1/savings-accounts` | See body below |
-| `INVESTMENT` | `POST` | `/api/v1/applications/apply` | May create account directly |
+| `INVESTMENT` | `POST` | `/api/v1/applications/apply` | Not supported by the product application table today; use product-specific flow |
+
+`/api/v1/applications/*` is proxied by `account-ms` to `product-ms`. Submitted loan/mortgage applications live in the `product-ms` `product_applications` collection. `/api/v1/loans/apply` and `/api/v1/mortgages/apply` remain gateway aliases, but new storefront clients should use `/api/v1/applications/apply`.
+
+For Plata upstream sync (`POST /api/v1/products/external-applications` via account-ms), include **`applicantName`**, **`phone`**, **`bvn`** (11 digits), and a valid **`email`**. The product must be activated from the Plata catalog (`upstreamProductId` on the local product).
+
+**Merchant roles:** Spring is the Plata integrator (`merchantId` from server env `PLATA_INTEGRATOR_MERCHANT_ID`). The tenant from login/app (`merchantId` on the apply body from gateway) is the **sub-merchant** (`offeringMerchantId`). Optionally send `subMerchant` or `subMerchantContactEmail` + `subMerchantContactPhone` for the usage event.
 
 **Savings body:**
 
@@ -407,21 +453,28 @@ Use **`user.id`** from login and **`product.id`** from detail.
   "success": true,
   "message": "Application submitted successfully. Pending approval.",
   "data": {
-    "type": "application",
-    "application": {
-      "id": "app_1",
-      "userId": "user-uuid",
-      "productId": "6790abc123def45678901234",
-      "productName": "Quick Loan",
-      "productType": "LOAN",
-      "amount": 50000,
-      "currency": "NGN",
-      "status": "PENDING",
-      "appId": "674a1b2c3d4e5f6789012345",
-      "merchantId": "merchant-uuid",
-      "createdAt": "2026-05-19T12:00:00.000Z",
-      "updatedAt": "2026-05-19T12:00:00.000Z"
-    }
+    "id": "application-id",
+    "userId": "user-uuid",
+    "productId": "6790abc123def45678901234",
+    "productName": "Quick Loan",
+    "productType": "LOAN",
+    "amount": 50000,
+    "currency": "NGN",
+    "status": "PENDING",
+    "appId": "674a1b2c3d4e5f6789012345",
+    "merchantId": "merchant-uuid",
+    "requirementsSnapshot": {
+      "security": { "guarantor": true }
+    },
+    "requirementSubmissions": [
+      {
+        "requirementId": "valid-id",
+        "type": "document",
+        "fileUrl": "https://springtd-product-documents.nyc3.digitaloceanspaces.com/id.pdf"
+      }
+    ],
+    "createdAt": "2026-05-19T12:00:00.000Z",
+    "updatedAt": "2026-05-19T12:00:00.000Z"
   }
 }
 ```
@@ -451,6 +504,7 @@ Use **`user.id`** from login and **`product.id`** from detail.
 | Status | Meaning |
 |--------|---------|
 | `400` | Missing `userId`, `productId`, `amount`, or `currency` |
+| `400` | Missing required product requirement submission |
 | `403` | Product not active for this app |
 | `404` | Product not found |
 | `500` | Server error — show `error` message |
@@ -481,6 +535,8 @@ Use **`user.id`** from login and **`product.id`** from detail.
       "currency": "NGN",
       "status": "PENDING",
       "appId": "674a1b2c3d4e5f6789012345",
+      "requirementsSnapshot": {},
+      "requirementSubmissions": [],
       "createdAt": "…",
       "updatedAt": "…"
     }

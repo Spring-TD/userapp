@@ -1,5 +1,4 @@
-import mockDb, { Application } from '../utils/mockDb';
-import productService from './productService';
+import productService, { ProductRequirementSubmission } from './productService';
 import accountService from './accountService';
 import createAppService from './createAppService';
 
@@ -9,6 +8,24 @@ export interface ApplyForProductInput {
     amount: number;
     currency: string;
     email?: string;
+    applicantName?: string;
+    phone?: string;
+    bvn?: string;
+    offeringMerchantName?: string;
+    country?: string;
+    integratorMerchantId?: string;
+    integratorMerchantName?: string;
+    productCreatorMerchantName?: string;
+    subMerchant?: {
+        id: string;
+        name: string;
+        email: string;
+        phone: string;
+        bvn?: string;
+    };
+    subMerchantContactEmail?: string;
+    subMerchantContactPhone?: string;
+    requirementSubmissions?: ProductRequirementSubmission[];
 }
 
 class ApplicationService {
@@ -45,17 +62,27 @@ class ApplicationService {
                     throw new Error('App not found for product');
                 }
 
-                // Create Application
-                const application = await mockDb.createApplication({
+                // Persist loan/mortgage applications in product-ms so product data and applicant requirements live together.
+                const application = await productService.createProductApplication({
                     userId: input.userId,
                     productId: input.productId,
-                    productName: product.name,
-                    productType: product.type,
                     amount: input.amount,
                     currency: input.currency,
-                    status: 'PENDING',
+                    email: input.email,
                     appId,
-                    merchantId: appInfo.merchantId
+                    merchantId: appInfo.merchantId,
+                    applicantName: input.applicantName,
+                    phone: input.phone,
+                    bvn: input.bvn,
+                    offeringMerchantName: input.offeringMerchantName,
+                    country: input.country,
+                    integratorMerchantId: input.integratorMerchantId,
+                    integratorMerchantName: input.integratorMerchantName,
+                    productCreatorMerchantName: input.productCreatorMerchantName,
+                    subMerchant: input.subMerchant,
+                    subMerchantContactEmail: input.subMerchantContactEmail,
+                    subMerchantContactPhone: input.subMerchantContactPhone,
+                    requirementSubmissions: input.requirementSubmissions
                 });
 
                 return {
@@ -96,7 +123,7 @@ class ApplicationService {
      */
     async approveApplication(applicationId: string, adminId: string) {
         try {
-            const app = await mockDb.getApplicationById(applicationId);
+            const app = await productService.getProductApplicationById(applicationId);
             if (!app) {
                 throw new Error('Application not found');
             }
@@ -105,8 +132,7 @@ class ApplicationService {
                 throw new Error(`Application is already ${app.status}`);
             }
 
-            // Update status to APPROVED
-            await mockDb.updateApplicationStatus(applicationId, 'APPROVED');
+            const updatedApplication = await productService.updateProductApplicationStatus(applicationId, 'APPROVED');
 
             // Create the actual account
             const account = await accountService.createAccount({
@@ -120,7 +146,7 @@ class ApplicationService {
                 success: true,
                 message: 'Application approved and account created.',
                 data: {
-                    application: app,
+                    application: updatedApplication,
                     account
                 }
             };
@@ -135,7 +161,7 @@ class ApplicationService {
      */
     async rejectApplication(applicationId: string, reason: string, adminId: string) {
         try {
-            const app = await mockDb.getApplicationById(applicationId);
+            const app = await productService.getProductApplicationById(applicationId);
             if (!app) {
                 throw new Error('Application not found');
             }
@@ -144,8 +170,7 @@ class ApplicationService {
                 throw new Error(`Application is already ${app.status}`);
             }
 
-            // Update status to REJECTED
-            const updatedApp = await mockDb.updateApplicationStatus(applicationId, 'REJECTED', reason);
+            const updatedApp = await productService.updateProductApplicationStatus(applicationId, 'REJECTED', reason);
 
             return {
                 success: true,
@@ -162,52 +187,46 @@ class ApplicationService {
      * Get all applications (admin) or all for one merchant (merchant listing).
      */
     async getAllApplications(merchantIdFilter?: string) {
-        if (merchantIdFilter) {
-            return await mockDb.getApplicationsByMerchantId(merchantIdFilter);
-        }
-        return await mockDb.getAllApplications();
+        return await productService.listProductApplications({ merchantId: merchantIdFilter });
     }
 
     /**
      * Get pending applications, optionally scoped to a merchant.
      */
     async getPendingApplications(merchantIdFilter?: string) {
-        const apps = merchantIdFilter
-            ? await mockDb.getApplicationsByMerchantId(merchantIdFilter)
-            : await mockDb.getAllApplications();
-        return apps.filter(a => a.status === 'PENDING');
+        return await productService.listProductApplications({ merchantId: merchantIdFilter, status: 'PENDING' });
     }
 
     /**
      * Get blacklisted mortgage applications, optionally scoped to a merchant.
      */
     async getBlacklistedMortgageApplications(merchantIdFilter?: string) {
-        const apps = merchantIdFilter
-            ? await mockDb.getApplicationsByMerchantId(merchantIdFilter)
-            : await mockDb.getAllApplications();
-        return apps.filter(a => a.productType === 'Mortgage' && a.status === 'BLACKLISTED');
+        return await productService.listProductApplications({
+            merchantId: merchantIdFilter,
+            productType: 'MORTGAGE',
+            status: 'BLACKLISTED'
+        });
     }
 
     /**
      * Get user's applications
      */
     async getUserApplications(userId: string) {
-        return await mockDb.getApplicationsByUserId(userId);
+        return await productService.listProductApplications({ userId });
     }
 
     /**
      * Get user's applications by type
      */
     async getUserApplicationsByType(userId: string, type: string) {
-        const apps = await mockDb.getApplicationsByUserId(userId);
-        return apps.filter(app => app.productType === type);
+        return await productService.listProductApplications({ userId, productType: type.toUpperCase() });
     }
 
     /**
      * Get application by ID
      */
     async getApplicationById(applicationId: string) {
-        return await mockDb.getApplicationById(applicationId);
+        return await productService.getProductApplicationById(applicationId);
     }
 
     /**
@@ -215,12 +234,12 @@ class ApplicationService {
      */
     async blacklistMortgageApplication(applicationId: string, reason: string, adminId: string) {
         try {
-            const app = await mockDb.getApplicationById(applicationId);
+            const app = await productService.getProductApplicationById(applicationId);
             if (!app) {
                 throw new Error('Application not found');
             }
 
-            if (app.productType !== 'Mortgage') {
+            if (String(app.productType).toUpperCase() !== 'MORTGAGE') {
                 throw new Error('Only mortgage applications can be blacklisted');
             }
 
@@ -232,7 +251,7 @@ class ApplicationService {
                 throw new Error('Application is already BLACKLISTED');
             }
 
-            const updatedApp = await mockDb.updateApplicationStatus(applicationId, 'BLACKLISTED', reason);
+            const updatedApp = await productService.updateProductApplicationStatus(applicationId, 'BLACKLISTED', reason);
 
             return {
                 success: true,

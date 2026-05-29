@@ -58,6 +58,16 @@ interface EnvironmentConfig {
   /** Merchant API keys used for upstream Plata requests */
   plataPublicKey: string;
   plataSecretKey: string;
+  /** External-platform integrator merchant id sent as body.merchantId (defaults to apply merchantId). */
+  plataIntegratorMerchantId: string;
+  plataIntegratorMerchantName: string;
+  /** wallet-ms origin for product application wallet provisioning */
+  walletServiceUrl: string;
+  /** Shared internal token expected by wallet-ms */
+  walletInternalToken: string;
+  walletServiceHttpTimeoutMs: number;
+  /** create-app-ms origin used for canonical transaction stats */
+  createAppServiceUrl: string;
   /** Max request body size for JSON (e.g. '10mb') */
   requestBodyLimit: string;
 }
@@ -76,5 +86,11 @@ export const config: EnvironmentConfig = {
   serverProductServiceUrl: upstreamProductCatalogBaseUrl,
   plataPublicKey: process.env.PLATA_PUBLIC_KEY || '',
   plataSecretKey: process.env.PLATA_SECRET_KEY || '',
+  plataIntegratorMerchantId: (process.env.PLATA_INTEGRATOR_MERCHANT_ID || '').trim(),
+  plataIntegratorMerchantName: (process.env.PLATA_INTEGRATOR_MERCHANT_NAME || '').trim(),
+  walletServiceUrl: process.env.WALLET_SERVICE_URL || 'http://localhost:4004',
+  walletInternalToken: (process.env.WALLET_INTERNAL_TOKEN || '').trim(),
+  walletServiceHttpTimeoutMs: parseInt(process.env.WALLET_SERVICE_HTTP_TIMEOUT_MS || '15000', 10),
+  createAppServiceUrl: process.env.CREATE_APP_SERVICE_URL || 'http://localhost:3002',
   requestBodyLimit: process.env.REQUEST_BODY_LIMIT || '10mb',
 };

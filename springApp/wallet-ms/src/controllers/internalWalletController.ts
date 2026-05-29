@@ -57,6 +57,82 @@ export class InternalWalletController {
     }
   }
 
+  static async ensureProductUserWallet(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const {
+        userId,
+        merchantId,
+        complianceShareholderUserId,
+        applicationId,
+        productId,
+        productName,
+        productType,
+        appId,
+        currency
+      } = req.body as {
+        userId?: string;
+        merchantId?: string;
+        complianceShareholderUserId?: string;
+        applicationId?: string;
+        productId?: string;
+        productName?: string;
+        productType?: string;
+        appId?: string;
+        currency?: string;
+      };
+
+      const required = { userId, merchantId, applicationId, productId, productType, currency };
+      for (const [key, value] of Object.entries(required)) {
+        if (!value || typeof value !== 'string' || !value.trim()) {
+          res.status(400).json({ success: false, error: `${key} is required` });
+          return;
+        }
+      }
+
+      const result = await WalletService.ensureProductUserWallet({
+        userId: userId!.trim(),
+        merchantId: merchantId!.trim(),
+        complianceShareholderUserId: complianceShareholderUserId?.trim() || undefined,
+        applicationId: applicationId!.trim(),
+        productId: productId!.trim(),
+        productName: productName?.trim() || undefined,
+        productType: productType!.trim().toUpperCase(),
+        appId: appId?.trim() || undefined,
+        currency: currency!.trim().toUpperCase()
+      });
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: result.error || 'Failed to ensure product wallet',
+          data: result.wallet ? { wallet: result.wallet } : undefined
+        });
+        return;
+      }
+
+      logger.info('Internal API: product user wallet ensured', {
+        userId: userId!.trim(),
+        merchantId: merchantId!.trim(),
+        applicationId: applicationId!.trim(),
+        walletId: result.wallet?.id,
+        reusedUpstreamAccount: result.reusedUpstreamAccount
+      });
+
+      res.status(result.skipped ? 200 : 201).json({
+        success: true,
+        skipped: result.skipped,
+        reusedUpstreamAccount: result.reusedUpstreamAccount,
+        message: result.reusedUpstreamAccount
+          ? 'Product wallet linked to existing upstream account'
+          : 'Product wallet created successfully',
+        data: { wallet: result.wallet }
+      });
+    } catch (error) {
+      logger.error('Internal API: ensure product user wallet failed', { error });
+      next(error);
+    }
+  }
+
   static async provisionUserNuban(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = (req.params.userId || '').trim();

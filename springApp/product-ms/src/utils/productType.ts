@@ -38,3 +38,14 @@ export function coerceStoredProductType(type: string): ProductDiscriminator {
   }
   return LEGACY_TYPE_MAP[type] ?? 'LOAN';
 }
+
+export function discriminatorFromStoredType(type: string | null | undefined): ProductDiscriminator | null {
+  if (!type) {
+    return null;
+  }
+  try {
+    return normalizeProductType(type);
+  } catch {
+    return null;
+  }
+}

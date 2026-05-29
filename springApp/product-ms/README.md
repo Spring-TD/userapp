@@ -3,12 +3,16 @@
 ## Overview
 `product-ms` exposes the shared Plata product catalog and manages app-specific enabled products.
 
-It now has two responsibilities:
+It now has four responsibilities:
 
 1. Fetch the full upstream product catalog from Plata.
 2. Persist products that an app has turned on into this service's local MongoDB `products` collection.
+3. Store submitted loan/mortgage applications, including requirement submissions, in the local MongoDB `product_applications` collection.
+4. Upload application requirement documents to DigitalOcean Spaces before application submission.
 
 When an app turns on a product, `product-ms` clones the upstream Plata product into its own `products` collection using the Plata product document structure. Turning the product off keeps the local app product but marks `isActive` as `false`.
+
+`account-ms` is the public gateway. Requests to `https://account-ms.fly.dev/api/v1/applications` are proxied to this service, so application ownership and storage stay in `product-ms`.
 
 Deployment URL: https://product-ms.fly.dev/
 
@@ -28,6 +32,33 @@ When clients call **`GET https://account-ms.fly.dev/api/v1/products`**, Spring *
 - `PLATA_PUBLIC_KEY`
 - `PLATA_SECRET_KEY`
 - `MONGODB_URI` or `DATABASE_URL`
+
+### Optional: application document uploads
+
+Loan/mortgage application documents are uploaded by `product-ms` to DigitalOcean Spaces through `POST /api/v1/applications/upload` (also available through `/api/v1/product-applications/upload`). `account-ms` proxies `/api/v1/applications/upload` to this service.
+
+Required for uploads:
+
+```env
+DO_SPACES_REGION=nyc3
+DO_SPACES_ENDPOINT=https://nyc3.digitaloceanspaces.com
+DO_SPACES_BUCKET=springtd-product-documents
+DO_SPACES_ACCESS_KEY_ID=your-access-key
+DO_SPACES_SECRET_ACCESS_KEY=your-secret-key
+```
+
+Optional:
+
+```env
+DO_SPACES_CDN_URL=https://springtd-product-documents.nyc3.cdn.digitaloceanspaces.com
+PRODUCT_APPLICATION_MAX_DOCUMENT_SIZE=10
+```
+
+Upload flow:
+
+1. `POST` multipart form-data to `/api/v1/applications/upload` with the file in the `file` field. Include optional `userId` as a form field to namespace the object key.
+2. Read the response `{ success, url, key, fileName, fileType, fileSize }`.
+3. Send that `url` and metadata as the matching `requirementSubmissions[].fileUrl` in `/api/v1/applications/apply`.
 
 ### Optional: notifications (email + in-app)
 
@@ -59,6 +90,7 @@ If both are unset but `PLATA_PUBLIC_KEY` and `PLATA_SECRET_KEY` are set, the ser
 2. User turns on a product for an app using `PUT /api/v1/products/toggle/:appId/:productId`.
 3. `product-ms` fetches that product from upstream and stores a local copy in MongoDB `products`.
 4. Frontend lists app-scoped products saved locally using `GET /api/v1/products/app/:appId`. That response includes **every** local row for the app (both `isActive: true` and `isActive: false`). Filter client-side to `isActive === true` when you only want products that are still turned on.
+5. End users apply for active loan/mortgage products through `/api/v1/applications/apply` (or gateway aliases such as `/api/v1/loans/apply`). Submitted applications are saved in `product_applications`.
 
 ## Storage Model
 
@@ -82,6 +114,21 @@ The local document shape follows the Plata product model, including fields such 
 - `feesAndCharges`
 
 This means each app’s products are stored as full product documents (with `isActive`), not as lightweight activation-only records.
+
+### Product Applications
+
+Submitted loan and mortgage applications live in the local MongoDB `product_applications` collection. This keeps applicant submissions beside the product configuration they refer to.
+
+Each application stores:
+
+- `userId`, `productId`, `productName`, `productType`
+- `amount`, `currency`, optional `email`
+- `status`: `PENDING`, `APPROVED`, `REJECTED`, or `BLACKLISTED`
+- `appId` and optional `merchantId`
+- `requirementsSnapshot`: the product `requirements` at the time the user applied
+- `requirementSubmissions`: user-submitted answers/files for those requirements
+
+`requirementsSnapshot` is intentionally persisted so later product configuration edits do not change the requirements attached to an already-submitted application.
 
 ### Fees and Charges Model (Additive)
 
@@ -229,6 +276,138 @@ Not supported in this service.
 
 **Endpoint:** `PUT /api/v1/products/:id/manage`
 
+### Product Applications
+
+Applications are owned by `product-ms` and exposed at both:
+
+- `POST /api/v1/applications/upload` — upload one requirement document to this service's DigitalOcean Spaces bucket
+- `POST /api/v1/applications/apply` — public/gateway-facing application endpoint
+- `POST /api/v1/product-applications` — lower-level product application endpoint
+
+`account-ms` proxies `/api/v1/applications/*` to this service. Loan and mortgage aliases in the gateway still call the same application creation flow.
+
+After a successful local save and wallet provisioning, loan/mortgage applies are forwarded to Plata when `PLATA_PUBLIC_KEY` and `PLATA_SECRET_KEY` are set:
+
+`POST {PLATA_ACCOUNT_SERVICE_URL}/api/v1/products/external-applications`
+
+Call **only through account-ms** (API gateway) with `PLATA_PUBLIC_KEY` and `PLATA_SECRET_KEY` — do not call product-ms directly.
+
+Body mapping (Spring → Plata):
+
+| Plata field | Spring source |
+|-------------|----------------|
+| `appId` | Plata global product `appId` (from catalog / `upstreamAppId`) |
+| `productId` | `upstreamProductId` on the local product |
+| `merchantId` | **Spring on Plata** — `PLATA_INTEGRATOR_MERCHANT_ID` (required) or `integratorMerchantId` |
+| `offeringMerchantId` | **Your tenant** — apply `merchantId` from create-app (sub-merchant on Plata) |
+| `subMerchant` | Auto-built from tenant when `subMerchantContactEmail` + `subMerchantContactPhone` are set, or pass `subMerchant` |
+| `externalUser` | `userId`, `applicantName`, `email`, `phone`, `bvn` (BVN required, 11 digits) |
+| `application.contractSnapshot` | Frozen terms + `requirementSubmissions` |
+| `application.merchantProductId` | Local Mongo product `_id` |
+
+Optional: `subMerchant`, `country` (default `NG`), `productCreatorMerchantName`, `offeringMerchantName`.
+
+If upstream is temporarily unavailable (HTTP 5xx), the local application is still saved and `upstreamSyncError` is set. HTTP 4xx from Plata fails the apply with 502.
+
+Test script: `scripts/loan-external-application-curl.ps1`
+
+**Apply request body:**
+
+```json
+{
+  "userId": "user-uuid",
+  "productId": "6790abc123def45678901234",
+  "amount": 50000,
+  "currency": "NGN",
+  "email": "jane@example.com",
+  "applicantName": "Jane Smith",
+  "phone": "+2348012345678",
+  "bvn": "22222222590",
+  "requirementSubmissions": [
+    {
+      "requirementId": "valid-id",
+      "requirementType": "identity",
+      "label": "Valid ID",
+      "type": "document",
+      "fileUrl": "https://springtd-product-documents.nyc3.digitaloceanspaces.com/id.pdf",
+      "fileName": "id.pdf",
+      "fileType": "application/pdf",
+      "fileSize": 123456
+    }
+  ]
+}
+```
+
+For `requirements.otherRequirements[]`, any item with `uploadRequired: true` or `required: true` must have a matching submission. Matching is by `requirementId`, `requirementType`, or `label`. Upload requirements must include `fileUrl`.
+
+**Apply response:**
+
+```json
+{
+  "success": true,
+  "message": "Application submitted successfully. Pending approval.",
+  "data": {
+    "id": "application-id",
+    "userId": "user-uuid",
+    "productId": "6790abc123def45678901234",
+    "productName": "Quick Loan",
+    "productType": "LOAN",
+    "amount": 50000,
+    "currency": "NGN",
+    "status": "PENDING",
+    "appId": "674a1b2c3d4e5f6789012345",
+    "merchantId": "merchant-uuid",
+    "requirementsSnapshot": {},
+    "requirementSubmissions": []
+  }
+}
+```
+
+**Other application endpoints:**
+
+- `GET /api/v1/applications` — admin or merchant list. Send `x-admin-id` for admin, or merchant `Authorization: Bearer <access JWT>` for merchant-scoped results.
+- `GET /api/v1/applications/pending` — pending applications, with the same admin/merchant access rules.
+- `GET /api/v1/applications/user/:userId` — applications for an end user.
+- `GET /api/v1/applications/:id` — application detail.
+- `POST /api/v1/applications/:id/approve` — admin approval using `x-admin-id`.
+- `POST /api/v1/applications/:id/reject` — admin rejection using `x-admin-id` and `{ "reason": "..." }`.
+
+## Product Overview Dashboard
+
+Single endpoint for the app-wide product dashboard headline and category cards.
+
+**Endpoint:** `GET /api/v1/products/app/:appId/product-overview`
+
+**Optional header:** `Authorization: Bearer <access_token>` is forwarded to create-app-ms when loading canonical transaction stats.
+
+**Headline mapping:**
+
+| UI label | API field |
+|---|---|
+| Requested | `data.headline.requestedAmount` |
+| Approved | `data.headline.approvedAmount` |
+| Total Transactions | `data.headline.totalTransactions` |
+| Total Savings | `data.headline.totalSavings` |
+| Total Interest | `data.headline.totalInterest` |
+
+**Category mapping:** match `data.byCategory[]` by `type` (`LOAN`, `MORTGAGE`, `SAVINGS`, `INVESTMENT`, `COMMODITY`).
+
+| UI label | API field |
+|---|---|
+| Product count | `configuredProductCount` |
+| Customers | `customerCount` |
+| Capital / Deposits | `capitalAmount` |
+| Issued / Interest Paid | `issuedAmount` |
+| Repayment / Withdrawals / COGS | `repaymentAmount` |
+| Inventory (commodity) | `inventoryAmount` |
+| Sales (commodity) | `salesAmount` |
+
+Per-product drill-down for one category:
+
+**Endpoint:** `GET /api/v1/products/app/:appId/product-overview/by-type/:productType`
+
+`productType` accepts `LOAN`, `MORTGAGE`, `SAVINGS`, `INVESTMENT`, or `COMMODITY`.
+
 ## Example Usage
 
 Fetch the full product catalog:
@@ -241,6 +420,13 @@ Fetch all app-scoped products for an app (includes inactive; filter by `isActive
 
 ```bash
 curl -X GET http://localhost:4005/api/v1/products/app/{appId}
+```
+
+Fetch the app-wide product overview dashboard:
+
+```bash
+curl -X GET http://localhost:4005/api/v1/products/app/{appId}/product-overview \
+  -H "Authorization: Bearer YOUR_JWT"
 ```
 
 Turn on a product for an app:

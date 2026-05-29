@@ -93,6 +93,11 @@ function docToWallet(doc: mongoose.Document | null): Wallet | null {
     userId: rest.userId as string,
     merchantId: rest.merchantId as string,
     complianceShareholderUserId: rest.complianceShareholderUserId as string | undefined,
+    walletPurpose: ((rest.walletPurpose as string | undefined) ?? 'PRIMARY') as UserWallet['walletPurpose'],
+    productApplicationId: rest.productApplicationId as string | undefined,
+    productId: rest.productId as string | undefined,
+    productType: rest.productType as string | undefined,
+    appId: rest.appId as string | undefined,
     name: rest.name as string
   } as UserWallet;
 }
@@ -123,6 +128,19 @@ export type PayonusNubanPatchFields = {
   payonusNubanProvisionError?: string | null;
   payonusNubanProvisionedAt?: Date | null;
 };
+
+export async function ensureWalletIndexes(): Promise<void> {
+  try {
+    const indexes = await WalletModel.collection.indexes();
+    const legacyUserIdIndex = indexes.find((index) => index.name === 'userId_1' && index.unique);
+    if (legacyUserIdIndex) {
+      await WalletModel.collection.dropIndex('userId_1');
+    }
+    await WalletModel.createIndexes();
+  } catch (error) {
+    console.warn('Wallet index migration skipped or failed:', error instanceof Error ? error.message : error);
+  }
+}
 
 export const db = {
   async createMerchantWallet(data: {
@@ -156,6 +174,11 @@ export const db = {
     userId: string;
     merchantId: string;
     complianceShareholderUserId?: string;
+    walletPurpose?: UserWallet['walletPurpose'];
+    productApplicationId?: string;
+    productId?: string;
+    productType?: string;
+    appId?: string;
     name: string;
     currency: string;
   }): Promise<UserWallet> {
@@ -164,6 +187,11 @@ export const db = {
       userId: data.userId,
       merchantId: data.merchantId,
       ...(data.complianceShareholderUserId ? { complianceShareholderUserId: data.complianceShareholderUserId } : {}),
+      walletPurpose: data.walletPurpose ?? 'PRIMARY',
+      ...(data.productApplicationId ? { productApplicationId: data.productApplicationId } : {}),
+      ...(data.productId ? { productId: data.productId } : {}),
+      ...(data.productType ? { productType: data.productType } : {}),
+      ...(data.appId ? { appId: data.appId } : {}),
       name: data.name,
       balance: 0,
       mainBalance: 0,
@@ -210,7 +238,32 @@ export const db = {
   },
 
   async getUserWallet(userId: string): Promise<UserWallet | null> {
-    const doc = await WalletModel.findOne({ walletType: 'USER', userId });
+    const doc = await WalletModel.findOne({
+      walletType: 'USER',
+      userId,
+      $or: [{ walletPurpose: 'PRIMARY' }, { walletPurpose: { $exists: false } }]
+    });
+    return docToWallet(doc) as UserWallet | null;
+  },
+
+  async getProductUserWallet(userId: string, productApplicationId: string): Promise<UserWallet | null> {
+    const doc = await WalletModel.findOne({
+      walletType: 'USER',
+      userId,
+      walletPurpose: 'PRODUCT',
+      productApplicationId
+    });
+    return docToWallet(doc) as UserWallet | null;
+  },
+
+  async findUserWalletWithActivePayonusAccount(userId: string, merchantId?: string): Promise<UserWallet | null> {
+    const doc = await WalletModel.findOne({
+      walletType: 'USER',
+      userId,
+      ...(merchantId ? { merchantId } : {}),
+      payonusNubanProvisionStatus: 'active',
+      payonusNubanAccountNumber: { $exists: true, $ne: '' }
+    }).sort({ walletPurpose: 1, createdAt: 1 });
     return docToWallet(doc) as UserWallet | null;
   },
 

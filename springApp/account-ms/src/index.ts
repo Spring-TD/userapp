@@ -7,7 +7,6 @@ import swaggerUi from 'swagger-ui-express';
 import { config } from './config/environment';
 import { swaggerServices, getServiceById, gatewaySpec } from './config/swagger';
 import accountRoutes from './routes/accountRoutes';
-import applicationRoutes from './routes/applicationRoutes';
 import loanRoutes from './routes/loanRoutes';
 import commodityRoutes from './routes/commodityRoutes';
 import savingsRoutes from './routes/savingsRoutes';
@@ -36,7 +35,6 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api/v1', accountRoutes);
-app.use('/api/v1/applications', applicationRoutes);
 app.use('/api/v1/loans', loanRoutes);
 app.use('/api/v1/commodities', commodityRoutes);
 app.use('/api/v1/savings-accounts', savingsRoutes);

@@ -5,6 +5,8 @@ import { ApiError } from '../middleware/errorHandler';
 import { validateInput, createProductSchema, updateProductSchema, selectProductTypeSchema, createProductAfterTypeSchema } from '../utils/validation';
 import { getAccessTokenUser } from '../utils/gatewayUser';
 import { sendProductConfigurationNotification } from '../services/notificationHelper';
+import { getProductOverviewByTypeForApp, getProductOverviewForApp } from '../services/productOverviewService';
+import { normalizeProductType } from '../utils/productType';
 
 interface TypedRequest<T> extends Request {
   body: T;
@@ -204,6 +206,80 @@ export class ProductController {
       }
 
       console.error('Error in getProductsByAppId controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  };
+
+  /** GET /api/v1/products/app/:appId/product-overview — app-wide headline + category cards */
+  getProductOverview = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { appId } = req.params;
+
+      if (!appId?.trim()) {
+        throw new ApiError(400, 'App ID is required');
+      }
+
+      const authHeader = req.headers.authorization;
+      const data = await getProductOverviewForApp(appId.trim(), {
+        bearerToken: typeof authHeader === 'string' ? authHeader : undefined
+      });
+
+      res.json({
+        success: true,
+        data
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+        return;
+      }
+
+      console.error('Error in getProductOverview controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  };
+
+  /** GET /api/v1/products/app/:appId/product-overview/by-type/:productType — per-product category table */
+  getProductOverviewByType = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { appId, productType } = req.params;
+
+      if (!appId?.trim()) {
+        throw new ApiError(400, 'App ID is required');
+      }
+
+      let type;
+      try {
+        type = normalizeProductType(String(productType ?? ''));
+      } catch {
+        throw new ApiError(400, 'Invalid product type');
+      }
+
+      const data = await getProductOverviewByTypeForApp(appId.trim(), type);
+
+      res.json({
+        success: true,
+        data
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+        return;
+      }
+
+      console.error('Error in getProductOverviewByType controller:', error);
       res.status(500).json({
         success: false,
         error: 'Internal server error'

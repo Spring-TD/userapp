@@ -61,6 +61,83 @@ export interface ProductInfo {
     currency?: string;
 }
 
+export type ProductApplicationStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'BLACKLISTED';
+
+export interface ProductRequirementSubmission {
+    requirementId?: string;
+    requirementType?: string;
+    label?: string;
+    type?: 'document' | 'text' | 'number' | 'boolean' | 'json';
+    value?: unknown;
+    fileUrl?: string;
+    fileName?: string;
+    fileType?: string;
+    fileSize?: number;
+    metadata?: Record<string, unknown>;
+}
+
+export interface ProductApplication {
+    id: string;
+    userId: string;
+    productId: string;
+    productName: string;
+    productType: string;
+    amount: number;
+    currency: string;
+    email?: string;
+    status: ProductApplicationStatus;
+    rejectionReason?: string;
+    blacklistReason?: string;
+    appId: string;
+    merchantId?: string;
+    requirementsSnapshot?: Record<string, unknown>;
+    requirementSubmissions: ProductRequirementSubmission[];
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface CreateProductApplicationInput {
+    userId: string;
+    productId: string;
+    amount: number;
+    currency: string;
+    email?: string;
+    merchantId?: string;
+    appId?: string;
+    applicantName?: string;
+    phone?: string;
+    bvn?: string;
+    offeringMerchantName?: string;
+    country?: string;
+    integratorMerchantId?: string;
+    integratorMerchantName?: string;
+    productCreatorMerchantName?: string;
+    subMerchant?: {
+        id: string;
+        name: string;
+        email: string;
+        phone: string;
+        bvn?: string;
+    };
+    subMerchantContactEmail?: string;
+    subMerchantContactPhone?: string;
+    requirementSubmissions?: ProductRequirementSubmission[];
+}
+
+export interface ListProductApplicationsQuery {
+    merchantId?: string;
+    userId?: string;
+    status?: ProductApplicationStatus;
+    productType?: string;
+}
+
+export class ProductServiceError extends Error {
+    constructor(message: string, public statusCode?: number) {
+        super(message);
+        Object.setPrototypeOf(this, new.target.prototype);
+    }
+}
+
 class ProductService {
     private baseUrl: string;
 
@@ -86,6 +163,102 @@ class ProductService {
         } catch (error: any) {
             console.error('Error getting product info:', error.message);
             return null;
+        }
+    }
+
+    private throwProductServiceError(error: unknown, fallback: string): never {
+        if (axios.isAxiosError(error)) {
+            const data = error.response?.data as { error?: string; message?: string } | undefined;
+            throw new ProductServiceError(
+                data?.error || data?.message || error.message || fallback,
+                error.response?.status
+            );
+        }
+
+        throw new ProductServiceError(fallback);
+    }
+
+    async createProductApplication(input: CreateProductApplicationInput): Promise<ProductApplication> {
+        try {
+            const response = await axios.post(`${this.baseUrl}/api/v1/product-applications`, input, {
+                headers: {
+                    'Authorization': 'Bearer sams_account_service_token'
+                }
+            });
+
+            if (response.data.success && response.data.data) {
+                return response.data.data;
+            }
+
+            throw new Error(response.data.error || 'Failed to create product application');
+        } catch (error) {
+            this.throwProductServiceError(error, 'Failed to create product application');
+        }
+    }
+
+    async getProductApplicationById(applicationId: string): Promise<ProductApplication | null> {
+        try {
+            const response = await axios.get(`${this.baseUrl}/api/v1/product-applications/${applicationId}`, {
+                headers: {
+                    'Authorization': 'Bearer sams_account_service_token'
+                }
+            });
+
+            if (response.data.success && response.data.data) {
+                return response.data.data;
+            }
+
+            return null;
+        } catch (error) {
+            if (axios.isAxiosError(error) && error.response?.status === 404) {
+                return null;
+            }
+            this.throwProductServiceError(error, 'Failed to get product application');
+        }
+    }
+
+    async listProductApplications(query: ListProductApplicationsQuery = {}): Promise<ProductApplication[]> {
+        try {
+            const response = await axios.get(`${this.baseUrl}/api/v1/product-applications`, {
+                params: query,
+                headers: {
+                    'Authorization': 'Bearer sams_account_service_token'
+                }
+            });
+
+            if (response.data.success && response.data.data) {
+                return response.data.data;
+            }
+
+            return [];
+        } catch (error) {
+            this.throwProductServiceError(error, 'Failed to list product applications');
+        }
+    }
+
+    async updateProductApplicationStatus(
+        applicationId: string,
+        status: Exclude<ProductApplicationStatus, 'PENDING'>,
+        reason?: string
+    ): Promise<ProductApplication> {
+        try {
+            const response = await axios.put(
+                `${this.baseUrl}/api/v1/product-applications/${applicationId}/status`,
+                { status, reason },
+                {
+                    headers: {
+                        'Authorization': 'Bearer sams_account_service_token'
+                    }
+                }
+            );
+
+            if (response.data.success && response.data.data) {
+                return response.data.data;
+            }
+
+            throw new Error(response.data.error || 'Failed to update product application status');
+        } catch (error) {
+            this.throwProductServiceError(error, 'Failed to update product application status');
         }
     }
 

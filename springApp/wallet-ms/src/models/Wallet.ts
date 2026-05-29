@@ -33,6 +33,8 @@ export enum MerchantWalletType {
   SETTLEMENT = 'SETTLEMENT'    // Settlement Wallet
 }
 
+export type UserWalletPurpose = 'PRIMARY' | 'PRODUCT';
+
 export interface MerchantWallet extends BaseWallet {
   merchantId: string;
   /**
@@ -54,6 +56,11 @@ export interface UserWallet extends BaseWallet {
   /** Merchant owner's auth userId for compliance shareholder / BVN lookup. */
   complianceShareholderUserId?: string;
   walletType: 'USER';
+  walletPurpose: UserWalletPurpose;
+  productApplicationId?: string;
+  productId?: string;
+  productType?: string;
+  appId?: string;
   name: string;
 }
 

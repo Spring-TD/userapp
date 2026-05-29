@@ -39,6 +39,11 @@ export const setupProxies = (app: Express) => {
         createProxyMiddleware(createOptions(config.productServiceUrl, '/api/v1/configurations'))
     );
 
+    app.use(
+        '/api/v1/applications',
+        createProxyMiddleware(createOptions(config.productServiceUrl, '/api/v1/applications'))
+    );
+
     // Compliance Service Proxy
     app.use(
         '/api/v1/compliance',

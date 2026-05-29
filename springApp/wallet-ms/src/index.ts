@@ -11,6 +11,7 @@ import { walletRoutes } from './routes/walletRoutes';
 import { internalWalletRoutes } from './routes/internalWalletRoutes';
 import { transactionRoutes } from './routes/transactionRoutes';
 import { errorHandler } from './middleware/errorHandler';
+import { ensureWalletIndexes } from './db/database';
 
 dotenv.config();
 
@@ -90,6 +91,7 @@ app.use(errorHandler);
 mongoose.connect(config.mongoUri)
   .then(() => {
     console.log('✅ Connected to MongoDB (DigitalOcean)');
+    void ensureWalletIndexes();
   })
   .catch((err) => {
     console.error('❌ MongoDB connection error:', err);

@@ -68,6 +68,8 @@ npm start
 - `DELETE /api/v1/accounts/:id` - Delete an account
 
 ### Application Processing
+These routes are gateway routes only. `account-ms` proxies `/api/v1/applications/*` to `product-ms`, where submitted loan/mortgage applications are stored.
+
 - `POST /api/v1/applications/apply` - Apply for a product
 - `POST /api/v1/applications/:id/approve` - Approve application (Admin)
 - `POST /api/v1/applications/:id/reject` - Reject application (Admin)
@@ -84,12 +86,12 @@ npm start
 - `GET /api/v1/pricing/product/:productId` - Get product pricing
 
 ### Loan Services
-- `POST /api/v1/loans/apply` - Apply for a loan
+- `POST /api/v1/loans/apply` - Apply for a loan (gateway alias; submitted applications are stored in `product-ms`)
 - `GET /api/v1/loans/:id` - Get loan details (application)
 - `GET /api/v1/loans/user/:userId` - Get all user's loans
 
 ### Mortgage Services
-- `POST /api/v1/mortgages/apply` - Apply for a mortgage
+- `POST /api/v1/mortgages/apply` - Apply for a mortgage (gateway alias; submitted applications are stored in `product-ms`)
 - `GET /api/v1/mortgages/blacklisted` - Get blacklisted mortgage applications (Admin or merchant-scoped)
 - `POST /api/v1/mortgages/:id/blacklist` - Blacklist a mortgage application (Admin)
 - `GET /api/v1/mortgages/:id` - Get mortgage details (application)
@@ -108,6 +110,7 @@ This service acts as the API Gateway for the SpringTD platform. It proxies reque
 
 - `/api/v1/products/*` -> Product Service
 - `/api/v1/configurations/*` -> Product Service
+- `/api/v1/applications/*` -> Product Service
 - `/api/v1/compliance/*` -> Compliance Service
 - `/api/v1/wallets/*` -> Wallet Service
 - `/api/v1/billing/*` -> Billing Service
@@ -167,10 +170,35 @@ Without valid headers (or when IP is not whitelisted), the gateway returns `401`
 
 | Function               | Method | API Endpoint                                          | Body Parameters (Example)                     |
 | ---------------------- | ------ | ----------------------------------------------------- | --------------------------------------------- |
-| Apply for loan         | POST   | `https://account-ms.fly.dev/api/v1/loans/apply`       | `{ product_id, merchant_id, user_id }`        |
-| Apply for mortgage     | POST   | `https://account-ms.fly.dev/api/v1/mortgages/apply`   | `{ product_id, merchant_id, user_id }`        |
+| Apply for loan         | POST   | `https://account-ms.fly.dev/api/v1/loans/apply`       | `{ userId, productId, amount, currency, requirementSubmissions }` |
+| Apply for mortgage     | POST   | `https://account-ms.fly.dev/api/v1/mortgages/apply`   | `{ userId, productId, amount, currency, requirementSubmissions }` |
+| Apply directly         | POST   | `https://account-ms.fly.dev/api/v1/applications/apply` | Same body; proxied to `product-ms` |
 | Create savings account | POST   | `https://account-ms.fly.dev/api/v1/savings-accounts/` | `{ product_id, user_id, initial_deposit... }` |
 | Buy commodity          | POST   | `https://account-ms.fly.dev/api/v1/commodities/buy`   | `{ product_id, user_id, amount }`             |
+
+Submitted loan/mortgage applications are persisted by `product-ms` in its `product_applications` collection. `account-ms` only proxies `/api/v1/applications/*` as the gateway.
+
+For requirement files, upload first to `POST https://account-ms.fly.dev/api/v1/applications/upload` as multipart form-data with the file in the `file` field. The gateway proxies the upload to `product-ms`, which stores the object in its DigitalOcean Spaces bucket and returns `{ url, key, fileName, fileType, fileSize }`.
+
+Example application body:
+
+```json
+{
+  "userId": "user-uuid",
+  "productId": "local-product-id",
+  "amount": 50000,
+  "currency": "NGN",
+  "email": "jane@example.com",
+  "requirementSubmissions": [
+    {
+      "requirementId": "valid-id",
+      "label": "Valid ID",
+      "type": "document",
+      "fileUrl": "https://example.com/id.pdf"
+    }
+  ]
+}
+```
 
 ---
 
