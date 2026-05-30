@@ -43,6 +43,7 @@ app.get('/', (_req, res) => {
       productOverviewByType: '/api/v1/products/app/:appId/product-overview/by-type/:productType',
       configurations: '/api/v1/configurations',
       applications: '/api/v1/applications',
+      applicationsSummary: '/api/v1/applications/summary',
       productApplications: '/api/v1/product-applications'
     },
     features: [

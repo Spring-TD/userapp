@@ -85,7 +85,59 @@ export interface CreateProductApplicationRequest {
   requirementSubmissions?: ProductRequirementSubmission[];
 }
 
+export interface SubmitProductApplicationRequirementsRequest {
+  userId?: string;
+  requirementSubmissions: ProductRequirementSubmission[];
+}
+
+export interface CreateApplicationGuarantorRequest {
+  userId?: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  occupation?: string;
+  relationship?: string;
+  country?: string;
+  callback?: string;
+  redirect?: string;
+}
+
+export interface SubmitProductApplicationRequest {
+  userId?: string;
+  acceptedTerms: boolean;
+  mortgageSelection?: {
+    propertyName?: string;
+    propertyType?: string;
+    location?: string;
+    unitPrice?: number;
+    quantity?: number;
+    startDate?: string;
+    investmentPeriod?: string;
+    total?: number;
+    metadata?: Record<string, unknown>;
+  };
+  metadata?: Record<string, unknown>;
+}
+
 export interface UpdateProductApplicationStatusRequest {
   status: Exclude<ProductApplicationStatus, 'PENDING'>;
   reason?: string;
+}
+
+/** Query filters for listing or summarizing product applications. */
+export interface ApplicationListQuery {
+  merchantId?: string;
+  userId?: string;
+  appId?: string;
+  status?: ProductApplicationStatus;
+  productType?: string;
+}
+
+/** Status counts for merchant customer application dashboards. */
+export interface ApplicationSummary {
+  total: number;
+  pending: number;
+  approved: number;
+  rejected: number;
+  blacklisted: number;
 }

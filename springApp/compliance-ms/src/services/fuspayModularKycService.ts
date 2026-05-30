@@ -51,6 +51,7 @@ export interface FuspayCreateVerificationUserPayload {
 /** Extended Modular KYC body (docs.fuspay.us style: customer_id + optional country + checks). */
 export interface FuspayCreateVerificationExtendedRequest {
   customer_id: string;
+  kyc_type?: string;
   country?: string;
   callback?: string;
   redirect?: string;

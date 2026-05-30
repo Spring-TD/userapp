@@ -41,11 +41,15 @@ type UpstreamExternalApplicationBody = {
 type UpstreamExternalApplicationResponse = {
   success?: boolean;
   data?: {
-    application?: { id?: string };
+    application?: { id?: string; [key: string]: unknown };
     applicationCreated?: boolean;
+    [key: string]: unknown;
   };
   error?: string;
+  [key: string]: unknown;
 };
+
+type UpstreamAccountDetails = NonNullable<SubmitUpstreamExternalApplicationResult['upstreamAccount']>;
 
 export class UpstreamApplicationService {
   isConfigured(): boolean {
@@ -66,6 +70,106 @@ export class UpstreamApplicationService {
     } else {
       console.error(context, error);
     }
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> | null {
+    return value !== undefined && value !== null && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : null;
+  }
+
+  private firstStringFrom(record: Record<string, unknown> | null, keys: string[]): string | undefined {
+    if (!record) {
+      return undefined;
+    }
+    for (const key of keys) {
+      const value = record[key];
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return String(value);
+      }
+    }
+    return undefined;
+  }
+
+  private accountFromRecord(record: Record<string, unknown> | null): UpstreamAccountDetails | null {
+    if (!record) {
+      return null;
+    }
+
+    const accountNumber = this.firstStringFrom(record, [
+      'accountNumber',
+      'account_number',
+      'nuban',
+      'virtualAccountNumber',
+      'virtual_account_number'
+    ]);
+    const provisionStatus = this.firstStringFrom(record, ['provisionStatus', 'provision_status', 'status']);
+    const provisionError = this.firstStringFrom(record, ['provisionError', 'provision_error', 'error']);
+
+    if (!accountNumber && !provisionStatus && !provisionError) {
+      return null;
+    }
+
+    return {
+      accountNumber,
+      bankName: this.firstStringFrom(record, ['bankName', 'bank_name', 'bank']),
+      bankCode: this.firstStringFrom(record, ['bankCode', 'bank_code']),
+      providerReference: this.firstStringFrom(record, [
+        'providerReference',
+        'provider_reference',
+        'reference',
+        'id',
+        'walletId',
+        'wallet_id'
+      ]),
+      provisionStatus: provisionStatus ?? (accountNumber ? 'active' : undefined),
+      provisionError
+    };
+  }
+
+  private extractUpstreamAccount(response: UpstreamExternalApplicationResponse): UpstreamAccountDetails | undefined {
+    const root = this.asRecord(response);
+    const data = this.asRecord(response.data);
+    const application = this.asRecord(data?.application);
+
+    const candidates: Array<Record<string, unknown> | null> = [
+      this.asRecord(data?.upstreamAccount),
+      this.asRecord(data?.account),
+      this.asRecord(data?.bankAccount),
+      this.asRecord(data?.virtualNuban),
+      this.asRecord(data?.virtualAccount),
+      this.asRecord(data?.wallet),
+      this.asRecord(this.asRecord(data?.wallet)?.virtualNuban),
+      this.asRecord(this.asRecord(data?.wallet)?.virtualAccount),
+      this.asRecord(data?.productWallet),
+      this.asRecord(this.asRecord(data?.productWallet)?.upstreamAccount),
+      this.asRecord(application?.upstreamAccount),
+      this.asRecord(application?.account),
+      this.asRecord(application?.bankAccount),
+      this.asRecord(application?.virtualNuban),
+      this.asRecord(application?.virtualAccount),
+      this.asRecord(application?.wallet),
+      this.asRecord(this.asRecord(application?.wallet)?.virtualNuban),
+      this.asRecord(this.asRecord(application?.wallet)?.virtualAccount),
+      this.asRecord(application?.productWallet),
+      this.asRecord(this.asRecord(application?.productWallet)?.upstreamAccount),
+      this.asRecord(root?.upstreamAccount),
+      this.asRecord(root?.account),
+      this.asRecord(root?.virtualNuban),
+      this.asRecord(root?.virtualAccount)
+    ];
+
+    for (const candidate of candidates) {
+      const account = this.accountFromRecord(candidate);
+      if (account) {
+        return account;
+      }
+    }
+
+    return undefined;
   }
 
   private async fetchUpstreamCatalogProduct(globalProductId: string): Promise<UpstreamCatalogProduct | null> {
@@ -281,7 +385,8 @@ export class UpstreamApplicationService {
         const upstreamApplicationId = response.data?.data?.application?.id;
         return {
           upstreamApplicationId,
-          applicationCreated: response.data?.data?.applicationCreated
+          applicationCreated: response.data?.data?.applicationCreated,
+          upstreamAccount: this.extractUpstreamAccount(response.data)
         };
       }
 

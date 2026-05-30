@@ -127,6 +127,7 @@ export interface CreateProductApplicationInput {
 export interface ListProductApplicationsQuery {
     merchantId?: string;
     userId?: string;
+    appId?: string;
     status?: ProductApplicationStatus;
     productType?: string;
 }

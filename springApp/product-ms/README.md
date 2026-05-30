@@ -365,12 +365,75 @@ For `requirements.otherRequirements[]`, any item with `uploadRequired: true` or 
 
 **Other application endpoints:**
 
-- `GET /api/v1/applications` — admin or merchant list. Send `x-admin-id` for admin, or merchant `Authorization: Bearer <access JWT>` for merchant-scoped results.
+- `GET /api/v1/applications` — admin or merchant list. Send `x-admin-id` for admin, or merchant `Authorization: Bearer <access JWT>` for merchant-scoped results. Optional query: `userId`, `appId`, `status`, `productType`.
+- `GET /api/v1/applications/summary` — status counts (`total`, `pending`, `approved`, `rejected`, `blacklisted`) with the same auth and query filters as the list (except `status` is not applied to the summary).
 - `GET /api/v1/applications/pending` — pending applications, with the same admin/merchant access rules.
-- `GET /api/v1/applications/user/:userId` — applications for an end user.
+- `GET /api/v1/applications/user/:userId` — applications for an end user. Optional query: `appId`, `status`, `productType` (no merchant scoping unless you also send a merchant JWT on `GET /api/v1/applications?userId=…`).
 - `GET /api/v1/applications/:id` — application detail.
 - `POST /api/v1/applications/:id/approve` — admin approval using `x-admin-id`.
 - `POST /api/v1/applications/:id/reject` — admin rejection using `x-admin-id` and `{ "reason": "..." }`.
+
+**Merchant customer application list (direct gateway contract):**
+
+Use this lower-level product-ms route when the caller already has a merchant JWT and wants applications for one customer on one app. For the merchant dashboard UI, prefer the create-app route `GET /api/v1/apps/{appId}/customers/{userId}/applications`, which also verifies app ownership.
+
+```http
+GET /api/v1/applications?userId={userId}&appId={appId}
+Authorization: Bearer <merchant-jwt>
+```
+
+Optional query: `productType` (`LOAN`, `MORTGAGE`, `SAVINGS`, `INVESTMENT`, `COMMODITY`, ...), `status` (`PENDING`, `APPROVED`, `REJECTED`, `BLACKLISTED`).
+
+**Success response**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "app_1",
+      "userId": "user-uuid",
+      "productId": "6790abc123def45678901234",
+      "productName": "Quick Loan",
+      "productType": "LOAN",
+      "amount": 50000,
+      "currency": "NGN",
+      "email": "customer@example.com",
+      "status": "PENDING",
+      "appId": "674a1b2c3d4e5f6789012345",
+      "merchantId": "merchant-uuid",
+      "requirementsSnapshot": {},
+      "requirementSubmissions": [],
+      "createdAt": "2026-05-19T12:00:00.000Z",
+      "updatedAt": "2026-05-19T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+**Merchant customer application summary (direct gateway contract):**
+
+```http
+GET /api/v1/applications/summary?userId={userId}&appId={appId}
+Authorization: Bearer <merchant-jwt>
+```
+
+Optional query: `productType`. Do not send `status` for dashboard summary cards.
+
+**Success response**
+
+```json
+{
+  "success": true,
+  "data": {
+    "total": 4,
+    "pending": 1,
+    "approved": 2,
+    "rejected": 1,
+    "blacklisted": 0
+  }
+}
+```
 
 ## Product Overview Dashboard
 

@@ -197,6 +197,101 @@ export class KYCController {
     }
   }
 
+  static async createGuarantorFuspayVerification(req: Request, res: Response, next: NextFunction) {
+    try {
+      const body = req.body || {};
+      const fullName = typeof body.fullName === 'string' ? body.fullName.trim() : '';
+      const email = typeof body.email === 'string' ? body.email.trim() : '';
+      const phone = typeof body.phone === 'string' ? body.phone.trim() : '';
+      const country = typeof body.country === 'string' && body.country.trim() ? body.country.trim().toUpperCase() : 'NG';
+      const userRef =
+        typeof body.userRef === 'string' && body.userRef.trim()
+          ? body.userRef.trim()
+          : `guarantor_${uuidv4()}`;
+
+      if (!fullName || !email || !phone) {
+        return res.status(400).json({
+          success: false,
+          error: 'fullName, email, and phone are required'
+        });
+      }
+
+      const userResult = await fuspayModularKycService.createUser({
+        email,
+        phone,
+        country,
+        userRef
+      });
+      if (!userResult.success) {
+        return res.status(400).json({
+          success: false,
+          error: `Fuspay guarantor user creation failed: ${userResult.error || 'Unknown error'}`
+        });
+      }
+
+      const userData = userResult.data as Record<string, unknown> | undefined;
+      const nestedUserData = userData?.data as Record<string, unknown> | undefined;
+      const customerId =
+        (userData?.customer_id as string | undefined) ||
+        (nestedUserData?.customer_id as string | undefined) ||
+        (nestedUserData?.id as string | undefined);
+
+      if (!customerId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Fuspay guarantor user creation did not return a customer id'
+        });
+      }
+
+      const verificationResult = await fuspayModularKycService.createVerification({
+        customer_id: customerId,
+        kyc_type: 'individual',
+        country,
+        callback: body.callback,
+        redirect: body.redirect,
+        individual_checks: body.individual_checks,
+        business_checks: body.business_checks,
+        aml_checks: body.aml_checks,
+        additional_fields: [
+          { key: 'fullName', value: fullName },
+          { key: 'email', value: email },
+          { key: 'phone', value: phone },
+          ...(typeof body.occupation === 'string' ? [{ key: 'occupation', value: body.occupation }] : []),
+          ...(typeof body.relationship === 'string' ? [{ key: 'relationship', value: body.relationship }] : []),
+          ...(typeof body.applicationId === 'string' ? [{ key: 'applicationId', value: body.applicationId }] : []),
+          ...(typeof body.productId === 'string' ? [{ key: 'productId', value: body.productId }] : [])
+        ]
+      });
+
+      if (!verificationResult.success) {
+        return res.status(400).json(verificationResult);
+      }
+
+      const verificationData = verificationResult.data as Record<string, unknown> | undefined;
+      const verificationUrl = verificationData?.verification_url as string | undefined;
+      const verificationId = verificationData?.verification_id as string | undefined;
+
+      return res.status(201).json({
+        success: true,
+        message: 'Guarantor KYC verification created successfully',
+        data: {
+          customerId,
+          userRef,
+          verificationId,
+          verificationUrl,
+          reference: verificationData?.reference,
+          status: verificationData?.status,
+          totalChecks: verificationData?.total_checks,
+          raw: verificationData
+        },
+        verification_url: verificationUrl,
+        verification_id: verificationId
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   /** Fuspay/Payonus webhook — no JWT; optional `FUSPAY_MODULAR_WEBHOOK_SECRET` via header `x-fuspay-webhook-secret`. */
   static async handleFuspayModularWebhook(req: Request, res: Response, next: NextFunction) {
     try {

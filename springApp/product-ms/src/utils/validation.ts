@@ -153,6 +153,53 @@ export const createProductApplicationSchema = Joi.object({
   requirementSubmissions: Joi.array().items(requirementSubmissionSchema).default([])
 });
 
+export const initProductApplicationSchema = createProductApplicationSchema.keys({
+  merchantId: Joi.string().trim().required(),
+  email: Joi.string().email().required(),
+  applicantName: Joi.string().trim().min(1).max(200).required(),
+  phone: Joi.string().trim().min(3).max(40).required(),
+  bvn: Joi.string().trim().pattern(/^\d{11}$/).required().messages({
+    'string.pattern.base': 'bvn must be exactly 11 digits'
+  }),
+  requirementSubmissions: Joi.forbidden()
+});
+
+export const submitProductApplicationRequirementsSchema = Joi.object({
+  userId: Joi.string().trim().optional(),
+  requirementSubmissions: Joi.array().items(requirementSubmissionSchema).required()
+});
+
+export const createApplicationGuarantorSchema = Joi.object({
+  userId: Joi.string().trim().optional(),
+  fullName: Joi.string().trim().min(1).max(200).required(),
+  email: Joi.string().email().required(),
+  phone: Joi.string().trim().min(3).max(40).required(),
+  occupation: Joi.string().trim().min(1).max(120).optional(),
+  relationship: Joi.string().trim().min(1).max(120).optional(),
+  country: Joi.string().trim().uppercase().length(2).optional(),
+  callback: Joi.string().uri().optional(),
+  redirect: Joi.string().uri().optional()
+});
+
+export const submitInitializedProductApplicationSchema = Joi.object({
+  userId: Joi.string().trim().optional(),
+  acceptedTerms: Joi.boolean().valid(true).required().messages({
+    'any.only': 'acceptedTerms must be true to submit application'
+  }),
+  mortgageSelection: Joi.object({
+    propertyName: Joi.string().trim().min(1).max(200).optional(),
+    propertyType: Joi.string().trim().min(1).max(100).optional(),
+    location: Joi.string().trim().min(1).max(300).optional(),
+    unitPrice: Joi.number().positive().optional(),
+    quantity: Joi.number().integer().min(1).optional(),
+    startDate: Joi.string().trim().min(1).max(100).optional(),
+    investmentPeriod: Joi.string().trim().min(1).max(100).optional(),
+    total: Joi.number().positive().optional(),
+    metadata: Joi.object().unknown(true).optional()
+  }).optional(),
+  metadata: Joi.object().unknown(true).optional()
+});
+
 export const updateProductApplicationStatusSchema = Joi.object({
   status: Joi.string().valid('APPROVED', 'REJECTED', 'BLACKLISTED').required(),
   reason: Joi.string().trim().optional()

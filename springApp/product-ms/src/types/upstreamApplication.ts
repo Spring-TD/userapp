@@ -39,6 +39,14 @@ export interface SubmitUpstreamExternalApplicationInput {
 export interface SubmitUpstreamExternalApplicationResult {
   upstreamApplicationId?: string;
   applicationCreated?: boolean;
+  upstreamAccount?: {
+    accountNumber?: string;
+    bankName?: string;
+    bankCode?: string;
+    providerReference?: string;
+    provisionStatus?: string;
+    provisionError?: string;
+  };
   skipped?: boolean;
   skipReason?: string;
 }

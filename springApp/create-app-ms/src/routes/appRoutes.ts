@@ -413,6 +413,20 @@ router.get(
   appController.getProductOverview
 );
 
+// Merchant dashboard: customer applications on one app (summary before list path)
+router.get(
+  '/:appId/customers/:userId/applications/summary',
+  authenticate,
+  merchantOnly,
+  appController.getCustomerApplicationsSummary
+);
+router.get(
+  '/:appId/customers/:userId/applications',
+  authenticate,
+  merchantOnly,
+  appController.getCustomerApplications
+);
+
 // Get app by ID
 router.get('/:id', authenticate, merchantOnly, appController.getAppById);
 

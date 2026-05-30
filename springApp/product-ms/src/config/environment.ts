@@ -65,6 +65,10 @@ interface EnvironmentConfig {
   walletServiceUrl: string;
   /** Shared internal token expected by wallet-ms */
   walletInternalToken: string;
+  /** compliance-ms origin for guarantor hosted KYC link creation */
+  complianceServiceUrl: string;
+  /** Service auth token accepted by compliance-ms serviceAuth middleware */
+  complianceServiceToken: string;
   walletServiceHttpTimeoutMs: number;
   /** create-app-ms origin used for canonical transaction stats */
   createAppServiceUrl: string;
@@ -90,6 +94,10 @@ export const config: EnvironmentConfig = {
   plataIntegratorMerchantName: (process.env.PLATA_INTEGRATOR_MERCHANT_NAME || '').trim(),
   walletServiceUrl: process.env.WALLET_SERVICE_URL || 'http://localhost:4004',
   walletInternalToken: (process.env.WALLET_INTERNAL_TOKEN || '').trim(),
+  complianceServiceUrl:
+    (process.env.COMPLIANCE_SERVICE_URL || '').replace(/\/+$/, '') ||
+    (process.env.NODE_ENV === 'production' ? 'https://compliance-ms.fly.dev' : 'http://localhost:4003'),
+  complianceServiceToken: (process.env.COMPLIANCE_SERVICE_TOKEN || 'sams_account_service_token').trim(),
   walletServiceHttpTimeoutMs: parseInt(process.env.WALLET_SERVICE_HTTP_TIMEOUT_MS || '15000', 10),
   createAppServiceUrl: process.env.CREATE_APP_SERVICE_URL || 'http://localhost:3002',
   requestBodyLimit: process.env.REQUEST_BODY_LIMIT || '10mb',

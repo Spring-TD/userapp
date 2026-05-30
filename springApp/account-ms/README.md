@@ -73,10 +73,82 @@ These routes are gateway routes only. `account-ms` proxies `/api/v1/applications
 - `POST /api/v1/applications/apply` - Apply for a product
 - `POST /api/v1/applications/:id/approve` - Approve application (Admin)
 - `POST /api/v1/applications/:id/reject` - Reject application (Admin)
-- `GET /api/v1/applications/` - Get all applications (Admin)
+- `GET /api/v1/applications/` - Get all applications (Admin or merchant JWT). Query: `userId`, `appId`, `status`, `productType`.
+- `GET /api/v1/applications/summary` - Application status counts for the same filters (proxied to product-ms).
 - `GET /api/v1/applications/pending` - Get pending applications (Admin)
-- `GET /api/v1/applications/user/:userId` - Get user applications
+- `GET /api/v1/applications/user/:userId` - Get user applications. Optional query: `appId`, `status`, `productType`.
 - `GET /api/v1/applications/:id` - Get application by ID
+- `GET /api/v1/apps/{appId}/customers/{userId}/applications` - Customer applications on one app (proxied to create-app-ms)
+- `GET /api/v1/apps/{appId}/customers/{userId}/applications/summary` - Status summary for that customer on the app (proxied to create-app-ms)
+
+#### Customer Applications Page (View Applications)
+
+Frontend flow from the Customers table:
+
+1. Navigate with the selected dashboard `appId` and row `userId`.
+2. Load summary cards:
+
+```http
+GET /api/v1/apps/{appId}/customers/{userId}/applications/summary
+Authorization: Bearer <merchant-jwt>
+```
+
+Optional query: `productType=LOAN` (or `MORTGAGE`, `SAVINGS`, `INVESTMENT`, `COMMODITY`) for category tabs.
+
+```json
+{
+  "success": true,
+  "data": {
+    "appId": "674a1b2c3d4e5f6789012345",
+    "userId": "user-uuid",
+    "summary": {
+      "total": 4,
+      "pending": 1,
+      "approved": 2,
+      "rejected": 1,
+      "blacklisted": 0
+    }
+  }
+}
+```
+
+3. Load the application list:
+
+```http
+GET /api/v1/apps/{appId}/customers/{userId}/applications
+Authorization: Bearer <merchant-jwt>
+```
+
+Optional query: `productType=LOAN`, `status=PENDING`.
+
+```json
+{
+  "success": true,
+  "data": {
+    "appId": "674a1b2c3d4e5f6789012345",
+    "userId": "user-uuid",
+    "applications": [
+      {
+        "id": "app_1",
+        "userId": "user-uuid",
+        "productId": "6790abc123def45678901234",
+        "productName": "Quick Loan",
+        "productType": "LOAN",
+        "amount": 50000,
+        "currency": "NGN",
+        "email": "customer@example.com",
+        "status": "PENDING",
+        "appId": "674a1b2c3d4e5f6789012345",
+        "merchantId": "merchant-uuid",
+        "requirementsSnapshot": {},
+        "requirementSubmissions": [],
+        "createdAt": "2026-05-19T12:00:00.000Z",
+        "updatedAt": "2026-05-19T12:00:00.000Z"
+      }
+    ]
+  }
+}
+```
 
 ### Account Services
 - `POST /api/v1/users/:userId/billing-check` - Check billing status

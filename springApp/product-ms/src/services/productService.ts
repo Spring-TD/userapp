@@ -411,6 +411,10 @@ export class ProductService {
     const localProduct = await this.getMerchantProductConfiguration(appId, productId);
 
     if (localProduct) {
+      if (activate && localProduct.isActive === true) {
+        throw new ApiError(400, 'this product is already turned on for this app');
+      }
+
       const setDoc: Record<string, unknown> = {
         isActive: activate,
         updatedAt: new Date().toISOString()

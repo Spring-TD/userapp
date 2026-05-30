@@ -365,6 +365,186 @@ Use **`id` from the catalog list** (local app product id).
 
 Use **`user.id`** from login and **`product.id`** from detail.
 
+### Loan / mortgage two-step flow
+
+For loan and mortgage products, the mobile storefront should use the modal button to initialize the application before showing the requirements screen:
+
+1. User taps **Go ahead, Create Bank account**.
+2. Storefront calls `POST /api/v1/applications/init`.
+3. Backend creates the local application, calls Plata upstream to create the application / bank account, then returns the account number created by Plata.
+4. Storefront renders the requirements screen from `data.requirementsSnapshot` in the init response.
+5. Storefront uploads files with `POST /api/v1/applications/upload`, then submits the completed requirement rows with `PATCH /api/v1/applications/{applicationId}/requirements`.
+6. Storefront shows the final summary / mortgage “Buy More” screen, then calls `POST /api/v1/applications/{applicationId}/submit`.
+
+**Initialize loan / mortgage application:**
+
+```http
+POST /api/v1/applications/init
+Content-Type: application/json
+```
+
+```json
+{
+  "userId": "user-uuid",
+  "productId": "6790abc123def45678901234",
+  "merchantId": "merchant-uuid",
+  "amount": 50000,
+  "currency": "NGN",
+  "email": "jane@example.com",
+  "applicantName": "Jane Smith",
+  "phone": "+2348012345678",
+  "bvn": "22123456789",
+  "country": "NG"
+}
+```
+
+**Response `201`:** `data` is the application. Use:
+
+- `data.id` as the `applicationId` for the requirements submit call.
+- `data.requirementsSnapshot` to render the requirements screen. This is copied from the product DB `requirements` object, including `security`, `documentsToDownload`, and `otherRequirements`.
+- `data.productWallet.upstreamAccount` for the Plata-created bank account. The init call now requires `upstreamAccount.accountNumber`; if Plata does not return an account number, the endpoint fails with `502`.
+
+For `requirements.documentsToDownload`, render each item as a **Download File** + **Upload File** row. The user downloads the configured `fileUrl`, fills the form, uploads the completed form through `/api/v1/applications/upload`, then includes that returned upload URL in `requirementSubmissions`. Match the submitted row by the document `name` using `requirementType` or `label`.
+
+**Submit completed requirements:**
+
+```http
+PATCH /api/v1/applications/{applicationId}/requirements
+Content-Type: application/json
+```
+
+```json
+{
+  "userId": "user-uuid",
+  "requirementSubmissions": [
+    {
+      "requirementType": "Application Form",
+      "label": "Application Form",
+      "type": "document",
+      "fileUrl": "https://springtd-product-documents.nyc3.digitaloceanspaces.com/product-applications/user-uuid/completed-application-form.pdf",
+      "fileName": "completed-application-form.pdf",
+      "fileType": "application/pdf",
+      "fileSize": 123456,
+      "metadata": {
+        "source": "documentsToDownload",
+        "downloadedFileUrl": "https://example.com/forms/application.pdf"
+      }
+    },
+    {
+      "requirementType": "Account Statement",
+      "label": "Account Statement",
+      "type": "document",
+      "fileUrl": "https://springtd-product-documents.nyc3.digitaloceanspaces.com/id.pdf",
+      "fileName": "statement.pdf",
+      "fileType": "application/pdf",
+      "fileSize": 123456
+    },
+    {
+      "requirementType": "Employment",
+      "label": "Employment",
+      "type": "json",
+      "value": {
+        "occupation": "Engineer",
+        "placeOfWork": "Example Ltd",
+        "hrName": "Jane HR",
+        "hrEmail": "hr@example.com"
+      }
+    }
+  ]
+}
+```
+
+Every `requirements.documentsToDownload[]` item must have a completed uploaded form submission with matching `requirementType` or `label` and a `fileUrl`.
+
+Any `requirements.otherRequirements[]` item with `uploadRequired: true` or `required: true` must have a matching submission. Matching is by `requirementId`, `requirementType`, or `label`. Upload-style items with `contentType: "document"` or `contentType: "document_upload"` must include `fileUrl`.
+
+If `data.requirementsSnapshot.security.guarantor === true`, show **+ Add a Guarantor**. When the user fills the guarantor form and taps **Generate KYC link**, call:
+
+```http
+POST /api/v1/applications/{applicationId}/guarantors
+Content-Type: application/json
+```
+
+```json
+{
+  "userId": "user-uuid",
+  "fullName": "Charles Avis",
+  "email": "talktoavischales@gmail.com",
+  "phone": "+23470452781",
+  "occupation": "Trader",
+  "relationship": "Brother",
+  "country": "NG"
+}
+```
+
+The backend creates the guarantor's upstream KYC verification link and stores the guarantor on the application.
+
+**Response `201`:**
+
+```json
+{
+  "success": true,
+  "message": "Guarantor KYC verification link created.",
+  "data": {
+    "guarantor": {
+      "id": "guarantor-id",
+      "fullName": "Charles Avis",
+      "email": "talktoavischales@gmail.com",
+      "phone": "+23470452781",
+      "kyc": {
+        "verificationId": "verification-id",
+        "verificationUrl": "https://transid2.fuspay.finance/?verificationId=..."
+      }
+    },
+    "application": {}
+  }
+}
+```
+
+Display **Copy KYC URL** using `data.guarantor.kyc.verificationUrl`. The final submit endpoint requires at least one guarantor KYC URL when the product has `requirements.security.guarantor: true`.
+
+The older one-shot endpoint, `POST /api/v1/applications/apply`, is still supported when a client wants to submit the application and requirements in one request.
+
+**Final submit:**
+
+```http
+POST /api/v1/applications/{applicationId}/submit
+Content-Type: application/json
+```
+
+For loan products, only terms acceptance is required:
+
+```json
+{
+  "userId": "user-uuid",
+  "acceptedTerms": true
+}
+```
+
+For mortgage products, include the final mortgage selection shown on the last screen. `quantity` is the “Buy More” count selected by the user.
+
+```json
+{
+  "userId": "user-uuid",
+  "acceptedTerms": true,
+  "mortgageSelection": {
+    "propertyName": "Maize Investment",
+    "propertyType": "Mortgage",
+    "unitPrice": 60700000,
+    "quantity": 1,
+    "startDate": "2026-03",
+    "investmentPeriod": "1 year",
+    "total": 60830842,
+    "metadata": {
+      "roi": "3%",
+      "duration": "06 months"
+    }
+  }
+}
+```
+
+The submit call validates that all configured requirements have been uploaded, then sets `loanWorkflowStatus` to `under_review`. Mortgage final-screen details are stored in `contractSnapshot.finalSubmission.mortgageSelection`.
+
 ### Common apply body
 
 ```json

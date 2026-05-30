@@ -418,6 +418,145 @@ If the app ID is missing, you'll receive a 400 error:
 }
 ```
 
+#### Customer applications on an app (merchant dashboard)
+
+These routes power **Customers → View Applications**. The frontend navigates with the selected app id and the customer user id, then loads the summary cards and application list.
+
+Both routes require JWT authentication and enforce that merchant callers own the app. Through the **account-ms gateway**, the paths stay unchanged under `/api/v1/apps/...` and proxy to **create-app-ms**.
+
+**Route parameters**
+
+| Param | Description |
+|-------|-------------|
+| `appId` | Create-app application id currently selected in the dashboard. |
+| `userId` | Customer / retail user id from `GET /api/v1/user/list`. |
+
+**Headers**
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `Authorization: Bearer <merchant-jwt>` | Yes | Merchant access token. |
+| `x-admin-id` | No | Optional admin passthrough when an admin is calling the route. |
+
+##### Load summary cards
+
+Use this for the Total / Pending / Approved / Rejected cards on the Applications page.
+
+```http
+GET /api/v1/apps/{appId}/customers/{userId}/applications/summary
+Authorization: Bearer <merchant-jwt>
+```
+
+**Optional query parameters**
+
+| Query | Example | Description |
+|-------|---------|-------------|
+| `productType` | `LOAN` | Applies category tabs to the summary. Common values: `LOAN`, `MORTGAGE`, `SAVINGS`, `INVESTMENT`, `COMMODITY`. |
+
+**Example request**
+
+```http
+GET /api/v1/apps/674a1b2c3d4e5f6789012345/customers/user-uuid/applications/summary?productType=LOAN
+Authorization: Bearer <merchant-jwt>
+```
+
+**Success response**
+
+```json
+{
+  "success": true,
+  "data": {
+    "appId": "674a1b2c3d4e5f6789012345",
+    "userId": "user-uuid",
+    "summary": {
+      "total": 4,
+      "pending": 1,
+      "approved": 2,
+      "rejected": 1,
+      "blacklisted": 0
+    }
+  }
+}
+```
+
+##### Load application list
+
+Use this for the table/list below the summary cards.
+
+```http
+GET /api/v1/apps/{appId}/customers/{userId}/applications
+Authorization: Bearer <merchant-jwt>
+```
+
+**Optional query parameters**
+
+| Query | Example | Description |
+|-------|---------|-------------|
+| `productType` | `LOAN` | Filters category tabs. Common values: `LOAN`, `MORTGAGE`, `SAVINGS`, `INVESTMENT`, `COMMODITY`. |
+| `status` | `PENDING` | Optional status filter: `PENDING`, `APPROVED`, `REJECTED`, `BLACKLISTED`. |
+
+**Example request**
+
+```http
+GET /api/v1/apps/674a1b2c3d4e5f6789012345/customers/user-uuid/applications?productType=LOAN
+Authorization: Bearer <merchant-jwt>
+```
+
+**Success response**
+
+```json
+{
+  "success": true,
+  "data": {
+    "appId": "674a1b2c3d4e5f6789012345",
+    "userId": "user-uuid",
+    "applications": [
+      {
+        "id": "app_1",
+        "userId": "user-uuid",
+        "productId": "6790abc123def45678901234",
+        "productName": "Quick Loan",
+        "productType": "LOAN",
+        "amount": 50000,
+        "currency": "NGN",
+        "email": "customer@example.com",
+        "status": "PENDING",
+        "appId": "674a1b2c3d4e5f6789012345",
+        "merchantId": "merchant-uuid",
+        "requirementsSnapshot": {},
+        "requirementSubmissions": [],
+        "createdAt": "2026-05-19T12:00:00.000Z",
+        "updatedAt": "2026-05-19T12:00:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+**Frontend flow**
+
+1. From the Customers row, navigate with `{ appId, userId }`.
+2. Fetch summary: `GET /api/v1/apps/{appId}/customers/{userId}/applications/summary`.
+3. Fetch list: `GET /api/v1/apps/{appId}/customers/{userId}/applications`.
+4. For category tabs, add `?productType=LOAN`, `?productType=MORTGAGE`, etc. to both calls.
+5. For status tabs or filters, add `?status=PENDING` to the list call. Keep the summary unfiltered by status.
+
+**Common errors**
+
+| Status | Meaning |
+|--------|---------|
+| `400` | Missing or invalid `appId` / `userId`. |
+| `401` | Missing Bearer token. |
+| `403` | Merchant does not own the app or cannot list applications. |
+| `404` | App not found. |
+| `502` | Applications service unavailable. |
+
+**Direct product-ms / gateway alternatives** (prefer the app-scoped routes above for dashboard screens because they enforce app ownership):
+
+- `GET /api/v1/applications?userId={userId}&appId={appId}` — merchant JWT required.
+- `GET /api/v1/applications/summary?userId={userId}&appId={appId}` — merchant JWT required.
+- `GET /api/v1/applications/user/{userId}?appId={appId}` — optional `appId` filter.
+
 #### Get product overview (merchant dashboard)
 
 ```

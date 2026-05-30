@@ -13,6 +13,10 @@ import {
   sendAppReactivatedNotification
 } from '../services/notificationHelper';
 import { buildProductOverview } from '../services/productOverviewService';
+import {
+  listCustomerApplicationsForApp,
+  summarizeCustomerApplicationsForApp
+} from '../services/customerApplicationsService';
 import { assertLikelyMongoObjectId } from '../utils/mongoObjectId';
 import { tryGetApiBaseUrl } from '../utils/requestBaseUrl';
 
@@ -864,6 +868,130 @@ export class AppController {
       }
 
       console.error('Error in getProductOverview controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  };
+
+  /**
+   * Merchant dashboard: all applications for one customer on one app.
+   */
+  getCustomerApplications = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { appId, userId } = req.params;
+      if (!appId?.trim() || !userId?.trim()) {
+        throw new ApiError(400, 'App ID and user ID are required');
+      }
+
+      assertLikelyMongoObjectId(appId.trim(), 'App ID');
+
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        throw new ApiError(401, 'Bearer token required');
+      }
+
+      const app = await this.appService.getAppById(appId.trim());
+      if (!app) {
+        throw new ApiError(404, 'App not found');
+      }
+      this.assertMerchantOwnsApp(req, app);
+
+      const adminHdr = req.headers['x-admin-id'];
+      const adminId = Array.isArray(adminHdr) ? adminHdr[0] : adminHdr;
+      const productType =
+        typeof req.query.productType === 'string' ? req.query.productType : undefined;
+      const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+
+      const applications = await listCustomerApplicationsForApp({
+        appId: appId.trim(),
+        userId: userId.trim(),
+        authorization: authHeader,
+        adminId: adminId?.trim() || undefined,
+        productType,
+        status
+      });
+
+      res.json({
+        success: true,
+        data: {
+          appId: appId.trim(),
+          userId: userId.trim(),
+          applications
+        }
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+        return;
+      }
+
+      console.error('Error in getCustomerApplications controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  };
+
+  /**
+   * Merchant dashboard: application status counts for one customer on one app.
+   */
+  getCustomerApplicationsSummary = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { appId, userId } = req.params;
+      if (!appId?.trim() || !userId?.trim()) {
+        throw new ApiError(400, 'App ID and user ID are required');
+      }
+
+      assertLikelyMongoObjectId(appId.trim(), 'App ID');
+
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        throw new ApiError(401, 'Bearer token required');
+      }
+
+      const app = await this.appService.getAppById(appId.trim());
+      if (!app) {
+        throw new ApiError(404, 'App not found');
+      }
+      this.assertMerchantOwnsApp(req, app);
+
+      const adminHdr = req.headers['x-admin-id'];
+      const adminId = Array.isArray(adminHdr) ? adminHdr[0] : adminHdr;
+      const productType =
+        typeof req.query.productType === 'string' ? req.query.productType : undefined;
+
+      const summary = await summarizeCustomerApplicationsForApp({
+        appId: appId.trim(),
+        userId: userId.trim(),
+        authorization: authHeader,
+        adminId: adminId?.trim() || undefined,
+        productType
+      });
+
+      res.json({
+        success: true,
+        data: {
+          appId: appId.trim(),
+          userId: userId.trim(),
+          summary
+        }
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+        return;
+      }
+
+      console.error('Error in getCustomerApplicationsSummary controller:', error);
       res.status(500).json({
         success: false,
         error: 'Internal server error'

@@ -211,6 +211,7 @@ router.get('/search', authenticate, KYCController.searchKYCProfiles);
 
 // Fuspay Modular KYC routes
 router.post('/modular/webhook', KYCController.handleFuspayModularWebhook);
+router.post('/modular/guarantor-verification', authenticate, KYCController.createGuarantorFuspayVerification);
 router.post('/modular/verification', authenticate, KYCController.createFuspayVerification);
 router.get('/modular/verification-url', authenticate, KYCController.getMyFuspayVerification);
 router.post('/modular/submit/:verificationId', authenticate, KYCController.submitFuspayVerification);

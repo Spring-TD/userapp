@@ -8,8 +8,12 @@ import {
   validateApplicationDocumentUpload
 } from '../services/spacesService';
 import type {
+  ApplicationListQuery,
+  CreateApplicationGuarantorRequest,
   CreateProductApplicationRequest,
   ProductApplicationStatus,
+  SubmitProductApplicationRequest,
+  SubmitProductApplicationRequirementsRequest,
   UpdateProductApplicationStatusRequest
 } from '../types/productApplication';
 import type { ApplicationAuthRequest } from '../middleware/applicationAuth';
@@ -67,6 +71,66 @@ class ProductApplicationController {
     }
   };
 
+  initializeApplication = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const body = (req.validatedBody ?? req.body) as CreateProductApplicationRequest;
+      const application = await productApplicationService.initializeApplication(body);
+
+      res.status(201).json({
+        success: true,
+        message: 'Application initialized. Bank account created; continue with requirements.',
+        data: application
+      });
+    } catch (error) {
+      this.handleError(error, res, 'Error initializing product application');
+    }
+  };
+
+  submitRequirements = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const body = (req.validatedBody ?? req.body) as SubmitProductApplicationRequirementsRequest;
+      const application = await productApplicationService.submitRequirements(req.params.id, body);
+
+      res.json({
+        success: true,
+        message: 'Application requirements submitted.',
+        data: application
+      });
+    } catch (error) {
+      this.handleError(error, res, 'Error submitting product application requirements');
+    }
+  };
+
+  createGuarantor = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const body = (req.validatedBody ?? req.body) as CreateApplicationGuarantorRequest;
+      const result = await productApplicationService.createGuarantor(req.params.id, body);
+
+      res.status(201).json({
+        success: true,
+        message: 'Guarantor KYC verification link created.',
+        data: result
+      });
+    } catch (error) {
+      this.handleError(error, res, 'Error creating guarantor KYC verification');
+    }
+  };
+
+  submitApplication = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const body = (req.validatedBody ?? req.body) as SubmitProductApplicationRequest;
+      const application = await productApplicationService.submitApplication(req.params.id, body);
+
+      res.json({
+        success: true,
+        message: 'Application submitted for review.',
+        data: application
+      });
+    } catch (error) {
+      this.handleError(error, res, 'Error submitting product application');
+    }
+  };
+
   getApplicationById = async (req: Request, res: Response): Promise<void> => {
     try {
       const application = await productApplicationService.getApplicationById(req.params.id);
@@ -85,14 +149,9 @@ class ProductApplicationController {
 
   listApplications = async (req: Request, res: Response): Promise<void> => {
     try {
-      const applications = await productApplicationService.listApplications({
-        merchantId:
-          (req as ApplicationAuthRequest).applicationsMerchantIdFilter ??
-          (typeof req.query.merchantId === 'string' ? req.query.merchantId : undefined),
-        userId: typeof req.query.userId === 'string' ? req.query.userId : undefined,
-        status: this.statusQuery(req.query.status),
-        productType: typeof req.query.productType === 'string' ? req.query.productType : undefined
-      });
+      const applications = await productApplicationService.listApplications(
+        this.listQueryFromRequest(req)
+      );
 
       res.json({
         success: true,
@@ -100,6 +159,21 @@ class ProductApplicationController {
       });
     } catch (error) {
       this.handleError(error, res, 'Error listing product applications');
+    }
+  };
+
+  getApplicationsSummary = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const summary = await productApplicationService.summarizeApplications(
+        this.listQueryFromRequest(req)
+      );
+
+      res.json({
+        success: true,
+        data: summary
+      });
+    } catch (error) {
+      this.handleError(error, res, 'Error summarizing product applications');
     }
   };
 
@@ -121,9 +195,9 @@ class ProductApplicationController {
 
   listUserApplications = async (req: Request, res: Response): Promise<void> => {
     try {
-      const applications = await productApplicationService.listApplications({
-        userId: req.params.userId
-      });
+      const query = this.listQueryFromRequest(req);
+      query.userId = req.params.userId;
+      const applications = await productApplicationService.listApplications(query);
 
       res.json({
         success: true,
@@ -186,6 +260,24 @@ class ProductApplicationController {
       this.handleError(error, res, 'Error updating product application status');
     }
   };
+
+  private listQueryFromRequest(req: Request): ApplicationListQuery {
+    const authReq = req as ApplicationAuthRequest;
+    const appId =
+      typeof req.query.appId === 'string' && req.query.appId.trim()
+        ? req.query.appId.trim()
+        : undefined;
+
+    return {
+      merchantId:
+        authReq.applicationsMerchantIdFilter ??
+        (typeof req.query.merchantId === 'string' ? req.query.merchantId : undefined),
+      userId: typeof req.query.userId === 'string' ? req.query.userId : undefined,
+      appId,
+      status: this.statusQuery(req.query.status),
+      productType: typeof req.query.productType === 'string' ? req.query.productType : undefined
+    };
+  }
 
   private statusQuery(value: unknown): ProductApplicationStatus | undefined {
     if (typeof value !== 'string') {
