@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Check, ChevronLeft, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ensureMortgageAccount } from '@/lib/mortgageApplyClient'
-import { mortgageAccountSuccessHref } from '@/lib/mortgageApplyRoutes'
+import { mortgageApplyHref } from '@/lib/mortgageApplyRoutes'
 
 function MortgageApplyStartInner() {
   const router = useRouter()
@@ -33,7 +33,7 @@ function MortgageApplyStartInner() {
         return
       }
 
-      router.replace(mortgageAccountSuccessHref(productId))
+      router.replace(mortgageApplyHref(productId))
     } finally {
       setProcessing(false)
     }

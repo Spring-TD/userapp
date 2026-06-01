@@ -3,17 +3,28 @@
 import React, { useMemo, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { useSearchParams } from 'next/navigation'
 import {
   Check,
   ChevronDown,
   ChevronLeft,
+  Copy,
   Download,
   Filter,
+  Loader2,
   Plus,
   Upload,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import {
+  addApplicationGuarantor,
+  readInitializedApplication,
+  submitApplicationRequirements,
+  submitInitializedApplication,
+  uploadApplicationFile,
+  type RequirementSubmission,
+} from '@/lib/storefrontApplicationClient'
 
 type ProductKind = 'loan' | 'mortgage'
 type StepId = 'requirement' | 'file' | 'property' | 'product'
@@ -22,6 +33,7 @@ type Guarantor = {
   name: string
   phone: string
   email: string
+  verificationUrl?: string
 }
 
 const PRIMARY = 'bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white'
@@ -80,24 +92,74 @@ function StatusDot({ done }: { done?: boolean }) {
   )
 }
 
-function FileActionRow({ name }: { name: string }) {
+function FileActionRow({
+  name,
+  fileUrl,
+  userId,
+  onUploaded,
+}: {
+  name: string
+  fileUrl?: string
+  userId?: string
+  onUploaded: (submission: RequirementSubmission) => void
+}) {
+  const [uploading, setUploading] = useState(false)
+  const [uploaded, setUploaded] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleUpload = async (file?: File) => {
+    if (!file) return
+    setUploading(true)
+    setError(null)
+    try {
+      const uploadedFile = await uploadApplicationFile(file, userId)
+      onUploaded({
+        requirementType: name,
+        label: name,
+        type: 'document',
+        fileUrl: uploadedFile.fileUrl,
+        fileName: uploadedFile.fileName,
+        fileType: uploadedFile.fileType,
+        fileSize: uploadedFile.fileSize,
+        metadata: {
+          source: 'documentsToDownload',
+          ...(fileUrl ? { downloadedFileUrl: fileUrl } : {}),
+        },
+      })
+      setUploaded(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <span className="text-xs text-gray-500">{name}</span>
-        <StatusDot done />
+        <StatusDot done={uploaded} />
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <button className="flex h-9 items-center justify-center gap-2 rounded-xl bg-red-50 text-xs font-semibold text-gray-600">
+        <a
+          href={fileUrl || '#'}
+          target={fileUrl ? '_blank' : undefined}
+          rel="noreferrer"
+          className={cn(
+            'flex h-9 items-center justify-center gap-2 rounded-xl bg-red-50 text-xs font-semibold text-gray-600',
+            !fileUrl && 'pointer-events-none opacity-50',
+          )}
+        >
           Download File
           <Download className="h-3 w-3" />
-        </button>
+        </a>
         <label className="flex h-9 cursor-pointer items-center justify-center gap-2 rounded-xl bg-gray-100 text-xs font-semibold text-gray-600">
-          <input type="file" className="hidden" />
-          Upload File
-          <Upload className="h-3 w-3" />
+          <input type="file" className="hidden" onChange={(event) => void handleUpload(event.target.files?.[0])} />
+          {uploading ? 'Uploading...' : uploaded ? 'Uploaded' : 'Upload File'}
+          {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
         </label>
       </div>
+      {error ? <p className="text-[10px] text-red-600">{error}</p> : null}
     </div>
   )
 }
@@ -283,6 +345,7 @@ function ProductSummary({
 }
 
 export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
+  const searchParams = useSearchParams()
   const steps = useMemo<StepId[]>(
     () => (kind === 'loan' ? ['requirement', 'file', 'product'] : ['requirement', 'file', 'property', 'product']),
     [kind],
@@ -290,6 +353,9 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
   const [activeStep, setActiveStep] = useState<StepId>('requirement')
   const [accepted, setAccepted] = useState(false)
   const [sheet, setSheet] = useState<'create_account' | 'guarantor_form' | 'guarantor_added' | 'success' | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [requirementSubmissions, setRequirementSubmissions] = useState<RequirementSubmission[]>([])
   const [guarantors, setGuarantors] = useState<Guarantor[]>([])
   const [guarantorDraft, setGuarantorDraft] = useState<Guarantor>({
     name: '',
@@ -298,13 +364,84 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
   })
   const productName = prettyKind(kind)
   const providerName = 'AG Mortgage Bank'
+  const initializedApplication = readInitializedApplication()
+  const applicationId = searchParams.get('applicationId') || initializedApplication?.id || initializedApplication?._id || ''
+  const userId = initializedApplication?.userId || ''
+  const requirements = initializedApplication?.requirementsSnapshot
+  const documentsToDownload = requirements?.documentsToDownload ?? []
+  const otherRequirements = requirements?.otherRequirements ?? []
+  const requiresGuarantor = requirements?.security?.guarantor === true
 
   const goBackHref = kind === 'loan' ? '/mobile-v2/products/loan' : '/mobile-v2/products/mortgage'
   const activeIndex = steps.indexOf(activeStep)
 
+  const upsertSubmission = (submission: RequirementSubmission) => {
+    const key = submission.requirementId || submission.requirementType || submission.label
+    setRequirementSubmissions((current) => {
+      const filtered = current.filter((item) => (item.requirementId || item.requirementType || item.label) !== key)
+      return [...filtered, submission]
+    })
+  }
+
+  const handleFinalSubmit = async () => {
+    if (!applicationId || !userId) {
+      setError('Application was not initialized. Please go back and create the account again.')
+      return
+    }
+
+    if (requiresGuarantor && guarantors.length === 0) {
+      setError('Please add at least one guarantor before submitting.')
+      setActiveStep('requirement')
+      return
+    }
+
+    setSubmitting(true)
+    setError(null)
+    try {
+      const submissions: RequirementSubmission[] = [
+        ...requirementSubmissions,
+        {
+          requirementType: 'Employment',
+          label: 'Employment',
+          type: 'json',
+          value: {},
+        },
+      ]
+      const requirementsResult = await submitApplicationRequirements(applicationId, userId, submissions)
+      if (!requirementsResult.ok) {
+        setError(requirementsResult.error)
+        return
+      }
+
+      const submitResult = await submitInitializedApplication(applicationId, {
+        userId,
+        acceptedTerms: true,
+        ...(kind === 'mortgage'
+          ? {
+              mortgageSelection: {
+                propertyName: 'Mortgage property',
+                propertyType: 'Mortgage',
+                quantity: 1,
+                total: 0,
+              },
+            }
+          : {}),
+      })
+
+      if (!submitResult.ok) {
+        setError(submitResult.error)
+        return
+      }
+
+      setSheet('success')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const goNext = () => {
     if (activeStep === 'product') {
-      setSheet('create_account')
+      void handleFinalSubmit()
       return
     }
     setActiveStep(steps[Math.min(activeIndex + 1, steps.length - 1)])
@@ -339,6 +476,7 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
                 <InputPill placeholder="HR's Email" />
               </div>
 
+              {requiresGuarantor ? (
               <div className="space-y-3">
                 <SectionTitle>Guarantor</SectionTitle>
                 {guarantors.length > 0 ? (
@@ -347,7 +485,16 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
                     <p className="mt-1 text-[10px] text-gray-500">
                       {guarantors[0].phone} | {guarantors[0].email}
                     </p>
-                    <button className="mt-3 text-xs font-bold text-[#1E293B]">Copy KYC URL</button>
+                    {guarantors[0].verificationUrl ? (
+                      <button
+                        type="button"
+                        onClick={() => void navigator.clipboard?.writeText(guarantors[0].verificationUrl || '')}
+                        className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-[#1E293B]"
+                      >
+                        <Copy className="h-3 w-3" />
+                        Copy KYC URL
+                      </button>
+                    ) : null}
                     <span className="absolute right-4 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-green-500 text-white">
                       <Check className="h-3 w-3" />
                     </span>
@@ -361,51 +508,25 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
                   <Plus className="h-3 w-3" /> Add a Guarantor
                 </button>
               </div>
+              ) : null}
 
               <div className="space-y-4">
                 <SectionTitle>Collateral</SectionTitle>
-                <CollateralRequirement
-                  title="On-Dated Cheque(Bank)"
-                  description=""
-                  button="Upload Cheque"
-                  done
-                  upload
-                />
-                <CollateralRequirement
-                  title="Bank Guarantee"
-                  description=""
-                  button="Upload Bank Guarantee"
-                  done
-                  upload
-                />
-                <CollateralRequirement
-                  title="Property"
-                  description="Accepted Doc: C of O, Deed of Conveyance, Deed of Assignment, Gov. Consent"
-                  button="Upload Property Doc"
-                  upload
-                />
-                <CollateralRequirement
-                  title="Vehicle"
-                  description="Accepted Doc: Custom Paper, Insurance, Vehicle Licenses"
-                  button="Upload Property Doc"
-                  upload
-                />
-                <CollateralRequirement
-                  title="Insurance"
-                  description='Upload "Key Man" Insurance Certificate'
-                  button="Upload Insurance"
-                  upload
-                />
-                <CollateralRequirement
-                  title="Account Statement"
-                  description="Connect bank account through 'Mono' to submit (x month) Bank Statement"
-                  button="Connect Bank Account"
-                />
-                <CollateralRequirement
-                  title="Global Debit Mandate"
-                  description="Create Approve Auto-debit mandate for (Provider) to be able to debit your bank account."
-                  button="Connect Bank Account"
-                />
+                {otherRequirements.length > 0 ? (
+                  otherRequirements.map((requirement, index) => (
+                    <CollateralRequirement
+                      key={requirement.requirementId || requirement.id || requirement.requirementType || index}
+                      title={requirement.label || requirement.requirementType || `Requirement ${index + 1}`}
+                      description={requirement.description || requirement.contentType || ''}
+                      button={requirement.uploadRequired || requirement.required ? 'Upload Document' : 'Add Details'}
+                      upload={requirement.uploadRequired || requirement.required}
+                    />
+                  ))
+                ) : (
+                  <p className="rounded-2xl bg-gray-50 p-4 text-xs text-gray-500">
+                    No extra collateral requirements configured for this product.
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -413,9 +534,21 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
           {activeStep === 'file' && (
             <div className="space-y-7">
               <SectionTitle>Bank Form to fill & Submit</SectionTitle>
-              {['File Name 1', 'File Name 2', 'File Name 3', 'File Name 4'].map((name) => (
-                <FileActionRow key={name} name={name} />
-              ))}
+              {documentsToDownload.length > 0 ? (
+                documentsToDownload.map((document, index) => (
+                  <FileActionRow
+                    key={document.name || index}
+                    name={document.name || `Document ${index + 1}`}
+                    fileUrl={document.fileUrl}
+                    userId={userId}
+                    onUploaded={upsertSubmission}
+                  />
+                ))
+              ) : (
+                <p className="rounded-2xl bg-gray-50 p-4 text-xs text-gray-500">
+                  No downloadable forms configured for this product.
+                </p>
+              )}
             </div>
           )}
 
@@ -430,13 +563,19 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
       </div>
 
       <div className="absolute bottom-6 left-5 right-5">
+        {error ? <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">{error}</p> : null}
         <Button
           type="button"
-          disabled={activeStep === 'product' && !accepted}
+          disabled={(activeStep === 'product' && !accepted) || submitting}
           className={cn('h-12 w-full rounded-full text-sm font-semibold disabled:opacity-50', PRIMARY)}
           onClick={goNext}
         >
-          {activeStep === 'product' ? 'Submit application' : 'Next'}
+          {submitting ? (
+            <span className="inline-flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Submitting...
+            </span>
+          ) : activeStep === 'product' ? 'Submit application' : 'Next'}
         </Button>
       </div>
 
@@ -513,12 +652,35 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
           <Button
             type="button"
             className={cn('mt-6 h-12 w-full rounded-full font-semibold', PRIMARY)}
-            onClick={() => {
+            onClick={async () => {
+              if (!applicationId || !userId) {
+                setError('Application was not initialized. Please go back and create the account again.')
+                setSheet(null)
+                return
+              }
+              const fullName = guarantorDraft.name.trim() || DEFAULT_GUARANTOR.name
+              const email = guarantorDraft.email.trim() || DEFAULT_GUARANTOR.email
+              const phone = guarantorDraft.phone.trim() || DEFAULT_GUARANTOR.phone
+              const result = await addApplicationGuarantor(applicationId, {
+                userId,
+                fullName,
+                email,
+                phone,
+                occupation: 'Not specified',
+                relationship: 'Not specified',
+                country: 'NG',
+              })
+              if (!result.ok) {
+                setError(result.error)
+                setSheet(null)
+                return
+              }
               setGuarantors([
                 {
-                  name: guarantorDraft.name.trim() || DEFAULT_GUARANTOR.name,
-                  phone: guarantorDraft.phone.trim() || DEFAULT_GUARANTOR.phone,
-                  email: guarantorDraft.email.trim() || DEFAULT_GUARANTOR.email,
+                  name: result.data?.guarantor?.fullName || fullName,
+                  phone: result.data?.guarantor?.phone || phone,
+                  email: result.data?.guarantor?.email || email,
+                  verificationUrl: result.data?.guarantor?.kyc?.verificationUrl,
                 },
               ])
               setSheet('guarantor_added')
@@ -547,7 +709,16 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
             <p className="mt-1 text-[10px] text-gray-500">
               {(guarantors[0] ?? DEFAULT_GUARANTOR).phone} | {(guarantors[0] ?? DEFAULT_GUARANTOR).email}
             </p>
-            <button className="mt-4 text-xs font-bold text-[#1E293B]">Copy KYC URL</button>
+            {(guarantors[0] ?? DEFAULT_GUARANTOR).verificationUrl ? (
+              <button
+                type="button"
+                onClick={() => void navigator.clipboard?.writeText((guarantors[0] ?? DEFAULT_GUARANTOR).verificationUrl || '')}
+                className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-[#1E293B]"
+              >
+                <Copy className="h-3 w-3" />
+                Copy KYC URL
+              </button>
+            ) : null}
             <span className="absolute right-4 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-green-500 text-white">
               <Check className="h-3 w-3" />
             </span>

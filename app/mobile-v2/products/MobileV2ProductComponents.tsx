@@ -8,9 +8,9 @@ import { useMobileProducts, MobileProduct } from '@/hooks/useMobileProducts';
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
 import { cn } from '@/lib/utils';
 import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeletons';
-import { loanProductApplyDetailHref } from '@/lib/loanApplyRoutes';
+import { loanApplyStartHref, loanProductApplyDetailHref } from '@/lib/loanApplyRoutes';
 import { mortgageProductApplyDetailHref } from '@/lib/mortgageApplyRoutes';
-import { amountRange, rateLabel } from '@/lib/mobileProductDetailDisplay';
+import { amountRange, poweredBy, rateLabel } from '@/lib/mobileProductDetailDisplay';
 
 // ─── Tab bar shared across all V2 product pages ───────────────────────────────
 const ALL_TABS = ['Mortgage', 'Loan', 'Savings', 'Invest', 'Commodity'] as const;
@@ -154,6 +154,115 @@ export function LoanProductCard({ product }: { product: MobileProduct }) {
     );
 }
 
+// ─── Featured loan ───────────────────────────────────────────────────────────
+export function FeaturedLoanProductCard({ product }: { product: MobileProduct }) {
+    const detailHref = loanProductApplyDetailHref(product.id);
+    const [slide, setSlide] = React.useState(0);
+    const loanAmount =
+        product.amountMax != null
+            ? product.amountMax.toLocaleString('en-NG')
+            : product.amountMin != null
+                ? product.amountMin.toLocaleString('en-NG')
+                : amountRange(product).replaceAll('NGN', '');
+    const provider = poweredBy();
+
+    return (
+        <div className="space-y-3">
+            <div className="rounded-[18px] bg-[var(--sf-ink,#1E1B4B)] px-6 py-6 text-white shadow-md">
+                <div className="flex items-start justify-between gap-5">
+                    <div>
+                        <p className="mb-1 text-[11px] text-white/75">Loan Amount</p>
+                        <h3 className="text-[32px] font-bold leading-none tracking-tight">{loanAmount}</h3>
+                    </div>
+                    <div className="mt-5 flex shrink-0 items-start gap-5">
+                        <div className="flex items-start gap-1.5">
+                            <span className="flex h-4 w-4 items-center justify-center rounded-sm bg-white/20">
+                                <Calendar className="h-2.5 w-2.5 text-white/90" />
+                            </span>
+                            <div className="leading-none">
+                                <p className="text-[7px] font-semibold text-white/65">Duration</p>
+                                <p className="mt-1 text-[9px] font-bold text-white">{product.duration || '12 months'}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-1.5">
+                            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-white/20">
+                                <Percent className="h-2.5 w-2.5 text-white/90" />
+                            </span>
+                            <div className="leading-none">
+                                <p className="text-[7px] font-semibold text-white/65">Interest</p>
+                                <p className="mt-1 text-[9px] font-bold text-white">{rateLabel(product)} p.a</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <p className="mt-7 max-w-[330px] text-[15px] leading-snug text-white/95">
+                    {product.description || 'Explore competitive rates and flexible repayment on this loan.'}
+                </p>
+
+                <div className="mt-9 flex items-center justify-between gap-4">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black text-[10px] font-bold text-yellow-300">
+                            AG
+                        </div>
+                        <p className="truncate text-sm font-bold text-white">{provider}</p>
+                    </div>
+                    <Link href={detailHref}>
+                        <Button className="h-10 rounded-lg bg-[var(--sf-button,#1E40AF)] px-5 text-xs font-semibold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]">
+                            Apply for Loan
+                        </Button>
+                    </Link>
+                </div>
+            </div>
+            <div className="flex justify-center gap-2">
+                {[0, 1, 2].map((i) => (
+                    <button
+                        key={i}
+                        type="button"
+                        aria-label={`Loan highlight ${i + 1}`}
+                        onClick={() => setSlide(i)}
+                        className={cn('h-1.5 rounded-full transition-all', i === slide ? 'w-8 bg-[var(--sf-primary,#2563EB)]' : 'w-4 bg-gray-400')}
+                    />
+                ))}
+            </div>
+        </div>
+    );
+}
+
+// ─── Loan Product Card ───────────────────────────────────────────────────────
+export function HotLoanProductCard({ product, compact }: { product: MobileProduct; compact?: boolean }) {
+    const detailHref = loanProductApplyDetailHref(product.id);
+    const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?q=80&w=2070&auto=format&fit=crop';
+    const imgH = compact ? 'h-[100px]' : 'h-[140px]';
+
+    return (
+        <div className="rounded-[20px] border border-gray-100 bg-white p-3 shadow-sm">
+            <div
+                className={cn('relative mb-3 w-full overflow-hidden rounded-[18px] bg-gray-100', imgH)}
+                style={{ backgroundImage: `url(${product.image || DEFAULT_IMAGE})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+            />
+            <div className="space-y-1.5 px-0.5">
+                <h3 className={cn('font-bold text-[var(--sf-ink,#1E1B4B)]', compact ? 'line-clamp-2 text-xs' : 'text-sm')}>{product.name}</h3>
+                {!compact && (
+                    <p className="line-clamp-2 text-[10px] text-gray-500">{product.description}</p>
+                )}
+                <div className="text-xs font-bold text-[var(--sf-ink,#1E1B4B)]">{amountRange(product)}</div>
+                <div className="text-[10px] font-semibold text-[var(--sf-button,#1E40AF)]">{rateLabel(product)}</div>
+                <Link href={detailHref}>
+                    <Button
+                        className={cn(
+                            'mt-1 w-full rounded-full bg-[var(--sf-button,#1E40AF)] font-semibold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]',
+                            compact ? 'h-9 text-[10px]' : 'h-10 text-xs',
+                        )}
+                    >
+                        {compact ? 'View' : 'Get Started'}
+                    </Button>
+                </Link>
+            </div>
+        </div>
+    );
+}
+
 // ─── Featured mortgage (carousel dots + Get Started → detail) ───────────────
 export function FeaturedMortgageCard({ product }: { product: MobileProduct }) {
     const detailHref = mortgageProductApplyDetailHref(product.id);
@@ -283,21 +392,21 @@ export function InvestProductCard({ product }: { product: MobileProduct }) {
     const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?q=80&w=2070&auto=format&fit=crop';
 
     return (
-        <div className="bg-white rounded-[24px] p-3 shadow-sm border border-gray-100">
+        <div className="bg-white rounded-[18px] p-2.5 shadow-sm border border-gray-100">
             <div
-                className="relative w-full aspect-[4/3] rounded-[20px] mb-4 overflow-hidden bg-gray-100"
+                className="relative mb-2 h-[76px] w-full overflow-hidden rounded-[14px] bg-gray-100"
                 style={{ backgroundImage: `url(${product.image || DEFAULT_IMAGE})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
             />
-            <div className="px-1 space-y-2">
-                <h3 className="text-sm font-bold text-[var(--sf-ink,#1E1B4B)] line-clamp-2">{product.name}</h3>
-                <p className="text-[10px] text-gray-500 line-clamp-2">{product.description}</p>
+            <div className="space-y-1.5 px-0.5">
+                <h3 className="line-clamp-2 text-[12px] font-bold leading-snug text-[var(--sf-ink,#1E1B4B)]">{product.name}</h3>
+                {/* <p className="line-clamp-2 text-[9px] leading-snug text-gray-500">{product.description}</p> */}
                 {product.duration ? (
-                    <p className="text-[10px] font-medium text-gray-600">{product.duration}</p>
+                    <p className="text-[9px] font-medium text-gray-600">{product.duration}</p>
                 ) : null}
-                <p className="text-xs font-bold text-[var(--sf-ink,#1E1B4B)]">{amountRange(product)}</p>
-                <p className="text-xs font-bold text-[var(--sf-button,#1E40AF)]">{rateLabel(product)} returns</p>
+                <p className="line-clamp-2 text-[10px] font-bold leading-tight text-[var(--sf-ink,#1E1B4B)]">{amountRange(product)}</p>
+                <p className="text-[10px] font-bold text-[var(--sf-button,#1E40AF)]">{rateLabel(product)} returns</p>
                 <Link href={detailHref}>
-                    <Button className="w-full h-10 rounded-full bg-[var(--sf-primary,#2563EB)] hover:bg-[var(--sf-primary,#2563EB)] text-white text-xs font-semibold mt-2">
+                    <Button className="mt-1 h-8 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-[10px] font-semibold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]">
                         View investment
                     </Button>
                 </Link>
@@ -312,24 +421,24 @@ export function CommodityProductCard({ product }: { product: MobileProduct }) {
     const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1551754655-cd27e38d2076?q=80&w=2070&auto=format&fit=crop';
 
     return (
-        <div className="bg-white rounded-[24px] p-3 shadow-sm border border-gray-100">
+        <div className="bg-white rounded-[18px] p-2.5 shadow-sm border border-gray-100">
             <div
-                className="relative w-full aspect-square rounded-[20px] mb-4 overflow-hidden bg-gray-100"
+                className="relative mb-2 h-[76px] w-full overflow-hidden rounded-[14px] bg-gray-100"
                 style={{ backgroundImage: `url(${product.image || DEFAULT_IMAGE})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
             />
-            <div className="px-1 space-y-2">
-                <h3 className="text-sm font-bold text-[var(--sf-ink,#1E1B4B)]">{product.name}</h3>
-                <p className="text-[10px] text-gray-500 line-clamp-2">{product.description}</p>
-                <div className="text-sm font-bold text-[var(--sf-ink,#1E1B4B)]">
+            <div className="space-y-1.5 px-0.5">
+                <h3 className="line-clamp-2 text-[12px] font-bold leading-snug text-[var(--sf-ink,#1E1B4B)]">{product.name}</h3>
+                <p className="line-clamp-1 text-[9px] leading-snug text-gray-500">{product.description}</p>
+                <div className="line-clamp-2 text-[10px] font-bold leading-tight text-[var(--sf-ink,#1E1B4B)]">
                     {amountRange(product)}
                     {product.minimumQuantity ? (
-                        <span className="block text-xs font-normal text-gray-500">
+                        <span className="block text-[9px] font-normal text-gray-500">
                             Min quantity: {product.minimumQuantity.toLocaleString()}
                         </span>
                     ) : null}
                 </div>
                 <Link href={detailRoute}>
-                    <Button className="w-full h-10 rounded-full bg-[var(--sf-primary,#2563EB)] hover:bg-[var(--sf-primary,#2563EB)] text-white text-xs font-semibold mt-2">
+                    <Button className="mt-1 h-8 w-full rounded-full bg-[var(--sf-primary,#2563EB)] text-[10px] font-semibold text-white hover:bg-[var(--sf-primary,#2563EB)]">
                         View commodity
                     </Button>
                 </Link>
@@ -369,19 +478,33 @@ export function MobileV2ProductList({ productType }: MobileV2ProductListProps) {
         );
 
     if (productType === 'Loan') {
+        const featured = filteredProducts.find((product) => product.isFeatured) ?? filteredProducts[0];
+        const hot = filteredProducts.filter((product) => product.id !== featured?.id);
         return (
-            <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                    <h2 className="font-bold text-[#1E293B]">Available Loans</h2>
-                    <button className="px-3 py-1.5 bg-[var(--sf-button,#1E40AF)] text-white text-[10px] uppercase font-bold rounded-lg">
+            <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                    <h2 className="font-bold text-[#1E293B]">Feature</h2>
+                    <Link
+                        href={featured ? loanApplyStartHref(featured.id) : '/mobile-v2/products/loan/apply/start'}
+                        className="rounded-lg bg-[var(--sf-button,#1E40AF)] px-3 py-1.5 text-[10px] font-bold uppercase text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]"
+                    >
                         Check Eligibility
-                    </button>
+                    </Link>
                 </div>
-                <div className="space-y-4">
-                    {filteredProducts.map((product) => (
-                        <LoanProductCard key={product.id} product={product} />
-                    ))}
-                </div>
+                {featured ? <FeaturedLoanProductCard product={featured} /> : null}
+
+                {hot.length > 0 ? (
+                    <div>
+                        <h2 className="mb-3 font-bold text-[#1E293B]">Hot Loan</h2>
+                        <div className="-mx-1 flex gap-3 overflow-x-auto pb-2 pl-1 pr-4 no-scrollbar">
+                            {hot.map((p) => (
+                                <div key={p.id} className="w-[200px] shrink-0">
+                                    <HotLoanProductCard product={p} compact />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ) : null}
             </div>
         );
     }

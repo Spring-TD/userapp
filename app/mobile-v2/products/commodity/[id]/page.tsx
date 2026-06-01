@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { Calendar, Check, ChevronDown, ChevronLeft, Minus, Percent, Plus } from 'lucide-react'
+import { Calendar, Check, ChevronDown, ChevronLeft, Loader2, Minus, Percent, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
@@ -12,6 +12,7 @@ import {
   asCommodityCatalogProduct,
   type CommodityCatalogProduct,
 } from '@/lib/commodityCatalog'
+import { buyCommodity } from '@/lib/storefrontApplicationClient'
 
 function formatNgn(amount?: number | null) {
   if (amount == null || Number.isNaN(amount)) return 'NGN—'
@@ -94,6 +95,8 @@ export default function CommodityDetailPage() {
   const [sheet, setSheet] = useState<'details' | 'account' | null>(null)
   const [step, setStep] = useState<'details' | 'pin' | 'success'>('details')
   const [pin, setPin] = useState<string[]>(['3', '8', '9', '8'])
+  const [processing, setProcessing] = useState(false)
+  const [purchaseError, setPurchaseError] = useState<string | null>(null)
 
   const pushPin = (digit: number) => {
     const firstEmpty = pin.findIndex((p) => !p)
@@ -176,11 +179,33 @@ export default function CommodityDetailPage() {
               </div>
             ))}
           </div>
+          {purchaseError ? <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">{purchaseError}</p> : null}
           <Button
-            onClick={() => setStep('success')}
+            disabled={processing}
+            onClick={async () => {
+              setProcessing(true)
+              setPurchaseError(null)
+              try {
+                const result = await buyCommodity(product.id, quantity, product.total || product.price || 1)
+                if (!result.ok) {
+                  setPurchaseError(result.error)
+                  return
+                }
+                setStep('success')
+              } finally {
+                setProcessing(false)
+              }
+            }}
             className="h-14 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-base font-semibold text-white"
           >
-            Pay Now
+            {processing ? (
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Processing...
+              </span>
+            ) : (
+              'Pay Now'
+            )}
           </Button>
         </div>
 
