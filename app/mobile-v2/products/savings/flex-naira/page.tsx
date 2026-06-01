@@ -144,6 +144,8 @@ export default function FlexNairaPage() {
             <ProductFundingFlowSheet
                 open={isFundingFlowOpen}
                 onClose={() => setIsFundingFlowOpen(false)}
+                productId={productId}
+                accountKind="savings"
                 productName={title}
                 productKindLabel="savings"
                 termsTitle="Create a Savings Account"

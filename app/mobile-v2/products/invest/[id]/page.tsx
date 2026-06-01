@@ -155,6 +155,8 @@ export default function InvestDetailPage() {
             <ProductFundingFlowSheet
                 open={isFundingFlowOpen}
                 onClose={() => setIsFundingFlowOpen(false)}
+                productId={product.id}
+                accountKind="investment"
                 productName={product.name}
                 productKindLabel="investment"
                 termsTitle="Create an Investment Account"

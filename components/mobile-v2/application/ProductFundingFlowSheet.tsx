@@ -3,10 +3,12 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import Image from 'next/image';
-import { AlertCircle, Check, CheckCircle, ChevronDown, Copy, X } from 'lucide-react';
+import { AlertCircle, Check, CheckCircle, ChevronDown, Copy, Loader2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ensureInvestmentAccount } from '@/lib/investmentApplyClient';
+import { ensureSavingsAccount } from '@/lib/savingsApplyClient';
 
-type FundingFlowStep = 'terms' | 'application' | 'accountDetails' | 'success' | 'failure';
+type FundingFlowStep = 'terms' | 'accountCreated' | 'application' | 'accountDetails' | 'success' | 'failure';
 
 type FundingFlowForm = {
     name: string;
@@ -17,9 +19,14 @@ type FundingFlowForm = {
     acceptedTerms: boolean;
 };
 
+type FundingAccountKind = 'savings' | 'investment';
+
 type ProductFundingFlowSheetProps = {
     open: boolean;
     onClose: () => void;
+    /** App-scoped product id from the storefront catalog. */
+    productId?: string;
+    accountKind?: FundingAccountKind;
     productName: string;
     productKindLabel: string;
     termsTitle: string;
@@ -39,6 +46,8 @@ const DEFAULT_CENTRAL_WALLET_BALANCE = 250000;
 export function ProductFundingFlowSheet({
     open,
     onClose,
+    productId = '',
+    accountKind = 'savings',
     productName,
     productKindLabel,
     termsTitle,
@@ -53,9 +62,12 @@ export function ProductFundingFlowSheet({
     centralWalletBalance = DEFAULT_CENTRAL_WALLET_BALANCE,
 }: ProductFundingFlowSheetProps) {
     const [step, setStep] = useState<FundingFlowStep>('terms');
-    const [termsAccepted, setTermsAccepted] = useState(true);
-    const [privacyAccepted, setPrivacyAccepted] = useState(true);
+    const [termsAccepted, setTermsAccepted] = useState(false);
+    const [privacyAccepted, setPrivacyAccepted] = useState(false);
     const [useCentralWallet, setUseCentralWallet] = useState(false);
+    const [setupError, setSetupError] = useState<string | null>(null);
+    const [settingUpAccount, setSettingUpAccount] = useState(false);
+    const [accountCreationMessage, setAccountCreationMessage] = useState('');
     const [form, setForm] = useState<FundingFlowForm>({
         name: '',
         purpose: '',
@@ -83,16 +95,73 @@ export function ProductFundingFlowSheet({
 
     const close = () => {
         setStep('terms');
+        setTermsAccepted(false);
+        setPrivacyAccepted(false);
+        setUseCentralWallet(false);
+        setSetupError(null);
+        setSettingUpAccount(false);
+        setAccountCreationMessage('');
         onClose();
     };
 
-    const processPayment = () => {
+    const handleCreateAccount = async () => {
+        if (!termsAccepted || !privacyAccepted) {
+            setSetupError('Please accept the terms and privacy policy to continue.');
+            return;
+        }
+
+        if (!productId.trim()) {
+            setSetupError('No product selected.');
+            return;
+        }
+
+        setSettingUpAccount(true);
+        setSetupError(null);
+
+        try {
+            const ensure =
+                accountKind === 'investment' ? ensureInvestmentAccount : ensureSavingsAccount;
+            const result = await ensure(productId.trim(), { currency: 'NGN' });
+            if (!result.ok) {
+                setSetupError(result.error || 'Could not create your account. Please try again.');
+                return;
+            }
+
+            setAccountCreationMessage(
+                result.message || `Your ${productKindLabel} account was created successfully.`,
+            );
+            setStep('accountCreated');
+        } finally {
+            setSettingUpAccount(false);
+        }
+    };
+
+    const submitFundingAccount = async () => {
+        setSettingUpAccount(true);
+        setSetupError(null);
+
+        try {
+            const ensure =
+                accountKind === 'investment' ? ensureInvestmentAccount : ensureSavingsAccount;
+            const result = await ensure(productId.trim(), { amount: enteredAmount, currency: 'NGN' });
+            if (!result.ok) {
+                setSetupError(result.error || 'Could not set up your account.');
+                setStep('application');
+                return;
+            }
+            setStep('success');
+        } finally {
+            setSettingUpAccount(false);
+        }
+    };
+
+    const processPayment = async () => {
         if (useCentralWallet && enteredAmount > centralWalletBalance) {
             setStep('failure');
             return;
         }
 
-        setStep('success');
+        await submitFundingAccount();
     };
 
     return (
@@ -146,7 +215,11 @@ export function ProductFundingFlowSheet({
                                 onClick={item.onClick}
                                 className="flex items-center gap-2"
                             >
-                                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-black text-white">
+                                <span
+                                    className={`flex h-4 w-4 items-center justify-center rounded-full border ${
+                                        item.checked ? 'border-black bg-black text-white' : 'border-gray-400 bg-white'
+                                    }`}
+                                >
                                     {item.checked ? <Check className="h-3 w-3" /> : null}
                                 </span>
                                 <span>{item.label}</span>
@@ -154,12 +227,23 @@ export function ProductFundingFlowSheet({
                         ))}
                     </div>
 
+                    {setupError ? (
+                        <p className="mt-4 text-center text-xs text-red-600">{setupError}</p>
+                    ) : null}
+
                     <Button
-                        disabled={!termsAccepted || !privacyAccepted}
-                        onClick={() => setStep('application')}
+                        disabled={!termsAccepted || !privacyAccepted || settingUpAccount}
+                        onClick={() => void handleCreateAccount()}
                         className="mt-7 h-12 w-full rounded-full bg-[var(--sf-button,#2563EB)] text-sm font-semibold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)] disabled:opacity-50"
                     >
-                        Go ahead, Create Bank account
+                        {settingUpAccount ? (
+                            <span className="inline-flex items-center gap-2">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Creating account...
+                            </span>
+                        ) : (
+                            'Go ahead, Create Bank account'
+                        )}
                     </Button>
 
                     <button
@@ -168,6 +252,31 @@ export function ProductFundingFlowSheet({
                         className="mt-5 w-full text-sm font-medium text-[#1E293B]"
                     >
                         No. Go back
+                    </button>
+                </div>
+            ) : step === 'accountCreated' ? (
+                <div className="relative z-10 w-full rounded-t-[28px] bg-white px-8 pb-8 pt-4 text-center shadow-2xl">
+                    <div className="mx-auto mb-8 h-1.5 w-20 rounded-full bg-gray-300" />
+                    <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-green-600">
+                        <CheckCircle className="h-9 w-9" />
+                    </div>
+                    <h2 className="text-xl font-bold text-[#1E293B]">Account Created Successfully</h2>
+                    <p className="mx-auto mt-3 max-w-xs text-sm leading-relaxed text-gray-500">
+                        {accountCreationMessage || `Your ${productKindLabel} account has been created successfully.`}
+                    </p>
+                    <Button
+                        type="button"
+                        onClick={() => setStep('application')}
+                        className="mt-8 h-12 w-full rounded-full bg-[var(--sf-button,#2563EB)] text-sm font-semibold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]"
+                    >
+                        Continue to Application
+                    </Button>
+                    <button
+                        type="button"
+                        onClick={close}
+                        className="mt-5 w-full text-sm font-medium text-[#1E293B]"
+                    >
+                        Not now
                     </button>
                 </div>
             ) : step === 'application' ? (
@@ -293,10 +402,18 @@ export function ProductFundingFlowSheet({
                     </div>
 
                     <Button
-                        onClick={processPayment}
+                        onClick={() => void processPayment()}
+                        disabled={settingUpAccount}
                         className="mt-9 h-14 w-full rounded-full bg-[var(--sf-button,#2563EB)] text-base font-semibold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]"
                     >
-                        Continue
+                        {settingUpAccount ? (
+                            <span className="inline-flex items-center gap-2">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Processing...
+                            </span>
+                        ) : (
+                            'Continue'
+                        )}
                     </Button>
                 </div>
             ) : (

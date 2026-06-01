@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Check, ChevronLeft, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ensureLoanAccount } from '@/lib/loanApplyClient'
-import { loanAccountSuccessHref } from '@/lib/loanApplyRoutes'
+import { loanApplyHref } from '@/lib/loanApplyRoutes'
 
 function LoanApplyStartInner() {
   const router = useRouter()
@@ -34,7 +34,7 @@ function LoanApplyStartInner() {
         return
       }
 
-      router.replace(loanAccountSuccessHref(productId))
+      router.replace(loanApplyHref(productId))
     } finally {
       setProcessing(false)
     }
