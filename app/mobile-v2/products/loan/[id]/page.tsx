@@ -10,6 +10,7 @@ import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 import { mapMobileProductToLoanCatalog } from '@/lib/mapProductToLoanCatalog'
 import { loanApplyStartHref } from '@/lib/loanApplyRoutes'
+import { sanitizeProductId } from '@/lib/sanitizeProductId'
 import type { LoanCatalogItem } from '@/types/loanCatalog'
 import { ProductDetailsScreen } from '@/components/mobile-v2/application/ProductDetailsScreen'
 import { amountRange, feeSummary, formatNgn, requirementSummary } from '@/lib/mobileProductDetailDisplay'
@@ -18,11 +19,11 @@ function LoanDetailInner() {
   const params = useParams()
   const searchParams = useSearchParams()
   const rawId = params?.id
-  const productId = typeof rawId === 'string' ? decodeURIComponent(rawId) : ''
+  const productId = typeof rawId === 'string' ? sanitizeProductId(decodeURIComponent(rawId)) : ''
   const detailsOnly = searchParams.get('tab') === 'details'
   const initialTab = detailsOnly ? 'product' : 'history'
 
-  const { ready: tenantReady } = useMobileV2Tenant()
+  const { ready: tenantReady, displayName } = useMobileV2Tenant()
   const { product, loading } = useMobileProductDetail({
     productId,
     enabled: tenantReady && Boolean(productId),
@@ -30,9 +31,9 @@ function LoanDetailInner() {
 
   const loan = useMemo<LoanCatalogItem | undefined>(() => {
     if (!productId) return undefined
-    if (product) return mapMobileProductToLoanCatalog(product)
+    if (product) return mapMobileProductToLoanCatalog(product, displayName || 'Provider')
     return undefined
-  }, [product, productId])
+  }, [displayName, product, productId])
 
   if (!tenantReady || loading) {
     return (

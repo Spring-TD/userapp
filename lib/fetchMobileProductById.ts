@@ -1,6 +1,7 @@
 import { apiClient } from '@/lib/api'
 import { ENDPOINTS } from '@/lib/endpoints'
 import { getAccessToken } from '@/lib/cookieAuth'
+import { sanitizeProductId } from '@/lib/sanitizeProductId'
 import { mapApiProductToMobileProduct, type MobileProduct } from '@/lib/storefrontProducts'
 
 type ProductDetailResponse = {
@@ -55,7 +56,7 @@ export function extractDetailRow(payload: unknown, productId: string): Record<st
 
 /** Fetches and maps a single storefront product by activation id. */
 export async function fetchMobileProductById(productId: string): Promise<MobileProduct | null> {
-  const id = productId.trim()
+  const id = sanitizeProductId(productId)
   if (!id) return null
 
   const hasToken = typeof window !== 'undefined' && Boolean(getAccessToken())

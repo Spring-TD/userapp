@@ -6,12 +6,19 @@ import Link from 'next/link'
 import { Calendar, ChevronLeft, Filter, Percent, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import {
+  fetchUserApplications,
+  readInitializedApplication,
+  type StorefrontApplication,
+} from '@/lib/storefrontApplicationClient'
 
 type DetailKind = 'loan' | 'mortgage'
 type DetailTab = 'history' | 'schedule' | 'property' | 'product'
 type MortgageProductTab = 'mortgage' | 'property'
 
 const ACCOUNT_LOGO_SRC = '/images/mobile/WhatsApp%20Image%202026-05-20%20at%201.34.41%20PM.jpeg'
+const BRAND_INK = 'text-[var(--sf-ink,#1E293B)]'
+const BRAND_SOFT = 'bg-[color-mix(in_srgb,var(--sf-button,#1E40AF)_10%,white)]'
 const MORTGAGE_FACILITIES: Array<[string, boolean]> = [
   ['Solar energy system', true],
   ['Reliable water supply', true],
@@ -27,6 +34,15 @@ const MORTGAGE_FACILITIES: Array<[string, boolean]> = [
   ['Gateman quarter', true],
   ['Indoor Cinema', true],
 ]
+
+type ApplicationHistoryRow = {
+  id: string
+  name: string
+  amount: string
+  status: string
+  date: string
+  color: string
+}
 
 type ProductDetailsScreenProps = {
   kind: DetailKind
@@ -47,21 +63,71 @@ type ProductDetailsScreenProps = {
 }
 
 function NairaAmount({ children }: { children: React.ReactNode }) {
-  return <span className="font-bold text-[#1E293B]">{children}</span>
+  return <span className={`font-bold ${BRAND_INK}`}>{children}</span>
 }
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4 text-sm">
       <span className="text-gray-500">{label}</span>
-      <span className="max-w-[55%] text-right font-semibold text-[#1E293B]">{value}</span>
+      <span className={`max-w-[55%] text-right font-semibold ${BRAND_INK}`}>{value}</span>
     </div>
   )
 }
 
-function AccountSummaryCard({ kind, provider }: { kind: DetailKind; provider: string }) {
+function formatCurrency(amount?: number | null, currency = 'NGN') {
+  if (amount == null || Number.isNaN(amount)) return `${currency}—`
+  return `${currency}${amount.toLocaleString('en-NG', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
+}
+
+function formatDate(value?: string) {
+  if (!value) return 'Date unavailable'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return 'Date unavailable'
+  return d.toLocaleDateString('en-NG', { month: 'short', day: '2-digit', year: 'numeric' })
+}
+
+function statusColor(status: string) {
+  const s = status.toLowerCase()
+  if (['approved', 'active', 'successful', 'disbursed'].some((x) => s.includes(x))) return 'text-green-500'
+  if (['rejected', 'failed', 'unsuccessful'].some((x) => s.includes(x))) return 'text-red-400'
+  return 'text-amber-500'
+}
+
+function getApplicationId(application: StorefrontApplication) {
+  return String(application.id ?? application._id ?? '').trim()
+}
+
+function getApplicationAccount(application?: StorefrontApplication | null) {
+  return application?.productWallet?.upstreamAccount ?? application?.account ?? null
+}
+
+function AccountSummaryCard({
+  kind,
+  provider,
+  title,
+  imageUrl,
+  application,
+}: {
+  kind: DetailKind
+  provider: string
+  title: string
+  imageUrl: string
+  application?: StorefrontApplication | null
+}) {
+  const account = getApplicationAccount(application)
+  const accountLabel = account?.accountNumber
+    ? `${account.bankName || provider} · ${account.accountNumber}`
+    : `${title} account`
+  const balance = account?.balance ?? application?.amount
+  const currency = account?.currency || application?.currency || 'NGN'
+  const status = account?.status || application?.status || 'Not initialized'
+
   return (
-    <div className="rounded-2xl bg-[#F2F7FF] p-4 shadow-sm">
+    <div className={`rounded-2xl p-4 shadow-sm ${BRAND_SOFT}`}>
       <div className="mb-3 flex items-start justify-between gap-4">
         <div>
           <div className="mb-2 h-5 w-[86px] overflow-hidden rounded bg-white/80">
@@ -73,27 +139,25 @@ function AccountSummaryCard({ kind, provider }: { kind: DetailKind; provider: st
               className="h-full w-full object-contain"
             />
           </div>
-          <p className="text-xs font-medium text-[#1E293B]">Stanley Samuel Wallet</p>
-          <p className="mt-1 text-xl font-bold text-[#1E293B]">₦0.00</p>
-          <p className="text-[10px] text-gray-500">Active · NGN</p>
+          <p className={`text-xs font-medium ${BRAND_INK}`}>{accountLabel}</p>
+          <p className={`mt-1 text-xl font-bold ${BRAND_INK}`}>{formatCurrency(balance, currency)}</p>
+          <p className="text-[10px] text-gray-500">{status} · {currency}</p>
         </div>
 
         <div
           className="h-16 w-20 rounded-xl bg-cover bg-center"
           style={{
-            backgroundImage:
-              kind === 'mortgage'
-                ? "url('/mortgage-feature.png')"
-                : "url('https://images.unsplash.com/photo-1560518883-ce09059eeffa?q=80&w=800&auto=format&fit=crop')",
+            backgroundImage: `url(${imageUrl})`,
           }}
         />
       </div>
       <div className="flex items-end gap-2">
         <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-300">
-          <div className="h-full w-1/3 rounded-full bg-green-500" />
+          <div className={cn('h-full rounded-full bg-[var(--sf-button,#1E40AF)]', application ? 'w-2/3' : 'w-0')} />
         </div>
-        <span className="text-[8px] font-semibold text-gray-400">33% NGN2,000,000</span>
-        <span className="text-[8px] font-semibold text-gray-400">30,000,000</span>
+        <span className="text-[8px] font-semibold text-gray-400">
+          {application ? 'Application in progress' : `No ${kind} application yet`}
+        </span>
       </div>
     </div>
   )
@@ -114,31 +178,28 @@ function SearchBox({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder="Search transactions"
-        className="h-full min-w-0 flex-1 bg-transparent text-xs text-[#1E293B] outline-none placeholder:text-gray-400"
+        className={`h-full min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-gray-400 ${BRAND_INK}`}
       />
     </div>
   )
 }
 
 function HistoryList({
-  kind,
+  rows,
+  loading,
+  error,
   searchTerm,
   onSearchTermChange,
 }: {
-  kind: DetailKind
+  rows: ApplicationHistoryRow[]
+  loading: boolean
+  error: string | null
   searchTerm: string
   onSearchTermChange: (value: string) => void
 }) {
-  const requestLabel = kind === 'mortgage' ? 'Mortgage request' : 'Loan request'
-  const rows = [
-    [requestLabel, '₦3,000,000.00', 'Successful', 'text-green-500'],
-    [requestLabel, '₦500,000.00', 'Unsuccessful', 'text-red-400'],
-    [requestLabel, '₦500,000.00', 'Pending', 'text-amber-500'],
-    [requestLabel, '₦500,000.00', 'Pending', 'text-amber-500'],
-  ]
   const normalizedSearch = searchTerm.trim().toLowerCase()
   const filteredRows = normalizedSearch
-    ? rows.filter(([name, amount, status]) =>
+    ? rows.filter(({ name, amount, status }) =>
         [name, amount, status].some((value) => value.toLowerCase().includes(normalizedSearch)),
       )
     : rows
@@ -147,15 +208,23 @@ function HistoryList({
     <div className="rounded-2xl bg-white p-4 shadow-sm">
       <SearchBox value={searchTerm} onChange={onSearchTermChange} />
       <div className="divide-y divide-gray-100">
-        {filteredRows.map(([name, amount, status, color], index) => (
-          <div key={`${name}-${index}`} className="flex items-start justify-between py-3">
+        {loading ? (
+          <p className="py-6 text-center text-xs text-gray-500">Loading applications...</p>
+        ) : error ? (
+          <p className="rounded-xl bg-amber-50 px-3 py-3 text-xs text-amber-800">{error}</p>
+        ) : filteredRows.length === 0 ? (
+          <p className="py-6 text-center text-xs text-gray-500">
+            No application history yet. Submitted applications will appear here.
+          </p>
+        ) : filteredRows.map(({ id, name, amount, status, color, date }) => (
+          <div key={id} className="flex items-start justify-between py-3">
             <div>
-              <p className="text-sm font-semibold text-[#1E293B]">{name}</p>
+              <p className={`text-sm font-semibold ${BRAND_INK}`}>{name}</p>
               <p className={cn('mt-1 text-[10px]', color)}>{status}</p>
             </div>
             <div className="text-right">
-              <p className="text-xs font-bold text-[#1E293B]">{amount}</p>
-              <p className="mt-1 text-[9px] text-gray-400">Mar 05, 2026</p>
+              <p className={`text-xs font-bold ${BRAND_INK}`}>{amount}</p>
+              <p className="mt-1 text-[9px] text-gray-400">{date}</p>
             </div>
           </div>
         ))}
@@ -171,35 +240,12 @@ function ScheduleList({
   searchTerm: string
   onSearchTermChange: (value: string) => void
 }) {
-  const rows = [
-    ['10th May 2026', '₦3,000,000.00', 'Paid', 'text-green-500'],
-    ['11th June 2026', '₦500,000.00', 'Unsuccessful', 'text-red-400'],
-    ['10th July 2026', '₦500,000.00', 'Upcoming', 'text-amber-500'],
-  ]
-  const normalizedSearch = searchTerm.trim().toLowerCase()
-  const filteredRows = normalizedSearch
-    ? rows.filter(([date, amount, status]) =>
-        [date, amount, status].some((value) => value.toLowerCase().includes(normalizedSearch)),
-      )
-    : rows
-
   return (
     <div className="rounded-2xl bg-white p-4 shadow-sm">
       <SearchBox value={searchTerm} onChange={onSearchTermChange} />
-      <div className="divide-y divide-gray-100">
-        {filteredRows.map(([date, amount, status, color]) => (
-          <div key={date} className="flex items-start justify-between py-3">
-            <div>
-              <p className="text-sm font-semibold text-[#1E293B]">{date}</p>
-              <p className={cn('mt-1 text-[10px]', color)}>{status}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs font-bold text-[#1E293B]">{amount}</p>
-              <p className="mt-1 text-[9px] text-gray-400">Capital: ₦450,000 | Interest: ₦50,000</p>
-            </div>
-          </div>
-        ))}
-      </div>
+      <p className="py-6 text-center text-xs text-gray-500">
+        No repayment schedule is available yet. It will appear after the provider creates a schedule for this application.
+      </p>
     </div>
   )
 }
@@ -252,7 +298,7 @@ function ProductPanel({
             style={{ backgroundImage: `url(${imageUrl})` }}
           />
           <div>
-            <h2 className="mb-4 text-sm font-bold uppercase tracking-wide text-[#1E293B]">
+            <h2 className={`mb-4 text-sm font-bold uppercase tracking-wide ${BRAND_INK}`}>
               Facility Details
             </h2>
             <div className="grid grid-cols-1 gap-3">
@@ -265,7 +311,7 @@ function ProductPanel({
               ).map(([facility, value]) => (
                 <div
                   key={facility}
-                  className="flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-sm font-medium text-[#1E293B] shadow-sm"
+                  className={`flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-sm font-medium shadow-sm ${BRAND_INK}`}
                 >
                   <span>{facility}</span>
                   <span
@@ -302,7 +348,7 @@ function ProductPanel({
           ) : null}
 
           <div className="flex items-start justify-between gap-3">
-            <h2 className="text-sm font-medium text-[#1E293B]">{title}</h2>
+            <h2 className={`text-sm font-medium ${BRAND_INK}`}>{title}</h2>
             <NairaAmount>{amount}</NairaAmount>
           </div>
           <p className="text-[11px] leading-relaxed text-gray-500">{description}</p>
@@ -355,18 +401,51 @@ function ProductPanel({
 }
 
 export function ProductDetailsScreen(props: ProductDetailsScreenProps) {
-  const { kind, backHref, productId, provider, initialTab = 'history', detailsOnly = false } = props
+  const { kind, backHref, productId, provider, imageUrl, title, initialTab = 'history', detailsOnly = false } = props
   const tabs = kind === 'mortgage'
     ? (['history', 'schedule', 'property', 'product'] as DetailTab[])
     : (['history', 'schedule', 'product'] as DetailTab[])
   const resolvedInitialTab = tabs.includes(initialTab) ? initialTab : 'history'
   const [activeTab, setActiveTab] = useState<DetailTab>(resolvedInitialTab)
   const [searchTerm, setSearchTerm] = useState('')
+  const [applications, setApplications] = useState<StorefrontApplication[]>([])
+  const [applicationsLoading, setApplicationsLoading] = useState(false)
+  const [applicationsError, setApplicationsError] = useState<string | null>(null)
 
   useEffect(() => {
     setActiveTab(resolvedInitialTab)
     setSearchTerm('')
   }, [kind, productId, resolvedInitialTab])
+
+  useEffect(() => {
+    if (detailsOnly) return
+    let cancelled = false
+    setApplicationsLoading(true)
+    setApplicationsError(null)
+
+    fetchUserApplications()
+      .then((result) => {
+        if (cancelled) return
+        if (result.ok) {
+          setApplications(result.applications)
+        } else {
+          setApplications([])
+          setApplicationsError(result.error)
+        }
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return
+        setApplications([])
+        setApplicationsError(error instanceof Error ? error.message : 'Failed to load applications')
+      })
+      .finally(() => {
+        if (!cancelled) setApplicationsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [detailsOnly, productId])
 
   const labels: Record<DetailTab, string> = {
     history: 'History',
@@ -375,14 +454,36 @@ export function ProductDetailsScreen(props: ProductDetailsScreenProps) {
     product:  'Details'
   }
 
+  const initializedApplication = readInitializedApplication()
+  const matchingApplications = applications.filter((application) => {
+    const applicationProductId = String(application.productId ?? '').trim()
+    if (applicationProductId === productId) return true
+    const productType = String(application.productType ?? '').toLowerCase()
+    return !applicationProductId && productType.includes(kind)
+  })
+  const latestApplication =
+    matchingApplications[0] ||
+    (initializedApplication?.productId === productId ? initializedApplication : null)
+  const historyRows: ApplicationHistoryRow[] = matchingApplications.map((application, index) => {
+    const status = String(application.status ?? 'Pending')
+    return {
+      id: getApplicationId(application) || `${application.productId || productId}-${index}`,
+      name: application.productName || `${kind === 'mortgage' ? 'Mortgage' : 'Loan'} application`,
+      amount: formatCurrency(application.amount, application.currency || 'NGN'),
+      status,
+      color: statusColor(status),
+      date: formatDate(application.createdAt || application.updatedAt),
+    }
+  })
+
   return (
-    <div className="relative flex h-full flex-col bg-[#F7F9FF]">
+    <div className="relative flex h-full flex-col bg-[color-mix(in_srgb,var(--sf-button,#1E40AF)_6%,white)]">
       <div className="no-scrollbar flex-1 overflow-y-auto px-4 pb-10 pt-10">
         <div className="mb-6 flex items-center justify-between">
           <Link href={backHref} className="flex h-9 w-9 items-center justify-center rounded-full">
             <ChevronLeft className="h-5 w-5 text-gray-700" />
           </Link>
-          <h1 className="text-base font-bold text-[#111827]">
+          <h1 className={`text-base font-bold ${BRAND_INK}`}>
             {kind === 'mortgage' ? 'Mortgage Details' : 'Loan Details'}
           </h1>
           <Filter className="h-4 w-4 text-gray-700" />
@@ -392,7 +493,13 @@ export function ProductDetailsScreen(props: ProductDetailsScreenProps) {
           <ProductPanel {...props} />
         ) : (
           <>
-            <AccountSummaryCard kind={kind} provider={provider} />
+            <AccountSummaryCard
+              kind={kind}
+              provider={provider}
+              title={title}
+              imageUrl={imageUrl}
+              application={latestApplication}
+            />
 
             <div className="my-6 flex gap-2 overflow-x-auto no-scrollbar">
               {tabs.map((tab) => (
@@ -403,7 +510,7 @@ export function ProductDetailsScreen(props: ProductDetailsScreenProps) {
                   className={cn(
                     'shrink-0 rounded-full border px-5 py-2 text-xs font-medium',
                     activeTab === tab
-                      ? 'border-gray-700 bg-white text-[#1E293B] shadow-sm'
+                      ? 'border-[var(--sf-button,#1E40AF)] bg-white text-[var(--sf-button,#1E40AF)] shadow-sm'
                       : 'border-transparent bg-white/70 text-gray-400',
                   )}
                 >
@@ -414,7 +521,9 @@ export function ProductDetailsScreen(props: ProductDetailsScreenProps) {
 
             {activeTab === 'history' ? (
               <HistoryList
-                kind={kind}
+                rows={historyRows}
+                loading={applicationsLoading}
+                error={applicationsError}
                 searchTerm={searchTerm}
                 onSearchTermChange={setSearchTerm}
               />
@@ -426,7 +535,7 @@ export function ProductDetailsScreen(props: ProductDetailsScreenProps) {
               <div className="space-y-4">
                 <div
                   className="h-[112px] rounded-xl bg-gray-300 bg-cover bg-center"
-                  style={{ backgroundImage: "url('/mortgage-feature.png')" }}
+                  style={{ backgroundImage: `url(${imageUrl})` }}
                 />
                 <div className="flex justify-center gap-1.5">
                   <span className="h-1.5 w-5 rounded-full bg-gray-600" />

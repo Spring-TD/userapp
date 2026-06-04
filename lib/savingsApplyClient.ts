@@ -6,7 +6,7 @@ type SavingsApplyResponse = {
   error?: string
   data?: {
     accountCreated?: boolean
-    account?: { id?: string }
+    account?: { id?: string; accountNumber?: string; bankName?: string; currency?: string; status?: string }
   }
 }
 
@@ -14,6 +14,7 @@ export type EnsureSavingsAccountResult = {
   ok: boolean
   accountCreated: boolean
   accountId?: string
+  account?: { id?: string; accountNumber?: string; bankName?: string; currency?: string; status?: string }
   message?: string
   error?: string
 }
@@ -25,11 +26,12 @@ export async function ensureSavingsAccount(
 ): Promise<EnsureSavingsAccountResult> {
   const result = await createSavingsAccount(productId, { currency: options?.currency })
   if (!result.ok) return { ok: false, accountCreated: false, error: result.error }
-  const data = result.data as { accountCreated?: boolean; account?: { id?: string } } | undefined
+  const data = result.data as SavingsApplyResponse['data'] | undefined
   return {
     ok: true,
     accountCreated: data?.accountCreated === true || Boolean(data?.account?.id),
     accountId: data?.account?.id,
+    account: data?.account,
     message: 'Savings account created.',
   }
 }

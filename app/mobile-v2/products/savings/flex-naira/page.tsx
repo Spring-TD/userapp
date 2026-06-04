@@ -19,7 +19,7 @@ import { amountRange, feeSummary, formatNgn, rateLabel } from '@/lib/mobileProdu
 export default function FlexNairaPage() {
     const searchParams = useSearchParams();
     const productId = searchParams.get('productId') || '';
-    const { ready: tenantReady } = useMobileV2Tenant();
+    const { ready: tenantReady, displayName } = useMobileV2Tenant();
     const { product, loading } = useMobileProductDetail({
         productId,
         enabled: tenantReady && Boolean(productId),
@@ -50,6 +50,7 @@ export default function FlexNairaPage() {
     const duration = product.duration || 'Not specified';
     const rate = rateLabel(product);
     const description = product.description || 'Savings product';
+    const providerName = displayName || 'Provider';
     const amountRows =
         product.amountMin != null && product.amountMax != null
             ? [
@@ -83,7 +84,7 @@ export default function FlexNairaPage() {
                             {title}
                         </h1>
                         <span className="mt-1 shrink-0 rounded-full bg-white px-4 py-2 text-[10px] font-semibold text-gray-600">
-                            By AG Mortgage
+                            By {providerName}
                         </span>
                     </div>
                     <p className="max-w-[270px] text-[13px] font-medium leading-relaxed text-white/90">
@@ -152,10 +153,11 @@ export default function FlexNairaPage() {
                 termsDescription={
                     <>
                         Before you can proceed with <strong>{title}</strong> offered by{' '}
-                        <strong>AG Mortgage Bank</strong>, you are required to open a bank account with{' '}
-                        <strong>AG Mortgage Bank</strong>.
+                        <strong>{providerName}</strong>, you are required to open a bank account with{' '}
+                        <strong>{providerName}</strong>.
                     </>
                 }
+                providerName={providerName}
                 formTitle="Start Flex Savings"
                 namePlaceholder="Name of savings"
                 amountPlaceholder="Amount to save"

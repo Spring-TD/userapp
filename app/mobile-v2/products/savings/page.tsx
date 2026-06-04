@@ -13,7 +13,7 @@ import type { MobileProduct } from '@/lib/storefrontProducts';
 
 const SAVINGS_ICONS = [PiggyBank, Target, LockKeyhole];
 
-function SavingsCard({ plan, index }: { plan: MobileProduct; index: number }) {
+function SavingsCard({ plan, index, providerName }: { plan: MobileProduct; index: number; providerName: string }) {
     const Icon = SAVINGS_ICONS[index % SAVINGS_ICONS.length];
     const detailHref = `/mobile-v2/products/savings/flex-naira?productId=${encodeURIComponent(plan.id)}`;
 
@@ -21,7 +21,7 @@ function SavingsCard({ plan, index }: { plan: MobileProduct; index: number }) {
         <div className="rounded-[10px] bg-[#1F1F1F] p-3 text-white shadow-lg shadow-black/10">
             <div className="mb-4 flex items-center justify-between gap-2">
                 <p className="text-[9px] font-medium text-white/60">
-                    By AG Mortgage Bank
+                    By {providerName}
                 </p>
                 {plan.isFeatured ? (
                     <span className="rounded-full bg-white/10 px-2 py-1 text-[8px] font-bold uppercase text-white">
@@ -53,7 +53,7 @@ function SavingsCard({ plan, index }: { plan: MobileProduct; index: number }) {
 }
 
 export default function SavingsProductPage() {
-    const { appId, ready: tenantReady } = useMobileV2Tenant();
+    const { appId, ready: tenantReady, displayName } = useMobileV2Tenant();
     const { loading, error, getProductsByType } = useMobileProducts({
         springAppId: appId ?? undefined,
         tenantReady,
@@ -80,7 +80,7 @@ export default function SavingsProductPage() {
                     ) : orderedPlans.length > 0 ? (
                         <div className="grid grid-cols-2 gap-5">
                             {orderedPlans.map((plan, index) => (
-                                <SavingsCard key={plan.id} plan={plan} index={index} />
+                                <SavingsCard key={plan.id} plan={plan} index={index} providerName={displayName || 'Provider'} />
                             ))}
                         </div>
                     ) : (

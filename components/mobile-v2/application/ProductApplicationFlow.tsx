@@ -24,6 +24,7 @@ import {
   submitInitializedApplication,
   uploadApplicationFile,
   type RequirementSubmission,
+  type StorefrontApplication,
 } from '@/lib/storefrontApplicationClient'
 
 type ProductKind = 'loan' | 'mortgage'
@@ -36,7 +37,16 @@ type Guarantor = {
   verificationUrl?: string
 }
 
+type EmploymentDraft = {
+  occupation: string
+  placeOfWork: string
+  hrName: string
+  hrEmail: string
+}
+
 const PRIMARY = 'bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white'
+const BRAND_INK = 'text-[var(--sf-ink,#1E293B)]'
+const BRAND_SOFT = 'bg-[color-mix(in_srgb,var(--sf-button,#1E40AF)_10%,white)]'
 
 const DEFAULT_GUARANTOR: Guarantor = {
   name: 'Charles Avis',
@@ -46,6 +56,22 @@ const DEFAULT_GUARANTOR: Guarantor = {
 
 function prettyKind(kind: ProductKind) {
   return kind === 'loan' ? 'Loan' : 'Mortgage'
+}
+
+function formatCurrency(amount?: number | null, currency = 'NGN') {
+  if (amount == null || Number.isNaN(amount)) return `${currency}—`
+  return `${currency}${amount.toLocaleString('en-NG', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
+}
+
+function getApplicationAccount(application?: StorefrontApplication | null) {
+  return application?.productWallet?.upstreamAccount ?? application?.account ?? null
+}
+
+function applicationProvider(application?: StorefrontApplication | null) {
+  return getApplicationAccount(application)?.bankName || 'your provider'
 }
 
 function InputPill({
@@ -62,13 +88,13 @@ function InputPill({
   type?: React.HTMLInputTypeAttribute
 }) {
   return (
-    <label className="flex h-12 items-center justify-between rounded-2xl bg-[#F2F2F2] px-4">
+    <label className="flex h-12 items-center justify-between rounded-2xl bg-gray-100 px-4 ring-[var(--sf-button,#1E40AF)]/20 focus-within:ring-2">
       <input
         type={type}
         value={value}
         onChange={(e) => onChange?.(e.target.value)}
         placeholder={placeholder}
-        className="min-w-0 flex-1 bg-transparent text-[12px] text-[#1E293B] placeholder:text-gray-400 focus:outline-none"
+        className={`min-w-0 flex-1 bg-transparent text-[12px] placeholder:text-gray-400 focus:outline-none ${BRAND_INK}`}
       />
       {right}
     </label>
@@ -76,7 +102,7 @@ function InputPill({
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <h2 className="pt-2 text-sm font-bold text-[#1E293B]">{children}</h2>
+  return <h2 className={`pt-2 text-sm font-bold ${BRAND_INK}`}>{children}</h2>
 }
 
 function StatusDot({ done }: { done?: boolean }) {
@@ -84,7 +110,7 @@ function StatusDot({ done }: { done?: boolean }) {
     <span
       className={cn(
         'inline-flex h-4 w-4 items-center justify-center rounded-full text-white',
-        done ? 'bg-green-400' : 'bg-gray-400',
+        done ? 'bg-[var(--sf-button,#1E40AF)]' : 'bg-gray-400',
       )}
     >
       {done ? <Check className="h-2.5 w-2.5" /> : null}
@@ -146,14 +172,14 @@ function FileActionRow({
           target={fileUrl ? '_blank' : undefined}
           rel="noreferrer"
           className={cn(
-            'flex h-9 items-center justify-center gap-2 rounded-xl bg-red-50 text-xs font-semibold text-gray-600',
+            `flex h-9 items-center justify-center gap-2 rounded-xl text-xs font-semibold ${BRAND_SOFT} ${BRAND_INK}`,
             !fileUrl && 'pointer-events-none opacity-50',
           )}
         >
           Download File
           <Download className="h-3 w-3" />
         </a>
-        <label className="flex h-9 cursor-pointer items-center justify-center gap-2 rounded-xl bg-gray-100 text-xs font-semibold text-gray-600">
+        <label className={`flex h-9 cursor-pointer items-center justify-center gap-2 rounded-xl bg-gray-100 text-xs font-semibold ${BRAND_INK}`}>
           <input type="file" className="hidden" onChange={(event) => void handleUpload(event.target.files?.[0])} />
           {uploading ? 'Uploading...' : uploaded ? 'Uploaded' : 'Upload File'}
           {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
@@ -166,7 +192,7 @@ function FileActionRow({
 
 function FileUploadButton({ label }: { label: string }) {
   return (
-    <label className="inline-flex cursor-pointer rounded-xl bg-gray-100 px-4 py-2 text-xs font-bold text-gray-700">
+    <label className={`inline-flex cursor-pointer rounded-xl bg-gray-100 px-4 py-2 text-xs font-bold ${BRAND_INK}`}>
       <input type="file" className="hidden" />
       {label}
     </label>
@@ -196,7 +222,7 @@ function CollateralRequirement({
       {upload ? (
         <FileUploadButton label={button} />
       ) : (
-        <button type="button" className="rounded-xl bg-gray-100 px-4 py-2 text-xs font-bold text-gray-700">
+        <button type="button" className={`rounded-xl bg-gray-100 px-4 py-2 text-xs font-bold ${BRAND_INK}`}>
           {button}
         </button>
       )}
@@ -232,7 +258,7 @@ function ProgressTabs({
           className={cn(
             'shrink-0 rounded-full border px-3 py-1.5 text-[10px] font-medium',
             active === step
-              ? 'border-gray-700 bg-white text-gray-800 shadow-sm'
+              ? 'border-[var(--sf-button,#1E40AF)] bg-white text-[var(--sf-button,#1E40AF)] shadow-sm'
               : 'border-transparent bg-gray-100 text-gray-400',
           )}
         >
@@ -268,15 +294,31 @@ function BottomSheet({
 
 function ProductSummary({
   kind,
+  application,
+  providerName,
   withTerms,
   accepted,
   onToggleAccepted,
 }: {
   kind: ProductKind
+  application?: StorefrontApplication | null
+  providerName: string
   withTerms: boolean
   accepted: boolean
   onToggleAccepted: () => void
 }) {
+  const account = getApplicationAccount(application)
+  const productName = application?.productName || `${prettyKind(kind)} application`
+  const amount = formatCurrency(application?.amount, application?.currency || 'NGN')
+  const summaryRows = [
+    ['Application status', application?.status || 'Initialized'],
+    ['Product type', application?.productType || prettyKind(kind).toUpperCase()],
+    ['Application amount', amount],
+    ...(account?.bankName ? [['Bank name', account.bankName]] : []),
+    ...(account?.accountNumber ? [['Account number', account.accountNumber]] : []),
+    ['Powered by:', providerName],
+  ]
+
   return (
     <div className="space-y-5">
       <div
@@ -290,27 +332,19 @@ function ProductSummary({
       />
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-medium text-[#1E293B]">
-            {kind === 'mortgage' ? '2 Bedroom Flat Duplex' : 'Business Loan'}
+          <h2 className={`text-sm font-medium ${BRAND_INK}`}>
+            {productName}
           </h2>
           <p className="mt-2 text-[11px] leading-relaxed text-gray-500">
-            Lorem ipsum dolor sit amet consectetur. Malesuada volutpat risus adipiscing nunc amet
-            dolor eu fermentum. Sollicitu...
+            Review the initialized {prettyKind(kind).toLowerCase()} application details before submitting.
           </p>
         </div>
-        <p className="shrink-0 text-sm font-bold text-[#1E293B]">
-          {kind === 'mortgage' ? 'NGN122,000,000' : 'NGN2,000,000'}
+        <p className={`shrink-0 text-sm font-bold ${BRAND_INK}`}>
+          {amount}
         </p>
       </div>
       <div className="space-y-5 pt-2 text-sm">
-        {[
-          ['Location', 'N60,700,000.00'],
-          ['Buffer amount', 'N60,800,440.00'],
-          ['Start Date', 'Mar 2026'],
-          ['Investment Period', '1 year'],
-          ['Powered by:', 'AG Mortgage Bank'],
-          ['Total', 'N60,830,842.00'],
-        ].map(([label, value]) => (
+        {summaryRows.map(([label, value]) => (
           <div key={label} className="flex items-center justify-between gap-4">
             <span className="text-gray-500">{label}</span>
             <span className="text-right font-semibold text-gray-700">{value}</span>
@@ -327,7 +361,7 @@ function ProductSummary({
             <span
               className={cn(
                 'flex h-4 w-4 items-center justify-center rounded-full border',
-                accepted ? 'border-black bg-black text-white' : 'border-gray-300',
+                accepted ? 'border-[var(--sf-button,#1E40AF)] bg-[var(--sf-button,#1E40AF)] text-white' : 'border-gray-300',
               )}
             >
               {accepted ? <Check className="h-2.5 w-2.5" /> : null}
@@ -357,14 +391,20 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
   const [submitting, setSubmitting] = useState(false)
   const [requirementSubmissions, setRequirementSubmissions] = useState<RequirementSubmission[]>([])
   const [guarantors, setGuarantors] = useState<Guarantor[]>([])
+  const [employmentDraft, setEmploymentDraft] = useState<EmploymentDraft>({
+    occupation: '',
+    placeOfWork: '',
+    hrName: '',
+    hrEmail: '',
+  })
   const [guarantorDraft, setGuarantorDraft] = useState<Guarantor>({
     name: '',
     phone: '',
     email: '',
   })
   const productName = prettyKind(kind)
-  const providerName = 'AG Mortgage Bank'
   const initializedApplication = readInitializedApplication()
+  const providerName = applicationProvider(initializedApplication)
   const applicationId = searchParams.get('applicationId') || initializedApplication?.id || initializedApplication?._id || ''
   const userId = initializedApplication?.userId || ''
   const requirements = initializedApplication?.requirementsSnapshot
@@ -404,7 +444,7 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
           requirementType: 'Employment',
           label: 'Employment',
           type: 'json',
-          value: {},
+          value: employmentDraft,
         },
       ]
       const requirementsResult = await submitApplicationRequirements(applicationId, userId, submissions)
@@ -454,7 +494,7 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
           <Link href={goBackHref} className="flex h-9 w-9 items-center justify-center rounded-full">
             <ChevronLeft className="h-5 w-5 text-gray-700" />
           </Link>
-          <h1 className="text-base font-bold text-[#111827]">Apply</h1>
+          <h1 className={`text-base font-bold ${BRAND_INK}`}>Apply</h1>
           <Filter className="h-4 w-4 text-gray-700" />
         </div>
 
@@ -470,10 +510,28 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
             <div className="space-y-6">
               <SectionTitle>Occupation</SectionTitle>
               <div className="space-y-3">
-                <InputPill placeholder="Occupation" right={<ChevronDown className="h-4 w-4 text-gray-400" />} />
-                <InputPill placeholder="Place of Work" />
-                <InputPill placeholder="Name of HR" />
-                <InputPill placeholder="HR's Email" />
+                <InputPill
+                  placeholder="Occupation"
+                  right={<ChevronDown className="h-4 w-4 text-gray-400" />}
+                  value={employmentDraft.occupation}
+                  onChange={(occupation) => setEmploymentDraft((draft) => ({ ...draft, occupation }))}
+                />
+                <InputPill
+                  placeholder="Place of Work"
+                  value={employmentDraft.placeOfWork}
+                  onChange={(placeOfWork) => setEmploymentDraft((draft) => ({ ...draft, placeOfWork }))}
+                />
+                <InputPill
+                  placeholder="Name of HR"
+                  value={employmentDraft.hrName}
+                  onChange={(hrName) => setEmploymentDraft((draft) => ({ ...draft, hrName }))}
+                />
+                <InputPill
+                  placeholder="HR's Email"
+                  type="email"
+                  value={employmentDraft.hrEmail}
+                  onChange={(hrEmail) => setEmploymentDraft((draft) => ({ ...draft, hrEmail }))}
+                />
               </div>
 
               {requiresGuarantor ? (
@@ -481,7 +539,7 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
                 <SectionTitle>Guarantor</SectionTitle>
                 {guarantors.length > 0 ? (
                   <div className="relative rounded-2xl bg-gray-100 p-4 pr-10">
-                    <p className="text-sm font-bold text-[#1E293B]">{guarantors[0].name}</p>
+                    <p className={`text-sm font-bold ${BRAND_INK}`}>{guarantors[0].name}</p>
                     <p className="mt-1 text-[10px] text-gray-500">
                       {guarantors[0].phone} | {guarantors[0].email}
                     </p>
@@ -489,13 +547,13 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
                       <button
                         type="button"
                         onClick={() => void navigator.clipboard?.writeText(guarantors[0].verificationUrl || '')}
-                        className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-[#1E293B]"
+                        className={`mt-3 inline-flex items-center gap-1 text-xs font-bold ${BRAND_INK}`}
                       >
                         <Copy className="h-3 w-3" />
                         Copy KYC URL
                       </button>
                     ) : null}
-                    <span className="absolute right-4 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-green-500 text-white">
+                    <span className="absolute right-4 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-[var(--sf-button,#1E40AF)] text-white">
                       <Check className="h-3 w-3" />
                     </span>
                   </div>
@@ -503,7 +561,7 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
                 <button
                   type="button"
                   onClick={() => setSheet(guarantors.length > 0 ? 'guarantor_added' : 'guarantor_form')}
-                  className="inline-flex items-center gap-1 rounded-xl bg-gray-100 px-3 py-2 text-sm font-bold text-[#111827]"
+                  className={`inline-flex items-center gap-1 rounded-xl bg-gray-100 px-3 py-2 text-sm font-bold ${BRAND_INK}`}
                 >
                   <Plus className="h-3 w-3" /> Add a Guarantor
                 </button>
@@ -553,11 +611,25 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
           )}
 
           {activeStep === 'property' && (
-            <ProductSummary kind={kind} withTerms={false} accepted={accepted} onToggleAccepted={() => setAccepted((v) => !v)} />
+            <ProductSummary
+              kind={kind}
+              application={initializedApplication}
+              providerName={providerName}
+              withTerms={false}
+              accepted={accepted}
+              onToggleAccepted={() => setAccepted((v) => !v)}
+            />
           )}
 
           {activeStep === 'product' && (
-            <ProductSummary kind={kind} withTerms accepted={accepted} onToggleAccepted={() => setAccepted((v) => !v)} />
+            <ProductSummary
+              kind={kind}
+              application={initializedApplication}
+              providerName={providerName}
+              withTerms
+              accepted={accepted}
+              onToggleAccepted={() => setAccepted((v) => !v)}
+            />
           )}
         </div>
       </div>
@@ -582,13 +654,13 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
       {sheet === 'create_account' && (
         <BottomSheet onClose={() => setSheet(null)}>
           <div className="text-center">
-            <h2 className="text-xl font-bold text-[#1E293B]">Create a {productName} Account</h2>
+            <h2 className={`text-xl font-bold ${BRAND_INK}`}>Create a {productName} Account</h2>
             <p className="mx-auto mt-4 max-w-xs text-xs leading-relaxed text-gray-500">
-              Before you can proceed with <strong>{productName} name</strong> offered by{' '}
+              Before you can proceed with <strong>{initializedApplication?.productName || productName}</strong> offered by{' '}
               <strong>{providerName}</strong>, you are required to open a Bank Account with{' '}
               <strong>{providerName}</strong>.
             </p>
-            <div className="mt-5 flex items-center gap-3 rounded bg-green-50 p-3 text-left text-xs text-green-900">
+            <div className={`mt-5 flex items-center gap-3 rounded p-3 text-left text-xs ${BRAND_SOFT} ${BRAND_INK}`}>
               <Image
                 src="/images/mobile/cbn.png"
                 alt="Central Bank of Nigeria"
@@ -603,11 +675,11 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
             </div>
             <div className="mt-5 space-y-3 text-left text-xs text-gray-700">
               <label className="flex items-center gap-2">
-                <Check className="h-4 w-4 rounded-full bg-black p-0.5 text-white" />
+                <Check className="h-4 w-4 rounded-full bg-[var(--sf-button,#1E40AF)] p-0.5 text-white" />
                 Accept Terms & Condition, Data Sharing with (Provider)
               </label>
               <label className="flex items-center gap-2">
-                <Check className="h-4 w-4 rounded-full bg-black p-0.5 text-white" />
+                <Check className="h-4 w-4 rounded-full bg-[var(--sf-button,#1E40AF)] p-0.5 text-white" />
                 Accept Data Privacy & Use of Data
               </label>
             </div>
@@ -618,7 +690,7 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
             >
               Go ahead, Create Bank account
             </Button>
-            <button type="button" className="mt-5 text-sm font-medium text-gray-700" onClick={() => setSheet(null)}>
+            <button type="button" className={`mt-5 text-sm font-medium ${BRAND_INK}`} onClick={() => setSheet(null)}>
               No. Go back
             </button>
           </div>
@@ -627,7 +699,7 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
 
       {sheet === 'guarantor_form' && (
         <BottomSheet onClose={() => setSheet(null)}>
-          <h2 className="mb-7 text-center text-xl font-bold text-[#1E293B]">Add Guarantor 1</h2>
+          <h2 className={`mb-7 text-center text-xl font-bold ${BRAND_INK}`}>Add Guarantor 1</h2>
           <div className="space-y-3">
             <InputPill
               placeholder="Full Name"
@@ -688,7 +760,7 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
           >
             Generate KYC link for Guarantor 1
           </Button>
-          <button type="button" className="mt-5 w-full text-center text-sm font-medium text-gray-700" onClick={() => setSheet(null)}>
+          <button type="button" className={`mt-5 w-full text-center text-sm font-medium ${BRAND_INK}`} onClick={() => setSheet(null)}>
             No. Go back
           </button>
         </BottomSheet>
@@ -696,14 +768,14 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
 
       {sheet === 'guarantor_added' && (
         <BottomSheet onClose={() => setSheet(null)}>
-          <h2 className="mb-4 text-center text-xl font-bold text-[#1E293B]">Add Guarantor 1</h2>
-          <p className="mb-5 rounded bg-orange-50 p-3 text-[11px] leading-relaxed text-gray-500">
+          <h2 className={`mb-4 text-center text-xl font-bold ${BRAND_INK}`}>Add Guarantor 1</h2>
+          <p className={`mb-5 rounded p-3 text-[11px] leading-relaxed ${BRAND_SOFT} ${BRAND_INK}`}>
             Share the KYC URL with each of your Guarantor(s) to complete their KYC before you can
             submit your application
           </p>
           <p className="mb-3 text-sm font-semibold text-gray-700">1 of 2 Guarantor Added</p>
           <div className="relative rounded-2xl bg-gray-100 p-4 pr-10">
-            <p className="text-sm font-bold text-[#1E293B]">
+            <p className={`text-sm font-bold ${BRAND_INK}`}>
               {(guarantors[0] ?? DEFAULT_GUARANTOR).name}
             </p>
             <p className="mt-1 text-[10px] text-gray-500">
@@ -713,17 +785,17 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
               <button
                 type="button"
                 onClick={() => void navigator.clipboard?.writeText((guarantors[0] ?? DEFAULT_GUARANTOR).verificationUrl || '')}
-                className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-[#1E293B]"
+                className={`mt-4 inline-flex items-center gap-1 text-xs font-bold ${BRAND_INK}`}
               >
                 <Copy className="h-3 w-3" />
                 Copy KYC URL
               </button>
             ) : null}
-            <span className="absolute right-4 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-green-500 text-white">
+            <span className="absolute right-4 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-[var(--sf-button,#1E40AF)] text-white">
               <Check className="h-3 w-3" />
             </span>
           </div>
-          <button type="button" className="mt-5 text-sm font-bold text-[#1E293B]" onClick={() => setSheet('guarantor_form')}>
+          <button type="button" className={`mt-5 text-sm font-bold ${BRAND_INK}`} onClick={() => setSheet('guarantor_form')}>
             + Add Another Guarantor
           </button>
           <Button
@@ -733,7 +805,7 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
           >
             Save & Continue
           </Button>
-          <button type="button" className="mt-5 w-full text-center text-sm font-medium text-gray-700" onClick={() => setSheet(null)}>
+          <button type="button" className={`mt-5 w-full text-center text-sm font-medium ${BRAND_INK}`} onClick={() => setSheet(null)}>
             No. Go back
           </button>
         </BottomSheet>
@@ -742,10 +814,10 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
       {sheet === 'success' && (
         <BottomSheet onClose={() => setSheet(null)}>
           <div className="flex flex-col items-center py-4 text-center">
-            <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-[#2DD4BF]">
-              <Check className="h-10 w-10 text-white" strokeWidth={3} />
+            <div className={`mb-6 flex h-20 w-20 items-center justify-center rounded-full ${BRAND_SOFT}`}>
+              <Check className="h-10 w-10 text-[var(--sf-button,#1E40AF)]" strokeWidth={3} />
             </div>
-            <h2 className="text-xl font-bold text-[#1E293B]">Application Submitted</h2>
+            <h2 className={`text-xl font-bold ${BRAND_INK}`}>Application Submitted</h2>
             <p className="mt-2 text-sm text-gray-500">Your {productName.toLowerCase()} application has been submitted.</p>
             <Link href={goBackHref} className="mt-8 w-full">
               <Button className={cn('h-12 w-full rounded-full font-semibold', PRIMARY)}>Continue</Button>

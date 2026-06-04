@@ -79,7 +79,7 @@ function PinKey({ value, onClick }: { value: number | 'del' | ''; onClick: () =>
 export default function CommodityDetailPage() {
   const params = useParams()
   const productId = typeof params?.id === 'string' ? decodeURIComponent(params.id) : ''
-  const { ready: tenantReady } = useMobileV2Tenant()
+  const { ready: tenantReady, displayName } = useMobileV2Tenant()
   const { product: detailProduct, loading } = useMobileProductDetail({
     productId,
     enabled: tenantReady && Boolean(productId),
@@ -94,7 +94,7 @@ export default function CommodityDetailPage() {
   const [quantity, setQuantity] = useState(1)
   const [sheet, setSheet] = useState<'details' | 'account' | null>(null)
   const [step, setStep] = useState<'details' | 'pin' | 'success'>('details')
-  const [pin, setPin] = useState<string[]>(['3', '8', '9', '8'])
+  const [pin, setPin] = useState<string[]>(['', '', '', ''])
   const [processing, setProcessing] = useState(false)
   const [purchaseError, setPurchaseError] = useState<string | null>(null)
 
@@ -137,14 +137,14 @@ export default function CommodityDetailPage() {
 
   if (step === 'success') {
     return (
-      <div className="flex h-full flex-col items-center justify-center bg-[#FAFAFA] px-8 text-center">
+      <div className="flex h-full flex-col items-center justify-center bg-[color-mix(in_srgb,var(--sf-button,#1E40AF)_6%,white)] px-8 text-center">
         <div className="relative mb-8 h-32 w-32">
-          <div className="absolute inset-0 rounded-full bg-[#2DD4BF] opacity-20" />
-          <div className="absolute inset-4 flex items-center justify-center rounded-full bg-[#2DD4BF] shadow-lg">
+          <div className="absolute inset-0 rounded-full bg-[var(--sf-button,#1E40AF)] opacity-15" />
+          <div className="absolute inset-4 flex items-center justify-center rounded-full bg-[var(--sf-button,#1E40AF)] shadow-lg">
             <Check className="h-16 w-16 stroke-[4] text-white" />
           </div>
         </div>
-        <h1 className="text-xl font-bold text-[#1E293B]">Payment Done Successfully</h1>
+        <h1 className="text-xl font-bold text-[var(--sf-ink,#1E293B)]">Payment Done Successfully</h1>
         <Link href="/mobile-v2/products/commodity" className="mt-10 w-full max-w-sm">
           <Button className="h-14 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-base font-semibold text-white">
             Done
@@ -154,9 +154,11 @@ export default function CommodityDetailPage() {
     )
   }
 
+  const providerName = displayName || 'Provider'
+
   if (step === 'pin') {
     return (
-      <div className="flex h-full flex-col bg-[#FAFAFA]">
+      <div className="flex h-full flex-col bg-[color-mix(in_srgb,var(--sf-button,#1E40AF)_6%,white)]">
         <div className="px-6 pt-12">
           <button
             type="button"
@@ -168,12 +170,12 @@ export default function CommodityDetailPage() {
         </div>
 
         <div className="flex flex-1 flex-col items-center px-8 pt-28 text-center">
-          <h1 className="mb-10 text-lg font-medium text-[#111827]">Enter your transaction pin</h1>
+          <h1 className="mb-10 text-lg font-medium text-[var(--sf-ink,#111827)]">Enter your transaction pin</h1>
           <div className="mb-12 flex gap-3">
             {pin.map((digit, index) => (
               <div
                 key={index}
-                className="flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--sf-button,#1E40AF)] bg-white text-lg text-[#111827]"
+                className="flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--sf-button,#1E40AF)] bg-white text-lg text-[var(--sf-ink,#111827)]"
               >
                 {digit}
               </div>
@@ -181,7 +183,7 @@ export default function CommodityDetailPage() {
           </div>
           {purchaseError ? <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">{purchaseError}</p> : null}
           <Button
-            disabled={processing}
+            disabled={processing || pin.some((digit) => !digit)}
             onClick={async () => {
               setProcessing(true)
               setPurchaseError(null)
@@ -226,7 +228,7 @@ export default function CommodityDetailPage() {
   }
 
   return (
-    <div className="relative flex h-full flex-col bg-[#FAFAFA]">
+    <div className="relative flex h-full flex-col bg-[color-mix(in_srgb,var(--sf-button,#1E40AF)_6%,white)]">
       <div className="flex-1 overflow-y-auto pb-12">
         <div className="px-6 pt-12">
           <Link
@@ -243,17 +245,17 @@ export default function CommodityDetailPage() {
             style={{ backgroundImage: `url(${product.image})` }}
           >
             <span className="absolute left-3 top-3 rounded-full bg-white/95 px-4 py-1.5 text-[10px] font-medium text-gray-700 shadow-sm">
-              By AG Mortgage
+              By {providerName}
             </span>
           </div>
 
           <div className="mt-5 flex items-start justify-between gap-4">
-            <h1 className="line-clamp-1 text-sm font-medium text-[#1E293B]">
+            <h1 className="line-clamp-1 text-sm font-medium text-[var(--sf-ink,#1E293B)]">
               {product.name}.....
             </h1>
             <div className="shrink-0 text-right">
               <p className="text-[8px] text-gray-500">Current Price</p>
-              <p className="text-sm font-bold text-[#1E293B]">{formatNgn(product.price)}</p>
+              <p className="text-sm font-bold text-[var(--sf-ink,#1E293B)]">{formatNgn(product.price)}</p>
             </div>
           </div>
 
@@ -314,7 +316,7 @@ export default function CommodityDetailPage() {
                 </span>
               }
             />
-            <InfoRow label="Powered by:" value="AG Mortgage Bank" />
+            <InfoRow label="Powered by:" value={providerName} />
             <InfoRow label="Total" value={formatNaira(product.total)} />
           </div>
 
@@ -334,12 +336,12 @@ export default function CommodityDetailPage() {
           </h2>
           <div className="space-y-7">
             <InfoRow label="Min purchase" value={formatNaira(product.minPurchase)} />
-            <InfoRow label="Unit" value={quantity + 1} />
+            <InfoRow label="Unit" value={quantity} />
             <InfoRow label="R.O.I" value={product.roi} />
             <InfoRow label="Start Date" value={product.startDate} />
             <InfoRow label="Maturity Date" value={product.maturityDate} />
             <InfoRow label="Ref No:" value={product.refNo} />
-            <InfoRow label="Powered by:" value="AG Mortgage Bank" />
+            <InfoRow label="Powered by:" value={providerName} />
           </div>
           <Button
             onClick={() => setSheet('account')}
@@ -352,22 +354,22 @@ export default function CommodityDetailPage() {
 
       {sheet === 'account' && (
         <BottomSheet onClose={() => setSheet(null)}>
-          <h2 className="mb-7 text-center text-xl font-bold text-[#1E293B]">Account Details</h2>
+          <h2 className="mb-7 text-center text-xl font-bold text-[var(--sf-ink,#1E293B)]">Account Details</h2>
           <div className="space-y-5 px-2 text-sm">
             <div>
               <p className="text-[10px] text-gray-400">Bank Name</p>
-              <p className="font-bold text-[#111827]">AG Mortgage Bank</p>
+              <p className="font-bold text-[var(--sf-ink,#111827)]">{providerName}</p>
             </div>
             <div className="flex items-center justify-between border-b border-dashed border-gray-200 pb-5">
               <div>
                 <p className="text-[10px] text-gray-400">Account Number</p>
-                <p className="font-bold text-[#111827]">7012345678</p>
+                <p className="font-bold text-[var(--sf-ink,#111827)]">Pending after purchase</p>
               </div>
-              <span className="h-4 w-4 rounded bg-gray-400" />
+              <span className="h-4 w-4 rounded bg-gray-300" />
             </div>
             <div className="flex items-center justify-between">
               <p className="text-gray-500">Commodity Wallet</p>
-              <span className="h-4 w-4 rounded-full border-4 border-gray-300" />
+              <span className="h-4 w-4 rounded-full border-4 border-[var(--sf-button,#1E40AF)]" />
             </div>
           </div>
           <Button

@@ -85,6 +85,15 @@ function readCachedSubdomain(): string | null {
   }
 }
 
+function displayNameFromSubdomain(subdomain: string | null): string | null {
+  if (!subdomain) return null
+  return subdomain
+    .split(/[-_.]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ") || null
+}
+
 function persist(
   appId: string | null,
   merchantId: string | null,
@@ -250,7 +259,7 @@ export function MobileV2TenantProvider({ children }: { children: ReactNode }) {
       tenantSubdomain,
       pwaInstall,
       pwaManifest,
-      displayName: storefrontDisplayName(pwaManifest),
+      displayName: storefrontDisplayName(pwaManifest) || displayNameFromSubdomain(tenantSubdomain),
       ready,
       error,
       clearTenant,

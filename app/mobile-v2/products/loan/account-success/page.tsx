@@ -6,10 +6,11 @@ import { useSearchParams } from 'next/navigation'
 import { Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { loanApplyHref } from '@/lib/loanApplyRoutes'
+import { sanitizeProductId } from '@/lib/sanitizeProductId'
 
 function LoanAccountSuccessInner() {
   const searchParams = useSearchParams()
-  const productId = searchParams.get('productId')?.trim() || ''
+  const productId = sanitizeProductId(searchParams.get('productId'))
   const continueHref = productId ? loanApplyHref(productId) : '/mobile-v2/products/loan'
 
   return (

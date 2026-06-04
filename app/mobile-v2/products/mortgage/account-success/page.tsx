@@ -5,11 +5,12 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { sanitizeProductId } from '@/lib/sanitizeProductId'
 import { mortgageApplyHref } from '@/lib/mortgageApplyRoutes'
 
 function MortgageAccountSuccessInner() {
   const searchParams = useSearchParams()
-  const productId = searchParams.get('productId')?.trim() || ''
+  const productId = sanitizeProductId(searchParams.get('productId'))
   const continueHref = productId ? mortgageApplyHref(productId) : '/mobile-v2/products/mortgage'
 
   return (

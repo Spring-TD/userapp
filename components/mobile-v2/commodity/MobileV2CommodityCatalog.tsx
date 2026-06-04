@@ -19,7 +19,7 @@ function formatNgn(amount?: number | null) {
   return `NGN${amount.toLocaleString('en-NG')}`
 }
 
-function FeaturedCommodityCard({ product }: { product: CommodityCatalogProduct }) {
+function FeaturedCommodityCard({ product, providerName }: { product: CommodityCatalogProduct; providerName: string }) {
   const [slide, setSlide] = useState(0)
 
   return (
@@ -31,7 +31,7 @@ function FeaturedCommodityCard({ product }: { product: CommodityCatalogProduct }
             style={{ backgroundImage: `url(${product.image})` }}
           >
             <span className="absolute left-3 top-3 rounded-full bg-white/95 px-4 py-1.5 text-[10px] font-medium text-gray-700 shadow-sm">
-              By AG Mortgage
+              By {providerName}
             </span>
           </div>
 
@@ -79,10 +79,10 @@ function FeaturedCommodityCard({ product }: { product: CommodityCatalogProduct }
   )
 }
 
-function CommodityGridCard({ product }: { product: CommodityCatalogProduct }) {
+function CommodityGridCard({ product, providerName }: { product: CommodityCatalogProduct; providerName: string }) {
   return (
     <div>
-      <p className="mb-2 pl-0.5 text-[10px] text-gray-600">By AG Mortgage Bank</p>
+      <p className="mb-2 pl-0.5 text-[10px] text-gray-600">By {providerName}</p>
       <Link href={commodityDetailHref(product.id)} className="block">
         <div
           className="mb-3 aspect-square w-full rounded-[10px] bg-gray-100 bg-cover bg-center"
@@ -106,7 +106,7 @@ function CommodityGridCard({ product }: { product: CommodityCatalogProduct }) {
       </div>
       <Link href={commodityDetailHref(product.id)}>
         <Button className="mt-3 h-9 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-xs font-medium text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]">
-          Buy Mortgage
+          Buy Commodity
         </Button>
       </Link>
     </div>
@@ -114,7 +114,7 @@ function CommodityGridCard({ product }: { product: CommodityCatalogProduct }) {
 }
 
 export function MobileV2CommodityCatalog() {
-  const { appId, ready: tenantReady } = useMobileV2Tenant()
+  const { appId, ready: tenantReady, displayName } = useMobileV2Tenant()
   const { loading, getProductsByType } = useMobileProducts({
     springAppId: appId ?? undefined,
     tenantReady,
@@ -125,6 +125,7 @@ export function MobileV2CommodityCatalog() {
   const commodities = useMemo(() => apiCommodities.map(asCommodityCatalogProduct), [apiCommodities])
   const featured = commodities[0]
   const otherCommodities = commodities.slice(1)
+  const providerName = displayName || 'Provider'
 
   if (!tenantReady || loading) {
     return <MobileV2ProductListSkeleton />
@@ -143,7 +144,7 @@ export function MobileV2CommodityCatalog() {
     <div className="space-y-8">
       <div>
         <h2 className="mb-3 text-base font-bold text-[#1E293B]">Feature</h2>
-        <FeaturedCommodityCard product={featured} />
+        <FeaturedCommodityCard product={featured} providerName={providerName} />
       </div>
 
       <div>
@@ -151,7 +152,7 @@ export function MobileV2CommodityCatalog() {
         {otherCommodities.length > 0 ? (
           <div className="grid grid-cols-2 gap-x-4 gap-y-14">
             {otherCommodities.map((product) => (
-              <CommodityGridCard key={product.id} product={product} />
+              <CommodityGridCard key={product.id} product={product} providerName={providerName} />
             ))}
           </div>
         ) : (

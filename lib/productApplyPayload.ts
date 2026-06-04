@@ -1,5 +1,7 @@
+import api from '@/lib/api'
 import { fetchMobileProductById } from '@/lib/fetchMobileProductById'
-import { fetchAuthUserProfile } from '@/lib/userProfileClient'
+import { sanitizeProductId } from '@/lib/sanitizeProductId'
+import { fetchAuthUserProfile, type AuthUserProfile } from '@/lib/userProfileClient'
 import { resolveWalletUserId } from '@/lib/resolveWalletUserId'
 import { TENANT_MERCHANT_ID_STORAGE_KEY } from '@/lib/mobileTenant/storageKeys'
 
@@ -8,10 +10,11 @@ export type ProductApplyBody = {
   productId: string
   amount: number
   currency: string
-  email?: string
-  merchantId?: string
-  applicantName?: string
-  phone?: string
+  email: string
+  merchantId: string
+  applicantName: string
+  phone: string
+  bvn: string
   country?: string
 }
 
@@ -42,14 +45,65 @@ export async function resolveDefaultApplyAmount(productId: string): Promise<numb
   return 1
 }
 
+function pickStrFromRecord(obj: Record<string, unknown>, ...keys: string[]): string {
+  for (const k of keys) {
+    const v = obj[k]
+    if (typeof v === 'string' && v.trim()) return v.trim()
+    if (typeof v === 'number' && Number.isFinite(v)) return String(v)
+  }
+  return ''
+}
+
+function bvnFromProfile(user: AuthUserProfile | null): string {
+  if (!user) return ''
+  const row = user as Record<string, unknown>
+  return pickStrFromRecord(row, 'bvn', 'BVN', 'bank_verification_number', 'bankVerificationNumber')
+}
+
+async function bvnFromKycStatus(userId: string): Promise<string> {
+  try {
+    const { data } = await api.get<{ success?: boolean; data?: unknown }>(
+      `/compliance/status/${encodeURIComponent(userId)}`,
+      { includeAuth: true, timeout: 20_000 },
+    )
+    const root = data?.data
+    if (!root || typeof root !== 'object') return ''
+    const row = root as Record<string, unknown>
+    const direct = pickStrFromRecord(row, 'bvn', 'BVN', 'bank_verification_number', 'bankVerificationNumber')
+    if (direct) return direct
+    const personal = row.personalInfo
+    if (personal && typeof personal === 'object') {
+      return pickStrFromRecord(personal as Record<string, unknown>, 'bvn', 'BVN')
+    }
+    const profile = row.profile
+    if (profile && typeof profile === 'object') {
+      return pickStrFromRecord(profile as Record<string, unknown>, 'bvn', 'BVN')
+    }
+  } catch {
+    /* optional */
+  }
+  return ''
+}
+
+function resolveMerchantId(sessionMerchantId: string | undefined, user: AuthUserProfile | null): string {
+  if (sessionMerchantId?.trim()) return sessionMerchantId.trim()
+  const fromUser = user?.user_merchant_id?.trim()
+  if (fromUser) return fromUser
+  const row = user as Record<string, unknown> | null
+  if (row) {
+    return pickStrFromRecord(row, 'merchantId', 'merchant_id', 'user_merchant_id')
+  }
+  return ''
+}
+
 /**
- * Builds the account-ms apply payload (`userId`, `productId`, `amount`, `currency`).
+ * Builds the account-ms `POST /applications/init` payload per storefront API docs.
  */
 export async function buildProductApplyBody(
   productId: string,
   options?: { amount?: number; currency?: string },
 ): Promise<BuildProductApplyBodyResult> {
-  const trimmedProductId = productId.trim()
+  const trimmedProductId = sanitizeProductId(productId)
   if (!trimmedProductId) {
     return { ok: false, error: 'No product selected.' }
   }
@@ -63,11 +117,37 @@ export async function buildProductApplyBody(
   const amount = explicitAmount ?? (await resolveDefaultApplyAmount(trimmedProductId))
 
   const { user } = await fetchAuthUserProfile()
-  const merchantId =
+  const sessionMerchantId =
     typeof window !== 'undefined'
       ? sessionStorage.getItem(TENANT_MERCHANT_ID_STORAGE_KEY)?.trim() || undefined
       : undefined
+  const merchantId = resolveMerchantId(sessionMerchantId, user)
   const applicantName = [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim()
+  const email = user?.email?.trim() || ''
+  const phone = user?.phone?.trim() || ''
+  const bvn = bvnFromProfile(user) || (await bvnFromKycStatus(userId))
+
+  if (!merchantId) {
+    return {
+      ok: false,
+      error: 'Storefront is still loading. Refresh the page and try again.',
+    }
+  }
+  if (!email) {
+    return { ok: false, error: 'Add an email address to your profile before continuing.' }
+  }
+  if (!applicantName) {
+    return { ok: false, error: 'Add your name to your profile before continuing.' }
+  }
+  if (!phone) {
+    return { ok: false, error: 'Add a phone number to your profile before continuing.' }
+  }
+  if (!bvn) {
+    return {
+      ok: false,
+      error: 'Your BVN is required to open this account. Complete identity verification (KYC) first.',
+    }
+  }
 
   return {
     ok: true,
@@ -76,10 +156,11 @@ export async function buildProductApplyBody(
       productId: trimmedProductId,
       amount,
       currency: options?.currency?.trim() || 'NGN',
-      ...(user?.email ? { email: user.email } : {}),
-      ...(merchantId ? { merchantId } : {}),
-      ...(applicantName ? { applicantName } : {}),
-      ...(user?.phone ? { phone: user.phone } : {}),
+      email,
+      merchantId,
+      applicantName,
+      phone,
+      bvn,
       ...(user?.country ? { country: user.country } : {}),
     },
   }
