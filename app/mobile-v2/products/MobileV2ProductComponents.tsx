@@ -157,6 +157,7 @@ export function LoanProductCard({ product }: { product: MobileProduct }) {
 // ─── Featured loan ───────────────────────────────────────────────────────────
 export function FeaturedLoanProductCard({ product }: { product: MobileProduct }) {
     const detailHref = loanProductApplyDetailHref(product.id);
+    const { displayName } = useMobileV2Tenant();
     const [slide, setSlide] = React.useState(0);
     const loanAmount =
         product.amountMax != null
@@ -164,7 +165,7 @@ export function FeaturedLoanProductCard({ product }: { product: MobileProduct })
             : product.amountMin != null
                 ? product.amountMin.toLocaleString('en-NG')
                 : amountRange(product).replaceAll('NGN', '');
-    const provider = poweredBy();
+    const provider = poweredBy(displayName || undefined);
 
     return (
         <div className="space-y-3">
@@ -203,7 +204,7 @@ export function FeaturedLoanProductCard({ product }: { product: MobileProduct })
                 <div className="mt-9 flex items-center justify-between gap-4">
                     <div className="flex min-w-0 items-center gap-3">
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black text-[10px] font-bold text-yellow-300">
-                            AG
+                            {provider.slice(0, 2).toUpperCase()}
                         </div>
                         <p className="truncate text-sm font-bold text-white">{provider}</p>
                     </div>
@@ -266,9 +267,11 @@ export function HotLoanProductCard({ product, compact }: { product: MobileProduc
 // ─── Featured mortgage (carousel dots + Get Started → detail) ───────────────
 export function FeaturedMortgageCard({ product }: { product: MobileProduct }) {
     const detailHref = mortgageProductApplyDetailHref(product.id);
+    const { displayName } = useMobileV2Tenant();
     const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=2070&auto=format&fit=crop';
     const [slide, setSlide] = React.useState(0);
     const price = amountRange(product);
+    const provider = poweredBy(displayName || undefined);
 
     return (
         <div className="overflow-hidden rounded-[24px] bg-white shadow-md border border-gray-100">
@@ -281,7 +284,7 @@ export function FeaturedMortgageCard({ product }: { product: MobileProduct }) {
                 }}
             >
                 <span className="absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-[var(--sf-button,#1E40AF)] shadow-sm">
-                    By AG Mortgage
+                    By {provider}
                 </span>
             </div>
             <div className="p-4">

@@ -1,23 +1,38 @@
 'use client'
 
-import React, { Suspense, useState } from 'react'
+import React, { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Check, ChevronLeft, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { sanitizeProductId } from '@/lib/sanitizeProductId'
 import { ensureLoanAccount } from '@/lib/loanApplyClient'
 import { loanApplyHref } from '@/lib/loanApplyRoutes'
+import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 
 function LoanApplyStartInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const productId = searchParams.get('productId')?.trim() || ''
-  const providerName = 'your loan provider'
+  const { displayName, tenantSubdomain } = useMobileV2Tenant()
+  const rawProductId = searchParams.get('productId') ?? ''
+  const productId = sanitizeProductId(rawProductId)
+  const providerName = displayName || tenantSubdomain || 'Provider'
   const [error, setError] = useState<string | null>(null)
   const [termsAccepted, setTermsAccepted] = useState(true)
   const [privacyAccepted, setPrivacyAccepted] = useState(true)
   const [processing, setProcessing] = useState(false)
+
+  useEffect(() => {
+    if (!rawProductId || rawProductId === productId) return
+    const params = new URLSearchParams(window.location.search)
+    params.set('productId', productId)
+    const embeddedSubdomain = rawProductId.match(/subdomain=([^&/?#]+)/i)?.[1]
+    if (embeddedSubdomain && !params.get('subdomain')) {
+      params.set('subdomain', embeddedSubdomain)
+    }
+    router.replace(`?${params.toString()}`, { scroll: false })
+  }, [rawProductId, productId, router])
 
   const handleAccept = async () => {
     if (!productId) {
@@ -93,7 +108,7 @@ function LoanApplyStartInner() {
               <span className="flex h-4 w-4 items-center justify-center rounded-full bg-black text-white">
                 {termsAccepted ? <Check className="h-3 w-3" /> : null}
               </span>
-              Accept Terms & Condition, Data Sharing with Provider
+              Accept Terms & Condition, Data Sharing with {providerName}
             </button>
             <button
               type="button"

@@ -9,6 +9,7 @@ import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 import { MortgageDetailSkeleton } from '@/components/mobile-v2/data-skeletons'
 import { Skeleton } from '@/components/ui/skeleton'
 import { mortgageApplyStartHref } from '@/lib/mortgageApplyRoutes'
+import { sanitizeProductId } from '@/lib/sanitizeProductId'
 import { ProductDetailsScreen } from '@/components/mobile-v2/application/ProductDetailsScreen'
 import { amountRange, feeSummary, formatNgn, rateLabel, requirementSummary } from '@/lib/mobileProductDetailDisplay'
 
@@ -16,11 +17,11 @@ function MortgageDetailInner() {
   const params = useParams()
   const searchParams = useSearchParams()
   const rawId = params?.id
-  const productId = typeof rawId === 'string' ? decodeURIComponent(rawId) : ''
+  const productId = typeof rawId === 'string' ? sanitizeProductId(decodeURIComponent(rawId)) : ''
   const detailsOnly = searchParams.get('tab') === 'details'
   const initialTab = detailsOnly ? 'product' : 'history'
 
-  const { ready: tenantReady } = useMobileV2Tenant()
+  const { ready: tenantReady, displayName } = useMobileV2Tenant()
   const { product: detailProduct, loading } = useMobileProductDetail({
     productId,
     enabled: tenantReady && Boolean(productId),
@@ -31,7 +32,7 @@ function MortgageDetailInner() {
     return detailProduct ?? undefined
   }, [detailProduct, productId])
 
-  const lender = 'AG Mortgage Bank'
+  const lender = displayName || 'Provider'
   const imageUrl =
     product?.image ||
     'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1200&auto=format&fit=crop'

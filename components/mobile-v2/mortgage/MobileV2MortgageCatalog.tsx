@@ -11,7 +11,7 @@ import {
 } from '@/app/mobile-v2/products/MobileV2ProductComponents'
 
 export function MobileV2MortgageCatalog() {
-  const { appId, ready: tenantReady } = useMobileV2Tenant()
+  const { appId, ready: tenantReady, displayName } = useMobileV2Tenant()
   const { loading, getProductsByType } = useMobileProducts({
     springAppId: appId ?? undefined,
     tenantReady,
@@ -26,6 +26,7 @@ export function MobileV2MortgageCatalog() {
 
   const featured = orderedProducts[0]
   const hot = orderedProducts.slice(1)
+  const providerName = displayName || 'Provider'
 
   if (!tenantReady || loading) {
     return <MobileV2ProductListSkeleton />
@@ -60,7 +61,7 @@ export function MobileV2MortgageCatalog() {
           <div className="-mx-1 flex gap-3 overflow-x-auto pb-2 pl-1 pr-4 no-scrollbar">
             {hot.map((product) => (
               <div key={product.id} className="w-[200px] shrink-0">
-                <p className="mb-2 pl-0.5 text-[10px] text-gray-500">By AG Mortgage Bank</p>
+                <p className="mb-2 pl-0.5 text-[10px] text-gray-500">By {providerName}</p>
                 <MortgageProductCard product={product} compact />
               </div>
             ))}

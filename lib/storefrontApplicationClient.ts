@@ -25,6 +25,18 @@ export type StorefrontApplication = {
   amount?: number
   currency?: string
   status?: string
+  appId?: string
+  merchantId?: string
+  createdAt?: string
+  updatedAt?: string
+  account?: {
+    id?: string
+    accountNumber?: string
+    bankName?: string
+    balance?: number
+    currency?: string
+    status?: string
+  }
   requirementsSnapshot?: {
     security?: Record<string, unknown>
     documentsToDownload?: Array<{ name?: string; fileUrl?: string }>
@@ -43,6 +55,8 @@ export type StorefrontApplication = {
     upstreamAccount?: {
       accountNumber?: string
       bankName?: string
+      balance?: number
+      currency?: string
       status?: string
     }
   }
@@ -84,12 +98,31 @@ export function readInitializedApplication(): StorefrontApplication | null {
 function parseApiError(data: unknown, status: number): string {
   if (data && typeof data === "object") {
     const row = data as Record<string, unknown>
-    return (
-      String(row.error || row.message || row.msg || "") ||
-      (status >= 400 ? `Request failed (${status})` : "Upload failed")
-    )
+    const raw = String(row.error || row.message || row.msg || "")
+    if (raw) return humanizeApplicationError(raw)
+    return status >= 400 ? `Request failed (${status})` : "Upload failed"
   }
   return `Upload failed (${status})`
+}
+
+function humanizeApplicationError(message: string): string {
+  const m = message.trim()
+  if (!m || m === "fetch failed") {
+    return "Could not reach the application service. Check your connection and try again."
+  }
+  if (m.includes("ETIMEDOUT") || m.includes("timed out")) {
+    return "The application service took too long to respond. Please try again."
+  }
+  if (m.includes("ECONNREFUSED") && m.includes("3004")) {
+    return "Loan account provisioning is temporarily unavailable. Please try again later or contact support."
+  }
+  if (m.includes("Plata account provisioning")) {
+    return "We could not provision your provider bank account right now. Please try again later or contact support."
+  }
+  if (m.includes('"bvn" is required')) {
+    return "Your BVN is required. Complete identity verification (KYC) before opening this account."
+  }
+  return m
 }
 
 export async function initializeProductApplication(productId: string, options?: { amount?: number; currency?: string }) {
@@ -143,6 +176,25 @@ export async function createSavingsAccount(productId: string, options?: { curren
   }
 
   return { ok: true as const, data: res.data?.data }
+}
+
+export async function fetchUserApplications(userId?: string) {
+  const resolvedUserId = userId || (await resolveWalletUserId())
+  if (!resolvedUserId) return { ok: false as const, error: "Sign in to continue.", applications: [] as StorefrontApplication[] }
+
+  const res = await apiClient.get<ApiEnvelope<StorefrontApplication[]>>(
+    `/v1/applications/user/${encodeURIComponent(resolvedUserId)}`,
+    { includeAuth: true, timeout: 30_000 },
+  )
+
+  if (res.data?.success === false || res.status >= 400) {
+    return { ok: false as const, error: parseApiError(res.data, res.status), applications: [] as StorefrontApplication[] }
+  }
+
+  return {
+    ok: true as const,
+    applications: Array.isArray(res.data?.data) ? res.data.data : [],
+  }
 }
 
 export async function buyCommodity(productId: string, quantity: number, amount: number, options?: { currency?: string }) {

@@ -20,7 +20,7 @@ export default function InvestDetailPage() {
     const params = useParams();
     const rawId = params?.id;
     const productId = typeof rawId === 'string' ? decodeURIComponent(rawId) : '';
-    const { ready: tenantReady } = useMobileV2Tenant();
+    const { ready: tenantReady, displayName } = useMobileV2Tenant();
     const { product, loading } = useMobileProductDetail({
         productId,
         enabled: tenantReady && Boolean(productId),
@@ -43,6 +43,7 @@ export default function InvestDetailPage() {
             ];
     const returnDisplay = product ? `${rateLabel(product)} returns` : 'Returns available';
     const durationDisplay = product?.duration || 'Flexible duration';
+    const providerName = displayName || 'Provider';
 
     const investmentDetails = useMemo(
         () => [
@@ -78,23 +79,23 @@ export default function InvestDetailPage() {
     }
 
     return (
-        <div className="relative flex h-full flex-col overflow-hidden bg-[#F4F7FF]">
+        <div className="relative flex h-full flex-col overflow-hidden bg-[color-mix(in_srgb,var(--sf-button,#2563EB)_6%,white)]">
             <div className="no-scrollbar flex-1 overflow-y-auto px-6 pb-8 pt-12">
                 <Link
                     href="/mobile-v2/products/invest"
-                    className="mb-10 flex h-9 w-9 items-center justify-center rounded-full bg-white text-[#1E293B] shadow-sm"
+                    className="mb-10 flex h-9 w-9 items-center justify-center rounded-full bg-white text-[var(--sf-ink,#1E293B)] shadow-sm"
                     aria-label="Back to investments"
                 >
                     <ChevronLeft className="h-5 w-5" />
                 </Link>
 
-                <section className="rounded-[8px] bg-[#262728] px-4 py-7 text-white">
+                <section className="rounded-[16px] bg-[var(--sf-ink,#1E1B4B)] px-4 py-7 text-white shadow-sm">
                     <div className="mb-5 flex items-start justify-between gap-4">
-                        <h1 className="text-[32px] font-bold leading-none text-[var(--sf-button,#2563EB)]">
+                        <h1 className="text-[32px] font-bold leading-none text-white">
                             {product.name}
                         </h1>
-                        <span className="mt-1 shrink-0 rounded-full bg-white px-4 py-2 text-[10px] font-semibold text-gray-600">
-                            By AG Mortgage
+                        <span className="mt-1 shrink-0 rounded-full bg-white/95 px-4 py-2 text-[10px] font-semibold text-[var(--sf-ink,#1E293B)]">
+                            By {providerName}
                         </span>
                     </div>
                     <p className="max-w-[270px] text-[13px] font-medium leading-relaxed text-white/90">
@@ -104,23 +105,23 @@ export default function InvestDetailPage() {
 
                 <section className="mt-7">
                     <div className="mb-4 flex items-start justify-between gap-4">
-                        <h2 className="text-base font-medium text-[#4B5563]">{product.name}</h2>
-                        <p className="shrink-0 text-sm font-bold text-[#1F2937]">{returnDisplay}</p>
+                        <h2 className="text-base font-medium text-[var(--sf-ink,#1E293B)]">{product.name}</h2>
+                        <p className="shrink-0 text-sm font-bold text-[var(--sf-button,#2563EB)]">{returnDisplay}</p>
                     </div>
 
-                    <p className="mb-5 text-[12px] leading-relaxed text-[#4B5563]">
+                    <p className="mb-5 text-[12px] leading-relaxed text-[color-mix(in_srgb,var(--sf-ink,#1E293B)_80%,white)]">
                         {product.description || 'Review this investment and continue when you are ready to proceed.'}
                     </p>
 
-                    <div className="mb-10 flex items-center gap-4 text-[13px] font-bold text-[#5F6368]">
+                    <div className="mb-10 flex items-center gap-4 text-[13px] font-bold text-[var(--sf-ink,#1E293B)]">
                         <span className="inline-flex items-center gap-2">
-                            <span className="flex h-5 w-5 items-center justify-center rounded bg-gray-300 text-white">
+                            <span className="flex h-5 w-5 items-center justify-center rounded bg-[var(--sf-button,#2563EB)] text-white">
                                 <CalendarDays className="h-3.5 w-3.5" />
                             </span>
                             {durationDisplay}
                         </span>
                         <span className="inline-flex items-center gap-2">
-                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-gray-300 text-white">
+                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--sf-button,#2563EB)] text-white">
                                 <Percent className="h-3.5 w-3.5" />
                             </span>
                             {returnDisplay}
@@ -134,7 +135,7 @@ export default function InvestDetailPage() {
                             return (
                                 <div key={label} className="flex items-center justify-between gap-6">
                                     <span className="text-base font-medium text-gray-500">{label}</span>
-                                    <span className="inline-flex items-center gap-2 text-right text-base font-bold text-[#4B4F58]">
+                                    <span className="inline-flex items-center gap-2 text-right text-base font-bold text-[var(--sf-ink,#1E293B)]">
                                         {value}
                                         {showDropdown ? <ChevronDown className="h-4 w-4 text-[#4B4F58]" /> : null}
                                     </span>
@@ -163,10 +164,11 @@ export default function InvestDetailPage() {
                 termsDescription={
                     <>
                         Before you can proceed with <strong>{product.name}</strong> offered by{' '}
-                        <strong>AG Mortgage Bank</strong>, you are required to open a bank account with{' '}
-                        <strong>AG Mortgage Bank</strong>.
+                        <strong>{providerName}</strong>, you are required to open a bank account with{' '}
+                        <strong>{providerName}</strong>.
                     </>
                 }
+                providerName={providerName}
                 formTitle="Start Investment"
                 namePlaceholder="Name of investment"
                 amountPlaceholder="Amount to invest"

@@ -20,6 +20,13 @@ type FundingFlowForm = {
 };
 
 type FundingAccountKind = 'savings' | 'investment';
+type ProvisionedAccount = {
+    id?: string;
+    accountNumber?: string;
+    bankName?: string;
+    currency?: string;
+    status?: string;
+};
 
 type ProductFundingFlowSheetProps = {
     open: boolean;
@@ -29,6 +36,7 @@ type ProductFundingFlowSheetProps = {
     accountKind?: FundingAccountKind;
     productName: string;
     productKindLabel: string;
+    providerName?: string;
     termsTitle: string;
     termsDescription: ReactNode;
     formTitle: string;
@@ -42,6 +50,9 @@ type ProductFundingFlowSheetProps = {
 };
 
 const DEFAULT_CENTRAL_WALLET_BALANCE = 250000;
+const BRAND_BUTTON = 'bg-[var(--sf-button,#2563EB)] text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]';
+const BRAND_INK = 'text-[var(--sf-ink,#1E293B)]';
+const BRAND_SOFT = 'bg-[color-mix(in_srgb,var(--sf-button,#2563EB)_10%,white)]';
 
 export function ProductFundingFlowSheet({
     open,
@@ -50,6 +61,7 @@ export function ProductFundingFlowSheet({
     accountKind = 'savings',
     productName,
     productKindLabel,
+    providerName = 'your provider',
     termsTitle,
     termsDescription,
     formTitle,
@@ -68,6 +80,7 @@ export function ProductFundingFlowSheet({
     const [setupError, setSetupError] = useState<string | null>(null);
     const [settingUpAccount, setSettingUpAccount] = useState(false);
     const [accountCreationMessage, setAccountCreationMessage] = useState('');
+    const [provisionedAccount, setProvisionedAccount] = useState<ProvisionedAccount | null>(null);
     const [form, setForm] = useState<FundingFlowForm>({
         name: '',
         purpose: '',
@@ -101,6 +114,7 @@ export function ProductFundingFlowSheet({
         setSetupError(null);
         setSettingUpAccount(false);
         setAccountCreationMessage('');
+        setProvisionedAccount(null);
         onClose();
     };
 
@@ -127,6 +141,7 @@ export function ProductFundingFlowSheet({
                 return;
             }
 
+            setProvisionedAccount(result.account ?? null);
             setAccountCreationMessage(
                 result.message || `Your ${productKindLabel} account was created successfully.`,
             );
@@ -149,6 +164,7 @@ export function ProductFundingFlowSheet({
                 setStep('application');
                 return;
             }
+            setProvisionedAccount(result.account ?? provisionedAccount);
             setStep('success');
         } finally {
             setSettingUpAccount(false);
@@ -177,13 +193,13 @@ export function ProductFundingFlowSheet({
                 <div className="relative z-10 w-full rounded-t-[28px] bg-white px-6 pb-8 pt-3 shadow-2xl">
                     <div className="mx-auto mb-6 h-1.5 w-16 rounded-full bg-gray-300" />
                     <div className="text-center">
-                        <h2 className="text-xl font-bold text-[#1E293B]">{termsTitle}</h2>
+                        <h2 className={`text-xl font-bold ${BRAND_INK}`}>{termsTitle}</h2>
                         <p className="mx-auto mt-4 max-w-xs text-xs leading-relaxed text-gray-500">
                             {termsDescription}
                         </p>
                     </div>
 
-                    <div className="mt-5 flex items-center gap-3 rounded bg-green-50 p-3 text-left text-xs text-green-900">
+                    <div className={`mt-5 flex items-center gap-3 rounded p-3 text-left text-xs ${BRAND_SOFT} ${BRAND_INK}`}>
                         <Image
                             src="/images/mobile/cbn.png"
                             alt="Central Bank of Nigeria"
@@ -192,7 +208,7 @@ export function ProductFundingFlowSheet({
                             className="h-8 w-8 shrink-0 object-contain"
                         />
                         <span>
-                            <strong>AG Mortgage Bank</strong> is a licensed financial institution by the Central Bank of Nigeria.
+                            <strong>{providerName}</strong> is a licensed financial institution by the Central Bank of Nigeria.
                         </span>
                     </div>
 
@@ -201,7 +217,7 @@ export function ProductFundingFlowSheet({
                             {
                                 checked: termsAccepted,
                                 onClick: () => setTermsAccepted((value) => !value),
-                                label: 'Accept Terms & Condition, Data Sharing with AG Mortgage Bank',
+                                label: `Accept Terms & Condition, Data Sharing with ${providerName}`,
                             },
                             {
                                 checked: privacyAccepted,
@@ -217,7 +233,7 @@ export function ProductFundingFlowSheet({
                             >
                                 <span
                                     className={`flex h-4 w-4 items-center justify-center rounded-full border ${
-                                        item.checked ? 'border-black bg-black text-white' : 'border-gray-400 bg-white'
+                                        item.checked ? 'border-[var(--sf-button,#2563EB)] bg-[var(--sf-button,#2563EB)] text-white' : 'border-gray-400 bg-white'
                                     }`}
                                 >
                                     {item.checked ? <Check className="h-3 w-3" /> : null}
@@ -234,7 +250,7 @@ export function ProductFundingFlowSheet({
                     <Button
                         disabled={!termsAccepted || !privacyAccepted || settingUpAccount}
                         onClick={() => void handleCreateAccount()}
-                        className="mt-7 h-12 w-full rounded-full bg-[var(--sf-button,#2563EB)] text-sm font-semibold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)] disabled:opacity-50"
+                        className={`mt-7 h-12 w-full rounded-full text-sm font-semibold disabled:opacity-50 ${BRAND_BUTTON}`}
                     >
                         {settingUpAccount ? (
                             <span className="inline-flex items-center gap-2">
@@ -249,7 +265,7 @@ export function ProductFundingFlowSheet({
                     <button
                         type="button"
                         onClick={close}
-                        className="mt-5 w-full text-sm font-medium text-[#1E293B]"
+                        className={`mt-5 w-full text-sm font-medium ${BRAND_INK}`}
                     >
                         No. Go back
                     </button>
@@ -257,24 +273,24 @@ export function ProductFundingFlowSheet({
             ) : step === 'accountCreated' ? (
                 <div className="relative z-10 w-full rounded-t-[28px] bg-white px-8 pb-8 pt-4 text-center shadow-2xl">
                     <div className="mx-auto mb-8 h-1.5 w-20 rounded-full bg-gray-300" />
-                    <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-green-600">
+                    <div className={`mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full ${BRAND_SOFT} text-[var(--sf-button,#2563EB)]`}>
                         <CheckCircle className="h-9 w-9" />
                     </div>
-                    <h2 className="text-xl font-bold text-[#1E293B]">Account Created Successfully</h2>
+                    <h2 className={`text-xl font-bold ${BRAND_INK}`}>Account Created Successfully</h2>
                     <p className="mx-auto mt-3 max-w-xs text-sm leading-relaxed text-gray-500">
                         {accountCreationMessage || `Your ${productKindLabel} account has been created successfully.`}
                     </p>
                     <Button
                         type="button"
                         onClick={() => setStep('application')}
-                        className="mt-8 h-12 w-full rounded-full bg-[var(--sf-button,#2563EB)] text-sm font-semibold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]"
+                        className={`mt-8 h-12 w-full rounded-full text-sm font-semibold ${BRAND_BUTTON}`}
                     >
                         Continue to Application
                     </Button>
                     <button
                         type="button"
                         onClick={close}
-                        className="mt-5 w-full text-sm font-medium text-[#1E293B]"
+                        className={`mt-5 w-full text-sm font-medium ${BRAND_INK}`}
                     >
                         Not now
                     </button>
@@ -282,32 +298,32 @@ export function ProductFundingFlowSheet({
             ) : step === 'application' ? (
                 <div className="relative z-10 w-full rounded-t-[28px] bg-white px-6 pb-8 pt-3 shadow-2xl">
                     <div className="mx-auto mb-6 h-1.5 w-16 rounded-full bg-gray-300" />
-                    <h2 className="mb-7 text-center text-xl font-bold text-[#1E293B]">{formTitle}</h2>
+                    <h2 className={`mb-7 text-center text-xl font-bold ${BRAND_INK}`}>{formTitle}</h2>
 
                     <div className="space-y-4">
                         <input
                             value={form.name}
                             onChange={(event) => updateForm('name', event.target.value)}
                             placeholder={namePlaceholder}
-                            className="h-12 w-full rounded-full bg-gray-100 px-5 text-sm outline-none placeholder:text-gray-400"
+                            className="h-12 w-full rounded-full bg-gray-100 px-5 text-sm outline-none ring-[var(--sf-button,#2563EB)]/20 placeholder:text-gray-400 focus:ring-2"
                         />
                         <input
                             value={form.purpose}
                             onChange={(event) => updateForm('purpose', event.target.value)}
                             placeholder="Purpose"
-                            className="h-12 w-full rounded-full bg-gray-100 px-5 text-sm outline-none placeholder:text-gray-400"
+                            className="h-12 w-full rounded-full bg-gray-100 px-5 text-sm outline-none ring-[var(--sf-button,#2563EB)]/20 placeholder:text-gray-400 focus:ring-2"
                         />
                         <input
                             value={form.duration}
                             onChange={(event) => updateForm('duration', event.target.value)}
                             placeholder="Duration"
-                            className="h-12 w-full rounded-full bg-gray-100 px-5 text-sm outline-none placeholder:text-gray-400"
+                            className="h-12 w-full rounded-full bg-gray-100 px-5 text-sm outline-none ring-[var(--sf-button,#2563EB)]/20 placeholder:text-gray-400 focus:ring-2"
                         />
                         <div className="relative">
                             <select
                                 value={form.frequency}
                                 onChange={(event) => updateForm('frequency', event.target.value)}
-                                className={`h-12 w-full appearance-none rounded-full bg-gray-100 px-5 pr-12 text-sm outline-none ${
+                                className={`h-12 w-full appearance-none rounded-full bg-gray-100 px-5 pr-12 text-sm outline-none ring-[var(--sf-button,#2563EB)]/20 focus:ring-2 ${
                                     form.frequency ? 'text-gray-700' : 'text-gray-400'
                                 }`}
                             >
@@ -323,14 +339,14 @@ export function ProductFundingFlowSheet({
                             onChange={(event) => updateForm('amount', event.target.value)}
                             placeholder={amountPlaceholder}
                             inputMode="numeric"
-                            className="h-12 w-full rounded-full bg-gray-100 px-5 text-sm outline-none placeholder:text-gray-400"
+                            className="h-12 w-full rounded-full bg-gray-100 px-5 text-sm outline-none ring-[var(--sf-button,#2563EB)]/20 placeholder:text-gray-400 focus:ring-2"
                         />
                         <button
                             type="button"
                             onClick={() => updateForm('acceptedTerms', !form.acceptedTerms)}
                             className="flex items-center gap-3 px-1 text-left text-sm text-gray-700"
                         >
-                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-black text-white">
+                            <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${form.acceptedTerms ? 'border-[var(--sf-button,#2563EB)] bg-[var(--sf-button,#2563EB)] text-white' : 'border-gray-400 bg-white text-transparent'}`}>
                                 {form.acceptedTerms ? <Check className="h-3.5 w-3.5" /> : null}
                             </span>
                             <span>Accept terms &amp; conditions</span>
@@ -340,7 +356,7 @@ export function ProductFundingFlowSheet({
                     <Button
                         disabled={!canSubmit}
                         onClick={() => setStep('accountDetails')}
-                        className="mt-6 h-12 w-full rounded-full bg-[var(--sf-button,#2563EB)] text-sm font-semibold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)] disabled:opacity-50"
+                        className={`mt-6 h-12 w-full rounded-full text-sm font-semibold disabled:opacity-50 ${BRAND_BUTTON}`}
                     >
                         {actionLabel}
                     </Button>
@@ -348,7 +364,7 @@ export function ProductFundingFlowSheet({
                     <button
                         type="button"
                         onClick={close}
-                        className="mt-5 w-full text-sm font-medium text-[#1E293B]"
+                        className={`mt-5 w-full text-sm font-medium ${BRAND_INK}`}
                     >
                         No. Go back
                     </button>
@@ -360,25 +376,39 @@ export function ProductFundingFlowSheet({
                         type="button"
                         onClick={close}
                         aria-label="Close account details"
-                        className="absolute right-14 top-[62px] text-[#111827]"
+                        className="absolute right-14 top-[62px] text-[var(--sf-ink,#111827)]"
                     >
                         <X className="h-4 w-4" />
                     </button>
 
-                    <h2 className="mb-8 text-center text-xl font-bold text-[#343434]">Account Details</h2>
+                    <h2 className={`mb-8 text-center text-xl font-bold ${BRAND_INK}`}>Account Details</h2>
 
                     <div className="space-y-5 text-left">
                         <div>
                             <p className="text-[10px] text-gray-400">Bank Name</p>
-                            <p className="mt-1 text-sm font-bold text-[#1E293B]">AG Mortgage Bank</p>
+                            <p className={`mt-1 text-sm font-bold ${BRAND_INK}`}>
+                                {provisionedAccount?.bankName || providerName}
+                            </p>
                         </div>
 
                         <div className="flex items-center justify-between border-b border-dashed border-gray-200 pb-5">
                             <div>
                                 <p className="text-[10px] text-gray-400">Account Number</p>
-                                <p className="mt-1 text-sm font-bold text-[#1E293B]">7012345678</p>
+                                <p className={`mt-1 text-sm font-bold ${BRAND_INK}`}>
+                                    {provisionedAccount?.accountNumber || 'Pending provisioning'}
+                                </p>
                             </div>
-                            <button type="button" aria-label="Copy account number" className="text-gray-400">
+                            <button
+                                type="button"
+                                aria-label="Copy account number"
+                                className="text-gray-400 disabled:opacity-40"
+                                disabled={!provisionedAccount?.accountNumber}
+                                onClick={() => {
+                                    if (provisionedAccount?.accountNumber) {
+                                        void navigator.clipboard?.writeText(provisionedAccount.accountNumber);
+                                    }
+                                }}
+                            >
                                 <Copy className="h-4 w-4" />
                             </button>
                         </div>
@@ -404,7 +434,7 @@ export function ProductFundingFlowSheet({
                     <Button
                         onClick={() => void processPayment()}
                         disabled={settingUpAccount}
-                        className="mt-9 h-14 w-full rounded-full bg-[var(--sf-button,#2563EB)] text-base font-semibold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]"
+                        className={`mt-9 h-14 w-full rounded-full text-base font-semibold ${BRAND_BUTTON}`}
                     >
                         {settingUpAccount ? (
                             <span className="inline-flex items-center gap-2">
@@ -426,7 +456,7 @@ export function ProductFundingFlowSheet({
                     >
                         {step === 'success' ? <CheckCircle className="h-9 w-9" /> : <AlertCircle className="h-9 w-9" />}
                     </div>
-                    <h2 className="text-xl font-bold text-[#1E293B]">
+                    <h2 className={`text-xl font-bold ${BRAND_INK}`}>
                         {step === 'success' ? successTitle : 'Insufficient Balance'}
                     </h2>
                     <p className="mx-auto mt-3 max-w-xs text-sm leading-relaxed text-gray-500">
@@ -440,7 +470,7 @@ export function ProductFundingFlowSheet({
 
                     <Button
                         onClick={close}
-                        className="mt-8 h-12 w-full rounded-full bg-[var(--sf-button,#2563EB)] text-sm font-semibold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]"
+                        className={`mt-8 h-12 w-full rounded-full text-sm font-semibold ${BRAND_BUTTON}`}
                     >
                         {step === 'success' ? 'Done' : 'Try Again'}
                     </Button>

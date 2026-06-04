@@ -1,22 +1,38 @@
 'use client'
 
-import React, { Suspense, useState } from 'react'
+import React, { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Check, ChevronLeft, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { sanitizeProductId } from '@/lib/sanitizeProductId'
 import { ensureMortgageAccount } from '@/lib/mortgageApplyClient'
 import { mortgageApplyHref } from '@/lib/mortgageApplyRoutes'
+import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 
 function MortgageApplyStartInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const productId = searchParams.get('productId')?.trim() || ''
+  const { displayName, tenantSubdomain } = useMobileV2Tenant()
+  const rawProductId = searchParams.get('productId') ?? ''
+  const productId = sanitizeProductId(rawProductId)
+  const providerName = displayName || tenantSubdomain || 'Provider'
   const [error, setError] = useState<string | null>(null)
   const [termsAccepted, setTermsAccepted] = useState(true)
   const [privacyAccepted, setPrivacyAccepted] = useState(true)
   const [processing, setProcessing] = useState(false)
+
+  useEffect(() => {
+    if (!rawProductId || rawProductId === productId) return
+    const params = new URLSearchParams(window.location.search)
+    params.set('productId', productId)
+    const embeddedSubdomain = rawProductId.match(/subdomain=([^&/?#]+)/i)?.[1]
+    if (embeddedSubdomain && !params.get('subdomain')) {
+      params.set('subdomain', embeddedSubdomain)
+    }
+    router.replace(`?${params.toString()}`, { scroll: false })
+  }, [rawProductId, productId, router])
 
   const handleAccept = async () => {
     if (!productId) {
@@ -65,7 +81,7 @@ function MortgageApplyStartInner() {
             <h2 className="text-xl font-bold text-[#1E293B]">Create a Mortgage Account</h2>
             <p className="mx-auto mt-4 max-w-xs text-xs leading-relaxed text-gray-500">
               Before you can proceed with <strong>Mortgage product</strong>, you are required to open
-              a bank account with <strong>AG Mortgage Bank</strong>.
+              a bank account with <strong>{providerName}</strong>.
             </p>
           </div>
 
@@ -78,7 +94,7 @@ function MortgageApplyStartInner() {
               className="h-7 w-7 shrink-0 object-contain"
             />
             <span>
-              <strong>AG Mortgage Bank</strong> is a licensed financial institution by the Central
+              <strong>{providerName}</strong> is a licensed financial institution by the Central
               Bank of Nigeria.
             </span>
           </div>
@@ -92,7 +108,7 @@ function MortgageApplyStartInner() {
               <span className="flex h-4 w-4 items-center justify-center rounded-full bg-black text-white">
                 {termsAccepted ? <Check className="h-3 w-3" /> : null}
               </span>
-              Accept Terms & Condition, Data Sharing with Provider
+              Accept Terms & Condition, Data Sharing with {providerName}
             </button>
             <button
               type="button"

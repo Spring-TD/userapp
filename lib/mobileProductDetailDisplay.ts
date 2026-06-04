@@ -52,6 +52,6 @@ export function requirementSummary(product: MobileProduct): string {
     .join(', ') || 'Required where applicable';
 }
 
-export function poweredBy(): string {
-  return 'AG Mortgage Bank';
+export function poweredBy(providerName?: string): string {
+  return providerName?.trim() || 'Provider';
 }

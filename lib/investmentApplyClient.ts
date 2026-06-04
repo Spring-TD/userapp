@@ -6,7 +6,7 @@ type InvestmentApplyResponse = {
   error?: string
   data?: {
     accountCreated?: boolean
-    account?: { id?: string }
+    account?: { id?: string; accountNumber?: string; bankName?: string; currency?: string; status?: string }
   }
 }
 
@@ -14,6 +14,7 @@ export type EnsureInvestmentAccountResult = {
   ok: boolean
   accountCreated: boolean
   accountId?: string
+  account?: { id?: string; accountNumber?: string; bankName?: string; currency?: string; status?: string }
   message?: string
   error?: string
 }
@@ -29,6 +30,7 @@ export async function ensureInvestmentAccount(
     ok: true,
     accountCreated: true,
     accountId: result.application?.id || result.application?._id,
+    account: result.application?.productWallet?.upstreamAccount,
     message: 'Investment application submitted.',
   }
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
@@ -10,14 +10,37 @@ import {
     Briefcase,
     ChevronRight,
     LogOut,
-    Pencil
+    Pencil,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { useAuthUserProfile } from '@/hooks/useAuthUserProfile';
+import type { AuthUserProfile } from '@/lib/userProfileClient';
+
+function fullName(user: AuthUserProfile | null) {
+    return [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim();
+}
+
+function initials(name: string) {
+    const parts = name.split(/\s+/).filter(Boolean);
+    return (parts[0]?.[0] || 'U') + (parts[1]?.[0] || '');
+}
+
+function formatDate(value?: string) {
+    if (!value) return 'Not available';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Not available';
+    return date.toLocaleDateString('en-NG', { month: 'short', day: '2-digit', year: 'numeric' });
+}
 
 export default function EditProfilePage() {
     const [showLogoutModal, setShowLogoutModal] = useState(false);
+    const { user, loading, error } = useAuthUserProfile();
+    const name = useMemo(() => fullName(user), [user]);
+    const displayName = name || 'Profile';
+    const avatarUrl = user?.avatar_url || user?.profile_image || user?.image || '';
 
     return (
         <div className="flex flex-col h-full bg-[#FAFAFA] relative">
@@ -35,12 +58,20 @@ export default function EditProfilePage() {
                     <div className="flex justify-center">
                         <div className="relative">
                             <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-white shadow-sm">
-                                <Image
-                                    src="/avatar-john.png"
-                                    alt="Profile"
-                                    fill
-                                    className="object-cover"
-                                />
+                                {loading ? (
+                                    <Skeleton className="h-full w-full rounded-full bg-gray-200" />
+                                ) : avatarUrl ? (
+                                    <Image
+                                        src={avatarUrl}
+                                        alt={displayName}
+                                        fill
+                                        className="object-cover"
+                                    />
+                                ) : (
+                                    <div className="flex h-full w-full items-center justify-center bg-[var(--sf-button,#1E40AF)] text-xl font-bold text-white">
+                                        {initials(displayName)}
+                                    </div>
+                                )}
                             </div>
                             <button className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-white shadow-md flex items-center justify-center text-blue-600 border border-gray-100">
                                 <Pencil className="w-4 h-4 fill-current" />
@@ -50,30 +81,57 @@ export default function EditProfilePage() {
 
                     {/* Form Fields */}
                     <div className="space-y-6">
+                        {error ? (
+                            <p className="rounded-2xl bg-amber-50 px-4 py-3 text-xs text-amber-900">{error}</p>
+                        ) : null}
                         <div className="space-y-2">
                             <label className="text-sm font-semibold text-[#1E293B] ml-1">Full Name</label>
-                            <Input
-                                placeholder="Adedayo Fad"
-                                className="h-14 rounded-[16px] border-gray-300 bg-transparent px-4 text-base"
-                            />
+                            {loading ? (
+                                <Skeleton className="h-14 rounded-[16px] bg-gray-200" />
+                            ) : (
+                                <Input
+                                    value={displayName}
+                                    readOnly
+                                    className="h-14 rounded-[16px] border-gray-300 bg-transparent px-4 text-base"
+                                />
+                            )}
                         </div>
 
                         <div className="space-y-2">
                             <label className="text-sm font-semibold text-[#1E293B] ml-1">Email</label>
-                            <Input
-                                type="email"
-                                placeholder="adefad@gmail.com"
-                                className="h-14 rounded-[16px] border-gray-300 bg-transparent px-4 text-base"
-                            />
+                            {loading ? (
+                                <Skeleton className="h-14 rounded-[16px] bg-gray-200" />
+                            ) : (
+                                <Input
+                                    type="email"
+                                    value={user?.email || 'Not provided'}
+                                    readOnly
+                                    className="h-14 rounded-[16px] border-gray-300 bg-transparent px-4 text-base"
+                                />
+                            )}
                         </div>
 
                         <div className="space-y-2">
                             <label className="text-sm font-semibold text-[#1E293B] ml-1">Phone number</label>
-                            <Input
-                                type="tel"
-                                placeholder="+23470*******89"
-                                className="h-14 rounded-[16px] border-gray-300 bg-transparent px-4 text-base"
-                            />
+                            {loading ? (
+                                <Skeleton className="h-14 rounded-[16px] bg-gray-200" />
+                            ) : (
+                                <Input
+                                    type="tel"
+                                    value={user?.phone || 'Not provided'}
+                                    readOnly
+                                    className="h-14 rounded-[16px] border-gray-300 bg-transparent px-4 text-base"
+                                />
+                            )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <ReadOnlyField label="User type" value={user?.user_type || 'Not available'} loading={loading} />
+                            <ReadOnlyField label="Status" value={user?.status || 'Not available'} loading={loading} />
+                            <ReadOnlyField label="Country" value={user?.country || 'Not available'} loading={loading} />
+                            <ReadOnlyField label="User ref" value={user?.user_ref || 'Not available'} loading={loading} />
+                            <ReadOnlyField label="Created" value={formatDate(user?.created_at)} loading={loading} />
+                            <ReadOnlyField label="Last login" value={formatDate(user?.last_login_at)} loading={loading} />
                         </div>
                     </div>
 
@@ -147,6 +205,17 @@ export default function EditProfilePage() {
                     </div>
                 </div>
             )}
+        </div>
+    );
+}
+
+function ReadOnlyField({ label, value, loading }: { label: string; value: string; loading: boolean }) {
+    return (
+        <div className="rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{label}</p>
+            <p className="mt-1 flex min-h-5 items-center text-xs font-bold text-[#1E293B]">
+                {loading ? <Skeleton className="h-3.5 w-20 bg-gray-200" /> : value}
+            </p>
         </div>
     );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -16,20 +16,49 @@ import {
     LogOut,
     ChevronRight,
     BadgeCheck,
-    ScanFace
+    ScanFace,
+    AlertCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { useAppDispatch } from '@/store/hooks';
 import { logoutThunk } from '@/store/authSlice';
 import { toast } from 'sonner';
 import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
+import { useAuthUserProfile } from '@/hooks/useAuthUserProfile';
+import type { AuthUserProfile } from '@/lib/userProfileClient';
+
+function fullName(user: AuthUserProfile | null) {
+    return [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim() || 'Profile';
+}
+
+function initials(name: string) {
+    const parts = name.split(/\s+/).filter(Boolean);
+    return (parts[0]?.[0] || 'U') + (parts[1]?.[0] || '');
+}
+
+function formatDate(value?: string) {
+    if (!value) return 'Not available';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Not available';
+    return date.toLocaleDateString('en-NG', { month: 'short', day: '2-digit', year: 'numeric' });
+}
+
+function statusLabel(user: AuthUserProfile | null) {
+    if (user?.email_verified || user?.phone_verified) return 'Identity Verified';
+    if (user?.status) return user.status;
+    return 'Profile loaded';
+}
 
 export default function ProfilePage() {
     const router = useRouter();
     const dispatch = useAppDispatch();
+    const { user, loading, error } = useAuthUserProfile();
     const [showLogoutModal, setShowLogoutModal] = useState(false);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
+    const name = useMemo(() => fullName(user), [user]);
+    const avatarUrl = user?.avatar_url || user?.profile_image || user?.image || '';
 
     const handleLogout = async () => {
         try {
@@ -60,35 +89,86 @@ export default function ProfilePage() {
                     {/* Profile Card */}
                     <div className="bg-white rounded-[24px] p-4 flex items-center gap-4 shadow-sm border border-gray-100">
                         <div className="relative w-14 h-14 rounded-full overflow-hidden bg-gray-200">
-                            <Image
-                                src="/avatar-john.png"
-                                alt="Profile"
-                                fill
-                                className="object-cover"
-                            />
+                            {loading ? (
+                                <Skeleton className="h-full w-full rounded-full bg-gray-200" />
+                            ) : avatarUrl ? (
+                                <Image
+                                    src={avatarUrl}
+                                    alt={name}
+                                    fill
+                                    className="object-cover"
+                                />
+                            ) : (
+                                <div className="flex h-full w-full items-center justify-center bg-[var(--sf-button,#1E40AF)] text-sm font-bold text-white">
+                                    {initials(name)}
+                                </div>
+                            )}
                         </div>
-                        <div>
-                            <h2 className="text-base font-bold text-[#1E293B]">Adedayo David</h2>
-                            <div className="flex items-center gap-1 text-[#16A34A]">
-                                <span className="text-xs font-medium">Identity Verified</span>
-                                <BadgeCheck className="w-4 h-4 fill-current" />
-                            </div>
+                        <div className="min-w-0 flex-1">
+                            {loading ? (
+                                <div className="space-y-2">
+                                    <Skeleton className="h-4 w-36 bg-gray-200" />
+                                    <Skeleton className="h-3 w-28 bg-gray-200" />
+                                </div>
+                            ) : (
+                                <>
+                                    <h2 className="truncate text-base font-bold text-[#1E293B]">{name}</h2>
+                                    <div className={cn(
+                                        'flex items-center gap-1',
+                                        user?.email_verified || user?.phone_verified ? 'text-[#16A34A]' : 'text-amber-500',
+                                    )}>
+                                        <span className="text-xs font-medium">{statusLabel(user)}</span>
+                                        <BadgeCheck className="w-4 h-4 fill-current" />
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
+
+                    {error ? (
+                        <div className="flex items-start gap-3 rounded-2xl bg-amber-50 p-4 text-xs text-amber-900">
+                            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                            <p>{error}</p>
+                        </div>
+                    ) : null}
 
                     {/* General Settings */}
                     <div>
                         <h3 className="text-sm font-bold text-[#1E293B] mb-3 ml-1">General Settings</h3>
                         <div className="bg-white rounded-[24px] overflow-hidden shadow-sm border border-gray-100">
                             <Link href="/mobile-v2/profile/edit">
-                                <SettingItem icon={<User className="w-5 h-5" />} label="Name" />
+                                <SettingItem icon={<User className="w-5 h-5" />} label="Name" value={name} loading={loading} />
                             </Link>
                             <Link href="/mobile-v2/profile/edit">
-                                <SettingItem icon={<Shield className="w-5 h-5" />} label="Email" />
+                                <SettingItem
+                                    icon={<Mail className="w-5 h-5" />}
+                                    label="Email"
+                                    value={user?.email || 'Not provided'}
+                                    loading={loading}
+                                />
                             </Link>
                             <Link href="/mobile-v2/profile/edit">
-                                <SettingItem icon={<Phone className="w-5 h-5" />} label="Phone Number" last />
+                                <SettingItem
+                                    icon={<Phone className="w-5 h-5" />}
+                                    label="Phone Number"
+                                    value={user?.phone || 'Not provided'}
+                                    loading={loading}
+                                    last
+                                />
                             </Link>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 className="text-sm font-bold text-[#1E293B] mb-3 ml-1">Account Details</h3>
+                        <div className="bg-white rounded-[24px] overflow-hidden shadow-sm border border-gray-100">
+                            <SettingItem icon={<User className="w-5 h-5" />} label="User Type" value={user?.user_type || 'Not available'} loading={loading} />
+                            <SettingItem icon={<Shield className="w-5 h-5" />} label="Status" value={user?.status || 'Not available'} loading={loading} />
+                            <SettingItem icon={<Mail className="w-5 h-5" />} label="Email Verified" value={user?.email_verified ? 'Yes' : 'No'} loading={loading} />
+                            <SettingItem icon={<Phone className="w-5 h-5" />} label="Phone Verified" value={user?.phone_verified ? 'Yes' : 'No'} loading={loading} />
+                            <SettingItem icon={<FileText className="w-5 h-5" />} label="Country" value={user?.country || 'Not available'} loading={loading} />
+                            <SettingItem icon={<FileText className="w-5 h-5" />} label="User Ref" value={user?.user_ref || 'Not available'} loading={loading} />
+                            <SettingItem icon={<FileText className="w-5 h-5" />} label="Last Login" value={formatDate(user?.last_login_at)} loading={loading} last />
                         </div>
                     </div>
 
@@ -189,15 +269,34 @@ export default function ProfilePage() {
     );
 }
 
-function SettingItem({ icon, label, last }: { icon: React.ReactNode, label: string, last?: boolean }) {
+function SettingItem({
+    icon,
+    label,
+    value,
+    loading,
+    last,
+}: {
+    icon: React.ReactNode,
+    label: string,
+    value?: string,
+    loading?: boolean,
+    last?: boolean,
+}) {
     return (
         <div className={cn(
             "w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors cursor-pointer",
             !last && "border-b border-gray-100"
         )}>
-            <div className="flex items-center gap-4 text-gray-700">
+            <div className="flex min-w-0 items-center gap-4 text-gray-700">
                 {icon}
-                <span className="text-sm font-medium">{label}</span>
+                <div className="min-w-0">
+                    <span className="block text-sm font-medium">{label}</span>
+                    {loading ? (
+                        <Skeleton className="mt-1 h-3 w-32 bg-gray-200" />
+                    ) : value ? (
+                        <span className="block truncate text-xs text-gray-400">{value}</span>
+                    ) : null}
+                </div>
             </div>
             <ChevronRight className="w-5 h-5 text-gray-400" />
         </div>

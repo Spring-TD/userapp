@@ -17,6 +17,13 @@ export type AuthUserProfile = {
   phone_verified?: boolean
   user_merchant_id?: string
   country?: string
+  bvn?: string
+  app_id?: string
+  role_id?: string
+  user_ref?: string
+  created_at?: string
+  updated_at?: string
+  last_login_at?: string
   /** Optional image URL if the backend adds it later */
   avatar_url?: string
   profile_image?: string
@@ -60,7 +67,17 @@ export function normalizeAuthUserProfile(raw: unknown): AuthUserProfile | null {
     first_name: pickStr(u, 'first_name', 'firstName', 'firstname'),
     last_name: pickStr(u, 'last_name', 'lastName', 'lastname'),
     phone: pickStr(u, 'phone', 'phoneNumber'),
+    user_type: pickStr(u, 'user_type', 'userType'),
+    status: pickStr(u, 'status'),
+    user_merchant_id: pickStr(u, 'user_merchant_id', 'userMerchantId', 'merchantId'),
     country: pickStr(u, 'country'),
+    bvn: pickStr(u, 'bvn', 'BVN', 'bank_verification_number', 'bankVerificationNumber'),
+    app_id: pickStr(u, 'app_id', 'appId'),
+    role_id: pickStr(u, 'role_id', 'roleId'),
+    user_ref: pickStr(u, 'user_ref', 'userRef'),
+    created_at: pickStr(u, 'created_at', 'createdAt'),
+    updated_at: pickStr(u, 'updated_at', 'updatedAt'),
+    last_login_at: pickStr(u, 'last_login_at', 'lastLoginAt'),
     avatar_url: pickStr(u, 'avatar_url', 'avatarUrl', 'profile_image', 'profileImage'),
   } as AuthUserProfile
 }

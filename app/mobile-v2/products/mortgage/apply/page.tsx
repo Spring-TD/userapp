@@ -3,12 +3,13 @@
 import React, { Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { sanitizeProductId } from '@/lib/sanitizeProductId'
 import { MortgageApplyFlow } from '@/components/mobile-v2/mortgage/MortgageApplyFlow'
 import { MortgageApplyFlowSkeleton } from '@/components/mobile-v2/data-skeletons'
 
 function ApplyInner() {
   const searchParams = useSearchParams()
-  const productId = searchParams.get('productId')?.trim() ?? ''
+  const productId = sanitizeProductId(searchParams.get('productId'))
 
   if (!productId) {
     return (
