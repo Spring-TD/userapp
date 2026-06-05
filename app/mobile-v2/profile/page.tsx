@@ -200,7 +200,9 @@ export default function ProfilePage() {
                             <Link href="/mobile-v2/profile/privacy-policy">
                                 <SettingItem icon={<FileText className="w-5 h-5" />} label="Privacy Policy" />
                             </Link>
-                            <SettingItem icon={<FileText className="w-5 h-5" />} label="About" last />
+                            <Link href="/mobile-v2/profile/about">
+                                <SettingItem icon={<FileText className="w-5 h-5" />} label="About" last />
+                            </Link>
                         </div>
                     </div>
 

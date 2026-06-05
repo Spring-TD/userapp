@@ -21,6 +21,13 @@ import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
 const ACCOUNT_FILTERS = ['Mortgage', 'Loan', 'Savings', 'Invest', 'Commodity'] as const;
 type AccountFilter = typeof ACCOUNT_FILTERS[number];
 const ACCOUNT_LOGO_SRC = '/images/mobile/WhatsApp%20Image%202026-05-20%20at%201.34.41%20PM.jpeg';
+const ACCOUNT_TOTAL_LABELS: Record<AccountFilter, string> = {
+    Mortgage: 'Total Mortgage',
+    Loan: 'Total Loan',
+    Savings: 'Total Savings',
+    Invest: 'Total Investment',
+    Commodity: 'Total Commodity',
+};
 
 function displayNameFromProfile(user: AuthUserProfile | null): string {
     if (!user) return '';
@@ -130,6 +137,7 @@ export default function AccountsPage() {
     const masked = maskAccountNumber(wallet?.virtualNuban?.accountNumber);
     const statusLabel =
         wallet?.status === 'ACTIVE' ? 'Active' : wallet?.status ? wallet.status : '—';
+    const totalLabel = ACCOUNT_TOTAL_LABELS[activeFilter];
 
     return (
         <div className="flex flex-col h-full bg-[#FAFAFA] relative">
@@ -190,7 +198,7 @@ export default function AccountsPage() {
                                 <div className="w-12 h-12 rounded-full border-2 border-green-400/30 p-0.5 mb-3 bg-white/10 backdrop-blur-sm flex items-center justify-center">
                                     <Wallet className="w-6 h-6 text-white/90" />
                                 </div>
-                                <span className="text-sm font-medium text-blue-100 mb-1">Total balance</span>
+                                <span className="text-sm font-medium text-blue-100 mb-1">{totalLabel}</span>
                                 <h2 className="text-4xl font-bold mb-2 min-h-[2.5rem] flex items-center justify-center">
                                     {walletLoading ? (
                                         <Skeleton className="h-10 w-40 rounded-lg bg-white/25" />
@@ -201,7 +209,7 @@ export default function AccountsPage() {
                                     )}
                                 </h2>
                                 <p className="text-[11px] text-blue-200/90 text-center max-w-[280px]">
-                                    {walletError || 'Your main wallet balance'}
+                                    {walletError || `Your ${activeFilter.toLowerCase()} account total`}
                                 </p>
                             </div>
                         </div>

@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
   addApplicationGuarantor,
+  initializeProductApplication,
   readInitializedApplication,
   submitApplicationRequirements,
   submitInitializedApplication,
@@ -26,6 +27,7 @@ import {
   type RequirementSubmission,
   type StorefrontApplication,
 } from '@/lib/storefrontApplicationClient'
+import { sanitizeProductId } from '@/lib/sanitizeProductId'
 
 type ProductKind = 'loan' | 'mortgage'
 type StepId = 'requirement' | 'file' | 'property' | 'product'
@@ -378,7 +380,7 @@ function ProductSummary({
   )
 }
 
-export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
+export function ProductApplicationFlow({ kind, productId: productIdProp }: { kind: ProductKind; productId?: string }) {
   const searchParams = useSearchParams()
   const steps = useMemo<StepId[]>(
     () => (kind === 'loan' ? ['requirement', 'file', 'product'] : ['requirement', 'file', 'property', 'product']),
@@ -389,6 +391,8 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
   const [sheet, setSheet] = useState<'create_account' | 'guarantor_form' | 'guarantor_added' | 'success' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [creatingAccount, setCreatingAccount] = useState(false)
+  const [createAccountError, setCreateAccountError] = useState<string | null>(null)
   const [requirementSubmissions, setRequirementSubmissions] = useState<RequirementSubmission[]>([])
   const [guarantors, setGuarantors] = useState<Guarantor[]>([])
   const [employmentDraft, setEmploymentDraft] = useState<EmploymentDraft>({
@@ -405,6 +409,7 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
   const productName = prettyKind(kind)
   const initializedApplication = readInitializedApplication()
   const providerName = applicationProvider(initializedApplication)
+  const productId = sanitizeProductId(productIdProp || searchParams.get('productId') || initializedApplication?.productId || '')
   const applicationId = searchParams.get('applicationId') || initializedApplication?.id || initializedApplication?._id || ''
   const userId = initializedApplication?.userId || ''
   const requirements = initializedApplication?.requirementsSnapshot
@@ -485,6 +490,26 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
       return
     }
     setActiveStep(steps[Math.min(activeIndex + 1, steps.length - 1)])
+  }
+
+  const handleCreateAccount = async () => {
+    if (!productId) {
+      setCreateAccountError(`No ${productName.toLowerCase()} product selected.`)
+      return
+    }
+
+    setCreatingAccount(true)
+    setCreateAccountError(null)
+    try {
+      const result = await initializeProductApplication(productId)
+      if (!result.ok) {
+        setCreateAccountError(result.error || `Could not create your ${productName.toLowerCase()} account.`)
+        return
+      }
+      setSheet('success')
+    } finally {
+      setCreatingAccount(false)
+    }
   }
 
   return (
@@ -683,12 +708,25 @@ export function ProductApplicationFlow({ kind }: { kind: ProductKind }) {
                 Accept Data Privacy & Use of Data
               </label>
             </div>
+            {createAccountError ? (
+              <p className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-center text-xs text-red-600">
+                {createAccountError}
+              </p>
+            ) : null}
             <Button
               type="button"
+              disabled={creatingAccount}
               className={cn('mt-8 h-12 w-full rounded-full font-semibold', PRIMARY)}
-              onClick={() => setSheet('success')}
+              onClick={() => void handleCreateAccount()}
             >
-              Go ahead, Create Bank account
+              {creatingAccount ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating account...
+                </span>
+              ) : (
+                'Go ahead, Create Bank account'
+              )}
             </Button>
             <button type="button" className={`mt-5 text-sm font-medium ${BRAND_INK}`} onClick={() => setSheet(null)}>
               No. Go back

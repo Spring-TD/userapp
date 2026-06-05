@@ -8,12 +8,98 @@ export interface WebAppManifestBranding {
   theme_color?: string
   background_color?: string
   icons?: { src?: string; sizes?: string; type?: string; purpose?: string }[]
+  policyTerms?: {
+    privacyPolicy?: ManifestDocument
+    termsOfService?: ManifestDocument
+    faq?: ManifestFaqItem[]
+  }
+  support?: ManifestSupport
+}
+
+export interface ManifestDocument {
+  title?: string
+  contentHtml?: string
+  contentText?: string
+}
+
+export interface ManifestFaqItem {
+  id: string
+  questionHtml?: string
+  answerHtml?: string
+}
+
+export interface ManifestSupport {
+  contactEmail?: string
+  contactPhone?: string
+  whatsapp?: string
+  whatsappNumber?: string
+  website?: string
+  linkedinPage?: string
+  privacyPolicyLink?: string
+  termsAndConditionsLink?: string
+  instagramHandle?: string
+  twitterHandle?: string
 }
 
 function asTrimmedString(v: unknown): string | undefined {
   if (typeof v !== "string") return undefined
   const t = v.trim()
   return t || undefined
+}
+
+function asRecord(v: unknown): Record<string, unknown> | null {
+  return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null
+}
+
+function parseDocument(raw: unknown): ManifestDocument | undefined {
+  const row = asRecord(raw)
+  if (!row) return undefined
+  const title = asTrimmedString(row.title)
+  const contentHtml = asTrimmedString(row.contentHtml)
+  const contentText = asTrimmedString(row.contentText)
+  if (!title && !contentHtml && !contentText) return undefined
+  return {
+    ...(title ? { title } : {}),
+    ...(contentHtml ? { contentHtml } : {}),
+    ...(contentText ? { contentText } : {}),
+  }
+}
+
+function parseFaq(raw: unknown): ManifestFaqItem[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  const items = raw
+    .map((item, index) => {
+      const row = asRecord(item)
+      if (!row) return null
+      const questionHtml = asTrimmedString(row.questionHtml) || asTrimmedString(row.question)
+      const answerHtml = asTrimmedString(row.answerHtml) || asTrimmedString(row.answer)
+      if (!questionHtml && !answerHtml) return null
+      return {
+        id: asTrimmedString(row.id) || `faq-${index}`,
+        ...(questionHtml ? { questionHtml } : {}),
+        ...(answerHtml ? { answerHtml } : {}),
+      }
+    })
+    .filter(Boolean) as ManifestFaqItem[]
+  return items.length ? items : undefined
+}
+
+function parseSupport(raw: unknown): ManifestSupport | undefined {
+  const row = asRecord(raw)
+  if (!row) return undefined
+  const support: ManifestSupport = {
+    ...(asTrimmedString(row.contactEmail) ? { contactEmail: asTrimmedString(row.contactEmail) } : {}),
+    ...(asTrimmedString(row.contactPhone) ? { contactPhone: asTrimmedString(row.contactPhone) } : {}),
+    ...(asTrimmedString(row.whatsapp) ? { whatsapp: asTrimmedString(row.whatsapp) } : {}),
+    ...(asTrimmedString(row.whatsappNumber) ? { whatsappNumber: asTrimmedString(row.whatsappNumber) } : {}),
+    ...(asTrimmedString(row.website) ? { website: asTrimmedString(row.website) } : {}),
+    ...(asTrimmedString(row.linkedinPage) ? { linkedinPage: asTrimmedString(row.linkedinPage) } : {}),
+    ...(asTrimmedString(row.privacyPolicyLink) ? { privacyPolicyLink: asTrimmedString(row.privacyPolicyLink) } : {}),
+    ...(asTrimmedString(row.termsAndConditionsLink) ? { termsAndConditionsLink: asTrimmedString(row.termsAndConditionsLink) } : {}),
+    ...(asTrimmedString(row.instagramHandle) ? { instagramHandle: asTrimmedString(row.instagramHandle) } : {}),
+    ...(asTrimmedString(row.twitterHandle) ? { twitterHandle: asTrimmedString(row.twitterHandle) } : {}),
+  }
+  return Object.keys(support).length ? support : undefined
 }
 
 export function parseWebAppManifestBranding(raw: unknown): WebAppManifestBranding | null {
@@ -40,6 +126,20 @@ export function parseWebAppManifestBranding(raw: unknown): WebAppManifestBrandin
   const description = asTrimmedString(o.description)
   const theme_color = asTrimmedString(o.theme_color)
   const background_color = asTrimmedString(o.background_color)
+  const config = asRecord(o.config)
+  const policyTermsRaw = asRecord(o.policyTerms) || asRecord(config?.policyTerms)
+  const privacyPolicy = parseDocument(policyTermsRaw?.privacyPolicy)
+  const termsOfService = parseDocument(policyTermsRaw?.termsOfService)
+  const faq = parseFaq(policyTermsRaw?.faq)
+  const support = parseSupport(o.support) || parseSupport(config?.support)
+  const policyTerms =
+    privacyPolicy || termsOfService || faq
+      ? {
+          ...(privacyPolicy ? { privacyPolicy } : {}),
+          ...(termsOfService ? { termsOfService } : {}),
+          ...(faq ? { faq } : {}),
+        }
+      : undefined
 
   if (
     !name &&
@@ -47,7 +147,9 @@ export function parseWebAppManifestBranding(raw: unknown): WebAppManifestBrandin
     !description &&
     !theme_color &&
     !background_color &&
-    (!icons || icons.length === 0)
+    (!icons || icons.length === 0) &&
+    !policyTerms &&
+    !support
   ) {
     return null
   }
@@ -59,6 +161,8 @@ export function parseWebAppManifestBranding(raw: unknown): WebAppManifestBrandin
     ...(theme_color ? { theme_color } : {}),
     ...(background_color ? { background_color } : {}),
     ...(icons && icons.length ? { icons } : {}),
+    ...(policyTerms ? { policyTerms } : {}),
+    ...(support ? { support } : {}),
   }
 }
 
