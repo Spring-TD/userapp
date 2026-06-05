@@ -133,6 +133,7 @@ async function loadTenantFromNavigation(search: string) {
   const merchantFromQuery = params.get("merchant_id")?.trim() || null
 
   let storedApp: string | null = null
+  const storedSubdomain = readCachedSubdomain()
   try {
     storedApp = sessionStorage.getItem(TENANT_APP_ID_STORAGE_KEY)
   } catch {
@@ -169,8 +170,8 @@ async function loadTenantFromNavigation(search: string) {
       appId = appIdParam
       if (!merchantId) merchantId = readMerchant()
       pwaManifest = readCachedManifest()
-    } else if (subdomainParam || hostSub) {
-      const slug = subdomainParam || hostSub!
+    } else if (subdomainParam || hostSub || storedSubdomain) {
+      const slug = subdomainParam || hostSub || storedSubdomain!
       tenantSubdomain = slug
       const t = await resolveSubdomain(slug)
       appId = t.appId

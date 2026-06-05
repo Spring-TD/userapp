@@ -3,8 +3,17 @@
 import React from 'react';
 import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
+import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
+import { externalUrl, manifestDocumentHtml, manifestDocumentTitle, supportFromManifest } from '@/lib/mobileManifestContent';
 
 export default function PrivacyPolicyPage() {
+    const { pwaManifest } = useMobileV2Tenant();
+    const policy = pwaManifest?.policyTerms?.privacyPolicy;
+    const support = supportFromManifest(pwaManifest);
+    const title = manifestDocumentTitle(policy, 'Privacy Policy');
+    const html = manifestDocumentHtml(policy);
+    const policyLink = externalUrl(support.privacyPolicyLink);
+
     return (
         <div className="flex flex-col h-full bg-[#FAFAFA] relative">
             <div className="flex-1 overflow-y-auto no-scrollbar pb-8">
@@ -13,62 +22,38 @@ export default function PrivacyPolicyPage() {
                     <Link href="/mobile-v2/profile" className="w-10 h-10 flex items-center justify-center -ml-2 text-gray-700">
                         <ChevronLeft className="w-6 h-6" />
                     </Link>
-                    <h1 className="flex-1 text-center text-lg font-bold text-[#1E293B] mr-8">Privacy Policy</h1>
+                    <h1 className="flex-1 text-center text-lg font-bold text-[#1E293B] mr-8">{title}</h1>
                 </div>
 
-                <div className="px-6 space-y-6 text-[#1E293B]">
-
-                    <section>
-                        <h2 className="font-bold text-base mb-2">Effective Date: January 1, 2025</h2>
-                        <p className="text-sm text-gray-500 leading-relaxed">
-                            This policy outlines how we handle your personal data starting from the date shown above.
-                        </p>
-                    </section>
-
-                    <section>
-                        <h2 className="font-bold text-base mb-2">1. Overview</h2>
-                        <p className="text-sm text-gray-500 leading-relaxed">
-                            Your privacy is important to us. This Privacy Policy explains how [YourApp Name] collects, uses, and protects your personal information.
-                        </p>
-                    </section>
-
-                    <section>
-                        <h2 className="font-bold text-base mb-2">2. Information We Collect</h2>
-                        <p className="text-sm text-gray-500 leading-relaxed mb-2">
-                            We may collect the following data:
-                        </p>
-                        <ul className="list-disc list-inside text-sm text-gray-500 space-y-1 pl-1">
-                            <li>Full name, email address, and phone number</li>
-                            <li>Payment card information</li>
-                            <li>Transaction history</li>
-                            <li>Location data (with permission)</li>
-                            <li>Device information</li>
-                        </ul>
-                    </section>
-
-                    <section>
-                        <h2 className="font-bold text-base mb-2">3. How We Use Your Data</h2>
-                        <p className="text-sm text-gray-500 leading-relaxed mb-2">
-                            We use your data to:
-                        </p>
-                        <ul className="list-disc list-inside text-sm text-gray-500 space-y-1 pl-1">
-                            <li>Provide and improve our services</li>
-                            <li>Process transactions</li>
-                            <li>Prevent fraud and ensure security</li>
-                            <li>Send account-related notifications</li>
-                        </ul>
-                    </section>
-
-                    <section>
-                        <h2 className="font-bold text-base mb-2">4. Data Sharing</h2>
-                        <p className="text-sm text-gray-500 leading-relaxed mb-2">
-                            We do not sell your data. We only share it with:
-                        </p>
-                        <ul className="list-disc list-inside text-sm text-gray-500 space-y-1 pl-1">
-                            <li>Regulatory authorities (when required by law)</li>
-                        </ul>
-                    </section>
-
+                <div className="px-6 text-[#1E293B]">
+                    {html ? (
+                        <article
+                            className="prose prose-sm max-w-none rounded-[24px] border border-gray-100 bg-white p-5 text-gray-600 shadow-sm"
+                            dangerouslySetInnerHTML={{ __html: html }}
+                        />
+                    ) : policyLink ? (
+                        <div className="rounded-[24px] border border-gray-100 bg-white p-6 text-center shadow-sm">
+                            <p className="text-sm font-semibold text-[#1E293B]">Privacy policy document</p>
+                            <p className="mt-2 text-xs leading-relaxed text-gray-500">
+                                The app owner configured the privacy policy as an external document.
+                            </p>
+                            <a
+                                href={policyLink}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-5 inline-flex h-11 items-center justify-center rounded-full bg-[var(--sf-button,#1E40AF)] px-5 text-sm font-semibold text-white"
+                            >
+                                Open Privacy Policy
+                            </a>
+                        </div>
+                    ) : (
+                        <div className="rounded-[24px] border border-gray-100 bg-white p-6 text-center shadow-sm">
+                            <p className="text-sm font-semibold text-[#1E293B]">No privacy policy configured</p>
+                            <p className="mt-2 text-xs leading-relaxed text-gray-500">
+                                The app owner has not added a privacy policy to this storefront manifest yet.
+                            </p>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

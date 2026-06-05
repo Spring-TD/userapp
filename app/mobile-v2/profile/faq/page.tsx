@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -10,8 +10,23 @@ import {
     AccordionItem,
     AccordionTrigger,
 } from "@/components/ui/accordion";
+import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
+import { htmlToPlainText, manifestFaqItems } from '@/lib/mobileManifestContent';
+import { sanitizeHtml } from '@/lib/sanitize';
 
 export default function FAQPage() {
+    const { pwaManifest } = useMobileV2Tenant();
+    const [query, setQuery] = useState('');
+    const configuredFaqs = manifestFaqItems(pwaManifest);
+    const filteredFaqs = useMemo(() => {
+        const needle = query.trim().toLowerCase();
+        if (!needle) return configuredFaqs;
+        return configuredFaqs.filter((item) => {
+            const haystack = `${htmlToPlainText(item.questionHtml)} ${htmlToPlainText(item.answerHtml)}`.toLowerCase();
+            return haystack.includes(needle);
+        });
+    }, [configuredFaqs, query]);
+
     return (
         <div className="flex flex-col h-full bg-[#FAFAFA] relative">
             <div className="flex-1 overflow-y-auto no-scrollbar pb-8">
@@ -29,56 +44,35 @@ export default function FAQPage() {
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                         <Input
                             placeholder="Search"
+                            value={query}
+                            onChange={(event) => setQuery(event.target.value)}
                             className="h-12 pl-12 rounded-[12px] border-gray-200 bg-white"
                         />
                     </div>
 
-                    {/* FAQ Items */}
-                    <Accordion type="single" collapsible className="w-full space-y-4">
-                        <div className="bg-white rounded-[24px] px-6 py-2 shadow-sm border border-gray-100">
-                            <AccordionItem value="item-1" className="border-none">
-                                <AccordionTrigger className="text-sm font-semibold text-[#1E293B] hover:no-underline">
-                                    Why is SpringTD
-                                </AccordionTrigger>
-                                <AccordionContent className="text-xs text-gray-500 leading-relaxed">
-                                    Lorem ipsum dolor sit amet consectetur. Rhoncus purus sed vestibulum dignissim libero tellus. Et vitae in eget dui id lectus parturient magna.
-                                </AccordionContent>
-                            </AccordionItem>
+                    {filteredFaqs.length > 0 ? (
+                        <Accordion type="single" collapsible className="w-full space-y-4">
+                            {filteredFaqs.map((item, index) => (
+                                <div key={item.id || index} className="bg-white rounded-[24px] px-6 py-2 shadow-sm border border-gray-100">
+                                    <AccordionItem value={item.id || `item-${index}`} className="border-none">
+                                        <AccordionTrigger className="text-left text-sm font-semibold text-[#1E293B] hover:no-underline">
+                                            <span dangerouslySetInnerHTML={{ __html: sanitizeHtml(item.questionHtml || 'Question') }} />
+                                        </AccordionTrigger>
+                                        <AccordionContent className="text-xs text-gray-500 leading-relaxed">
+                                            <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(item.answerHtml || 'No answer configured.') }} />
+                                        </AccordionContent>
+                                    </AccordionItem>
+                                </div>
+                            ))}
+                        </Accordion>
+                    ) : (
+                        <div className="rounded-[24px] border border-gray-100 bg-white p-6 text-center shadow-sm">
+                            <p className="text-sm font-semibold text-[#1E293B]">No FAQ configured</p>
+                            <p className="mt-2 text-xs leading-relaxed text-gray-500">
+                                The app owner has not added FAQ items to this storefront manifest yet.
+                            </p>
                         </div>
-
-                        <div className="bg-white rounded-[24px] px-6 py-2 shadow-sm border border-gray-100">
-                            <AccordionItem value="item-2" className="border-none">
-                                <AccordionTrigger className="text-sm font-semibold text-[#1E293B] hover:no-underline">
-                                    How does Mortgage Work?
-                                </AccordionTrigger>
-                                <AccordionContent className="text-xs text-gray-500 leading-relaxed">
-                                    Lorem ipsum dolor sit amet consectetur. Rhoncus purus sed vestibulum dignissim libero tellus.
-                                </AccordionContent>
-                            </AccordionItem>
-                        </div>
-
-                        <div className="bg-white rounded-[24px] px-6 py-2 shadow-sm border border-gray-100">
-                            <AccordionItem value="item-3" className="border-none">
-                                <AccordionTrigger className="text-sm font-semibold text-[#1E293B] hover:no-underline">
-                                    Who can use Mortgage?
-                                </AccordionTrigger>
-                                <AccordionContent className="text-xs text-gray-500 leading-relaxed">
-                                    Detailed explanation about mortgage eligibility.
-                                </AccordionContent>
-                            </AccordionItem>
-                        </div>
-
-                        <div className="bg-white rounded-[24px] px-6 py-2 shadow-sm border border-gray-100">
-                            <AccordionItem value="item-4" className="border-none">
-                                <AccordionTrigger className="text-sm font-semibold text-[#1E293B] hover:no-underline">
-                                    What is Product Builder?
-                                </AccordionTrigger>
-                                <AccordionContent className="text-xs text-gray-500 leading-relaxed">
-                                    Information about the Product Builder feature.
-                                </AccordionContent>
-                            </AccordionItem>
-                        </div>
-                    </Accordion>
+                    )}
                 </div>
             </div>
         </div>

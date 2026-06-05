@@ -127,28 +127,6 @@ export async function buildProductApplyBody(
   const phone = user?.phone?.trim() || ''
   const bvn = bvnFromProfile(user) || (await bvnFromKycStatus(userId))
 
-  if (!merchantId) {
-    return {
-      ok: false,
-      error: 'Storefront is still loading. Refresh the page and try again.',
-    }
-  }
-  if (!email) {
-    return { ok: false, error: 'Add an email address to your profile before continuing.' }
-  }
-  if (!applicantName) {
-    return { ok: false, error: 'Add your name to your profile before continuing.' }
-  }
-  if (!phone) {
-    return { ok: false, error: 'Add a phone number to your profile before continuing.' }
-  }
-  if (!bvn) {
-    return {
-      ok: false,
-      error: 'Your BVN is required to open this account. Complete identity verification (KYC) first.',
-    }
-  }
-
   return {
     ok: true,
     body: {
