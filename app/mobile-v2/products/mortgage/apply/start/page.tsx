@@ -7,9 +7,10 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Check, ChevronLeft, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
-import { ensureMortgageAccount } from '@/lib/mortgageApplyClient'
+import { getExistingInitializedApplication, initializeProductApplication } from '@/lib/storefrontApplicationClient'
 import { mortgageApplyHref } from '@/lib/mortgageApplyRoutes'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
+import { resolveWalletUserId } from '@/lib/resolveWalletUserId'
 
 function MortgageApplyStartInner() {
   const router = useRouter()
@@ -22,6 +23,7 @@ function MortgageApplyStartInner() {
   const [termsAccepted, setTermsAccepted] = useState(true)
   const [privacyAccepted, setPrivacyAccepted] = useState(true)
   const [processing, setProcessing] = useState(false)
+  const [checkingExisting, setCheckingExisting] = useState(true)
 
   useEffect(() => {
     if (!rawProductId || rawProductId === productId) return
@@ -34,6 +36,39 @@ function MortgageApplyStartInner() {
     router.replace(`?${params.toString()}`, { scroll: false })
   }, [rawProductId, productId, router])
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function checkExistingApplication() {
+      if (!productId) {
+        setCheckingExisting(false)
+        return
+      }
+
+      setCheckingExisting(true)
+      try {
+        const userId = await resolveWalletUserId()
+        if (!userId) return
+
+        const result = await getExistingInitializedApplication(userId, productId)
+        if (!cancelled && result.ok && result.application) {
+          router.replace(mortgageApplyHref(productId))
+          return
+        }
+      } catch (error) {
+        console.warn('Could not check existing initialized mortgage application:', error)
+      } finally {
+        if (!cancelled) setCheckingExisting(false)
+      }
+    }
+
+    void checkExistingApplication()
+
+    return () => {
+      cancelled = true
+    }
+  }, [productId, router])
+
   const handleAccept = async () => {
     if (!productId) {
       setError('No mortgage product selected.')
@@ -43,7 +78,7 @@ function MortgageApplyStartInner() {
     setProcessing(true)
     setError(null)
     try {
-      const result = await ensureMortgageAccount(productId)
+      const result = await initializeProductApplication(productId)
       if (!result.ok) {
         setError(result.error || 'Could not set up your mortgage account.')
         return
@@ -53,6 +88,17 @@ function MortgageApplyStartInner() {
     } finally {
       setProcessing(false)
     }
+  }
+
+  if (checkingExisting) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center bg-[#FAFAFA] px-8 text-center">
+        <Loader2 className="h-8 w-8 animate-spin text-[var(--sf-button,#1E40AF)]" />
+        <p className="mt-4 text-sm font-medium text-[var(--sf-ink,#1E293B)]">
+          Checking your mortgage application...
+        </p>
+      </div>
+    )
   }
 
   return (

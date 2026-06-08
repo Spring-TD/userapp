@@ -11,6 +11,7 @@ import { clearAuthError, loginThunk } from '@/store/authSlice';
 import { clearMobileClientAuthError } from '@/store/mobileClientAuthSlice';
 import { AuthRouteSkeleton } from '@/components/mobile-v2/data-skeletons';
 import { showAuthError } from '@/lib/showAuthError';
+import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
 
 const DEFAULT_POST_LOGIN = '/mobile-v2/home';
 
@@ -35,6 +36,7 @@ function LoginPageInner() {
   const dispatch = useAppDispatch();
   const { loading, error } = useAppSelector((s) => s.auth);
   const mobileErr = useAppSelector((s) => s.mobileClientAuth.error);
+  const tenant = useMobileV2Tenant();
 
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
@@ -63,13 +65,33 @@ function LoginPageInner() {
 
   const handleLogin = async () => {
     setSubmitError(null);
+    if (!tenant.ready) {
+      setSubmitError(showAuthError('Storefront is still loading. Please try again in a moment.'));
+      return;
+    }
+    if (!tenant.tenantSubdomain && !tenant.appId && !tenant.merchantId) {
+      setSubmitError(showAuthError('Open this app from your storefront link, or add ?subdomain=… for local testing.'));
+      return;
+    }
     const { ok, errors } = validate();
     if (!ok) {
       const msg = errors.email || errors.password;
       if (msg) setSubmitError(showAuthError(msg));
       return;
     }
-    const res = await dispatch(loginThunk({ email: email.trim().toLowerCase(), password }));
+    const res = await dispatch(loginThunk({
+      email: email.trim().toLowerCase(),
+      password,
+      ...(tenant.tenantSubdomain ? { subdomain: tenant.tenantSubdomain } : {}),
+      ...(tenant.appId ? { app_id: tenant.appId, appId: tenant.appId } : {}),
+      ...(tenant.merchantId
+        ? {
+            user_merchant_id: tenant.merchantId,
+            userMerchantId: tenant.merchantId,
+            merchantId: tenant.merchantId,
+          }
+        : {}),
+    }));
     if (loginThunk.rejected.match(res)) {
       const status = (res.error as { message?: string })?.message;
       setSubmitError(showAuthError(res.payload ?? status ?? 'Sign in failed.'));
@@ -159,10 +181,10 @@ function LoginPageInner() {
         <Button
           type="button"
           className="h-14 w-full rounded-[20px] bg-[var(--sf-button,#1E40AF)] text-base font-medium text-white shadow-lg shadow-blue-900/20 hover:opacity-95"
-          disabled={loading}
+          disabled={loading || !tenant.ready}
           onClick={handleLogin}
         >
-          {loading ? 'Please wait…' : 'Login'}
+          {loading || !tenant.ready ? 'Please wait…' : 'Login'}
         </Button>
       </div>
     </div>

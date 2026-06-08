@@ -140,8 +140,8 @@ export default function AccountsPage() {
     const totalLabel = ACCOUNT_TOTAL_LABELS[activeFilter];
 
     return (
-        <div className="flex flex-col h-full bg-[#FAFAFA] relative">
-            <div className="flex-1 overflow-y-auto no-scrollbar pb-32">
+        <div className="flex min-h-full flex-col bg-[#FAFAFA] relative">
+            <div className="flex-1 overflow-y-auto no-scrollbar pb-[calc(8rem+env(safe-area-inset-bottom))]">
                 <div className="px-6 pt-12 pb-4 flex items-center justify-between">
                     <div>
                         <h1 className="text-[19px] font-bold text-[#1E293B]">

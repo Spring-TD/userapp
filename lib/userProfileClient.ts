@@ -37,6 +37,14 @@ type ProfileApiResponse = {
   message?: string
 }
 
+export type UpdateAuthUserProfileInput = {
+  first_name?: string
+  last_name?: string
+  phone?: string
+  country?: string
+  avatar_url?: string
+}
+
 function pickStr(obj: Record<string, unknown>, ...keys: string[]): string {
   for (const k of keys) {
     const v = obj[k]
@@ -114,6 +122,44 @@ export async function fetchAuthUserProfile(): Promise<{
     return {
       user: null,
       error: msg || (e instanceof Error ? e.message : 'Unable to load profile'),
+    }
+  }
+}
+
+export async function updateAuthUserProfile(input: UpdateAuthUserProfileInput): Promise<{
+  user: AuthUserProfile | null
+  error: string | null
+}> {
+  try {
+    const body = {
+      ...(input.first_name != null ? { first_name: input.first_name.trim() } : {}),
+      ...(input.last_name != null ? { last_name: input.last_name.trim() } : {}),
+      ...(input.phone != null ? { phone: input.phone.trim() } : {}),
+      ...(input.country != null ? { country: input.country.trim() } : {}),
+      ...(input.avatar_url != null ? { avatar_url: input.avatar_url.trim() } : {}),
+    }
+
+    const { data } = await api.put<ProfileApiResponse>('/v1/user/profile', body)
+    const inner = data?.data
+    const rawUser =
+      inner && typeof inner === 'object' && 'user' in inner
+        ? (inner as { user?: unknown }).user
+        : inner && typeof inner === 'object'
+          ? inner
+          : null
+    const user = rawUser ? normalizeAuthUserProfile(rawUser) : null
+    if (data?.success !== false) {
+      return { user, error: null }
+    }
+    return { user: null, error: data?.error || data?.message || 'Unable to update profile' }
+  } catch (e: unknown) {
+    const msg =
+      e && typeof e === 'object' && 'response' in e
+        ? String((e as { response?: { data?: { error?: string; message?: string } } }).response?.data?.error ?? (e as { response?: { data?: { message?: string } } }).response?.data?.message ?? '')
+        : ''
+    return {
+      user: null,
+      error: msg || (e instanceof Error ? e.message : 'Unable to update profile'),
     }
   }
 }

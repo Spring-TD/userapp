@@ -46,7 +46,7 @@ function isRetryableNetworkError(e: unknown): boolean {
   )
 }
 
-/** Server-side proxy: {@link getWalletProxyBaseUrl} + `/api/v1/wallets/*` (from `NEXT_PUBLIC_API_URL`). */
+/** Server-side proxy: {@link getWalletProxyBaseUrl} + `/api/v1/wallets/*` (wallet-ms, not account-ms gateway). */
 export async function proxyWalletRequest(
   request: NextRequest,
   segments: string[],

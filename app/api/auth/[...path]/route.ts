@@ -37,6 +37,31 @@ function mergeStorefrontHeaders(request: NextRequest, extra?: Record<string, str
   }
 }
 
+function withStorefrontBody(body: unknown, headers: Record<string, string>) {
+  const payload = body && typeof body === 'object' ? { ...(body as Record<string, unknown>) } : {}
+  const subdomain =
+    headers['x-tenant-subdomain'] ||
+    (typeof payload.subdomain === 'string' ? payload.subdomain : undefined)
+  const appId =
+    headers['x-tenant-app-id'] ||
+    (typeof payload.app_id === 'string' ? payload.app_id : undefined) ||
+    (typeof payload.appId === 'string' ? payload.appId : undefined)
+  const merchantId =
+    headers['x-tenant-merchant-id'] ||
+    (typeof payload.user_merchant_id === 'string' ? payload.user_merchant_id : undefined) ||
+    (typeof payload.userMerchantId === 'string' ? payload.userMerchantId : undefined) ||
+    (typeof payload.merchantId === 'string' ? payload.merchantId : undefined)
+
+  if (subdomain && typeof payload.subdomain !== 'string') payload.subdomain = subdomain
+  if (appId && typeof payload.app_id !== 'string') payload.app_id = appId
+  if (appId && typeof payload.appId !== 'string') payload.appId = appId
+  if (merchantId && typeof payload.user_merchant_id !== 'string') payload.user_merchant_id = merchantId
+  if (merchantId && typeof payload.userMerchantId !== 'string') payload.userMerchantId = merchantId
+  if (merchantId && typeof payload.merchantId !== 'string') payload.merchantId = merchantId
+
+  return payload
+}
+
 const cookieOpts = (maxAge: number) => ({
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
@@ -82,9 +107,40 @@ export class Auth {
     const loginUrl = buildUrl(BACKEND.auth.login);
     try {
       const body = await request.json();
-      const res = await axios.post(loginUrl, body, {
+      const headers = mergeStorefrontHeaders(request);
+      const payload = withStorefrontBody(body, headers);
+      const payloadRecord = payload as Record<string, unknown>;
+      const payloadSubdomain = typeof payloadRecord.subdomain === 'string' ? payloadRecord.subdomain : undefined;
+      const payloadAppId =
+        (typeof payloadRecord.app_id === 'string' ? payloadRecord.app_id : undefined) ||
+        (typeof payloadRecord.appId === 'string' ? payloadRecord.appId : undefined);
+      const payloadMerchantId =
+        (typeof payloadRecord.user_merchant_id === 'string' ? payloadRecord.user_merchant_id : undefined) ||
+        (typeof payloadRecord.userMerchantId === 'string' ? payloadRecord.userMerchantId : undefined) ||
+        (typeof payloadRecord.merchantId === 'string' ? payloadRecord.merchantId : undefined);
+      if (payloadSubdomain && !headers['x-tenant-subdomain']) headers['x-tenant-subdomain'] = payloadSubdomain;
+      if (payloadAppId && !headers['x-tenant-app-id']) headers['x-tenant-app-id'] = payloadAppId;
+      if (payloadMerchantId && !headers['x-tenant-merchant-id']) headers['x-tenant-merchant-id'] = payloadMerchantId;
+      console.log('[Auth] login → upstream', {
+        url: loginUrl,
+        tenantHeaders: {
+          'x-tenant-subdomain': headers['x-tenant-subdomain'],
+          'x-tenant-app-id': headers['x-tenant-app-id'],
+          'x-tenant-merchant-id': headers['x-tenant-merchant-id'],
+          'X-Forwarded-Host': headers['X-Forwarded-Host'],
+        },
+        payloadTenant: {
+          subdomain: payloadRecord.subdomain,
+          app_id: payloadRecord.app_id,
+          appId: payloadRecord.appId,
+          user_merchant_id: payloadRecord.user_merchant_id,
+          userMerchantId: payloadRecord.userMerchantId,
+          merchantId: payloadRecord.merchantId,
+        },
+      });
+      const res = await axios.post(loginUrl, payload, {
         ...axiosConfig,
-        headers: mergeStorefrontHeaders(request),
+        headers,
       });
       return NextResponse.json(res.data, { status: res.status });
     } catch (err: unknown) {

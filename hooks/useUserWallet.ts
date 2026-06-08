@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { useSelector } from "react-redux"
 
-import { resolveWalletUserId } from "@/lib/resolveWalletUserId"
+import { resolveWalletUserIdCandidates } from "@/lib/resolveWalletUserId"
 import { fetchUserWallet } from "@/lib/services/userWalletApi"
 import {
   formatWalletBalance,
@@ -43,8 +43,9 @@ export function useUserWallet(explicitUserId?: string | null): UseUserWalletRetu
     setError(null)
     setNotFound(false)
 
-    const userId = await resolveWalletUserId(hintUserId)
-    if (!userId) {
+    const userIds = await resolveWalletUserIdCandidates(hintUserId)
+    const primaryUserId = userIds[0]
+    if (!primaryUserId) {
       setLoading(false)
       setError("Not authenticated")
       setWallet(null)
@@ -52,31 +53,43 @@ export function useUserWallet(explicitUserId?: string | null): UseUserWalletRetu
     }
 
     const cached = readCachedRegistrationWallet()
-    const cachedWallet = cached ? registrationWalletToUserWallet(cached, userId) : null
+    const cachedWallet = cached ? registrationWalletToUserWallet(cached, primaryUserId) : null
 
     try {
-      const { wallet: fetched, error: fetchError, status } = await fetchUserWallet(userId)
+      let fetchError: string | null = null
+      let status = 0
 
-      // if (fetchError) {
-      //   if (status === 404) {
-      //     if (cachedWallet) {
-      //       setWallet(cachedWallet)
-      //       setNotFound(false)
-      //       setError(null)
-      //     } else {
-      //       setNotFound(true)
-      //       setError("User wallet not found")
-      //       setWallet(null)
-      //     }
-      //   } else {
-      //     setError(fetchError)
-      //     if (cachedWallet) setWallet(cachedWallet)
-      //   }
-      //   return
-      // }
+      for (const userId of userIds) {
+        const result = await fetchUserWallet(userId)
+        fetchError = result.error
+        status = result.status
 
-      if (fetched) {
-        setWallet(fetched)
+        if (result.wallet) {
+          setWallet(result.wallet)
+          if (userId !== primaryUserId) {
+            console.info("[useUserWallet] resolved wallet with alternate user id", { primaryUserId, userId })
+          }
+          return
+        }
+
+        if (result.status !== 404 && result.status !== 403) break
+      }
+
+      if (fetchError) {
+        if (status === 404) {
+          if (cachedWallet) {
+            setWallet(cachedWallet)
+            setNotFound(false)
+            setError(null)
+          } else {
+            setNotFound(true)
+            setError("User wallet not found")
+            setWallet(null)
+          }
+        } else {
+          setError(fetchError)
+          setWallet(cachedWallet)
+        }
         return
       }
 

@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic"
 
 type RouteParams = { params: Promise<{ userId: string }> }
 
-/** GET /api/v1/wallets/user/{userId} — Bearer required; proxied to account-ms → wallet-ms */
+/** GET /api/v1/wallets/user/{userId} — Bearer required; proxied to wallet-ms */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const { userId } = await params
   return proxyWalletRequest(request, ["user", userId])
