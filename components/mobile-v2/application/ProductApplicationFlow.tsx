@@ -538,7 +538,6 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
               <div className="space-y-3">
                 <InputPill
                   placeholder="Occupation"
-                  right={<ChevronDown className="h-4 w-4 text-gray-400" />}
                   value={employmentDraft.occupation}
                   onChange={(occupation) => setEmploymentDraft((draft) => ({ ...draft, occupation }))}
                 />
@@ -757,7 +756,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
               value={guarantorDraft.phone}
               onChange={(phone) => setGuarantorDraft((g) => ({ ...g, phone }))}
             />
-            <InputPill placeholder="Occupation" right={<ChevronDown className="h-4 w-4 text-gray-400" />} />
+            <InputPill placeholder="Occupation" />
             <InputPill placeholder="Relationship with Guarantor" right={<ChevronDown className="h-4 w-4 text-gray-400" />} />
           </div>
           <Button

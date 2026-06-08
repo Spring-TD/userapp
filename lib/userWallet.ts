@@ -19,6 +19,26 @@ function pickString(obj: Record<string, unknown>, ...keys: string[]): string | u
   return undefined
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value))
+}
+
+function normalizeLookupKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "")
+}
+
+function pickStringLoose(obj: Record<string, unknown>, ...keys: string[]): string | undefined {
+  const normalizedKeys = new Set(keys.map(normalizeLookupKey))
+
+  for (const [key, value] of Object.entries(obj)) {
+    if (!normalizedKeys.has(normalizeLookupKey(key))) continue
+    if (typeof value === "string" && value.trim()) return value.trim()
+    if (value != null && (typeof value === "number" || typeof value === "bigint")) return String(value)
+  }
+
+  return undefined
+}
+
 function normalizeVirtualNuban(wallet: UserWallet): UserWallet {
   const raw = wallet as UserWallet & Record<string, unknown>
   const existing = wallet.virtualNuban || {}
@@ -129,26 +149,84 @@ function walletTransactionChannel(transaction: WalletTransaction): string | unde
 function walletTransactionParticipant(transaction: WalletTransaction): string | undefined {
   const meta = (transaction.metadata || {}) as Record<string, unknown>
   const parsedPayload = (transaction.metadata?.parsedPayload || {}) as Record<string, unknown>
-  const fromTopLevel = pickString(transaction as unknown as Record<string, unknown>, "senderName", "customerName", "payerName", "userName")
-  const fromMeta = pickString(
-    meta,
+  const decodedRawPayload = (meta.decodedRawPayload || {}) as Record<string, unknown>
+  const payonus = (meta.payonus || {}) as Record<string, unknown>
+  const parties = (meta.parties || {}) as Record<string, unknown>
+  const payment = (meta.payment || {}) as Record<string, unknown>
+
+  const participantNameKeys = [
     "senderName",
+    "sender_name",
+    "senderAccountName",
+    "sender_account_name",
     "customerName",
+    "customer_name",
     "payerName",
+    "payer_name",
     "accountName",
+    "account_name",
     "sourceAccountName",
+    "source_account_name",
     "originatorName",
+    "originator_name",
+    "originatorAccountName",
+    "originator_account_name",
+    "sender",
+    "payer",
+    "customer",
+    "originator",
+    "name",
+    "fullName",
+    "full_name",
+  ]
+  const participantContainerKeys = [
+    "sender",
+    "payer",
+    "customer",
+    "originator",
+    "source",
+    "from",
+    "debitAccount",
+    "debit_account",
+    "sourceAccount",
+    "source_account",
+    "senderDetails",
+    "sender_details",
+    "payerDetails",
+    "payer_details",
+    "customerDetails",
+    "customer_details",
+    "originatorDetails",
+    "originator_details",
+  ]
+
+  const pickParticipant = (value: unknown): string | undefined => {
+    if (!isRecord(value)) return undefined
+
+    const direct = pickStringLoose(value, ...participantNameKeys)
+    if (direct) return direct
+
+    const normalizedContainerKeys = new Set(participantContainerKeys.map(normalizeLookupKey))
+    for (const [key, nested] of Object.entries(value)) {
+      if (!normalizedContainerKeys.has(normalizeLookupKey(key))) continue
+      if (isRecord(nested)) {
+        const nestedName = pickStringLoose(nested, ...participantNameKeys)
+        if (nestedName) return nestedName
+      }
+    }
+
+    return undefined
+  }
+
+  return (
+    pickParticipant(transaction) ||
+    pickParticipant(meta) ||
+    pickParticipant(parsedPayload) ||
+    pickParticipant(parties) ||
+    pickParticipant(payonus) ||
+    pickParticipant(payment) ||
+    pickParticipant(decodedRawPayload)
   )
-  const fromPayload = pickString(
-    parsedPayload,
-    "senderName",
-    "customerName",
-    "payerName",
-    "accountName",
-    "sourceAccountName",
-    "originatorName",
-  )
-  return fromTopLevel || fromMeta || fromPayload
 }
 
 /** Small label above each transaction title, e.g. Transfer or Card. */
