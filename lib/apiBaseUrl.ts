@@ -1,6 +1,4 @@
 const FALLBACK_WHEN_UNSET = "https://account-ms.fly.dev"
-/** account-ms strips `/api/v1/wallets` when proxying; wallet-ms needs the full path. */
-const WALLET_FALLBACK = "https://wallet-ms.fly.dev"
 
 function stripTrailingApiPath(origin: string): string {
   let u = origin.replace(/\/+$/, "")
@@ -15,13 +13,9 @@ export function getApiBaseUrl(): string {
 }
 
 /**
- * Wallet BFF upstream. Defaults to wallet-ms because account-ms forwards only the
- * suffix (e.g. `/user/:id`), which wallet-ms does not mount.
+ * Wallet BFF upstream. Keep wallets on account-ms so the browser only talks to
+ * the public gateway.
  */
 export function getWalletProxyBaseUrl(): string {
-  const raw =
-    process.env.WALLET_SERVICE_URL?.trim() ||
-    process.env.NEXT_PUBLIC_WALLET_SERVICE_URL?.trim() ||
-    WALLET_FALLBACK
-  return stripTrailingApiPath(raw)
+  return getApiBaseUrl()
 }

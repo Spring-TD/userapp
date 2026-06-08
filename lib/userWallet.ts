@@ -1,6 +1,6 @@
 import { AUTH_USER_ID_STORAGE_KEY } from "@/lib/mobileTenant/storageKeys"
 import type { RegisterUserWallet } from "@/types/mobileClientAuth"
-import type { UserWallet, UserWalletApiResponse, VirtualNuban } from "@/types/userWallet"
+import type { UserWallet, UserWalletApiResponse, VirtualNuban, WalletTransaction } from "@/types/userWallet"
 
 export const REGISTRATION_WALLET_STORAGE_KEY = "mobile-v2-registration-wallet"
 
@@ -111,6 +111,93 @@ export function formatWalletBalance(amount: number, currency = "NGN"): string {
     return `₦${amount.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   }
   return `${currency} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+function titleCaseWords(value: string): string {
+  return value
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ")
+}
+
+function walletTransactionChannel(transaction: WalletTransaction): string | undefined {
+  const channel = transaction.metadata?.parsedPayload?.paymentChannel
+  return typeof channel === "string" && channel.trim() ? channel.trim() : undefined
+}
+
+function walletTransactionParticipant(transaction: WalletTransaction): string | undefined {
+  const meta = (transaction.metadata || {}) as Record<string, unknown>
+  const parsedPayload = (transaction.metadata?.parsedPayload || {}) as Record<string, unknown>
+  const fromTopLevel = pickString(transaction as unknown as Record<string, unknown>, "senderName", "customerName", "payerName", "userName")
+  const fromMeta = pickString(
+    meta,
+    "senderName",
+    "customerName",
+    "payerName",
+    "accountName",
+    "sourceAccountName",
+    "originatorName",
+  )
+  const fromPayload = pickString(
+    parsedPayload,
+    "senderName",
+    "customerName",
+    "payerName",
+    "accountName",
+    "sourceAccountName",
+    "originatorName",
+  )
+  return fromTopLevel || fromMeta || fromPayload
+}
+
+/** Small label above each transaction title, e.g. Transfer or Card. */
+export function walletTransactionMethodLabel(transaction: WalletTransaction): string {
+  const channel = String(walletTransactionChannel(transaction) || "").toUpperCase()
+  const tags = Array.isArray(transaction.tags) ? transaction.tags.map((tag) => tag.toLowerCase()) : []
+
+  if (channel.includes("CARD") || tags.includes("card")) return "Card"
+  if (channel === "BANK_TRANSFER" || channel.includes("TRANSFER") || tags.includes("funding")) return "Transfer"
+  return transaction.type === "DEBIT" ? "Transfer" : "Receive"
+}
+
+/** Main transaction row title. Prefer the sender/customer name when the API provides it. */
+export function walletTransactionTitle(transaction: WalletTransaction): string {
+  const category = String(transaction.category || "").trim().toUpperCase()
+  const tags = Array.isArray(transaction.tags) ? transaction.tags.map((tag) => tag.toLowerCase()) : []
+  const participant = walletTransactionParticipant(transaction)
+
+  if (participant) return titleCaseWords(participant)
+
+  if (category === "FUNDING" || tags.includes("funding")) {
+    return transaction.type === "CREDIT" ? "Unknown sender" : "Unknown recipient"
+  }
+
+  const raw = (transaction.description || transaction.referenceId || transaction.externalReference || "").trim()
+  if (raw) {
+    const cleaned = raw
+      .replace(/\([^)]*\)/g, " ")
+      .replace(/[_-]/g, " ")
+      .replace(/\b(credit|debit|wallet|transaction|transfer|funding|collection|successful)\b/gi, "")
+      .replace(/\(\s*\)/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+
+    if (cleaned) return titleCaseWords(cleaned)
+  }
+
+  const provider = String(transaction.source || transaction.metadata?.provider || "").toLowerCase()
+  if (provider === "payonus") return transaction.type === "CREDIT" ? "Unknown sender" : "Unknown recipient"
+
+  return transaction.type === "CREDIT" ? "Wallet funding" : "Wallet transfer"
+}
+
+export function walletTransactionSummary(transaction: WalletTransaction): string {
+  const title = walletTransactionTitle(transaction)
+  const amount = formatWalletBalance(Math.abs(transaction.amount))
+  return transaction.type === "CREDIT"
+    ? `${amount} credit from ${title}`
+    : `${amount} debit to ${title}`
 }
 
 export function maskAccountNumber(accountNumber?: string): string {

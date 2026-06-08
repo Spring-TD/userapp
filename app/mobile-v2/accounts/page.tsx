@@ -5,7 +5,6 @@ import Link from 'next/link';
 import Image from 'next/image';
 import {
     Bell,
-    Eye,
     Wallet,
 } from 'lucide-react';
 import {
@@ -14,9 +13,11 @@ import {
 } from '@/components/mobile-v2/data-skeletons';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useUserWallet } from '@/hooks/useUserWallet';
+import { fetchUserProductTypeSummary } from '@/lib/services/userWalletApi';
 import { fetchAuthUserProfile, type AuthUserProfile } from '@/lib/userProfileClient';
-import { maskAccountNumber } from '@/lib/userWallet';
+import { formatWalletBalance } from '@/lib/userWallet';
 import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
+import type { ProductTypeSummaryItem, UserProductTypeSummary, WalletProductType } from '@/types/userWallet';
 
 const ACCOUNT_FILTERS = ['Mortgage', 'Loan', 'Savings', 'Invest', 'Commodity'] as const;
 type AccountFilter = typeof ACCOUNT_FILTERS[number];
@@ -27,6 +28,13 @@ const ACCOUNT_TOTAL_LABELS: Record<AccountFilter, string> = {
     Savings: 'Total Savings',
     Invest: 'Total Investment',
     Commodity: 'Total Commodity',
+};
+const ACCOUNT_FILTER_TO_PRODUCT_TYPE: Record<AccountFilter, WalletProductType> = {
+    Mortgage: 'MORTGAGE',
+    Loan: 'LOAN',
+    Savings: 'SAVINGS',
+    Invest: 'INVESTMENT',
+    Commodity: 'COMMODITY',
 };
 
 function displayNameFromProfile(user: AuthUserProfile | null): string {
@@ -41,18 +49,14 @@ function displayNameFromProfile(user: AuthUserProfile | null): string {
 
 function ProductAccountCard({
     activeFilter,
-    walletLabel,
     formattedBalance,
-    statusLabel,
+    accountCount,
     currency,
-    masked,
 }: {
     activeFilter: AccountFilter;
-    walletLabel: string;
     formattedBalance: string;
-    statusLabel: string;
+    accountCount: number;
     currency?: string;
-    masked: string;
 }) {
     const showMortgageImage = activeFilter === 'Mortgage';
     const accountDetailsHref =
@@ -75,11 +79,13 @@ function ProductAccountCard({
                             className="h-full w-full object-contain"
                         />
                     </div>
-                    <p className="text-sm text-[#1E293B] mb-1 font-medium">{walletLabel}</p>
+                    <p className="text-sm text-[#1E293B] mb-1 font-medium">{activeFilter} Accounts</p>
                     <h3 className="text-2xl font-bold text-[var(--sf-ink,#1E1B4B)]">
                         {formattedBalance}
                     </h3>
-                    <p className="text-xs text-gray-500 mt-1">{statusLabel} · {currency || 'NGN'}</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                        {accountCount} {accountCount === 1 ? 'account' : 'accounts'} · {currency || 'NGN'}
+                    </p>
                 </div>
 
                 {showMortgageImage ? (
@@ -116,7 +122,10 @@ export default function AccountsPage() {
     const [profile, setProfile] = useState<AuthUserProfile | null>(null);
     const [profileLoading, setProfileLoading] = useState(true);
     const [activeFilter, setActiveFilter] = useState<AccountFilter>('Mortgage');
-    const { wallet, formattedBalance, loading: walletLoading, error: walletError } = useUserWallet();
+    const { wallet, loading: walletLoading, error: walletError } = useUserWallet();
+    const [productSummary, setProductSummary] = useState<UserProductTypeSummary | null>(null);
+    const [summaryLoading, setSummaryLoading] = useState(false);
+    const [summaryError, setSummaryError] = useState<string | null>(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -132,12 +141,40 @@ export default function AccountsPage() {
         };
     }, []);
 
+    useEffect(() => {
+        const userId = wallet?.userId;
+        if (!userId) {
+            setProductSummary(null);
+            return;
+        }
+
+        let cancelled = false;
+        setSummaryLoading(true);
+        setSummaryError(null);
+
+        void fetchUserProductTypeSummary(userId).then((result) => {
+            if (cancelled) return;
+            setProductSummary(result.summary);
+            setSummaryError(result.error);
+            setSummaryLoading(false);
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [wallet?.userId]);
+
     const displayName = useMemo(() => displayNameFromProfile(profile), [profile]);
-    const walletLabel = wallet?.name || 'Main Wallet';
-    const masked = maskAccountNumber(wallet?.virtualNuban?.accountNumber);
-    const statusLabel =
-        wallet?.status === 'ACTIVE' ? 'Active' : wallet?.status ? wallet.status : '—';
     const totalLabel = ACCOUNT_TOTAL_LABELS[activeFilter];
+    const activeProductType = ACCOUNT_FILTER_TO_PRODUCT_TYPE[activeFilter];
+    const activeSummary: ProductTypeSummaryItem = productSummary?.summary?.[activeProductType] ?? {
+        totalAmount: 0,
+        currency: productSummary?.currency || wallet?.currency || 'NGN',
+        accountCount: 0,
+        accounts: [],
+    };
+    const activeFormattedBalance = formatWalletBalance(activeSummary.totalAmount, activeSummary.currency);
+    const isSummaryBusy = walletLoading || summaryLoading;
 
     return (
         <div className="flex min-h-full flex-col bg-[#FAFAFA] relative">
@@ -189,7 +226,7 @@ export default function AccountsPage() {
                 </div>
 
                 <div className="px-6 mb-8">
-                    {walletLoading && !wallet ? (
+                    {isSummaryBusy && !productSummary ? (
                         <WalletBalanceCardSkeleton />
                     ) : (
                         <div className="relative isolate w-full h-[220px] rounded-[30px] overflow-hidden bg-[var(--sf-button,#1E40AF)] shadow-xl shadow-blue-900/10">
@@ -200,16 +237,16 @@ export default function AccountsPage() {
                                 </div>
                                 <span className="text-sm font-medium text-blue-100 mb-1">{totalLabel}</span>
                                 <h2 className="text-4xl font-bold mb-2 min-h-[2.5rem] flex items-center justify-center">
-                                    {walletLoading ? (
+                                    {isSummaryBusy ? (
                                         <Skeleton className="h-10 w-40 rounded-lg bg-white/25" />
-                                    ) : walletError ? (
+                                    ) : walletError || summaryError ? (
                                         <span className="text-lg font-semibold text-blue-100">—</span>
                                     ) : (
-                                        formattedBalance
+                                        activeFormattedBalance
                                     )}
                                 </h2>
                                 <p className="text-[11px] text-blue-200/90 text-center max-w-[280px]">
-                                    {walletError || `Your ${activeFilter.toLowerCase()} account total`}
+                                    {walletError || summaryError || `Your ${activeFilter.toLowerCase()} account total`}
                                 </p>
                             </div>
                         </div>
@@ -218,30 +255,28 @@ export default function AccountsPage() {
 
                 <div className="px-6 flex justify-between items-center mb-4">
                     <h2 className="font-bold text-[#1E293B]">{activeFilter} Accounts</h2>
-                    {walletLoading ? (
+                    {isSummaryBusy ? (
                         <Skeleton className="h-4 w-16 rounded-md bg-gray-200/90" />
                     ) : (
                         <span className="text-xs text-green-500 font-medium">
-                            {wallet ? '1 Active' : '0 Active'}
+                            {activeSummary.accountCount} Active
                         </span>
                     )}
                 </div>
 
                 <div className="px-6 space-y-4">
-                    {walletLoading && !wallet ? (
+                    {isSummaryBusy && !productSummary ? (
                         <WalletAccountRowSkeleton />
-                    ) : wallet ? (
+                    ) : productSummary ? (
                         <ProductAccountCard
                             activeFilter={activeFilter}
-                            walletLabel={walletLabel}
-                            formattedBalance={formattedBalance}
-                            statusLabel={statusLabel}
-                            currency={wallet.currency}
-                            masked={masked}
+                            formattedBalance={activeFormattedBalance}
+                            accountCount={activeSummary.accountCount}
+                            currency={activeSummary.currency}
                         />
                     ) : (
                         <p className="text-sm text-gray-500 px-2">
-                            {walletError || `No active ${activeFilter.toLowerCase()} account yet.`}
+                            {walletError || summaryError || `No active ${activeFilter.toLowerCase()} account yet.`}
                         </p>
                     )}
 

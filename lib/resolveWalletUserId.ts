@@ -2,7 +2,7 @@ import { fetchAuthUserProfile } from "@/lib/userProfileClient"
 import { cacheAuthUserId, readCachedAuthUserId } from "@/lib/userWallet"
 import { getAccessToken } from "@/lib/cookieAuth"
 
-/** JWT claim — may differ from client-auth `user.id` used by wallet-ms. */
+/** JWT claim — may differ from the client-auth `user.id` expected by account-ms wallet routes. */
 function userIdFromAccessToken(): string | null {
   const token = getAccessToken()
   if (!token) return null
@@ -45,7 +45,7 @@ function uniqueIds(values: unknown[]): string[] {
 }
 
 /**
- * Wallet-ms expects the same `user.id` as client-auth (login / registration), not always JWT `sub`.
+ * Account-ms wallet routes expect the same `user.id` as client-auth (login / registration), not always JWT `sub`.
  */
 export async function resolveWalletUserId(fallback?: string | null): Promise<string | null> {
   const cached = readCachedAuthUserId()
