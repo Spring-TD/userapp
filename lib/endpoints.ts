@@ -330,6 +330,10 @@ export const ENDPOINTS = {
     userTransactions: (userId: string) =>
       `${WALLET_BASE}/user/${encodeURIComponent(userId)}/transactions`,
   },
+  applications: {
+    init: "/v1/applications/init",
+    user: (userId: string) => `/v1/applications/user/${encodeURIComponent(userId)}`,
+  },
   /**
    * Modular KYC — proxied via `/api/v1/kyc/*` → compliance-ms.
    * Flow: POST `modularVerification` (Bearer; `fuspay.customerId` from signup). Optional GET `modularVerificationUrl`.

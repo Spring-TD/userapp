@@ -8,7 +8,7 @@ import { Check, ChevronLeft, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
 import { getExistingInitializedApplication, initializeProductApplication } from '@/lib/storefrontApplicationClient'
-import { loanApplyHref } from '@/lib/loanApplyRoutes'
+import { loanAccountSuccessHref, loanApplyHref } from '@/lib/loanApplyRoutes'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 import { resolveWalletUserId } from '@/lib/resolveWalletUserId'
 
@@ -84,7 +84,7 @@ function LoanApplyStartInner() {
         return
       }
 
-      router.replace(loanApplyHref(productId))
+      router.replace(loanAccountSuccessHref(productId))
     } finally {
       setProcessing(false)
     }

@@ -1,17 +1,26 @@
 'use client'
 
-import React, { Suspense } from 'react'
+import React, { Suspense, useEffect } from 'react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
 import { mortgageApplyHref } from '@/lib/mortgageApplyRoutes'
 
 function MortgageAccountSuccessInner() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const productId = sanitizeProductId(searchParams.get('productId'))
   const continueHref = productId ? mortgageApplyHref(productId) : '/mobile-v2/products/mortgage'
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      router.replace(continueHref)
+    }, 5_000)
+
+    return () => window.clearTimeout(timer)
+  }, [continueHref, router])
 
   return (
     <div className="flex min-h-full flex-col bg-[#FAFAFA]">
@@ -26,7 +35,7 @@ function MortgageAccountSuccessInner() {
         <h1 className="text-xl font-bold text-[#1E293B]">Account created successfully</h1>
         <p className="mt-3 max-w-[280px] text-sm leading-relaxed text-gray-500">
           Your mortgage account has been set up. You can now continue to complete your mortgage
-          application.
+          application. Redirecting in 5 seconds...
         </p>
 
         <Link href={continueHref} className="mt-10 w-full max-w-sm">
