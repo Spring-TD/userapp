@@ -1,6 +1,6 @@
 import { AUTH_USER_ID_STORAGE_KEY } from "@/lib/mobileTenant/storageKeys"
 import type { RegisterUserWallet } from "@/types/mobileClientAuth"
-import type { UserWallet, UserWalletApiResponse } from "@/types/userWallet"
+import type { UserWallet, UserWalletApiResponse, VirtualNuban } from "@/types/userWallet"
 
 export const REGISTRATION_WALLET_STORAGE_KEY = "mobile-v2-registration-wallet"
 
@@ -10,13 +10,72 @@ function isWalletShape(value: unknown): value is UserWallet {
   return Boolean(w.id && (typeof w.mainBalance === "number" || typeof w.balance === "number"))
 }
 
+function pickString(obj: Record<string, unknown>, ...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = obj[key]
+    if (typeof value === "string" && value.trim()) return value.trim()
+    if (value != null && (typeof value === "number" || typeof value === "bigint")) return String(value)
+  }
+  return undefined
+}
+
+function normalizeVirtualNuban(wallet: UserWallet): UserWallet {
+  const raw = wallet as UserWallet & Record<string, unknown>
+  const existing = wallet.virtualNuban || {}
+  const accountNumber =
+    existing.accountNumber ||
+    pickString(
+      raw,
+      "accountNumber",
+      "account_number",
+      "nuban",
+      "nubanAccountNumber",
+      "payonusNubanAccountNumber",
+      "payonus_account_number",
+    )
+  const bankName =
+    existing.bankName ||
+    pickString(raw, "bankName", "bank_name", "nubanBankName", "payonusNubanBankName", "payonus_bank_name")
+  const bankCode =
+    existing.bankCode ||
+    pickString(raw, "bankCode", "bank_code", "nubanBankCode", "payonusNubanBankCode", "payonus_bank_code")
+  const providerReference =
+    existing.providerReference ||
+    pickString(raw, "providerReference", "provider_reference", "payonusNubanProviderReference")
+  const provisionStatus =
+    existing.provisionStatus ||
+    pickString(raw, "provisionStatus", "provision_status", "payonusNubanProvisionStatus") ||
+    (accountNumber ? "active" : undefined)
+  const provisionedAt =
+    existing.provisionedAt ||
+    pickString(raw, "provisionedAt", "provisioned_at", "payonusNubanProvisionedAt")
+  const provisionError =
+    existing.provisionError ||
+    pickString(raw, "provisionError", "provision_error", "payonusNubanProvisionError")
+
+  const virtualNuban: VirtualNuban | undefined = accountNumber
+    ? {
+        ...existing,
+        accountNumber,
+        bankName,
+        bankCode,
+        providerReference,
+        provisionStatus,
+        provisionedAt,
+        provisionError,
+      }
+    : wallet.virtualNuban
+
+  return virtualNuban ? { ...wallet, virtualNuban } : wallet
+}
+
 export function parseUserWalletFromResponse(payload: UserWalletApiResponse | null | undefined): UserWallet | null {
   if (!payload || typeof payload !== "object") return null
   const nested = payload.data?.wallet
-  if (isWalletShape(nested)) return nested
-  if (isWalletShape(payload.wallet)) return payload.wallet
+  if (isWalletShape(nested)) return normalizeVirtualNuban(nested)
+  if (isWalletShape(payload.wallet)) return normalizeVirtualNuban(payload.wallet)
   const data = payload.data
-  if (isWalletShape(data)) return data
+  if (isWalletShape(data)) return normalizeVirtualNuban(data)
   if (payload.success === false) return null
   return null
 }
@@ -62,7 +121,8 @@ export function maskAccountNumber(accountNumber?: string): string {
 export function isVirtualNubanActive(wallet: UserWallet | null | undefined): boolean {
   const nuban = wallet?.virtualNuban
   if (!nuban) return false
-  return nuban.provisionStatus === "active" && Boolean(nuban.accountNumber)
+  const status = String(nuban.provisionStatus || "").trim().toLowerCase()
+  return Boolean(nuban.accountNumber) && (!status || status === "active" || status === "provisioned" || status === "success")
 }
 
 export function cacheRegistrationWallet(wallet: RegisterUserWallet | undefined) {

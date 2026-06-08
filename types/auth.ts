@@ -19,6 +19,12 @@ export interface AuthTokens {
 export interface LoginRequestDto {
   email: string
   password: string
+  subdomain?: string
+  app_id?: string
+  appId?: string
+  user_merchant_id?: string
+  userMerchantId?: string
+  merchantId?: string
 }
 
 export interface LoginResponseDto extends ApiResponse<{

@@ -1,6 +1,7 @@
 import { apiClient } from "@/lib/api"
 import { buildProductApplyBody, type ProductApplyBody } from "@/lib/productApplyPayload"
 import { resolveWalletUserId } from "@/lib/resolveWalletUserId"
+import { sanitizeProductId } from "@/lib/sanitizeProductId"
 
 export type RequirementSubmission = {
   requirementId?: string
@@ -25,6 +26,7 @@ export type StorefrontApplication = {
   amount?: number
   currency?: string
   status?: string
+  loanWorkflowStatus?: string
   appId?: string
   merchantId?: string
   createdAt?: string
@@ -95,6 +97,48 @@ export function readInitializedApplication(): StorefrontApplication | null {
   }
 }
 
+function isInitializedPendingApplication(application: StorefrontApplication, productId: string) {
+  const normalizedProductId = sanitizeProductId(productId)
+  const applicationProductId = sanitizeProductId(application.productId)
+  const status = String(application.status || "").toUpperCase()
+  const workflowStatus = String(application.loanWorkflowStatus || "").toLowerCase()
+
+  return (
+    applicationProductId === normalizedProductId &&
+    status === "PENDING" &&
+    (workflowStatus === "account_created" || Boolean(application.productWallet?.upstreamAccount?.accountNumber))
+  )
+}
+
+export async function getExistingInitializedApplication(userId: string, productId: string) {
+  const normalizedProductId = sanitizeProductId(productId)
+  if (!userId || !normalizedProductId) {
+    return { ok: false as const, error: "Missing user or product.", application: null }
+  }
+
+  const res = await apiClient.get<ApiEnvelope<StorefrontApplication[]>>(
+    `/v1/applications/user/${encodeURIComponent(userId)}`,
+    {
+      includeAuth: true,
+      timeout: 30_000,
+      params: {
+        status: "PENDING",
+        productId: normalizedProductId,
+      },
+    },
+  )
+
+  if (res.data?.success === false || res.status >= 400) {
+    return { ok: false as const, error: parseApiError(res.data, res.status), application: null }
+  }
+
+  const applications = Array.isArray(res.data?.data) ? res.data.data : []
+  const application = applications.find((app) => isInitializedPendingApplication(app, normalizedProductId)) ?? null
+
+  if (application) saveInitializedApplication(application)
+  return { ok: true as const, application }
+}
+
 function parseApiError(data: unknown, status: number): string {
   if (data && typeof data === "object") {
     const row = data as Record<string, unknown>
@@ -135,7 +179,7 @@ export async function initializeProductApplication(productId: string, options?: 
     { includeAuth: true, timeout: 60_000 },
   )
 
-  if (res.data?.success === false || res.status >= 400 || !res.data?.data) {
+  if (res.data?.success === false || (res.status !== 200 && res.status !== 201) || !res.data?.data) {
     return { ok: false as const, error: parseApiError(res.data, res.status) }
   }
 

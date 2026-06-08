@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import {
     ChevronLeft,
     Home,
@@ -15,9 +16,11 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils';
 import { useAuthUserProfile } from '@/hooks/useAuthUserProfile';
-import type { AuthUserProfile } from '@/lib/userProfileClient';
+import { updateAuthUserProfile, type AuthUserProfile } from '@/lib/userProfileClient';
+import { toast } from 'sonner';
+import { useAppDispatch } from '@/store/hooks';
+import { logoutThunk } from '@/store/authSlice';
 
 function fullName(user: AuthUserProfile | null) {
     return [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim();
@@ -36,11 +39,64 @@ function formatDate(value?: string) {
 }
 
 export default function EditProfilePage() {
+    const router = useRouter();
+    const dispatch = useAppDispatch();
     const [showLogoutModal, setShowLogoutModal] = useState(false);
-    const { user, loading, error } = useAuthUserProfile();
+    const { user, loading, error, refetch } = useAuthUserProfile();
+    const [saving, setSaving] = useState(false);
+    const [isLoggingOut, setIsLoggingOut] = useState(false);
+    const [form, setForm] = useState({
+        first_name: '',
+        last_name: '',
+        phone: '',
+        country: '',
+    });
     const name = useMemo(() => fullName(user), [user]);
-    const displayName = name || 'Profile';
+    const displayName = [form.first_name, form.last_name].filter(Boolean).join(' ').trim() || name || 'Profile';
     const avatarUrl = user?.avatar_url || user?.profile_image || user?.image || '';
+
+    useEffect(() => {
+        if (!user) return;
+        setForm({
+            first_name: user.first_name || '',
+            last_name: user.last_name || '',
+            phone: user.phone || '',
+            country: user.country || '',
+        });
+    }, [user]);
+
+    const updateField = (field: keyof typeof form, value: string) => {
+        setForm((current) => ({ ...current, [field]: value }));
+    };
+
+    const handleSave = async () => {
+        setSaving(true);
+        const result = await updateAuthUserProfile(form);
+        setSaving(false);
+
+        if (result.error) {
+            toast.error(result.error);
+            return;
+        }
+
+        await refetch();
+        toast.success('Profile updated successfully.');
+        router.replace('/mobile-v2/profile');
+    };
+
+    const handleLogout = async () => {
+        try {
+            setIsLoggingOut(true);
+            await dispatch(logoutThunk()).unwrap();
+            toast.success('Logged out successfully.');
+            router.replace('/mobile-v2/auth/login');
+        } catch (error: any) {
+            toast.error(error?.message || 'Failed to logout. Please try again.');
+        } finally {
+            setIsLoggingOut(false);
+            setShowLogoutModal(false);
+        }
+    };
 
     return (
         <div className="flex flex-col h-full bg-[#FAFAFA] relative">
@@ -80,12 +136,39 @@ export default function EditProfilePage() {
                     </div>
 
                     {/* Form Fields */}
-                    <div className="space-y-6">
+                    <div className="space-y-5">
                         {error ? (
                             <p className="rounded-2xl bg-amber-50 px-4 py-3 text-xs text-amber-900">{error}</p>
                         ) : null}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-2">
+                                <label className="text-sm font-semibold text-[#1E293B] ml-1">First name</label>
+                                {loading ? (
+                                    <Skeleton className="h-14 rounded-[16px] bg-gray-200" />
+                                ) : (
+                                    <Input
+                                        value={form.first_name}
+                                        onChange={(event) => updateField('first_name', event.target.value)}
+                                        className="h-14 rounded-[16px] border-gray-300 bg-white px-4 text-base"
+                                    />
+                                )}
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-semibold text-[#1E293B] ml-1">Last name</label>
+                                {loading ? (
+                                    <Skeleton className="h-14 rounded-[16px] bg-gray-200" />
+                                ) : (
+                                    <Input
+                                        value={form.last_name}
+                                        onChange={(event) => updateField('last_name', event.target.value)}
+                                        className="h-14 rounded-[16px] border-gray-300 bg-white px-4 text-base"
+                                    />
+                                )}
+                            </div>
+                        </div>
+
                         <div className="space-y-2">
-                            <label className="text-sm font-semibold text-[#1E293B] ml-1">Full Name</label>
+                            <label className="text-sm font-semibold text-[#1E293B] ml-1">Display name</label>
                             {loading ? (
                                 <Skeleton className="h-14 rounded-[16px] bg-gray-200" />
                             ) : (
@@ -118,17 +201,38 @@ export default function EditProfilePage() {
                             ) : (
                                 <Input
                                     type="tel"
-                                    value={user?.phone || 'Not provided'}
-                                    readOnly
-                                    className="h-14 rounded-[16px] border-gray-300 bg-transparent px-4 text-base"
+                                    value={form.phone}
+                                    onChange={(event) => updateField('phone', event.target.value)}
+                                    className="h-14 rounded-[16px] border-gray-300 bg-white px-4 text-base"
                                 />
                             )}
                         </div>
 
+                        <div className="space-y-2">
+                            <label className="text-sm font-semibold text-[#1E293B] ml-1">Country</label>
+                            {loading ? (
+                                <Skeleton className="h-14 rounded-[16px] bg-gray-200" />
+                            ) : (
+                                <Input
+                                    value={form.country}
+                                    onChange={(event) => updateField('country', event.target.value)}
+                                    className="h-14 rounded-[16px] border-gray-300 bg-white px-4 text-base"
+                                />
+                            )}
+                        </div>
+
+                        <Button
+                            type="button"
+                            disabled={loading || saving}
+                            onClick={handleSave}
+                            className="h-12 w-full rounded-full bg-[var(--sf-button,#1E40AF)] font-semibold text-white disabled:opacity-60"
+                        >
+                            {saving ? 'Saving...' : 'Save changes'}
+                        </Button>
+
                         <div className="grid grid-cols-2 gap-3">
                             <ReadOnlyField label="User type" value={user?.user_type || 'Not available'} loading={loading} />
                             <ReadOnlyField label="Status" value={user?.status || 'Not available'} loading={loading} />
-                            <ReadOnlyField label="Country" value={user?.country || 'Not available'} loading={loading} />
                             <ReadOnlyField label="User ref" value={user?.user_ref || 'Not available'} loading={loading} />
                             <ReadOnlyField label="Created" value={formatDate(user?.created_at)} loading={loading} />
                             <ReadOnlyField label="Last login" value={formatDate(user?.last_login_at)} loading={loading} />
@@ -197,9 +301,13 @@ export default function EditProfilePage() {
                                 No, Cancel
                             </Button>
                             <Button
+                                onClick={() => {
+                                    void handleLogout();
+                                }}
+                                disabled={isLoggingOut}
                                 className="flex-1 h-12 rounded-full bg-[#EF4444] hover:bg-red-700 text-white font-semibold text-sm shadow-none"
                             >
-                                Yes, logout
+                                {isLoggingOut ? 'Logging out...' : 'Yes, logout'}
                             </Button>
                         </div>
                     </div>

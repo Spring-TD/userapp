@@ -110,6 +110,8 @@ export default function HomePage() {
     const nuban = wallet?.virtualNuban;
     const nubanReady = isVirtualNubanActive(wallet);
     const accountHolder = wallet?.name || displayNameFromProfile(profile) || '—';
+    const fundingUnavailableMessage = nuban?.provisionError ||
+        'Complete identity verification to activate your bank transfer account.';
 
     useEffect(() => {
         let cancelled = false;
@@ -133,7 +135,7 @@ export default function HomePage() {
     const closeModal = () => setActiveModal('none');
 
     return (
-        <div className="flex flex-col h-full bg-[#FAFAFA] relative overflow-y-auto no-scrollbar pb-24">
+        <div className="flex min-h-full flex-col bg-[#FAFAFA] relative overflow-y-auto no-scrollbar pb-[calc(8rem+env(safe-area-inset-bottom))]">
             {/* Header */}
             <div className="px-6 pt-12 pb-4 flex items-center justify-between">
                 <div>
@@ -282,7 +284,12 @@ export default function HomePage() {
                                 {Content}
                             </Link>
                         ) : (
-                            <button key={idx} className="flex flex-col items-center gap-2 group">
+                            <button
+                                key={idx}
+                                type="button"
+                                onClick={item.label === 'Top Up' ? () => setActiveModal('fund_options') : undefined}
+                                className="flex flex-col items-center gap-2 group"
+                            >
                                 {Content}
                             </button>
                         );
@@ -295,14 +302,14 @@ export default function HomePage() {
             {/* Backdrop */}
             {activeModal !== 'none' && (
                 <div
-                    className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+                    className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
                     onClick={closeModal}
                 />
             )}
 
             {/* Modal 1: Fund Options */}
             {activeModal === 'fund_options' && (
-                <div className="absolute bottom-0 left-0 right-0 z-50 bg-white rounded-t-[30px] p-6 pb-12 animate-in slide-in-from-bottom duration-300">
+                <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-[30px] p-6 pb-12 animate-in slide-in-from-bottom duration-300 md:left-1/2 md:right-auto md:w-[400px] md:-translate-x-1/2">
                     <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-8" />
                     <div className="flex justify-between items-center mb-6">
                         <h2 className="text-xl font-bold text-[var(--sf-ink,#1E1B4B)]">Choose ways to Fund wallet</h2>
@@ -318,7 +325,11 @@ export default function HomePage() {
                             </div>
                             <div>
                                 <h3 className="text-base font-semibold text-[var(--sf-ink,#1E1B4B)]">Add via bank transfer</h3>
-                                <p className="text-sm text-gray-500 mt-1">Fund your account by sending money to your unique USD bank account</p>
+                                <p className="text-sm text-gray-500 mt-1">
+                                    {nubanReady
+                                        ? 'Fund your wallet by sending money to your unique NGN bank account.'
+                                        : fundingUnavailableMessage}
+                                </p>
                             </div>
                         </button>
                         <button className="flex items-start gap-4 w-full text-left group">
@@ -336,7 +347,7 @@ export default function HomePage() {
 
             {/* Modal 2: Fund via Bank Details */}
             {activeModal === 'fund_bank' && (
-                <div className="absolute bottom-0 left-0 right-0 z-50 bg-white rounded-t-[30px] p-6 pb-12 animate-in slide-in-from-bottom duration-300">
+                <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-[30px] p-6 pb-12 animate-in slide-in-from-bottom duration-300 md:left-1/2 md:right-auto md:w-[400px] md:-translate-x-1/2">
                     <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-8" />
                     <div className="flex justify-between items-center mb-6">
                         <h2 className="text-lg font-bold text-[var(--sf-ink,#1E1B4B)] pr-8">Fund wallet via Bank Transfer</h2>
@@ -351,17 +362,25 @@ export default function HomePage() {
                                 <Skeleton className="h-10 w-full rounded-md bg-gray-200/90" />
                             </>
                         ) : (
-                            <>
-                                <CopyableDetailRow label="Account Holder" value={accountHolder} />
-                                <CopyableDetailRow label="Account Number" value={nuban?.accountNumber} />
-                                <CopyableDetailRow label="Bank Name" value={nuban?.bankName} />
-                                {!nubanReady && (
-                                    <p className="text-xs text-gray-500">
-                                        {nuban?.provisionError ||
-                                            'Funding details appear when your virtual account is active.'}
-                                    </p>
-                                )}
-                            </>
+                            nubanReady ? (
+                                <>
+                                    <CopyableDetailRow label="Account Holder" value={accountHolder} />
+                                    <CopyableDetailRow label="Account Number" value={nuban?.accountNumber} />
+                                    <CopyableDetailRow label="Bank Name" value={nuban?.bankName} />
+                                    <CopyableDetailRow label="Bank Code" value={nuban?.bankCode} />
+                                </>
+                            ) : (
+                                <div className="rounded-2xl bg-[#EFF6FF] p-4">
+                                    <p className="text-sm font-semibold text-[var(--sf-ink,#1E1B4B)]">Bank account not active yet</p>
+                                    <p className="mt-1 text-sm text-gray-600">{fundingUnavailableMessage}</p>
+                                    <Link
+                                        href="/mobile-v2/profile/kyc/create"
+                                        className="mt-3 inline-flex h-10 items-center rounded-full bg-[var(--sf-button,#1E40AF)] px-4 text-sm font-semibold text-white"
+                                    >
+                                        Complete KYC
+                                    </Link>
+                                </div>
+                            )
                         )}
                     </div>
 
@@ -378,7 +397,7 @@ export default function HomePage() {
 
             {/* Modal 3: Account Details (Triggered by Send button) */}
             {activeModal === 'account_details' && (
-                <div className="absolute bottom-0 left-0 right-0 z-50 bg-white rounded-t-[30px] p-6 pb-12 animate-in slide-in-from-bottom duration-300">
+                <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-[30px] p-6 pb-12 animate-in slide-in-from-bottom duration-300 md:left-1/2 md:right-auto md:w-[400px] md:-translate-x-1/2">
                     <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-8" />
                     <div className="flex justify-between items-center mb-6">
                         <h2 className="text-xl font-bold text-[var(--sf-ink,#1E1B4B)]">Account Details</h2>
@@ -393,14 +412,28 @@ export default function HomePage() {
                                 <Skeleton className="h-10 w-full rounded-md bg-gray-200/90" />
                             </>
                         ) : (
-                            <>
-                                <CopyableDetailRow
-                                    label="Account Type"
-                                    value={nuban?.accountType || wallet?.walletType}
-                                />
-                                <CopyableDetailRow label="Account Number" value={nuban?.accountNumber} />
-                                <CopyableDetailRow label="Bank Name" value={nuban?.bankName} />
-                            </>
+                            nubanReady ? (
+                                <>
+                                    <CopyableDetailRow
+                                        label="Account Type"
+                                        value={nuban?.accountType || wallet?.walletType}
+                                    />
+                                    <CopyableDetailRow label="Account Number" value={nuban?.accountNumber} />
+                                    <CopyableDetailRow label="Bank Name" value={nuban?.bankName} />
+                                    <CopyableDetailRow label="Provider Reference" value={nuban?.providerReference} />
+                                </>
+                            ) : (
+                                <div className="rounded-2xl bg-[#EFF6FF] p-4">
+                                    <p className="text-sm font-semibold text-[var(--sf-ink,#1E1B4B)]">Account details unavailable</p>
+                                    <p className="mt-1 text-sm text-gray-600">{fundingUnavailableMessage}</p>
+                                    <Link
+                                        href="/mobile-v2/profile/kyc/create"
+                                        className="mt-3 inline-flex h-10 items-center rounded-full bg-[var(--sf-button,#1E40AF)] px-4 text-sm font-semibold text-white"
+                                    >
+                                        Complete KYC
+                                    </Link>
+                                </div>
+                            )
                         )}
                     </div>
                 </div>

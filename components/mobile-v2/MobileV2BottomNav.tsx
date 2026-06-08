@@ -11,7 +11,7 @@ export function MobileV2BottomNav({ active }: { active: MobileV2BottomNavItem })
   const itemClass = 'flex flex-col items-center gap-1'
 
   return (
-    <div className="absolute bottom-6 left-6 right-6 z-40 flex h-[72px] items-center justify-around rounded-[24px] bg-white px-2 shadow-[0_4px_30px_rgba(0,0,0,0.08)]">
+    <nav className="fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom))] left-6 right-6 z-40 flex h-[72px] items-center justify-around rounded-[24px] bg-white px-2 shadow-[0_4px_30px_rgba(0,0,0,0.08)] md:left-1/2 md:right-auto md:w-[352px] md:-translate-x-1/2">
       <Link
         href="/mobile-v2/home"
         className={`${itemClass} ${active === 'home' ? activeClass : inactiveClass}`}
@@ -49,6 +49,6 @@ export function MobileV2BottomNav({ active }: { active: MobileV2BottomNavItem })
           Profile
         </span>
       </Link>
-    </div>
+    </nav>
   )
 }

@@ -506,7 +506,8 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         setCreateAccountError(result.error || `Could not create your ${productName.toLowerCase()} account.`)
         return
       }
-      setSheet('success')
+      setActiveStep('requirement')
+      setSheet(null)
     } finally {
       setCreatingAccount(false)
     }

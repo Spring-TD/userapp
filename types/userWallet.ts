@@ -26,6 +26,17 @@ export interface UserWallet {
   name?: string
   complianceShareholderUserId?: string
   virtualNuban?: VirtualNuban
+  accountNumber?: string
+  bankName?: string
+  bankCode?: string
+  providerReference?: string
+  payonusNubanAccountNumber?: string
+  payonusNubanBankName?: string
+  payonusNubanBankCode?: string
+  payonusNubanProviderReference?: string
+  payonusNubanProvisionStatus?: string
+  payonusNubanProvisionedAt?: string
+  payonusNubanProvisionError?: string
   createdAt?: string
   updatedAt?: string
 }
