@@ -322,9 +322,11 @@ export const ENDPOINTS = {
     resend: `${OTP_BASE}/resend`,
     generate: `${OTP_BASE}/generate`,
   },
-  /** User wallet — proxied via `/api/v1/wallets/*` (account-ms → wallet-ms). Bearer required. */
+  /** User wallet — proxied via `/api/v1/wallets/*` through account-ms. Bearer required. */
   wallet: {
     userById: (userId: string) => `${WALLET_BASE}/user/${encodeURIComponent(userId)}`,
+    userProductTypeSummary: (userId: string) =>
+      `${WALLET_BASE}/user/${encodeURIComponent(userId)}/product-type-summary`,
     userTransactions: (userId: string) =>
       `${WALLET_BASE}/user/${encodeURIComponent(userId)}/transactions`,
   },

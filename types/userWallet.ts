@@ -1,4 +1,4 @@
-/** GET /api/v1/wallets/user/{userId} — wallet-ms via account-ms gateway */
+/** GET /api/v1/wallets/user/{userId} — account-ms gateway */
 
 export type VirtualNubanProvisionStatus = "active" | "failed" | "pending" | string
 
@@ -49,6 +49,40 @@ export interface UserWalletApiResponse {
   error?: string
 }
 
+export type WalletProductType = "MORTGAGE" | "LOAN" | "SAVINGS" | "INVESTMENT" | "COMMODITY"
+
+export interface ProductTypeSummaryAccount {
+  id?: string
+  accountId?: string
+  productId?: string
+  productName?: string
+  name?: string
+  amount?: number
+  balance?: number
+  currency?: string
+  status?: string
+}
+
+export interface ProductTypeSummaryItem {
+  totalAmount: number
+  currency: string
+  accountCount: number
+  accounts: ProductTypeSummaryAccount[]
+}
+
+export interface UserProductTypeSummary {
+  userId: string
+  currency: string
+  summary: Record<WalletProductType, ProductTypeSummaryItem>
+}
+
+export interface UserProductTypeSummaryResponse {
+  success: boolean
+  data?: UserProductTypeSummary
+  error?: string
+  message?: string
+}
+
 export interface WalletTransaction {
   id: string
   walletId: string
@@ -57,6 +91,33 @@ export interface WalletTransaction {
   status: "PENDING" | "COMPLETED" | "FAILED" | "CANCELLED" | string
   description?: string
   referenceId?: string
+  externalReference?: string
+  source?: string
+  category?: string
+  userName?: string
+  senderName?: string
+  customerName?: string
+  payerName?: string
+  tags?: string[]
+  metadata?: {
+    provider?: string
+    senderName?: string
+    customerName?: string
+    payerName?: string
+    accountName?: string
+    sourceAccountName?: string
+    originatorName?: string
+    parsedPayload?: {
+      paymentChannel?: string
+      onusReference?: string
+      senderName?: string
+      customerName?: string
+      payerName?: string
+      accountName?: string
+      sourceAccountName?: string
+      originatorName?: string
+    }
+  }
   balanceBefore?: number
   balanceAfter?: number
   createdAt: string

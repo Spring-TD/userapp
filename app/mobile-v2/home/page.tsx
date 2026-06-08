@@ -22,8 +22,14 @@ import { CopyableDetailRow } from '@/components/mobile-v2/CopyableDetailRow';
 import { WalletBalanceCardSkeleton } from '@/components/mobile-v2/data-skeletons';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useUserWallet } from '@/hooks/useUserWallet';
+import { fetchUserWalletTransactions } from '@/lib/services/userWalletApi';
 import { fetchAuthUserProfile, type AuthUserProfile } from '@/lib/userProfileClient';
-import { isVirtualNubanActive } from '@/lib/userWallet';
+import {
+    formatWalletBalance,
+    isVirtualNubanActive,
+    walletTransactionMethodLabel,
+    walletTransactionTitle,
+} from '@/lib/userWallet';
 import { HomeStorefrontProducts } from '@/components/mobile-v2/HomeStorefrontProducts';
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
 import { useMobileProducts } from '@/hooks/useMobileProducts';
@@ -33,6 +39,7 @@ import {
     storefrontProductTypeRoute,
     type StorefrontProductType,
 } from '@/lib/storefrontProducts';
+import type { WalletTransaction } from '@/types/userWallet';
 
 function profileAvatarUrl(user: AuthUserProfile | null): string | null {
     if (!user) return null
@@ -58,6 +65,17 @@ function profileInitials(user: AuthUserProfile | null): string {
     const b = (user.last_name || '').trim()[0]
     const fromName = `${a || ''}${b || ''}`.toUpperCase()
     return fromName ? fromName.slice(0, 2) : ''
+}
+
+function formatTransactionTime(value?: string): string {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleTimeString('en-NG', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+    }).toLowerCase();
 }
 
 type QuickActionItem = {
@@ -107,6 +125,8 @@ export default function HomePage() {
     const [profile, setProfile] = useState<AuthUserProfile | null>(null);
     const [profileLoading, setProfileLoading] = useState(true);
     const { wallet, formattedBalance, loading: walletLoading, error: walletError, notFound } = useUserWallet();
+    const [recentTransactions, setRecentTransactions] = useState<WalletTransaction[]>([]);
+    const [transactionsLoading, setTransactionsLoading] = useState(false);
     const nuban = wallet?.virtualNuban;
     const nubanReady = isVirtualNubanActive(wallet);
     const accountHolder = wallet?.name || displayNameFromProfile(profile) || '—';
@@ -127,10 +147,36 @@ export default function HomePage() {
         };
     }, []);
 
+    useEffect(() => {
+        const userId = wallet?.userId;
+        if (!userId) {
+            setRecentTransactions([]);
+            return;
+        }
+
+        let cancelled = false;
+        setTransactionsLoading(true);
+
+        void fetchUserWalletTransactions(userId, { limit: 5 }).then((result) => {
+            if (cancelled) return;
+            setRecentTransactions(result.transactions);
+            setTransactionsLoading(false);
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [wallet?.userId]);
+
     const displayGreetingName = useMemo(() => displayNameFromProfile(profile), [profile]);
 
     const avatarSrc = profileAvatarUrl(profile);
     const initials = profileInitials(profile);
+    const sortedRecentTransactions = useMemo(
+        () => [...recentTransactions].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+        [recentTransactions],
+    );
+    const lastTransaction = sortedRecentTransactions[0] ?? null;
 
     const closeModal = () => setActiveModal('none');
 
@@ -229,7 +275,7 @@ export default function HomePage() {
                     onClick={() => setActiveModal('fund_options')}
                     className="flex-1 w-full h-12 rounded-full bg-[var(--sf-ink,#1E1B4B)] text-white hover:bg-[var(--sf-ink,#1E1B4B)]/90 text-[13px] font-semibold flex items-center justify-center"
                 >
-                    Fund/Withdraw
+                    Fund
                 </button>
                 <button
                     onClick={() => setActiveModal('account_details')}
@@ -248,22 +294,76 @@ export default function HomePage() {
                 tenantError={tenantError}
             /> */}
 
-            {/* Promo/Sort Card */}
-            <div className="px-6 mb-8">
-                <div className="w-full h-[80px] bg-[var(--sf-button,#1E40AF)] rounded-[24px] flex items-center px-4 relative overflow-hidden shadow-lg shadow-blue-900/5">
-                    {/* Icon Box */}
-                    <div className="w-10 h-10 rounded-xl bg-[var(--sf-primary,#2563EB)] flex items-center justify-center text-white mr-4 shadow-inner">
-                        <span className="text-lg font-bold">%</span>
+            {/* Last Transaction */}
+            <div className="px-6 mb-5">
+                <Link
+                    href="/mobile-v2/transactions"
+                    className="w-full min-h-[72px] bg-[var(--sf-button,#1E40AF)] rounded-[16px] flex items-center px-3.5 relative overflow-hidden shadow-lg shadow-blue-900/5"
+                >
+                    <div className="w-10 h-10 rounded-[10px] bg-[var(--sf-ink,#1E1B4B)]/30 flex items-center justify-center text-white mr-3 shadow-inner">
+                        <PieChart className="w-5 h-5" />
                     </div>
-                    <div className="flex-1 text-white">
-                        <h3 className="font-semibold text-sm">Sort your transactions</h3>
-                        <p className="text-[11px] text-blue-200">Get points for sorting your transactions</p>
+                    <div className="min-w-0 flex-1 text-white">
+                        <h3 className="font-semibold text-sm">Last transactions</h3>
+                        {transactionsLoading ? (
+                            <Skeleton className="mt-1 h-3 w-40 rounded-full bg-white/25" />
+                        ) : lastTransaction ? (
+                            <p className="mt-1 truncate text-[11px] text-blue-100">
+                                <span className="font-semibold text-white">{formatWalletBalance(lastTransaction.amount)}</span>{' '}
+                                {lastTransaction.type === 'CREDIT' ? 'credit from' : 'debit to'}{' '}
+                                <span className="font-semibold text-white">{walletTransactionTitle(lastTransaction)}</span>
+                            </p>
+                        ) : (
+                            <p className="mt-1 text-[11px] text-blue-100">No wallet activity yet</p>
+                        )}
                     </div>
-                    <button className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white backdrop-blur-sm">
+                    <div className="ml-3 w-9 h-9 rounded-full bg-white flex items-center justify-center text-[var(--sf-button,#1E40AF)] shadow-sm">
                         <ChevronRight className="w-5 h-5" />
-                    </button>
-                </div>
+                    </div>
+                </Link>
             </div>
+
+            {/* Recent Transactions */}
+            <section className="px-6 mb-8">
+                <div className="mb-3 flex items-center justify-between">
+                    <h3 className="font-bold text-[#1E293B]">Recent Transactions</h3>
+                    <Link href="/mobile-v2/transactions" className="text-[var(--sf-ink,#1E1B4B)]" aria-label="View transactions">
+                        <ChevronRight className="h-4 w-4" />
+                    </Link>
+                </div>
+                {transactionsLoading ? (
+                    <div className="space-y-3">
+                        <Skeleton className="h-12 w-full rounded-2xl bg-gray-200/90" />
+                        <Skeleton className="h-12 w-full rounded-2xl bg-gray-200/90" />
+                    </div>
+                ) : sortedRecentTransactions.length > 0 ? (
+                    <div className="space-y-3">
+                        {sortedRecentTransactions.slice(0, 3).map((transaction) => {
+                            const isCredit = transaction.type === 'CREDIT';
+                            return (
+                                <Link
+                                    href="/mobile-v2/transactions"
+                                    key={transaction.id}
+                                    className="flex min-h-[72px] items-center justify-between rounded-[14px] bg-white px-4 py-3 shadow-[0_10px_24px_rgba(15,23,42,0.04)]"
+                                >
+                                    <div className="min-w-0">
+                                        <p className="text-[11px] font-medium text-gray-400">{walletTransactionMethodLabel(transaction)}</p>
+                                        <p className="truncate text-sm font-semibold text-[var(--sf-ink,#1E1B4B)]">{walletTransactionTitle(transaction)}</p>
+                                    </div>
+                                    <div className="ml-3 shrink-0 text-right">
+                                        <p className={`text-sm font-semibold ${isCredit ? 'text-[#00A83B]' : 'text-[#FF0000]'}`}>
+                                            {formatWalletBalance(transaction.amount)}
+                                        </p>
+                                        <p className="mt-1 text-[11px] font-medium text-gray-400">{formatTransactionTime(transaction.createdAt)}</p>
+                                    </div>
+                                </Link>
+                            );
+                        })}
+                    </div>
+                ) : (
+                    <p className="rounded-2xl bg-white px-4 py-4 text-sm text-gray-500 shadow-sm">No recent transactions yet.</p>
+                )}
+            </section>
 
             {/* Quick Actions Grid */}
             <div className="px-6">
@@ -367,7 +467,6 @@ export default function HomePage() {
                                     <CopyableDetailRow label="Account Holder" value={accountHolder} />
                                     <CopyableDetailRow label="Account Number" value={nuban?.accountNumber} />
                                     <CopyableDetailRow label="Bank Name" value={nuban?.bankName} />
-                                    <CopyableDetailRow label="Bank Code" value={nuban?.bankCode} />
                                 </>
                             ) : (
                                 <div className="rounded-2xl bg-[#EFF6FF] p-4">

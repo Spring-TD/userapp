@@ -7,6 +7,8 @@ import { ENDPOINTS } from "@/lib/endpoints"
 import { fetchWithAuth } from "@/lib/fetchWithAuth"
 import { parseUserWalletFromResponse } from "@/lib/userWallet"
 import type {
+  UserProductTypeSummary,
+  UserProductTypeSummaryResponse,
   UserWallet,
   UserWalletApiResponse,
   UserWalletTransactionsResponse,
@@ -38,6 +40,30 @@ export async function fetchUserWallet(userId: string): Promise<{
 
   return {
     wallet: parseUserWalletFromResponse(data),
+    error: null,
+    status: res.status,
+  }
+}
+
+export async function fetchUserProductTypeSummary(userId: string): Promise<{
+  summary: UserProductTypeSummary | null
+  error: string | null
+  status: number
+}> {
+  const url = bffUrl(ENDPOINTS.wallet.userProductTypeSummary(userId))
+  const res = await fetchWithAuth(url, { method: "GET" })
+  const data = (await res.json().catch(() => ({}))) as UserProductTypeSummaryResponse
+
+  if (!res.ok) {
+    return {
+      summary: null,
+      error: data.error || data.message || `Failed to load account summary (${res.status})`,
+      status: res.status,
+    }
+  }
+
+  return {
+    summary: data.data ?? null,
     error: null,
     status: res.status,
   }

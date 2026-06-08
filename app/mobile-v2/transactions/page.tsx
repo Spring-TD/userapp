@@ -1,70 +1,179 @@
 'use client';
 
-import React from 'react';
-import Link from 'next/link';
-import { ChevronLeft, Filter } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { ChevronLeft, Search, SlidersHorizontal } from 'lucide-react';
 
-type Transaction = {
-    id: string;
-    type: 'Receive' | 'Transfer';
-    name: string;
-    amount: number;
-    time: string;
-};
+import { Skeleton } from '@/components/ui/skeleton';
+import { useUserWallet } from '@/hooks/useUserWallet';
+import { fetchUserWalletTransactions } from '@/lib/services/userWalletApi';
+import { formatWalletBalance, walletTransactionMethodLabel, walletTransactionTitle } from '@/lib/userWallet';
+import type { WalletTransaction } from '@/types/userWallet';
 
-const TRANSACTIONS: Transaction[] = [
-    { id: '1', type: 'Receive', name: 'Charles Boss', amount: 10000.00, time: '12.00 pm' },
-    { id: '2', type: 'Transfer', name: 'Chidi David', amount: 3000.00, time: '12.00 pm' },
-    { id: '3', type: 'Receive', name: 'Charles Boss', amount: 10000.00, time: '12.00 pm' },
-    { id: '4', type: 'Transfer', name: 'Chidi David', amount: 3000.00, time: '12.00 pm' },
-    { id: '5', type: 'Receive', name: 'Charles Boss', amount: 10000.00, time: '12.00 pm' },
-    { id: '6', type: 'Transfer', name: 'Chidi David', amount: 3000.00, time: '12.00 pm' },
-    { id: '7', type: 'Receive', name: 'Charles Boss', amount: 10000.00, time: '12.00 pm' },
-    { id: '8', type: 'Transfer', name: 'Chidi David', amount: 3000.00, time: '12.00 pm' },
-];
+function formatTransactionTime(value?: string): string {
+    if (!value) return '12:00 pm';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '12:00 pm';
+    return date.toLocaleTimeString('en-NG', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+    }).toLowerCase();
+}
 
-export default function TransactionsPage() {
+function TransactionRow({ transaction }: { transaction: WalletTransaction }) {
+    const isCredit = transaction.type === 'CREDIT';
+
     return (
-        <div className="flex flex-col h-full bg-[#FAFAFA] relative">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 pt-12 pb-4 bg-white border-b border-gray-100">
-                <Link href="/mobile-v2/home" className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors">
-                    <ChevronLeft className="w-6 h-6 text-[#1E293B]" />
-                </Link>
-                <h1 className="text-base font-semibold text-[#1E293B]">Transactions</h1>
-                <button className="p-2 -mr-2 text-gray-400 hover:text-gray-600">
-                    <Filter className="w-5 h-5" />
-                </button>
+        <article className="flex min-h-[66px] items-center justify-between rounded-xl bg-white px-3.5 py-3 shadow-[0_8px_24px_rgba(15,23,42,0.03)]">
+            <div className="min-w-0">
+                <p className="mb-1.5 text-[9px] font-medium text-[#9CA3AF]">{walletTransactionMethodLabel(transaction)}</p>
+                <h2 className="truncate text-[13px] font-semibold text-[#111827]">{walletTransactionTitle(transaction)}</h2>
             </div>
+            <div className="shrink-0 text-right">
+                <p className={`text-[11px] font-semibold ${isCredit ? 'text-[#00A83B]' : 'text-[#FF0000]'}`}>
+                    {formatWalletBalance(transaction.amount)}
+                </p>
+                <p className="mt-1.5 text-[9px] font-medium text-[#9CA3AF]">{formatTransactionTime(transaction.createdAt)}</p>
+            </div>
+        </article>
+    );
+}
 
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                {/* Search Bar Placeholder (Optional based on design, but good UX) */}
-                <div className="bg-white rounded-2xl h-12 flex items-center px-4 mb-4 shadow-sm border border-gray-50">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500 mr-3"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
-                    <input
-                        type="text"
-                        placeholder="Search transactions"
-                        className="flex-1 bg-transparent border-none focus:outline-none text-sm placeholder-gray-400"
-                    />
-                </div>
-
-                {TRANSACTIONS.map((tx) => (
-                    <div key={tx.id} className="bg-white rounded-2xl p-4 flex items-center justify-between shadow-[0_2px_8px_rgba(0,0,0,0.02)] border border-gray-50/50">
+function TransactionListSkeleton() {
+    return (
+        <div className="space-y-2.5">
+            {Array.from({ length: 7 }).map((_, idx) => (
+                <div key={idx} className="rounded-xl bg-white px-3.5 py-3">
+                    <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-[11px] text-gray-400 font-medium mb-0.5">{tx.type}</p>
-                            <h3 className="text-sm font-semibold text-[var(--sf-ink,#1E1B4B)]">{tx.name}</h3>
+                            <Skeleton className="mb-2 h-2.5 w-12 rounded-full bg-gray-200/90" />
+                            <Skeleton className="h-4 w-28 rounded-full bg-gray-200/90" />
                         </div>
-                        <div className="text-right">
-                            <p className={`text-sm font-bold ${tx.type === 'Receive' ? 'text-green-500' : 'text-red-500'}`}>
-                                {tx.type === 'Receive' ? '+' : '-'} N{tx.amount.toLocaleString()}
-                            </p>
-                            <p className="text-[11px] text-gray-400 font-medium mt-0.5">{tx.time}</p>
+                        <div className="flex flex-col items-end gap-2">
+                            <Skeleton className="h-3 w-16 rounded-full bg-gray-200/90" />
+                            <Skeleton className="h-2.5 w-12 rounded-full bg-gray-200/90" />
                         </div>
                     </div>
-                ))}
-            </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+export default function TransactionsPage() {
+    const router = useRouter();
+    const { wallet, loading: walletLoading, error: walletError } = useUserWallet();
+    const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+
+    useEffect(() => {
+        const userId = wallet?.userId;
+        if (!userId) return;
+
+        let cancelled = false;
+        setLoading(true);
+        setError(null);
+
+        void fetchUserWalletTransactions(userId, { limit: 50 }).then((result) => {
+            if (cancelled) return;
+            setTransactions(result.transactions);
+            setError(result.error);
+            setLoading(false);
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [wallet?.userId]);
+
+    const visibleTransactions = useMemo(() => {
+        const query = searchQuery.trim().toLowerCase();
+        const filtered = query
+            ? transactions.filter((transaction) => {
+                const haystack = [
+                    walletTransactionMethodLabel(transaction),
+                    walletTransactionTitle(transaction),
+                    transaction.amount,
+                    transaction.type,
+                    transaction.status,
+                    transaction.description,
+                    transaction.referenceId,
+                    formatTransactionTime(transaction.createdAt),
+                ]
+                    .filter((value) => value !== undefined && value !== null)
+                    .join(' ')
+                    .toLowerCase();
+                return haystack.includes(query);
+            })
+            : transactions;
+
+        return [...filtered].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }, [transactions, searchQuery]);
+    const isLoading = walletLoading || loading;
+
+    return (
+        <div className="min-h-full bg-[#F5F6FB] pb-[calc(2rem+env(safe-area-inset-bottom))]">
+            <header className="flex h-[102px] items-end justify-between bg-[#F4F6FF] px-7 pb-4">
+                <button
+                    type="button"
+                    onClick={() => router.back()}
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-white/70 text-[#111827] shadow-sm"
+                    aria-label="Go back"
+                >
+                    <ChevronLeft className="h-5 w-5" />
+                </button>
+                <h1 className="pb-1 text-[15px] font-semibold text-[#111827]">Transactions</h1>
+                <button
+                    type="button"
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-white/70 text-[#111827] shadow-sm"
+                    aria-label="Filter transactions"
+                >
+                    <SlidersHorizontal className="h-4 w-4" />
+                </button>
+            </header>
+
+            <main className="-mt-1 rounded-t-[8px] bg-white px-6 pb-8 pt-4 shadow-[0_-4px_20px_rgba(15,23,42,0.02)]">
+                <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-[#E5E7EB]" />
+
+                <label className="mb-5 flex h-[43px] items-center gap-3 rounded-[22px] border border-[#EEF0F6] bg-[#FAFBFF] px-4">
+                    <Search className="h-4 w-4 text-[#A5B4FC]" />
+                    <input
+                        type="search"
+                        placeholder="Search transactions"
+                        value={searchQuery}
+                        onChange={(event) => setSearchQuery(event.target.value)}
+                        className="h-full min-w-0 flex-1 bg-transparent text-[12px] text-[#111827] outline-none placeholder:text-[#A0A7B5]"
+                    />
+                </label>
+
+                {isLoading ? (
+                    <TransactionListSkeleton />
+                ) : error || walletError ? (
+                    <div className="rounded-2xl bg-[#F8FAFC] px-4 py-8 text-center">
+                        <p className="text-sm font-semibold text-[#111827]">Transactions unavailable</p>
+                        <p className="mt-1 text-xs text-[#9CA3AF]">{error || walletError}</p>
+                    </div>
+                ) : visibleTransactions.length > 0 ? (
+                    <div className="space-y-2.5">
+                        {visibleTransactions.map((transaction) => (
+                            <TransactionRow key={transaction.id} transaction={transaction} />
+                        ))}
+                    </div>
+                ) : searchQuery.trim() ? (
+                    <div className="rounded-2xl bg-[#F8FAFC] px-4 py-8 text-center">
+                        <p className="text-sm font-semibold text-[#111827]">No matching transactions</p>
+                        <p className="mt-1 text-xs text-[#9CA3AF]">Try another name, amount, type, or reference.</p>
+                    </div>
+                ) : (
+                    <div className="rounded-2xl bg-[#F8FAFC] px-4 py-8 text-center">
+                        <p className="text-sm font-semibold text-[#111827]">No transactions yet</p>
+                        <p className="mt-1 text-xs text-[#9CA3AF]">Your wallet activity will appear here.</p>
+                    </div>
+                )}
+            </main>
         </div>
     );
 }
