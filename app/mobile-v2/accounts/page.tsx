@@ -138,6 +138,7 @@ export default function AccountsPage() {
     const [summaryError, setSummaryError] = useState<string | null>(null);
     const [applicationsLoading, setApplicationsLoading] = useState(false);
     const [applicationsError, setApplicationsError] = useState<string | null>(null);
+    const activeProductType = ACCOUNT_FILTER_TO_PRODUCT_TYPE[activeFilter];
 
     useEffect(() => {
         let cancelled = false;
@@ -157,15 +158,12 @@ export default function AccountsPage() {
         const userId = wallet?.userId;
         if (!userId) {
             setProductSummary(null);
-            setApplications([]);
             return;
         }
 
         let cancelled = false;
         setSummaryLoading(true);
-        setApplicationsLoading(true);
         setSummaryError(null);
-        setApplicationsError(null);
 
         void fetchUserProductTypeSummary(userId).then((result) => {
             if (cancelled) return;
@@ -174,7 +172,24 @@ export default function AccountsPage() {
             setSummaryLoading(false);
         });
 
-        void fetchUserProductApplications(userId).then((result) => {
+        return () => {
+            cancelled = true;
+        };
+    }, [wallet?.userId]);
+
+    useEffect(() => {
+        const userId = wallet?.userId;
+        if (!userId) {
+            setApplications([]);
+            return;
+        }
+
+        let cancelled = false;
+        setApplications([]);
+        setApplicationsLoading(true);
+        setApplicationsError(null);
+
+        void fetchUserProductApplications(userId, { productType: activeProductType }).then((result) => {
             if (cancelled) return;
             setApplications(result.applications);
             setApplicationsError(result.error);
@@ -184,11 +199,10 @@ export default function AccountsPage() {
         return () => {
             cancelled = true;
         };
-    }, [wallet?.userId]);
+    }, [wallet?.userId, activeProductType]);
 
     const displayName = useMemo(() => displayNameFromProfile(profile), [profile]);
     const totalLabel = ACCOUNT_TOTAL_LABELS[activeFilter];
-    const activeProductType = ACCOUNT_FILTER_TO_PRODUCT_TYPE[activeFilter];
     const activeSummary: ProductTypeSummaryItem = productSummary?.summary?.[activeProductType] ?? {
         totalAmount: 0,
         currency: productSummary?.currency || wallet?.currency || 'NGN',
@@ -292,7 +306,7 @@ export default function AccountsPage() {
                 </div>
 
                 <div className="px-6 space-y-6">
-                    {isSummaryBusy && !productSummary && applications.length === 0 ? (
+                    {applicationsLoading || (isSummaryBusy && !productSummary && applications.length === 0) ? (
                         <WalletAccountRowSkeleton />
                     ) : activeApplications.length > 0 ? (
                         activeApplications.map((application) => (

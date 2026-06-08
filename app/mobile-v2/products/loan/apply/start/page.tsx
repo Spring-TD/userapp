@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Check, ChevronLeft, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
-import { getExistingInitializedApplication, initializeProductApplication } from '@/lib/storefrontApplicationClient'
+import { getProductApplicationInitStatus, initializeProductApplication } from '@/lib/storefrontApplicationClient'
 import { loanAccountSuccessHref, loanApplyHref } from '@/lib/loanApplyRoutes'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 import { resolveWalletUserId } from '@/lib/resolveWalletUserId'
@@ -24,6 +24,7 @@ function LoanApplyStartInner() {
   const [privacyAccepted, setPrivacyAccepted] = useState(true)
   const [processing, setProcessing] = useState(false)
   const [checkingExisting, setCheckingExisting] = useState(true)
+  const [hasInitializedAccount, setHasInitializedAccount] = useState(false)
 
   useEffect(() => {
     if (!rawProductId || rawProductId === productId) return
@@ -50,10 +51,9 @@ function LoanApplyStartInner() {
         const userId = await resolveWalletUserId()
         if (!userId) return
 
-        const result = await getExistingInitializedApplication(userId, productId)
-        if (!cancelled && result.ok && result.application) {
-          router.replace(loanApplyHref(productId))
-          return
+        const result = await getProductApplicationInitStatus(userId, productId)
+        if (!cancelled && result.ok && result.status) {
+          setHasInitializedAccount(Boolean(result.status.hasInitializedApplication || result.status.hasUpstreamAccount))
         }
       } catch (error) {
         console.warn('Could not check existing initialized loan application:', error)
@@ -75,10 +75,15 @@ function LoanApplyStartInner() {
       return
     }
 
+    if (hasInitializedAccount) {
+      router.replace(loanApplyHref(productId))
+      return
+    }
+
     setProcessing(true)
     setError(null)
     try {
-      const result = await initializeProductApplication(productId)
+      const result = await initializeProductApplication(productId, { productType: 'LOAN' })
       if (!result.ok) {
         setError(result.error || 'Could not set up your loan account.')
         return
@@ -113,9 +118,13 @@ function LoanApplyStartInner() {
       </div>
 
       <div className="flex flex-1 flex-col items-center justify-center px-8 pb-24 text-center opacity-60">
-        <h1 className="text-lg font-bold text-[var(--sf-ink,#1E1B4B)]">Create a Loan Account</h1>
+        <h1 className="text-lg font-bold text-[var(--sf-ink,#1E1B4B)]">
+          {hasInitializedAccount ? 'Continue Loan Application' : 'Create a Loan Account'}
+        </h1>
         <p className="mt-2 text-sm text-gray-500">
-          Accept the terms to create your account before continuing to the application.
+          {hasInitializedAccount
+            ? 'Your account has already been created. Continue to complete your application.'
+            : 'Accept the terms to create your account before continuing to the application.'}
         </p>
       </div>
 
@@ -124,10 +133,20 @@ function LoanApplyStartInner() {
         <div className="relative z-10 w-full rounded-t-[28px] bg-white px-6 pb-8 pt-3 shadow-2xl">
           <div className="mx-auto mb-5 h-1.5 w-16 rounded-full bg-gray-300" />
           <div className="text-center">
-            <h2 className="text-xl font-bold text-[#1E293B]">Create a Loan Account</h2>
+            <h2 className="text-xl font-bold text-[#1E293B]">
+              {hasInitializedAccount ? 'Continue Loan Application' : 'Create a Loan Account'}
+            </h2>
             <p className="mx-auto mt-4 max-w-xs text-xs leading-relaxed text-gray-500">
-              Before you can proceed with <strong>this loan product</strong>, you are required to open a
-              bank account with <strong>{providerName}</strong>.
+              {hasInitializedAccount ? (
+                <>
+                  Your bank account with <strong>{providerName}</strong> is already active. Continue to complete your loan application.
+                </>
+              ) : (
+                <>
+                  Before you can proceed with <strong>this loan product</strong>, you are required to open a
+                  bank account with <strong>{providerName}</strong>.
+                </>
+              )}
             </p>
           </div>
 
@@ -172,7 +191,7 @@ function LoanApplyStartInner() {
 
           <Button
             type="button"
-            disabled={!termsAccepted || !privacyAccepted || processing}
+            disabled={(!hasInitializedAccount && (!termsAccepted || !privacyAccepted)) || processing}
             className="mt-8 h-12 w-full rounded-full bg-[var(--sf-button,#1E40AF)] font-semibold text-white disabled:opacity-50"
             onClick={handleAccept}
           >
@@ -181,6 +200,8 @@ function LoanApplyStartInner() {
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Creating account...
               </span>
+            ) : hasInitializedAccount ? (
+              'Continue to Loan Application'
             ) : (
               'Go ahead, Create Bank account'
             )}

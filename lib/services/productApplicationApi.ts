@@ -30,8 +30,13 @@ function hasProvisionedAccount(application: ProductApplication): boolean {
 /** List user applications with provisioned product accounts (GET /v1/applications/user/{userId}). */
 export async function fetchUserProductApplications(
   userId: string,
+  params?: { productType?: string },
 ): Promise<{ applications: ProductApplication[]; error: string | null; status: number }> {
-  const url = bffUrl(ENDPOINTS.applications.user(userId))
+  const qs = new URLSearchParams()
+  if (params?.productType) qs.set("productType", params.productType)
+
+  const path = ENDPOINTS.applications.user(userId)
+  const url = bffUrl(qs.toString() ? `${path}?${qs}` : path)
   const res = await fetchWithAuth(url, { method: "GET" })
   const data = (await res.json().catch(() => ({}))) as ProductApplicationInitResponse
 
