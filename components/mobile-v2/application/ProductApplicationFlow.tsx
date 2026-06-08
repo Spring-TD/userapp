@@ -192,42 +192,186 @@ function FileActionRow({
   )
 }
 
-function FileUploadButton({ label }: { label: string }) {
-  return (
-    <label className={`inline-flex cursor-pointer rounded-xl bg-gray-100 px-4 py-2 text-xs font-bold ${BRAND_INK}`}>
-      <input type="file" className="hidden" />
-      {label}
-    </label>
+type CollateralRequirementItem = {
+  requirementId?: string
+  id?: string
+  requirementType?: string
+  label?: string
+  contentType?: string
+  description?: string
+  templateFileUrl?: string
+  fileUrl?: string
+  uploadRequired?: boolean
+  required?: boolean
+}
+
+function collateralRequirementKey(requirement: CollateralRequirementItem): string {
+  return String(
+    requirement.requirementId ||
+      requirement.id ||
+      requirement.requirementType ||
+      requirement.label ||
+      '',
   )
 }
 
-function CollateralRequirement({
-  title,
-  description,
-  button,
+function collateralNeedsUpload(requirement: CollateralRequirementItem): boolean {
+  const contentType = String(requirement.contentType || '').toLowerCase()
+  return Boolean(
+    requirement.uploadRequired ||
+      requirement.required ||
+      contentType.includes('document'),
+  )
+}
+
+function CollateralRequirementRow({
+  requirement,
+  userId,
+  onUploaded,
   done,
-  upload,
+  submission,
 }: {
-  title: string
-  description: string
-  button: string
+  requirement: CollateralRequirementItem
+  userId?: string
+  onUploaded: (submission: RequirementSubmission) => void
   done?: boolean
-  upload?: boolean
+  submission?: RequirementSubmission
 }) {
+  const [uploading, setUploading] = useState(false)
+  const [uploaded, setUploaded] = useState(Boolean(done))
+  const [uploadedFile, setUploadedFile] = useState<{
+    fileUrl: string
+    fileName: string
+    fileType?: string
+    fileSize?: number
+  } | null>(
+    submission?.fileUrl
+      ? {
+          fileUrl: submission.fileUrl,
+          fileName: submission.fileName || 'Uploaded file',
+          fileType: submission.fileType,
+          fileSize: submission.fileSize,
+        }
+      : null,
+  )
+  const [error, setError] = useState<string | null>(null)
+
+  const title = requirement.label || requirement.requirementType || 'Requirement'
+  const description = requirement.description || requirement.contentType || ''
+  const templateUrl =
+    requirement.templateFileUrl ||
+    requirement.fileUrl ||
+    (String(requirement.description || '').startsWith('http') ? requirement.description : undefined)
+  const needsUpload = collateralNeedsUpload(requirement)
+
+  const handleUpload = async (file?: File) => {
+    if (!file) return
+    setUploading(true)
+    setError(null)
+    try {
+      const uploadedFile = await uploadApplicationFile(file, userId)
+      onUploaded({
+        requirementId: requirement.requirementId || requirement.id,
+        requirementType: requirement.requirementType || title,
+        label: title,
+        type: 'document',
+        fileUrl: uploadedFile.fileUrl,
+        fileName: uploadedFile.fileName,
+        fileType: uploadedFile.fileType,
+        fileSize: uploadedFile.fileSize,
+        metadata: {
+          source: 'otherRequirements',
+          contentType: requirement.contentType,
+          ...(templateUrl ? { templateFileUrl: templateUrl } : {}),
+        },
+      })
+      setUploadedFile({
+        fileUrl: uploadedFile.fileUrl,
+        fileName: uploadedFile.fileName,
+        fileType: uploadedFile.fileType,
+        fileSize: uploadedFile.fileSize,
+      })
+      setUploaded(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleAcknowledge = () => {
+    onUploaded({
+      requirementId: requirement.requirementId || requirement.id,
+      requirementType: requirement.requirementType || title,
+      label: title,
+      type: 'json',
+      value: { acknowledged: true },
+      metadata: {
+        source: 'otherRequirements',
+        contentType: requirement.contentType,
+      },
+    })
+    setUploaded(true)
+  }
+
   return (
-    <div className="space-y-1">
+    <div className="space-y-2">
       <div className="flex items-center justify-between">
         <p className="text-[11px] font-medium text-gray-500">{title}</p>
-        <StatusDot done={done} />
+        <StatusDot done={uploaded || done} />
       </div>
-      <p className="text-[10px] leading-snug text-gray-500">{description}</p>
-      {upload ? (
-        <FileUploadButton label={button} />
+      {description ? <p className="text-[10px] leading-snug text-gray-500">{description}</p> : null}
+      {needsUpload ? (
+        <>
+          <div className={cn('grid gap-3', templateUrl ? 'grid-cols-2' : 'grid-cols-1')}>
+            {templateUrl ? (
+              <a
+                href={templateUrl}
+                target="_blank"
+                rel="noreferrer"
+                className={`flex h-9 items-center justify-center gap-2 rounded-xl text-xs font-semibold ${BRAND_SOFT} ${BRAND_INK}`}
+              >
+                Download
+                <Download className="h-3 w-3" />
+              </a>
+            ) : null}
+            <label
+              className={`flex h-9 cursor-pointer items-center justify-center gap-2 rounded-xl bg-gray-100 text-xs font-semibold ${BRAND_INK}`}
+            >
+              <input
+                type="file"
+                className="hidden"
+                accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                onChange={(event) => void handleUpload(event.target.files?.[0])}
+              />
+              {uploading ? 'Uploading...' : uploaded || done ? 'Uploaded' : 'Upload Document'}
+              {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+            </label>
+          </div>
+          {uploadedFile ? (
+            <div className="flex items-center justify-between gap-3 rounded-xl bg-green-50 px-3 py-2 text-[10px] text-green-800">
+              <span className="min-w-0 truncate font-medium">{uploadedFile.fileName}</span>
+              <a
+                href={uploadedFile.fileUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="shrink-0 font-bold underline"
+              >
+                Open
+              </a>
+            </div>
+          ) : null}
+        </>
       ) : (
-        <button type="button" className={`rounded-xl bg-gray-100 px-4 py-2 text-xs font-bold ${BRAND_INK}`}>
-          {button}
+        <button
+          type="button"
+          onClick={handleAcknowledge}
+          className={`rounded-xl bg-gray-100 px-4 py-2 text-xs font-bold ${BRAND_INK}`}
+        >
+          {uploaded || done ? 'Details added' : 'Add Details'}
         </button>
       )}
+      {error ? <p className="text-[10px] text-red-600">{error}</p> : null}
     </div>
   )
 }
@@ -501,7 +645,9 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     setCreatingAccount(true)
     setCreateAccountError(null)
     try {
-      const result = await initializeProductApplication(productId)
+      const result = await initializeProductApplication(productId, {
+        productType: kind === 'loan' ? 'LOAN' : 'MORTGAGE',
+      })
       if (!result.ok) {
         setCreateAccountError(result.error || `Could not create your ${productName.toLowerCase()} account.`)
         return
@@ -538,7 +684,6 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
               <div className="space-y-3">
                 <InputPill
                   placeholder="Occupation"
-                  right={<ChevronDown className="h-4 w-4 text-gray-400" />}
                   value={employmentDraft.occupation}
                   onChange={(occupation) => setEmploymentDraft((draft) => ({ ...draft, occupation }))}
                 />
@@ -597,15 +742,24 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
               <div className="space-y-4">
                 <SectionTitle>Collateral</SectionTitle>
                 {otherRequirements.length > 0 ? (
-                  otherRequirements.map((requirement, index) => (
-                    <CollateralRequirement
-                      key={requirement.requirementId || requirement.id || requirement.requirementType || index}
-                      title={requirement.label || requirement.requirementType || `Requirement ${index + 1}`}
-                      description={requirement.description || requirement.contentType || ''}
-                      button={requirement.uploadRequired || requirement.required ? 'Upload Document' : 'Add Details'}
-                      upload={requirement.uploadRequired || requirement.required}
-                    />
-                  ))
+                  otherRequirements.map((requirement, index) => {
+                    const requirementKey = collateralRequirementKey(requirement)
+                    const submission = requirementSubmissions.find(
+                      (item) =>
+                        (item.requirementId || item.requirementType || item.label) === requirementKey,
+                    )
+                    const isDone = Boolean(submission)
+                    return (
+                      <CollateralRequirementRow
+                        key={requirementKey || index}
+                        requirement={requirement}
+                        userId={userId}
+                        onUploaded={upsertSubmission}
+                        done={isDone}
+                        submission={submission}
+                      />
+                    )
+                  })
                 ) : (
                   <p className="rounded-2xl bg-gray-50 p-4 text-xs text-gray-500">
                     No extra collateral requirements configured for this product.
@@ -757,7 +911,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
               value={guarantorDraft.phone}
               onChange={(phone) => setGuarantorDraft((g) => ({ ...g, phone }))}
             />
-            <InputPill placeholder="Occupation" right={<ChevronDown className="h-4 w-4 text-gray-400" />} />
+            <InputPill placeholder="Occupation" />
             <InputPill placeholder="Relationship with Guarantor" right={<ChevronDown className="h-4 w-4 text-gray-400" />} />
           </div>
           <Button

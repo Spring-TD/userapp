@@ -64,6 +64,18 @@ export type StorefrontApplication = {
   }
 }
 
+export type ProductApplicationInitStatus = {
+  userId?: string
+  productId?: string
+  appId?: string
+  merchantId?: string
+  hasInitializedApplication?: boolean
+  hasUpstreamAccount?: boolean
+  upstreamAccount?: StorefrontApplication["productWallet"] extends { upstreamAccount?: infer A } ? A : never
+  loanWorkflowStatus?: string
+  application?: StorefrontApplication
+}
+
 type ApiEnvelope<T> = {
   success?: boolean
   message?: string
@@ -139,6 +151,44 @@ export async function getExistingInitializedApplication(userId: string, productI
   return { ok: true as const, application }
 }
 
+export async function getProductApplicationInitStatus(userId: string, productId: string) {
+  const normalizedProductId = sanitizeProductId(productId)
+  if (!userId || !normalizedProductId) {
+    return { ok: false as const, error: "Missing user or product.", status: null as ProductApplicationInitStatus | null }
+  }
+
+  const res = await apiClient.get<ApiEnvelope<ProductApplicationInitStatus>>(
+    `/v1/applications/user/${encodeURIComponent(userId)}/products/${encodeURIComponent(normalizedProductId)}/init-status`,
+    { includeAuth: true, timeout: 30_000 },
+  )
+
+  if (res.data?.success === false || res.status >= 400) {
+    return { ok: false as const, error: parseApiError(res.data, res.status), status: null as ProductApplicationInitStatus | null }
+  }
+
+  const status = res.data?.data ?? null
+  const application = status?.application
+  if (application && (status?.hasInitializedApplication || status?.hasUpstreamAccount)) {
+    saveInitializedApplication({
+      ...application,
+      userId: application.userId || status.userId,
+      productId: application.productId || status.productId || normalizedProductId,
+      appId: application.appId || status.appId,
+      merchantId: application.merchantId || status.merchantId,
+      loanWorkflowStatus: application.loanWorkflowStatus || status.loanWorkflowStatus,
+      productWallet:
+        application.productWallet ||
+        (status.upstreamAccount
+          ? {
+              upstreamAccount: status.upstreamAccount,
+            }
+          : undefined),
+    })
+  }
+
+  return { ok: true as const, status }
+}
+
 function parseApiError(data: unknown, status: number): string {
   if (data && typeof data === "object") {
     const row = data as Record<string, unknown>
@@ -169,7 +219,10 @@ function humanizeApplicationError(message: string): string {
   return m
 }
 
-export async function initializeProductApplication(productId: string, options?: { amount?: number; currency?: string }) {
+export async function initializeProductApplication(
+  productId: string,
+  options?: { amount?: number; currency?: string; productType?: ProductApplyBody["productType"] },
+) {
   const built = await buildProductApplyBody(productId, options)
   if (!built.ok) return { ok: false as const, error: built.error }
 
@@ -187,7 +240,10 @@ export async function initializeProductApplication(productId: string, options?: 
   return { ok: true as const, application: res.data.data, applicationId: applicationIdFrom(res.data.data) }
 }
 
-export async function applyProductOneShot(productId: string, options?: { amount?: number; currency?: string }) {
+export async function applyProductOneShot(
+  productId: string,
+  options?: { amount?: number; currency?: string; productType?: ProductApplyBody["productType"] },
+) {
   const built = await buildProductApplyBody(productId, options)
   if (!built.ok) return { ok: false as const, error: built.error }
 

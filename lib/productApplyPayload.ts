@@ -8,6 +8,7 @@ import { TENANT_MERCHANT_ID_STORAGE_KEY } from '@/lib/mobileTenant/storageKeys'
 export type ProductApplyBody = {
   userId: string
   productId: string
+  productType?: 'LOAN' | 'MORTGAGE' | 'SAVINGS' | 'INVESTMENT' | 'COMMODITY' | string
   amount: number
   currency: string
   email: string
@@ -101,7 +102,7 @@ function resolveMerchantId(sessionMerchantId: string | undefined, user: AuthUser
  */
 export async function buildProductApplyBody(
   productId: string,
-  options?: { amount?: number; currency?: string },
+  options?: { amount?: number; currency?: string; productType?: ProductApplyBody['productType'] },
 ): Promise<BuildProductApplyBodyResult> {
   const trimmedProductId = sanitizeProductId(productId)
   if (!trimmedProductId) {
@@ -132,6 +133,7 @@ export async function buildProductApplyBody(
     body: {
       userId,
       productId: trimmedProductId,
+      ...(options?.productType ? { productType: options.productType } : {}),
       amount,
       currency: options?.currency?.trim() || 'NGN',
       email,
