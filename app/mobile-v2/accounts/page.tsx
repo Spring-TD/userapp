@@ -2,9 +2,9 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import {
     Bell,
+    Plus,
     Wallet,
 } from 'lucide-react';
 import {
@@ -13,15 +13,16 @@ import {
 } from '@/components/mobile-v2/data-skeletons';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useUserWallet } from '@/hooks/useUserWallet';
+import { fetchUserProductApplications } from '@/lib/services/productApplicationApi';
 import { fetchUserProductTypeSummary } from '@/lib/services/userWalletApi';
 import { fetchAuthUserProfile, type AuthUserProfile } from '@/lib/userProfileClient';
 import { formatWalletBalance } from '@/lib/userWallet';
 import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
+import type { ProductApplication } from '@/types/productApplication';
 import type { ProductTypeSummaryItem, UserProductTypeSummary, WalletProductType } from '@/types/userWallet';
 
 const ACCOUNT_FILTERS = ['Mortgage', 'Loan', 'Savings', 'Invest', 'Commodity'] as const;
 type AccountFilter = typeof ACCOUNT_FILTERS[number];
-const ACCOUNT_LOGO_SRC = '/images/mobile/WhatsApp%20Image%202026-05-20%20at%201.34.41%20PM.jpeg';
 const ACCOUNT_TOTAL_LABELS: Record<AccountFilter, string> = {
     Mortgage: 'Total Mortgage',
     Loan: 'Total Loan',
@@ -47,73 +48,81 @@ function displayNameFromProfile(user: AuthUserProfile | null): string {
     return '';
 }
 
-function ProductAccountCard({
-    activeFilter,
-    formattedBalance,
-    accountCount,
-    currency,
-}: {
-    activeFilter: AccountFilter;
-    formattedBalance: string;
-    accountCount: number;
-    currency?: string;
-}) {
-    const showMortgageImage = activeFilter === 'Mortgage';
-    const accountDetailsHref =
-        activeFilter === 'Mortgage'
-            ? '/mobile-v2/products/mortgage'
-            : activeFilter === 'Loan'
-              ? '/mobile-v2/products/loan'
-              : null;
+function productRoute(activeFilter: AccountFilter): string {
+    return `/mobile-v2/products/${activeFilter.toLowerCase()}`;
+}
 
-    const card = (
-        <div className="w-full bg-[#EFF6FF] rounded-[24px] p-6 relative overflow-hidden min-h-[156px]">
-            <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0 flex-1">
-                    <div className="mb-4 h-9 w-[118px] overflow-hidden rounded-md bg-white/70">
-                        <Image
-                            src={ACCOUNT_LOGO_SRC}
-                            alt="AG Mortgage Bank"
-                            width={118}
-                            height={40}
-                            className="h-full w-full object-contain"
-                        />
-                    </div>
-                    <p className="text-sm text-[#1E293B] mb-1 font-medium">{activeFilter} Accounts</p>
-                    <h3 className="text-2xl font-bold text-[var(--sf-ink,#1E1B4B)]">
-                        {formattedBalance}
+function EmptyAccountState({ activeFilter }: { activeFilter: AccountFilter }) {
+    const createAccountHref = productRoute(activeFilter);
+
+    return (
+        <div className="rounded-[28px] border border-dashed border-blue-200 bg-white px-5 py-8 text-center shadow-sm">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--sf-tint,#E0E7FF)] text-[var(--sf-primary,#2563EB)]">
+                <Wallet className="h-7 w-7" />
+            </div>
+            <h3 className="text-base font-bold text-[var(--sf-ink,#1E1B4B)]">
+                No {activeFilter.toLowerCase()} account yet
+            </h3>
+            <p className="mx-auto mt-2 max-w-[260px] text-sm leading-6 text-gray-500">
+                Apply for a {activeFilter.toLowerCase()} product to create your account and start tracking it here.
+            </p>
+            <Link
+                href={createAccountHref}
+                className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[var(--sf-button,#1E40AF)] px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-900/10"
+            >
+                <Plus className="h-4 w-4" />
+                Create Account
+            </Link>
+        </div>
+    );
+}
+
+function ProductAccountCard({
+    application,
+    activeFilter,
+}: {
+    application: ProductApplication;
+    activeFilter: AccountFilter;
+}) {
+    const account = application.productWallet?.upstreamAccount;
+    const accountDetailsHref = productRoute(activeFilter);
+    const provisionStatus = account?.provisionStatus || application.loanWorkflowStatus || application.status;
+    const content = (
+        <div className="w-full rounded-[24px] border border-blue-100 bg-[#EFF6FF] p-5 shadow-sm">
+            <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[var(--sf-primary,#2563EB)]">
+                        {application.productType || activeFilter}
+                    </p>
+                    <h3 className="mt-1 truncate text-base font-bold text-[var(--sf-ink,#1E1B4B)]">
+                        {application.productName || application.productType || activeFilter}
                     </h3>
-                    <p className="text-xs text-gray-500 mt-1">
-                        {accountCount} {accountCount === 1 ? 'account' : 'accounts'} · {currency || 'NGN'}
+                    <p className="mt-1 text-sm font-medium text-[var(--sf-ink,#1E1B4B)]">
+                        {account?.accountNumber}
                     </p>
                 </div>
-
-                {showMortgageImage ? (
-                    <div className="relative h-20 w-24 shrink-0 overflow-hidden rounded-2xl bg-white shadow-sm">
-                        <Image
-                            src="/mortgage-feature.png"
-                            alt="Mortgage product"
-                            fill
-                            sizes="96px"
-                            className="object-cover"
-                        />
-                    </div>
-                ) : null}
+                <span className="shrink-0 rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-green-600">
+                    {String(provisionStatus || 'pending').replace(/_/g, ' ')}
+                </span>
             </div>
 
-            {/* <div className="absolute bottom-6 right-6 flex items-center gap-2">
-                <span className="text-xs text-gray-500 font-medium tracking-wider">{masked}</span>
-                <Eye className="w-4 h-4 text-gray-400" />
-                <div className="w-2 h-2 rounded-full bg-green-500" />
-            </div> */}
+            <div className="flex items-center justify-between gap-3 text-sm">
+                <p className="min-w-0 truncate text-gray-500">{account?.bankName}</p>
+                <div className="shrink-0 text-right text-xs">
+                    <p className="text-gray-400">Application</p>
+                    <p className="font-semibold text-[#1E293B]">{application.status || 'PENDING'}</p>
+                </div>
+            </div>
         </div>
     );
 
-    if (!accountDetailsHref) return card;
-
     return (
-        <Link href={accountDetailsHref} aria-label={`Open ${activeFilter.toLowerCase()} details`}>
-            {card}
+        <Link
+            href={accountDetailsHref}
+            aria-label={`Open ${activeFilter.toLowerCase()} details`}
+            className="block"
+        >
+            {content}
         </Link>
     );
 }
@@ -124,8 +133,11 @@ export default function AccountsPage() {
     const [activeFilter, setActiveFilter] = useState<AccountFilter>('Mortgage');
     const { wallet, loading: walletLoading, error: walletError } = useUserWallet();
     const [productSummary, setProductSummary] = useState<UserProductTypeSummary | null>(null);
+    const [applications, setApplications] = useState<ProductApplication[]>([]);
     const [summaryLoading, setSummaryLoading] = useState(false);
     const [summaryError, setSummaryError] = useState<string | null>(null);
+    const [applicationsLoading, setApplicationsLoading] = useState(false);
+    const [applicationsError, setApplicationsError] = useState<string | null>(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -145,18 +157,28 @@ export default function AccountsPage() {
         const userId = wallet?.userId;
         if (!userId) {
             setProductSummary(null);
+            setApplications([]);
             return;
         }
 
         let cancelled = false;
         setSummaryLoading(true);
+        setApplicationsLoading(true);
         setSummaryError(null);
+        setApplicationsError(null);
 
         void fetchUserProductTypeSummary(userId).then((result) => {
             if (cancelled) return;
             setProductSummary(result.summary);
             setSummaryError(result.error);
             setSummaryLoading(false);
+        });
+
+        void fetchUserProductApplications(userId).then((result) => {
+            if (cancelled) return;
+            setApplications(result.applications);
+            setApplicationsError(result.error);
+            setApplicationsLoading(false);
         });
 
         return () => {
@@ -173,8 +195,13 @@ export default function AccountsPage() {
         accountCount: 0,
         accounts: [],
     };
+    const activeApplications = applications.filter(
+        (application) => String(application.productType || '').toUpperCase() === activeProductType,
+    );
+    const createdAccountCount = activeApplications.length;
+    const displayedAccountCount = Math.max(activeSummary.accountCount, createdAccountCount);
     const activeFormattedBalance = formatWalletBalance(activeSummary.totalAmount, activeSummary.currency);
-    const isSummaryBusy = walletLoading || summaryLoading;
+    const isSummaryBusy = walletLoading || summaryLoading || applicationsLoading;
 
     return (
         <div className="flex min-h-full flex-col bg-[#FAFAFA] relative">
@@ -246,7 +273,7 @@ export default function AccountsPage() {
                                     )}
                                 </h2>
                                 <p className="text-[11px] text-blue-200/90 text-center max-w-[280px]">
-                                    {walletError || summaryError || `Your ${activeFilter.toLowerCase()} account total`}
+                                    {walletError || summaryError || applicationsError || `Your ${activeFilter.toLowerCase()} account total`}
                                 </p>
                             </div>
                         </div>
@@ -259,25 +286,30 @@ export default function AccountsPage() {
                         <Skeleton className="h-4 w-16 rounded-md bg-gray-200/90" />
                     ) : (
                         <span className="text-xs text-green-500 font-medium">
-                            {activeSummary.accountCount} Active
+                            {displayedAccountCount} Active
                         </span>
                     )}
                 </div>
 
-                <div className="px-6 space-y-4">
-                    {isSummaryBusy && !productSummary ? (
+                <div className="px-6 space-y-6">
+                    {isSummaryBusy && !productSummary && applications.length === 0 ? (
                         <WalletAccountRowSkeleton />
-                    ) : productSummary ? (
-                        <ProductAccountCard
-                            activeFilter={activeFilter}
-                            formattedBalance={activeFormattedBalance}
-                            accountCount={activeSummary.accountCount}
-                            currency={activeSummary.currency}
-                        />
+                    ) : activeApplications.length > 0 ? (
+                        activeApplications.map((application) => (
+                            <ProductAccountCard
+                                key={application.id}
+                                application={application}
+                                activeFilter={activeFilter}
+                            />
+                        ))
                     ) : (
-                        <p className="text-sm text-gray-500 px-2">
-                            {walletError || summaryError || `No active ${activeFilter.toLowerCase()} account yet.`}
-                        </p>
+                        walletError || summaryError || applicationsError ? (
+                            <p className="text-sm text-gray-500 px-2">
+                                {walletError || summaryError || applicationsError}
+                            </p>
+                        ) : (
+                            <EmptyAccountState activeFilter={activeFilter} />
+                        )
                     )}
 
                 </div>

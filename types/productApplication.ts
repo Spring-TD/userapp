@@ -1,0 +1,48 @@
+export type ProductApplicationType = "MORTGAGE" | "LOAN" | "SAVINGS" | "INVESTMENT" | "COMMODITY" | string
+
+export interface ProductApplicationUpstreamAccount {
+  accountNumber?: string
+  bankName?: string
+  bankCode?: string
+  providerReference?: string
+  provisionStatus?: string
+}
+
+export interface ProductApplicationWallet {
+  walletId?: string
+  walletPurpose?: string
+  reusedUpstreamAccount?: boolean
+  upstreamAccount?: ProductApplicationUpstreamAccount
+}
+
+export interface ProductApplication {
+  id: string
+  userId: string
+  productId: string
+  productName?: string
+  productType: ProductApplicationType
+  status: string
+  loanWorkflowStatus?: string
+  requirementsSnapshot?: Record<string, unknown>
+  productWallet?: ProductApplicationWallet
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface ProductApplicationInitResponse {
+  success: boolean
+  message?: string
+  data?: ProductApplication | ProductApplication[] | {
+    applications?: ProductApplication[]
+    accounts?: ProductApplication[]
+    application?: ProductApplication
+  }
+  error?: string
+}
+
+export interface InitProductApplicationPayload {
+  productId: string
+  productType?: ProductApplicationType
+  userId?: string
+  appId?: string
+}
