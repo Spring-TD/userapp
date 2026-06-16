@@ -2,7 +2,6 @@ import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/tool
 import { apiClient } from '@/lib/api'
 import { ENDPOINTS } from '@/lib/endpoints'
 import {
-  fuspayRegistrationErrorMessage,
   isFuspayCustomerLinked,
   isFuspayRegistrationFailed,
 } from '@/lib/fuspayRegistration'
@@ -100,7 +99,6 @@ export const registerMobileUserThunk = createAsyncThunk<
         userId: result.user?.id,
         fuspayProfileCreated: result.fuspayProfileCreated,
       })
-      return rejectWithValue({ message: fuspayRegistrationErrorMessage() })
     }
 
     if (result.fuspayProfileCreated !== undefined && !isFuspayCustomerLinked(result)) {
@@ -108,7 +106,6 @@ export const registerMobileUserThunk = createAsyncThunk<
         userId: result.user?.id,
         fuspayProfileCreated: result.fuspayProfileCreated,
       })
-      return rejectWithValue({ message: fuspayRegistrationErrorMessage() })
     }
 
     mobileAuthLog('registerMobileUserThunk:fulfilled')

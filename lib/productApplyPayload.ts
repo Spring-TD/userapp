@@ -4,6 +4,7 @@ import { sanitizeProductId } from '@/lib/sanitizeProductId'
 import { fetchAuthUserProfile, type AuthUserProfile } from '@/lib/userProfileClient'
 import { resolveWalletUserId } from '@/lib/resolveWalletUserId'
 import { TENANT_MERCHANT_ID_STORAGE_KEY } from '@/lib/mobileTenant/storageKeys'
+import { getManualKycStatus, isManualKycComplete } from '@/lib/manualKycClient'
 
 export type ProductApplyBody = {
   userId: string
@@ -86,6 +87,16 @@ async function bvnFromKycStatus(userId: string): Promise<string> {
   return ''
 }
 
+async function bvnFromManualKyc(): Promise<string> {
+  try {
+    const status = await getManualKycStatus()
+    if (!isManualKycComplete(status)) return ''
+    return status.manualKyc?.bvnNormalized || status.manualKyc?.bvn || ''
+  } catch {
+    return ''
+  }
+}
+
 function resolveMerchantId(sessionMerchantId: string | undefined, user: AuthUserProfile | null): string {
   if (sessionMerchantId?.trim()) return sessionMerchantId.trim()
   const fromUser = user?.user_merchant_id?.trim()
@@ -126,7 +137,7 @@ export async function buildProductApplyBody(
   const applicantName = [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim()
   const email = user?.email?.trim() || ''
   const phone = user?.phone?.trim() || ''
-  const bvn = bvnFromProfile(user) || (await bvnFromKycStatus(userId))
+  const bvn = bvnFromProfile(user) || (await bvnFromManualKyc()) || (await bvnFromKycStatus(userId))
 
   return {
     ok: true,

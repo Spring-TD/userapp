@@ -145,6 +145,13 @@ function SignupForm() {
       }
 
       const normalizedPhone = normalizeRegistrationPhone(phone, country);
+      sessionStorage.setItem(
+        'mobile-v2-manual-kyc-prefill',
+        JSON.stringify({
+          email: email.trim().toLowerCase(),
+          phone: normalizedPhone,
+        }),
+      );
       const payload = buildMobileRegisterPayload({
         first_name: firstName,
         last_name: lastName,
@@ -177,7 +184,9 @@ function SignupForm() {
       });
 
       if (!isFuspayCustomerLinked(regData)) {
-        toast.warning('Account created, but Fuspay was not linked yet. After sign-in, open KYC again to retry setup.');
+        toast.message('Account created', {
+          description: 'Complete manual KYC after email verification to finish setup.',
+        });
       }
 
       const walletNuban = regData.wallet?.virtualNuban?.accountNumber;

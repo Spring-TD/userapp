@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useSearchParams } from 'next/navigation'
@@ -21,9 +21,11 @@ import {
   addApplicationGuarantor,
   initializeProductApplication,
   readInitializedApplication,
+  saveApplicationProgress,
   submitApplicationRequirements,
   submitInitializedApplication,
   uploadApplicationFile,
+  type ApplicationProgress,
   type RequirementSubmission,
   type StorefrontApplication,
 } from '@/lib/storefrontApplicationClient'
@@ -46,6 +48,19 @@ type EmploymentDraft = {
   hrEmail: string
 }
 
+type ApplicationDraft = {
+  version: 1
+  activeStep: StepId
+  accepted: boolean
+  requirementSubmissions: RequirementSubmission[]
+  guarantors: Guarantor[]
+  employmentDraft: EmploymentDraft
+  guarantorDraft: Guarantor
+  updatedAt: string
+}
+
+type ProgressTab = 'requirement' | 'fileUpload' | 'loan'
+
 const PRIMARY = 'bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white'
 const BRAND_INK = 'text-[var(--sf-ink,#1E293B)]'
 const BRAND_SOFT = 'bg-[color-mix(in_srgb,var(--sf-button,#1E40AF)_10%,white)]'
@@ -54,6 +69,77 @@ const DEFAULT_GUARANTOR: Guarantor = {
   name: 'Charles Avis',
   phone: '+2347045271',
   email: 'talktowithcharles@gmail.com',
+}
+
+const APPLICATION_DRAFT_PREFIX = 'mobile-v2-product-application-draft'
+
+function draftStorageKey(kind: ProductKind, productId: string, applicationId: string) {
+  const id = productId || applicationId
+  return id ? `${APPLICATION_DRAFT_PREFIX}:${kind}:${id}` : ''
+}
+
+function readApplicationDraft(key: string): ApplicationDraft | null {
+  if (!key || typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(key)
+    if (!raw) return null
+    const draft = JSON.parse(raw) as Partial<ApplicationDraft>
+    return draft.version === 1 ? (draft as ApplicationDraft) : null
+  } catch {
+    return null
+  }
+}
+
+function saveApplicationDraft(key: string, draft: Omit<ApplicationDraft, 'version' | 'updatedAt'>) {
+  if (!key || typeof window === 'undefined') return
+  window.localStorage.setItem(
+    key,
+    JSON.stringify({
+      ...draft,
+      version: 1,
+      updatedAt: new Date().toISOString(),
+    }),
+  )
+}
+
+function clearApplicationDraft(key: string) {
+  if (!key || typeof window === 'undefined') return
+  window.localStorage.removeItem(key)
+}
+
+function progressTabForStep(step: StepId): ProgressTab {
+  if (step === 'file') return 'fileUpload'
+  if (step === 'property' || step === 'product') return 'loan'
+  return 'requirement'
+}
+
+function stepForProgressTab(tab?: string): StepId {
+  if (tab === 'fileUpload') return 'file'
+  if (tab === 'loan') return 'product'
+  return 'requirement'
+}
+
+function isEmploymentSubmission(submission: RequirementSubmission) {
+  return (submission.requirementType || submission.label || '').toLowerCase() === 'employment'
+}
+
+function employmentSubmissionFromDraft(employmentDraft: EmploymentDraft): RequirementSubmission {
+  return {
+    requirementType: 'Employment',
+    label: 'Employment',
+    type: 'json',
+    value: employmentDraft,
+  }
+}
+
+function employmentDraftFromSubmission(submission?: RequirementSubmission): EmploymentDraft {
+  const value = submission?.value && typeof submission.value === 'object' ? (submission.value as Partial<EmploymentDraft>) : {}
+  return {
+    occupation: typeof value.occupation === 'string' ? value.occupation : '',
+    placeOfWork: typeof value.placeOfWork === 'string' ? value.placeOfWork : '',
+    hrName: typeof value.hrName === 'string' ? value.hrName : '',
+    hrEmail: typeof value.hrEmail === 'string' ? value.hrEmail : '',
+  }
 }
 
 function prettyKind(kind: ProductKind) {
@@ -125,14 +211,33 @@ function FileActionRow({
   fileUrl,
   userId,
   onUploaded,
+  done,
+  submission,
 }: {
   name: string
   fileUrl?: string
   userId?: string
   onUploaded: (submission: RequirementSubmission) => void
+  done?: boolean
+  submission?: RequirementSubmission
 }) {
   const [uploading, setUploading] = useState(false)
-  const [uploaded, setUploaded] = useState(false)
+  const [uploaded, setUploaded] = useState(Boolean(done))
+  const [uploadedFile, setUploadedFile] = useState<{
+    fileUrl: string
+    fileName: string
+    fileType?: string
+    fileSize?: number
+  } | null>(
+    submission?.fileUrl
+      ? {
+          fileUrl: submission.fileUrl,
+          fileName: submission.fileName || 'Uploaded file',
+          fileType: submission.fileType,
+          fileSize: submission.fileSize,
+        }
+      : null,
+  )
   const [error, setError] = useState<string | null>(null)
 
   const handleUpload = async (file?: File) => {
@@ -154,6 +259,12 @@ function FileActionRow({
           ...(fileUrl ? { downloadedFileUrl: fileUrl } : {}),
         },
       })
+      setUploadedFile({
+        fileUrl: uploadedFile.fileUrl,
+        fileName: uploadedFile.fileName,
+        fileType: uploadedFile.fileType,
+        fileSize: uploadedFile.fileSize,
+      })
       setUploaded(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed')
@@ -166,7 +277,7 @@ function FileActionRow({
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <span className="text-xs text-gray-500">{name}</span>
-        <StatusDot done={uploaded} />
+        <StatusDot done={uploaded || done} />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <a
@@ -183,10 +294,18 @@ function FileActionRow({
         </a>
         <label className={`flex h-9 cursor-pointer items-center justify-center gap-2 rounded-xl bg-gray-100 text-xs font-semibold ${BRAND_INK}`}>
           <input type="file" className="hidden" onChange={(event) => void handleUpload(event.target.files?.[0])} />
-          {uploading ? 'Uploading...' : uploaded ? 'Uploaded' : 'Upload File'}
+          {uploading ? 'Uploading...' : uploaded || done ? 'Uploaded' : 'Upload File'}
           {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
         </label>
       </div>
+      {uploadedFile ? (
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-green-50 px-3 py-2 text-[10px] text-green-800">
+          <span className="min-w-0 truncate font-medium">{uploadedFile.fileName}</span>
+          <a href={uploadedFile.fileUrl} target="_blank" rel="noreferrer" className="shrink-0 font-bold underline">
+            Open
+          </a>
+        </div>
+      ) : null}
       {error ? <p className="text-[10px] text-red-600">{error}</p> : null}
     </div>
   )
@@ -537,6 +656,8 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
   const [submitting, setSubmitting] = useState(false)
   const [creatingAccount, setCreatingAccount] = useState(false)
   const [createAccountError, setCreateAccountError] = useState<string | null>(null)
+  const [draftHydrated, setDraftHydrated] = useState(false)
+  const [draftNotice, setDraftNotice] = useState<string | null>(null)
   const [requirementSubmissions, setRequirementSubmissions] = useState<RequirementSubmission[]>([])
   const [guarantors, setGuarantors] = useState<Guarantor[]>([])
   const [employmentDraft, setEmploymentDraft] = useState<EmploymentDraft>({
@@ -555,14 +676,110 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
   const providerName = applicationProvider(initializedApplication)
   const productId = sanitizeProductId(productIdProp || searchParams.get('productId') || initializedApplication?.productId || '')
   const applicationId = searchParams.get('applicationId') || initializedApplication?.id || initializedApplication?._id || ''
+  const currentDraftKey = draftStorageKey(kind, productId, applicationId)
   const userId = initializedApplication?.userId || ''
   const requirements = initializedApplication?.requirementsSnapshot
   const documentsToDownload = requirements?.documentsToDownload ?? []
   const otherRequirements = requirements?.otherRequirements ?? []
   const requiresGuarantor = requirements?.security?.guarantor === true
+  const applicationProgress = initializedApplication?.applicationProgress
+  const applicationProgressKey = applicationProgress ? JSON.stringify(applicationProgress) : ''
 
   const goBackHref = kind === 'loan' ? '/mobile-v2/products/loan' : '/mobile-v2/products/mortgage'
   const activeIndex = steps.indexOf(activeStep)
+
+  const buildRequirementDrafts = (employment: EmploymentDraft, submissions: RequirementSubmission[]) => {
+    const drafts = submissions.filter((submission) => submission.type !== 'document' && !isEmploymentSubmission(submission))
+    return [...drafts, employmentSubmissionFromDraft(employment)]
+  }
+
+  const buildUploadedDrafts = (submissions: RequirementSubmission[]) =>
+    submissions.filter((submission) => submission.type === 'document')
+
+  const hydrateProgress = (progress: ApplicationProgress) => {
+    const requirementDrafts = Array.isArray(progress.requirementDrafts) ? progress.requirementDrafts : []
+    const uploadedDrafts = Array.isArray(progress.uploadedDrafts) ? progress.uploadedDrafts : []
+    const employmentSubmission = requirementDrafts.find(isEmploymentSubmission)
+
+    setActiveStep(steps.includes(stepForProgressTab(progress.currentTab)) ? stepForProgressTab(progress.currentTab) : 'requirement')
+    setRequirementSubmissions([
+      ...requirementDrafts.filter((submission) => !isEmploymentSubmission(submission)),
+      ...uploadedDrafts,
+    ])
+    if (employmentSubmission) {
+      setEmploymentDraft(employmentDraftFromSubmission(employmentSubmission))
+    }
+  }
+
+  useEffect(() => {
+    if (draftHydrated) return
+    if (applicationProgress) {
+      hydrateProgress(applicationProgress)
+      setDraftNotice(applicationProgress.lastSavedAt ? 'Saved progress restored.' : null)
+    } else {
+      const draft = readApplicationDraft(currentDraftKey)
+      if (draft) {
+        setActiveStep(steps.includes(draft.activeStep) ? draft.activeStep : 'requirement')
+        setAccepted(Boolean(draft.accepted))
+        setRequirementSubmissions(Array.isArray(draft.requirementSubmissions) ? draft.requirementSubmissions : [])
+        setGuarantors(Array.isArray(draft.guarantors) ? draft.guarantors : [])
+        setEmploymentDraft({
+          occupation: draft.employmentDraft?.occupation || '',
+          placeOfWork: draft.employmentDraft?.placeOfWork || '',
+          hrName: draft.employmentDraft?.hrName || '',
+          hrEmail: draft.employmentDraft?.hrEmail || '',
+        })
+        setGuarantorDraft({
+          name: draft.guarantorDraft?.name || '',
+          phone: draft.guarantorDraft?.phone || '',
+          email: draft.guarantorDraft?.email || '',
+          verificationUrl: draft.guarantorDraft?.verificationUrl,
+        })
+        setDraftNotice('Saved progress restored.')
+      }
+    }
+    setDraftHydrated(true)
+  }, [draftHydrated, currentDraftKey, steps, applicationProgressKey])
+
+  const persistDraft = async (notice: string | null = 'Progress saved.') => {
+    saveApplicationDraft(currentDraftKey, {
+      activeStep,
+      accepted,
+      requirementSubmissions,
+      guarantors,
+      employmentDraft,
+      guarantorDraft,
+    })
+
+    if (applicationId && userId) {
+      const result = await saveApplicationProgress({
+        applicationId,
+        userId,
+        currentTab: progressTabForStep(activeStep),
+        requirementDrafts: buildRequirementDrafts(employmentDraft, requirementSubmissions),
+        uploadedDrafts: buildUploadedDrafts(requirementSubmissions),
+      })
+      if (!result.ok) {
+        if (notice) setDraftNotice('Progress saved locally. We could not sync it yet.')
+        return
+      }
+    }
+
+    if (notice) setDraftNotice(notice)
+  }
+
+  useEffect(() => {
+    if (!draftHydrated || !currentDraftKey) return
+    const timer = window.setTimeout(() => {
+      void persistDraft(null)
+    }, 800)
+    return () => window.clearTimeout(timer)
+  }, [draftHydrated, currentDraftKey, activeStep, accepted, requirementSubmissions, guarantors, employmentDraft, guarantorDraft])
+
+  const handleStepChange = (step: StepId) => {
+    void persistDraft(null)
+    setActiveStep(step)
+  }
 
   const upsertSubmission = (submission: RequirementSubmission) => {
     const key = submission.requirementId || submission.requirementType || submission.label
@@ -588,13 +805,8 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     setError(null)
     try {
       const submissions: RequirementSubmission[] = [
-        ...requirementSubmissions,
-        {
-          requirementType: 'Employment',
-          label: 'Employment',
-          type: 'json',
-          value: employmentDraft,
-        },
+        ...buildRequirementDrafts(employmentDraft, requirementSubmissions),
+        ...buildUploadedDrafts(requirementSubmissions),
       ]
       const requirementsResult = await submitApplicationRequirements(applicationId, userId, submissions)
       if (!requirementsResult.ok) {
@@ -622,6 +834,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         return
       }
 
+      clearApplicationDraft(currentDraftKey)
       setSheet('success')
     } finally {
       setSubmitting(false)
@@ -633,6 +846,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       void handleFinalSubmit()
       return
     }
+    void persistDraft(null)
     setActiveStep(steps[Math.min(activeIndex + 1, steps.length - 1)])
   }
 
@@ -663,7 +877,11 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     <div className="relative flex h-full flex-col bg-white">
       <div className="flex-1 overflow-y-auto px-5 pb-28 pt-12 no-scrollbar">
         <div className="mb-8 flex items-center justify-between">
-          <Link href={goBackHref} className="flex h-9 w-9 items-center justify-center rounded-full">
+          <Link
+            href={goBackHref}
+            onClick={() => void persistDraft(null)}
+            className="flex h-9 w-9 items-center justify-center rounded-full"
+          >
             <ChevronLeft className="h-5 w-5 text-gray-700" />
           </Link>
           <h1 className={`text-base font-bold ${BRAND_INK}`}>Apply</h1>
@@ -673,7 +891,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         <ProgressTabs
           steps={steps}
           active={activeStep}
-          onChange={setActiveStep}
+          onChange={handleStepChange}
           productLabel={productName}
         />
 
@@ -773,15 +991,23 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
             <div className="space-y-7">
               <SectionTitle>Bank Form to fill & Submit</SectionTitle>
               {documentsToDownload.length > 0 ? (
-                documentsToDownload.map((document, index) => (
-                  <FileActionRow
-                    key={document.name || index}
-                    name={document.name || `Document ${index + 1}`}
-                    fileUrl={document.fileUrl}
-                    userId={userId}
-                    onUploaded={upsertSubmission}
-                  />
-                ))
+                documentsToDownload.map((document, index) => {
+                  const documentName = document.name || `Document ${index + 1}`
+                  const submission = requirementSubmissions.find(
+                    (item) => (item.requirementType || item.label) === documentName,
+                  )
+                  return (
+                    <FileActionRow
+                      key={document.name || index}
+                      name={documentName}
+                      fileUrl={document.fileUrl}
+                      userId={userId}
+                      onUploaded={upsertSubmission}
+                      done={Boolean(submission)}
+                      submission={submission}
+                    />
+                  )
+                })
               ) : (
                 <p className="rounded-2xl bg-gray-50 p-4 text-xs text-gray-500">
                   No downloadable forms configured for this product.
@@ -816,6 +1042,14 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
 
       <div className="absolute bottom-6 left-5 right-5">
         {error ? <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">{error}</p> : null}
+        {draftNotice ? <p className="mb-3 rounded-xl bg-green-50 px-3 py-2 text-xs text-green-700">{draftNotice}</p> : null}
+        <button
+          type="button"
+          className={`mb-3 h-10 w-full rounded-full border border-[var(--sf-button,#1E40AF)] text-xs font-bold ${BRAND_INK}`}
+          onClick={() => void persistDraft()}
+        >
+          Save progress
+        </button>
         <Button
           type="button"
           disabled={(activeStep === 'product' && !accepted) || submitting}

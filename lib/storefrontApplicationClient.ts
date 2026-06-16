@@ -2,6 +2,7 @@ import { apiClient } from "@/lib/api"
 import { buildProductApplyBody, type ProductApplyBody } from "@/lib/productApplyPayload"
 import { resolveWalletUserId } from "@/lib/resolveWalletUserId"
 import { sanitizeProductId } from "@/lib/sanitizeProductId"
+import { TENANT_MERCHANT_ID_STORAGE_KEY } from "@/lib/mobileTenant/storageKeys"
 
 export type RequirementSubmission = {
   requirementId?: string
@@ -14,6 +15,16 @@ export type RequirementSubmission = {
   fileSize?: number
   value?: unknown
   metadata?: Record<string, unknown>
+}
+
+export type ApplicationProgressTab = "requirement" | "fileUpload" | "loan" | string
+
+export type ApplicationProgress = {
+  currentStep?: "apply" | string
+  currentTab?: ApplicationProgressTab
+  requirementDrafts?: RequirementSubmission[]
+  uploadedDrafts?: RequirementSubmission[]
+  lastSavedAt?: string
 }
 
 export type StorefrontApplication = {
@@ -31,6 +42,7 @@ export type StorefrontApplication = {
   merchantId?: string
   createdAt?: string
   updatedAt?: string
+  applicationProgress?: ApplicationProgress
   account?: {
     id?: string
     accountNumber?: string
@@ -89,6 +101,15 @@ type ApiEnvelope<T> = {
 }
 
 export const INIT_APPLICATION_STORAGE_KEY = "mobile-v2-current-product-application"
+
+function readTenantMerchantId(): string {
+  if (typeof window === "undefined") return ""
+  try {
+    return sessionStorage.getItem(TENANT_MERCHANT_ID_STORAGE_KEY) || ""
+  } catch {
+    return ""
+  }
+}
 
 function applicationIdFrom(data?: StorefrontApplication | null): string {
   return String(data?.id ?? data?._id ?? "").trim()
@@ -151,7 +172,7 @@ export async function getExistingInitializedApplication(userId: string, productI
   return { ok: true as const, application }
 }
 
-export async function getProductApplicationInitStatus(userId: string, productId: string) {
+export async function getProductApplicationInitStatus(userId: string, productId: string, merchantId = readTenantMerchantId()) {
   const normalizedProductId = sanitizeProductId(productId)
   if (!userId || !normalizedProductId) {
     return { ok: false as const, error: "Missing user or product.", status: null as ProductApplicationInitStatus | null }
@@ -159,7 +180,11 @@ export async function getProductApplicationInitStatus(userId: string, productId:
 
   const res = await apiClient.get<ApiEnvelope<ProductApplicationInitStatus>>(
     `/v1/applications/user/${encodeURIComponent(userId)}/products/${encodeURIComponent(normalizedProductId)}/init-status`,
-    { includeAuth: true, timeout: 30_000 },
+    {
+      includeAuth: true,
+      timeout: 30_000,
+      params: merchantId ? { merchantId } : undefined,
+    },
   )
 
   if (res.data?.success === false || res.status >= 400) {
@@ -359,6 +384,48 @@ export async function submitApplicationRequirements(
   }
 
   return { ok: true as const, application: res.data?.data }
+}
+
+export async function saveApplicationProgress({
+  applicationId,
+  userId,
+  currentTab,
+  requirementDrafts,
+  uploadedDrafts,
+}: {
+  applicationId: string
+  userId: string
+  currentTab: ApplicationProgressTab
+  requirementDrafts?: RequirementSubmission[]
+  uploadedDrafts?: RequirementSubmission[]
+}) {
+  const res = await apiClient.patch<ApiEnvelope<StorefrontApplication>>(
+    `/v1/applications/${encodeURIComponent(applicationId)}/progress`,
+    {
+      userId,
+      currentStep: "apply",
+      currentTab,
+      ...(requirementDrafts !== undefined ? { requirementDrafts } : {}),
+      ...(uploadedDrafts !== undefined ? { uploadedDrafts } : {}),
+    },
+    { includeAuth: true, timeout: 30_000 },
+  )
+
+  if (res.data?.success === false || res.status >= 400) {
+    return { ok: false as const, error: parseApiError(res.data, res.status) }
+  }
+
+  const application = res.data?.data
+  if (application) {
+    const current = readInitializedApplication()
+    saveInitializedApplication({
+      ...(current || {}),
+      ...application,
+      applicationProgress: application.applicationProgress || current?.applicationProgress,
+    })
+  }
+
+  return { ok: true as const, application }
 }
 
 export async function addApplicationGuarantor(
