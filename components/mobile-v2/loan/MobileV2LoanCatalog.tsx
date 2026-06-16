@@ -24,6 +24,9 @@ function FeaturedLoanCard({ item }: { item: LoanCatalogItem }) {
     >
       <div className="flex flex-col h-full justify-between gap-4">
         <div>
+          <h3 className="mb-3 text-base font-bold leading-snug text-white">
+            {item.title}
+          </h3>
           <span className="text-[10px] font-medium text-blue-200/90 block mb-1">
             {item.loanAmountLabel || 'Loan Amount'}
           </span>

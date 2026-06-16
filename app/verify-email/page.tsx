@@ -111,15 +111,15 @@ function VerifyEmailContent() {
         await setSecureTokens(data.data.accessToken, data.data.refreshToken)
       }
 
-      // Clear pending email from sessionStorage
+      sessionStorage.setItem(
+        "mobile-v2-manual-kyc-prefill",
+        JSON.stringify({ email: email.trim().toLowerCase() }),
+      )
       sessionStorage.removeItem("pendingEmail")
-      // Signal verify-success to clear tokens and ask user to sign in (only when coming from here)
-      sessionStorage.setItem("verifiedJustNow", "1")
 
       toast.success("✅ Email verified successfully!")
 
-      // Redirect to verify-success page
-      setTimeout(() => router.push("/verify-success"), 500)
+      setTimeout(() => router.push(`/mobile-v2/profile/kyc/create?from=registration&email=${encodeURIComponent(email)}`), 500)
     } catch (err: any) {
       console.error("Email verification failed", err)
       const errorMsg = err?.response?.data?.error || "Invalid or expired verification code"

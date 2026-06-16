@@ -14,7 +14,7 @@ export default function MortgageProductPage() {
                     <div className="flex justify-between items-center mb-6">
                         <h1 className="text-lg font-bold text-[var(--sf-ink,#1E1B4B)] text-left">Mortgage</h1>
                         <Link
-                        href="/mobile-v2/products/mortgage/survey"
+                        href="/mobile-v2/products/mortgage/pending"
                         className="rounded-lg bg-[var(--sf-ink,#1E1B4B)] px-3 py-1.5 text-[10px] font-bold uppercase text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]"
                         >
                         Pending Mortgage 

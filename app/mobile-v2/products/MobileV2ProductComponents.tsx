@@ -172,8 +172,11 @@ export function FeaturedLoanProductCard({ product }: { product: MobileProduct })
             <div className="rounded-[18px] bg-[var(--sf-ink,#1E1B4B)] px-6 py-6 text-white shadow-md">
                 <div className="flex items-start justify-between gap-5">
                     <div>
+                        <h3 className="mb-2 max-w-[220px] truncate text-base font-bold leading-tight text-white">
+                            {product.name || 'Loan Product'}
+                        </h3>
                         <p className="mb-1 text-[11px] text-white/75">Loan Amount</p>
-                        <h3 className="text-[32px] font-bold leading-none tracking-tight">{loanAmount}</h3>
+                        <p className="text-[32px] font-bold leading-none tracking-tight">{loanAmount}</p>
                     </div>
                     <div className="mt-5 flex shrink-0 items-start gap-5">
                         <div className="flex items-start gap-1.5">
@@ -237,17 +240,19 @@ export function HotLoanProductCard({ product, compact }: { product: MobileProduc
     const imgH = compact ? 'h-[100px]' : 'h-[140px]';
 
     return (
-        <div className="rounded-[20px] border border-gray-100 bg-white p-3 shadow-sm">
+        <div className={cn('min-w-0 overflow-hidden border border-gray-100 bg-white shadow-sm', compact ? 'rounded-[18px] p-2.5' : 'rounded-[20px] p-3')}>
             <div
                 className={cn('relative mb-3 w-full overflow-hidden rounded-[18px] bg-gray-100', imgH)}
                 style={{ backgroundImage: `url(${product.image || DEFAULT_IMAGE})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
             />
-            <div className="space-y-1.5 px-0.5">
+            <div className="min-w-0 space-y-1.5 px-0.5">
                 <h3 className={cn('font-bold text-[var(--sf-ink,#1E1B4B)]', compact ? 'line-clamp-2 text-xs' : 'text-sm')}>{product.name}</h3>
                 {!compact && (
                     <p className="line-clamp-2 text-[10px] text-gray-500">{product.description}</p>
                 )}
-                <div className="text-xs font-bold text-[var(--sf-ink,#1E1B4B)]">{amountRange(product)}</div>
+                <div className={cn('font-bold text-[var(--sf-ink,#1E1B4B)]', compact ? 'break-words text-[11px] leading-tight' : 'text-xs')}>
+                    {amountRange(product)}
+                </div>
                 <div className="text-[10px] font-semibold text-[var(--sf-button,#1E40AF)]">{rateLabel(product)}</div>
                 <Link href={detailHref}>
                     <Button
@@ -333,17 +338,19 @@ export function MortgageProductCard({ product, compact }: { product: MobileProdu
     const imgH = compact ? 'h-[100px]' : 'h-[140px]';
 
     return (
-        <div className="rounded-[20px] border border-gray-100 bg-white p-3 shadow-sm">
+        <div className={cn('min-w-0 overflow-hidden border border-gray-100 bg-white shadow-sm', compact ? 'rounded-[18px] p-2.5' : 'rounded-[20px] p-3')}>
             <div
                 className={cn('relative mb-3 w-full overflow-hidden rounded-[18px] bg-gray-100', imgH)}
                 style={{ backgroundImage: `url(${product.image || DEFAULT_IMAGE})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
             />
-            <div className="space-y-1.5 px-0.5">
+            <div className="min-w-0 space-y-1.5 px-0.5">
                 <h3 className={cn('font-bold text-[var(--sf-ink,#1E1B4B)]', compact ? 'line-clamp-2 text-xs' : 'text-sm')}>{product.name}</h3>
                 {!compact && (
                     <p className="line-clamp-2 text-[10px] text-gray-500">{product.description}</p>
                 )}
-                <div className="text-xs font-bold text-[var(--sf-ink,#1E1B4B)]">{amountRange(product)}</div>
+                <div className={cn('font-bold text-[var(--sf-ink,#1E1B4B)]', compact ? 'break-words text-[11px] leading-tight' : 'text-xs')}>
+                    {amountRange(product)}
+                </div>
                 <div className="text-[10px] font-semibold text-[var(--sf-button,#1E40AF)]">{rateLabel(product)}</div>
                 <Link href={detailHref}>
                     <Button
@@ -499,9 +506,9 @@ export function MobileV2ProductList({ productType }: MobileV2ProductListProps) {
                 {hot.length > 0 ? (
                     <div>
                         <h2 className="mb-3 font-bold text-[#1E293B]">Hot Loan</h2>
-                        <div className="-mx-1 flex gap-3 overflow-x-auto pb-2 pl-1 pr-4 no-scrollbar">
+                        <div className="grid grid-cols-2 gap-2">
                             {hot.map((p) => (
-                                <div key={p.id} className="w-[200px] shrink-0">
+                                <div key={p.id} className="min-w-0">
                                     <HotLoanProductCard product={p} compact />
                                 </div>
                             ))}
@@ -531,9 +538,9 @@ export function MobileV2ProductList({ productType }: MobileV2ProductListProps) {
                 {hot.length > 0 ? (
                     <div>
                         <h2 className="mb-3 font-bold text-[#1E293B]">Hot Mortgage</h2>
-                        <div className="-mx-1 flex gap-3 overflow-x-auto pb-2 pl-1 pr-4 no-scrollbar">
+                        <div className="grid grid-cols-2 gap-2">
                             {hot.map((p) => (
-                                <div key={p.id} className="w-[200px] shrink-0">
+                                <div key={p.id} className="min-w-0">
                                     <MortgageProductCard product={p} compact />
                                 </div>
                             ))}

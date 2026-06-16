@@ -70,6 +70,12 @@ export interface OtpVerifyDto {
 export interface OtpVerifyResponse {
   success?: boolean
   valid?: boolean
+  accessToken?: string
+  refreshToken?: string
+  data?: {
+    accessToken?: string
+    refreshToken?: string
+  }
   error?: string
 }
 
