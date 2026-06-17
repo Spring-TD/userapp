@@ -43,6 +43,12 @@ function LoginPageInner() {
   const [password, setPassword] = useState('');
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const verifiedEmail = searchParams.get('verified') === '1';
+
+  useEffect(() => {
+    const emailParam = searchParams.get('email')?.trim();
+    if (emailParam) setEmail(emailParam);
+  }, [searchParams]);
 
   useEffect(() => {
     if (error) {
@@ -116,10 +122,19 @@ function LoginPageInner() {
 
       <div className="mb-10 text-center">
         <h2 className="mb-2 text-[28px] font-bold tracking-tight text-[var(--sf-ink,#1E1B4B)]">Welcome back</h2>
-        <p className="px-4 text-[15px] leading-normal text-gray-500">Sign in with your email and password</p>
+        <p className="px-4 text-[15px] leading-normal text-gray-500">
+          {verifiedEmail
+            ? 'Your email is verified. Sign in to complete KYC and finish setup.'
+            : 'Sign in with your email and password'}
+        </p>
       </div>
 
       <div className="min-h-0 flex-1 space-y-6">
+        {verifiedEmail ? (
+          <p className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-900">
+            Email verified successfully. Use the password you created during signup.
+          </p>
+        ) : null}
         {submitError ? (
           <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900" role="alert">
             {submitError}
