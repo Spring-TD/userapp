@@ -7,6 +7,11 @@ import { AlertCircle, Check, CheckCircle, ChevronDown, Copy, Loader2, X } from '
 import { Button } from '@/components/ui/button';
 import { ensureInvestmentAccount } from '@/lib/investmentApplyClient';
 import { ensureSavingsAccount } from '@/lib/savingsApplyClient';
+import {
+    formatApplicationAmountHint,
+    parseApplicationAmount,
+    validateApplicationAmount,
+} from '@/lib/applicationAmount';
 
 type FundingFlowStep = 'terms' | 'accountCreated' | 'application' | 'accountDetails' | 'success' | 'failure';
 
@@ -47,6 +52,8 @@ type ProductFundingFlowSheetProps = {
     successMessage: string;
     failureMessage: string;
     centralWalletBalance?: number;
+    amountMin?: number | null;
+    amountMax?: number | null;
 };
 
 const DEFAULT_CENTRAL_WALLET_BALANCE = 250000;
@@ -72,6 +79,8 @@ export function ProductFundingFlowSheet({
     successMessage,
     failureMessage,
     centralWalletBalance = DEFAULT_CENTRAL_WALLET_BALANCE,
+    amountMin = null,
+    amountMax = null,
 }: ProductFundingFlowSheetProps) {
     const [step, setStep] = useState<FundingFlowStep>('terms');
     const [termsAccepted, setTermsAccepted] = useState(false);
@@ -96,13 +105,16 @@ export function ProductFundingFlowSheet({
         setForm((current) => ({ ...current, [field]: value }));
     };
 
-    const enteredAmount = Number(form.amount.replace(/[^\d.]/g, '')) || 0;
+    const enteredAmount = parseApplicationAmount(form.amount) ?? 0;
+    const amountValidationError =
+        enteredAmount > 0 ? validateApplicationAmount(enteredAmount, amountMin, amountMax) : null;
     const canSubmit = Boolean(
         form.name.trim() &&
         form.purpose.trim() &&
         form.duration.trim() &&
         form.frequency &&
         enteredAmount > 0 &&
+        !amountValidationError &&
         form.acceptedTerms,
     );
 
@@ -341,6 +353,12 @@ export function ProductFundingFlowSheet({
                             inputMode="numeric"
                             className="h-12 w-full rounded-full bg-gray-100 px-5 text-sm outline-none ring-[var(--sf-button,#2563EB)]/20 placeholder:text-gray-400 focus:ring-2"
                         />
+                        <p className="px-1 text-[11px] text-gray-500">
+                            {formatApplicationAmountHint(amountMin, amountMax)}
+                        </p>
+                        {amountValidationError ? (
+                            <p className="px-1 text-xs text-red-600">{amountValidationError}</p>
+                        ) : null}
                         <button
                             type="button"
                             onClick={() => updateForm('acceptedTerms', !form.acceptedTerms)}

@@ -1,4 +1,4 @@
-import { createSavingsAccount } from '@/lib/storefrontApplicationClient'
+import { applyProductOneShot, createSavingsAccount } from '@/lib/storefrontApplicationClient'
 
 type SavingsApplyResponse = {
   success?: boolean
@@ -24,9 +24,29 @@ export async function ensureSavingsAccount(
   productId: string,
   options?: { amount?: number; currency?: string },
 ): Promise<EnsureSavingsAccountResult> {
-  const result = await createSavingsAccount(productId, { currency: options?.currency })
+  const hasAmount = options?.amount != null && options.amount > 0
+  const result = hasAmount
+    ? await applyProductOneShot(productId, {
+        amount: options!.amount,
+        currency: options?.currency,
+        productType: 'SAVINGS',
+      })
+    : await createSavingsAccount(productId, { currency: options?.currency })
+
   if (!result.ok) return { ok: false, accountCreated: false, error: result.error }
-  const data = result.data as SavingsApplyResponse['data'] | undefined
+
+  if (hasAmount) {
+    const application = 'application' in result ? result.application : undefined
+    return {
+      ok: true,
+      accountCreated: true,
+      accountId: application?.id || application?._id,
+      account: application?.productWallet?.upstreamAccount,
+      message: 'Savings application submitted.',
+    }
+  }
+
+  const data = (result as { data?: SavingsApplyResponse['data'] }).data
   return {
     ok: true,
     accountCreated: data?.accountCreated === true || Boolean(data?.account?.id),
