@@ -63,6 +63,9 @@ type ProgressTab = 'requirement' | 'fileUpload' | 'loan'
 
 const PRIMARY = 'bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white'
 const BRAND_INK = 'text-[var(--sf-ink,#1E293B)]'
+const OUTLINE = 'bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80'
+const OUTLINE_HOVER = 'bg-secondary/80 text-secondary-foreground shadow-xs hover:bg-secondary/80'
+const OUTLINE_ACTIVE = 'bg-secondary/80 text-secondary-foreground shadow-xs hover:bg-secondary/80'
 const BRAND_SOFT = 'bg-[color-mix(in_srgb,var(--sf-button,#1E40AF)_10%,white)]'
 
 const DEFAULT_GUARANTOR: Guarantor = {
@@ -1040,20 +1043,21 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         </div>
       </div>
 
-      <div className="absolute bottom-6 left-5 right-5">
+      <div className="absolute bottom-6 left-5 right-5 bg-white mt-5 items-center">
         {error ? <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">{error}</p> : null}
-        {draftNotice ? <p className="mb-3 rounded-xl bg-green-50 px-3 py-2 text-xs text-green-700">{draftNotice}</p> : null}
-        <button
+        {/* {draftNotice ? <p className="mb-3 rounded-xl bg-green-50 px-3 py-2 text-xs text-green-700">{draftNotice}</p> : null} */}
+        <div className="flex flex-row justify-between gap-3 w-full items-center align-middle">
+        <Button
           type="button"
-          className={`mb-3 h-10 w-full rounded-full border border-[var(--sf-button,#1E40AF)] text-xs font-bold ${BRAND_INK}`}
+          className={cn(` h-10 w-1/2 rounded-full border border-[var(--sf-button,#1E40AF)] text-xs font-bold `, OUTLINE)}
           onClick={() => void persistDraft()}
         >
           Save progress
-        </button>
+        </Button>
         <Button
           type="button"
           disabled={(activeStep === 'product' && !accepted) || submitting}
-          className={cn('h-12 w-full rounded-full text-sm font-semibold disabled:opacity-50', PRIMARY)}
+          className={cn('h-10 rounded-full w-1/2 text-sm font-semibold disabled:opacity-50', PRIMARY)}
           onClick={goNext}
         >
           {submitting ? (
@@ -1063,6 +1067,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
             </span>
           ) : activeStep === 'product' ? 'Submit application' : 'Next'}
         </Button>
+        </div>
       </div>
 
       {sheet === 'create_account' && (

@@ -9,7 +9,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp
 import { toast } from 'sonner';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { clearMobileClientAuthError, resendOtpThunk, verifyOtpThunk } from '@/store/mobileClientAuthSlice';
-import { setSecureTokens } from '@/lib/tokenManager';
+import { clearSecureTokens } from '@/lib/tokenManager';
 
 function VerifyOtpContent() {
   const router = useRouter();
@@ -47,18 +47,13 @@ function VerifyOtpContent() {
       return;
     }
     try {
-      const verified = await dispatch(
+      await dispatch(
         verifyOtpThunk({
           identifier: email,
           code,
           purpose: 'verification',
         }),
       ).unwrap()
-      const accessToken = verified.data?.accessToken || verified.accessToken
-      const refreshToken = verified.data?.refreshToken || verified.refreshToken
-      if (accessToken) {
-        await setSecureTokens(accessToken, refreshToken)
-      }
     } catch (err: unknown) {
       const msg =
         (typeof err === 'string' ? err : null) ||
@@ -68,8 +63,12 @@ function VerifyOtpContent() {
       return
     }
 
-    toast.success('Email verified. Complete KYC to finish setup.')
-    router.push(`/mobile-v2/profile/kyc/create?from=registration&email=${encodeURIComponent(email)}`)
+    await clearSecureTokens()
+    toast.success('Email verified. Sign in to complete KYC.')
+    const kycNext = `/mobile-v2/profile/kyc/create?from=registration&email=${encodeURIComponent(email)}`
+    router.push(
+      `/mobile-v2/auth/login?email=${encodeURIComponent(email)}&verified=1&next=${encodeURIComponent(kycNext)}`,
+    )
   };
 
   const handleResend = async () => {

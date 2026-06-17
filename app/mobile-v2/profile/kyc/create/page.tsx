@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { clearSecureTokens } from '@/lib/tokenManager';
+import { getSecureAccessTokenSync } from '@/lib/tokenManager';
 import { getManualKycStatus, isManualKycComplete, submitManualKyc, type ManualKycStatus } from '@/lib/manualKycClient';
 
 const SIGNUP_KYC_STORAGE_KEY = 'mobile-v2-manual-kyc-prefill';
@@ -32,6 +32,19 @@ function CreateKycContent() {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState(searchParams.get('email') || '');
   const [error, setError] = useState<string | null>(null);
+
+  const loginRedirectPath = useMemo(() => {
+    const params = new URLSearchParams({ from: 'registration' });
+    if (email.trim()) params.set('email', email.trim().toLowerCase());
+    return `/mobile-v2/profile/kyc/create?${params.toString()}`;
+  }, [email]);
+
+  useEffect(() => {
+    if (!fromRegistration) return;
+    if (getSecureAccessTokenSync()) return;
+    const loginUrl = `/mobile-v2/auth/login?email=${encodeURIComponent(email)}&verified=1&next=${encodeURIComponent(loginRedirectPath)}`;
+    router.replace(loginUrl);
+  }, [email, fromRegistration, loginRedirectPath, router]);
 
   useEffect(() => {
     try {
@@ -62,7 +75,19 @@ function CreateKycContent() {
           setEmail(data.manualKyc.email || email);
         }
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load KYC status');
+        if (!cancelled) {
+          const message = err instanceof Error ? err.message : 'Could not load KYC status';
+          if (
+            fromRegistration &&
+            /token|authentication|unauthorized/i.test(message)
+          ) {
+            router.replace(
+              `/mobile-v2/auth/login?email=${encodeURIComponent(email)}&verified=1&next=${encodeURIComponent(loginRedirectPath)}`,
+            );
+            return;
+          }
+          setError(message);
+        }
       } finally {
         if (!cancelled) setLoadingStatus(false);
       }
@@ -71,7 +96,7 @@ function CreateKycContent() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [email, fromRegistration, loginRedirectPath, phone, router]);
 
   const validationError = useMemo(() => {
     if (onlyDigits(bvn).length !== 11) return 'BVN must be exactly 11 digits.';
@@ -81,11 +106,10 @@ function CreateKycContent() {
     return null;
   }, [bvn, nin, phone, email]);
 
-  const finishAndLogin = async () => {
+  const finishAfterKyc = async () => {
     if (fromRegistration) {
       sessionStorage.removeItem(SIGNUP_KYC_STORAGE_KEY);
-      await clearSecureTokens();
-      router.replace('/mobile-v2/auth/login');
+      router.replace('/mobile-v2/home');
       return;
     }
     router.replace('/mobile-v2/profile');
@@ -111,7 +135,7 @@ function CreateKycContent() {
       const nextStatus = await getManualKycStatus();
       setStatus(nextStatus);
       toast.success('KYC completed successfully.');
-      await finishAndLogin();
+      await finishAfterKyc();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'KYC submit failed';
       setError(message);
@@ -126,7 +150,10 @@ function CreateKycContent() {
   return (
     <div className="flex h-full flex-col bg-[#FAFAFA]">
       <div className="mb-6 flex items-center px-6 pt-12">
-        <Link href="/mobile-v2/profile" className="w-10 h-10 flex items-center justify-center -ml-2 text-gray-700">
+        <Link
+          href={fromRegistration ? '/mobile-v2/auth/login' : '/mobile-v2/profile'}
+          className="w-10 h-10 flex items-center justify-center -ml-2 text-gray-700"
+        >
           <ChevronLeft className="w-6 h-6" />
         </Link>
         <h1 className="mr-8 flex-1 text-center text-lg font-bold text-[#1E293B]">KYC</h1>
@@ -152,8 +179,8 @@ function CreateKycContent() {
             </div>
             <h3 className="text-lg font-bold text-[#1E293B]">KYC completed</h3>
             <p className="mt-2 text-sm text-gray-500">Your identity verification is complete.</p>
-            <Button className="mt-6 h-12 w-full rounded-xl bg-[var(--sf-button,#1E40AF)]" onClick={() => void finishAndLogin()}>
-              {fromRegistration ? 'Continue to Login' : 'Back to Profile'}
+            <Button className="mt-6 h-12 w-full rounded-xl bg-[var(--sf-button,#1E40AF)]" onClick={() => void finishAfterKyc()}>
+              {fromRegistration ? 'Continue to Home' : 'Back to Profile'}
             </Button>
           </div>
         ) : status?.enabled === false ? (
@@ -182,7 +209,7 @@ function CreateKycContent() {
             </div>
 
             <div className="rounded-xl bg-blue-50 px-3 py-3 text-xs leading-5 text-blue-900">
-              Email is verified from your signup OTP. Phone verification is confirmed for this manual fallback submission.
+              Sign in completed your email verification. Submit BVN and NIN to finish manual KYC.
             </div>
 
             <Button
