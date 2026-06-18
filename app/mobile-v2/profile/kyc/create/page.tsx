@@ -24,40 +24,41 @@ function CreateKycContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const fromRegistration = searchParams.get('from') === 'registration';
+  const initialEmail = searchParams.get('email')?.trim().toLowerCase() || '';
   const [status, setStatus] = useState<ManualKycStatus | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [bvn, setBvn] = useState('');
   const [nin, setNin] = useState('');
   const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState(searchParams.get('email') || '');
+  const [email, setEmail] = useState(initialEmail);
   const [error, setError] = useState<string | null>(null);
 
   const loginRedirectPath = useMemo(() => {
     const params = new URLSearchParams({ from: 'registration' });
-    if (email.trim()) params.set('email', email.trim().toLowerCase());
+    if (initialEmail) params.set('email', initialEmail);
     return `/mobile-v2/profile/kyc/create?${params.toString()}`;
-  }, [email]);
+  }, [initialEmail]);
 
   useEffect(() => {
     if (!fromRegistration) return;
     if (getSecureAccessTokenSync()) return;
-    const loginUrl = `/mobile-v2/auth/login?email=${encodeURIComponent(email)}&verified=1&next=${encodeURIComponent(loginRedirectPath)}`;
+    const loginUrl = `/mobile-v2/auth/login?email=${encodeURIComponent(initialEmail)}&verified=1&next=${encodeURIComponent(loginRedirectPath)}`;
     router.replace(loginUrl);
-  }, [email, fromRegistration, loginRedirectPath, router]);
+  }, [fromRegistration, initialEmail, loginRedirectPath, router]);
 
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem(SIGNUP_KYC_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as { email?: string; phone?: string };
-        if (!email && parsed.email) setEmail(parsed.email);
-        if (parsed.phone) setPhone(parsed.phone);
+        if (parsed.email) setEmail((current) => current || parsed.email || '');
+        if (parsed.phone) setPhone((current) => current || parsed.phone || '');
       }
     } catch {
       // Ignore invalid prefill data.
     }
-  }, [email]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,8 +72,8 @@ function CreateKycContent() {
         if (data.manualKyc) {
           setBvn(data.manualKyc.bvnNormalized || data.manualKyc.bvn || '');
           setNin(data.manualKyc.ninNormalized || data.manualKyc.nin || '');
-          setPhone(data.manualKyc.phone || phone);
-          setEmail(data.manualKyc.email || email);
+          setPhone((current) => current || data.manualKyc?.phone || '');
+          setEmail((current) => current || data.manualKyc?.email || '');
         }
       } catch (err) {
         if (!cancelled) {
@@ -82,7 +83,7 @@ function CreateKycContent() {
             /token|authentication|unauthorized/i.test(message)
           ) {
             router.replace(
-              `/mobile-v2/auth/login?email=${encodeURIComponent(email)}&verified=1&next=${encodeURIComponent(loginRedirectPath)}`,
+              `/mobile-v2/auth/login?email=${encodeURIComponent(initialEmail)}&verified=1&next=${encodeURIComponent(loginRedirectPath)}`,
             );
             return;
           }
@@ -96,7 +97,7 @@ function CreateKycContent() {
     return () => {
       cancelled = true;
     };
-  }, [email, fromRegistration, loginRedirectPath, phone, router]);
+  }, [fromRegistration, initialEmail, loginRedirectPath, router]);
 
   const validationError = useMemo(() => {
     if (onlyDigits(bvn).length !== 11) return 'BVN must be exactly 11 digits.';

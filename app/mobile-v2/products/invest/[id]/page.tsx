@@ -176,6 +176,8 @@ export default function InvestDetailPage() {
                 successTitle="Investment Started"
                 successMessage="Your investment has been created successfully."
                 failureMessage="Your central wallet balance is not sufficient for this investment amount. Please fund your wallet and try again."
+                amountMin={product.amountMin}
+                amountMax={product.amountMax}
             />
         </div>
     );

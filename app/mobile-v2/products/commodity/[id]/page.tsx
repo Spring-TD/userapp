@@ -13,6 +13,11 @@ import {
   type CommodityCatalogProduct,
 } from '@/lib/commodityCatalog'
 import { buyCommodity } from '@/lib/storefrontApplicationClient'
+import {
+  formatApplicationAmountHint,
+  parseApplicationAmount,
+  validateApplicationAmount,
+} from '@/lib/applicationAmount'
 
 function formatNgn(amount?: number | null) {
   if (amount == null || Number.isNaN(amount)) return 'NGN—'
@@ -92,6 +97,7 @@ export default function CommodityDetailPage() {
   }, [detailProduct, productId])
 
   const [quantity, setQuantity] = useState(1)
+  const [purchaseAmount, setPurchaseAmount] = useState('')
   const [sheet, setSheet] = useState<'details' | 'account' | null>(null)
   const [step, setStep] = useState<'details' | 'pin' | 'success'>('details')
   const [pin, setPin] = useState<string[]>(['', '', '', ''])
@@ -134,6 +140,21 @@ export default function CommodityDetailPage() {
       </div>
     )
   }
+
+  const unitPrice = product.price || product.total || 1
+  const parsedPurchaseAmount = parseApplicationAmount(purchaseAmount)
+  const purchaseTotal = parsedPurchaseAmount ?? unitPrice * quantity
+  const purchaseAmountError =
+    parsedPurchaseAmount != null
+      ? validateApplicationAmount(parsedPurchaseAmount, product.amountMin, product.amountMax) ||
+        (parsedPurchaseAmount < product.minPurchase
+          ? `Amount must be at least ${formatNaira(product.minPurchase)}`
+          : null)
+      : purchaseAmount.trim()
+        ? 'Enter a valid purchase amount.'
+        : purchaseTotal < product.minPurchase
+          ? `Amount must be at least ${formatNaira(product.minPurchase)}`
+          : null
 
   if (step === 'success') {
     return (
@@ -188,7 +209,7 @@ export default function CommodityDetailPage() {
               setProcessing(true)
               setPurchaseError(null)
               try {
-                const result = await buyCommodity(product.id, quantity, product.total || product.price || 1)
+                const result = await buyCommodity(product.id, quantity, purchaseTotal)
                 if (!result.ok) {
                   setPurchaseError(result.error)
                   return
@@ -276,6 +297,26 @@ export default function CommodityDetailPage() {
 
           <div className="mt-10 space-y-8">
             <InfoRow label="Min purchase" value={formatNaira(product.minPurchase)} />
+            <div className="space-y-2">
+              <p className="text-sm text-gray-500">Purchase amount</p>
+              <input
+                value={purchaseAmount}
+                onChange={(event) => setPurchaseAmount(event.target.value)}
+                placeholder="Enter amount to purchase"
+                inputMode="numeric"
+                className="h-12 w-full rounded-2xl bg-gray-100 px-4 text-sm text-[var(--sf-ink,#1E293B)] outline-none ring-[var(--sf-button,#1E40AF)]/20 placeholder:text-gray-400 focus:ring-2"
+              />
+              <p className="text-[11px] text-gray-500">
+                {formatApplicationAmountHint(product.amountMin, product.amountMax)}
+              </p>
+              {purchaseAmountError ? (
+                <p className="text-xs text-red-600">{purchaseAmountError}</p>
+              ) : (
+                <p className="text-[11px] text-gray-500">
+                  Leave blank to use unit price x quantity ({formatNaira(unitPrice * quantity)}).
+                </p>
+              )}
+            </div>
             <InfoRow
               label="Buy more"
               value={
@@ -317,12 +358,13 @@ export default function CommodityDetailPage() {
               }
             />
             <InfoRow label="Powered by:" value={providerName} />
-            <InfoRow label="Total" value={formatNaira(product.total)} />
+            <InfoRow label="Total" value={formatNaira(purchaseTotal)} />
           </div>
 
           <Button
             onClick={() => setSheet('details')}
-            className="mt-8 h-14 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-base font-semibold text-white"
+            disabled={Boolean(purchaseAmountError)}
+            className="mt-8 h-14 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-base font-semibold text-white disabled:opacity-50"
           >
             Purchase
           </Button>
@@ -336,6 +378,7 @@ export default function CommodityDetailPage() {
           </h2>
           <div className="space-y-7">
             <InfoRow label="Min purchase" value={formatNaira(product.minPurchase)} />
+            <InfoRow label="Purchase amount" value={formatNaira(purchaseTotal)} />
             <InfoRow label="Unit" value={quantity} />
             <InfoRow label="R.O.I" value={product.roi} />
             <InfoRow label="Start Date" value={product.startDate} />

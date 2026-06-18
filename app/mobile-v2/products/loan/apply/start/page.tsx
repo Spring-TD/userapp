@@ -11,6 +11,12 @@ import { getProductApplicationInitStatus, initializeProductApplication } from '@
 import { loanAccountSuccessHref, loanApplyHref } from '@/lib/loanApplyRoutes'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 import { resolveWalletUserId } from '@/lib/resolveWalletUserId'
+import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
+import {
+  formatApplicationAmountHint,
+  parseApplicationAmount,
+  validateApplicationAmount,
+} from '@/lib/applicationAmount'
 
 function LoanApplyStartInner() {
   const router = useRouter()
@@ -20,11 +26,23 @@ function LoanApplyStartInner() {
   const productId = sanitizeProductId(rawProductId)
   const providerName = displayName || tenantSubdomain || 'Provider'
   const [error, setError] = useState<string | null>(null)
-  const [termsAccepted, setTermsAccepted] = useState(true)
-  const [privacyAccepted, setPrivacyAccepted] = useState(true)
+  const [termsAccepted, setTermsAccepted] = useState(false)
+  const [privacyAccepted, setPrivacyAccepted] = useState(false)
+  const [applicationAmount, setApplicationAmount] = useState('')
   const [processing, setProcessing] = useState(false)
   const [checkingExisting, setCheckingExisting] = useState(true)
   const [hasInitializedAccount, setHasInitializedAccount] = useState(false)
+  const { product } = useMobileProductDetail({
+    productId,
+    enabled: Boolean(productId),
+  })
+  const parsedAmount = parseApplicationAmount(applicationAmount)
+  const amountValidationError =
+    parsedAmount != null
+      ? validateApplicationAmount(parsedAmount, product?.amountMin, product?.amountMax)
+      : applicationAmount.trim()
+        ? 'Enter a valid loan amount.'
+        : null
 
   useEffect(() => {
     if (!rawProductId || rawProductId === productId) return
@@ -80,10 +98,20 @@ function LoanApplyStartInner() {
       return
     }
 
+    if (!parsedAmount) {
+      setError('Enter the loan amount you want to apply for.')
+      return
+    }
+
+    if (amountValidationError) {
+      setError(amountValidationError)
+      return
+    }
+
     setProcessing(true)
     setError(null)
     try {
-      const result = await initializeProductApplication(productId, { productType: 'LOAN' })
+      const result = await initializeProductApplication(productId, { productType: 'LOAN', amount: parsedAmount })
       if (!result.ok) {
         setError(result.error || 'Could not set up your loan account.')
         return
@@ -164,13 +192,35 @@ function LoanApplyStartInner() {
             </span>
           </div>
 
+          {!hasInitializedAccount ? (
+            <div className="mt-5 space-y-2 text-left">
+              <label className="block text-xs font-semibold text-gray-700">Loan amount</label>
+              <input
+                value={applicationAmount}
+                onChange={(event) => setApplicationAmount(event.target.value)}
+                placeholder="Amount to borrow"
+                inputMode="numeric"
+                className="h-12 w-full rounded-2xl bg-gray-100 px-4 text-sm text-[#1E293B] outline-none ring-[var(--sf-button,#1E40AF)]/20 placeholder:text-gray-400 focus:ring-2"
+              />
+              <p className="text-[11px] text-gray-500">
+                {formatApplicationAmountHint(product?.amountMin, product?.amountMax)}
+              </p>
+            </div>
+          ) : null}
+
           <div className="mt-5 space-y-3 text-left text-xs text-gray-700">
             <button
               type="button"
               onClick={() => setTermsAccepted((v) => !v)}
               className="flex items-center gap-2"
             >
-              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-black text-white">
+              <span
+                className={`flex h-4 w-4 items-center justify-center rounded-full border ${
+                  termsAccepted
+                    ? 'border-[var(--sf-button,#1E40AF)] bg-[var(--sf-button,#1E40AF)] text-white'
+                    : 'border-gray-400 bg-white'
+                }`}
+              >
                 {termsAccepted ? <Check className="h-3 w-3" /> : null}
               </span>
               Accept Terms & Condition, Data Sharing with {providerName}
@@ -180,18 +230,30 @@ function LoanApplyStartInner() {
               onClick={() => setPrivacyAccepted((v) => !v)}
               className="flex items-center gap-2"
             >
-              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-black text-white">
+              <span
+                className={`flex h-4 w-4 items-center justify-center rounded-full border ${
+                  privacyAccepted
+                    ? 'border-[var(--sf-button,#1E40AF)] bg-[var(--sf-button,#1E40AF)] text-white'
+                    : 'border-gray-400 bg-white'
+                }`}
+              >
                 {privacyAccepted ? <Check className="h-3 w-3" /> : null}
               </span>
               Accept Data Privacy & Use of Data
             </button>
           </div>
 
-          {error ? <p className="mt-4 text-center text-xs text-red-600">{error}</p> : null}
+          {error || amountValidationError ? (
+            <p className="mt-4 text-center text-xs text-red-600">{error || amountValidationError}</p>
+          ) : null}
 
           <Button
             type="button"
-            disabled={(!hasInitializedAccount && (!termsAccepted || !privacyAccepted)) || processing}
+            disabled={
+              (!hasInitializedAccount &&
+                (!termsAccepted || !privacyAccepted || !parsedAmount || Boolean(amountValidationError))) ||
+              processing
+            }
             className="mt-8 h-12 w-full rounded-full bg-[var(--sf-button,#1E40AF)] font-semibold text-white disabled:opacity-50"
             onClick={handleAccept}
           >

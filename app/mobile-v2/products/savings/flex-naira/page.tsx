@@ -165,6 +165,8 @@ export default function FlexNairaPage() {
                 successTitle="Savings Started"
                 successMessage="Your savings plan has been created successfully."
                 failureMessage="Your central wallet balance is not sufficient for this savings amount. Please fund your wallet and try again."
+                amountMin={product.amountMin}
+                amountMax={product.amountMax}
             />
         </div>
     );

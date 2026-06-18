@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { useSearchParams } from 'next/navigation'
 import {
   Check,
+  CheckCircle,
   ChevronDown,
   ChevronLeft,
   Copy,
@@ -30,6 +31,13 @@ import {
   type StorefrontApplication,
 } from '@/lib/storefrontApplicationClient'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
+import {
+  defaultApplicationAmountValue,
+  formatApplicationAmountHint,
+  parseApplicationAmount,
+  validateApplicationAmount,
+} from '@/lib/applicationAmount'
+import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
 
 type ProductKind = 'loan' | 'mortgage'
 type StepId = 'requirement' | 'file' | 'property' | 'product'
@@ -52,6 +60,7 @@ type ApplicationDraft = {
   version: 1
   activeStep: StepId
   accepted: boolean
+  applicationAmount: string
   requirementSubmissions: RequirementSubmission[]
   guarantors: Guarantor[]
   employmentDraft: EmploymentDraft
@@ -171,17 +180,20 @@ function InputPill({
   value,
   onChange,
   type = 'text',
+  inputMode,
 }: {
   placeholder: string
   right?: React.ReactNode
   value?: string
   onChange?: (value: string) => void
   type?: React.HTMLInputTypeAttribute
+  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode']
 }) {
   return (
     <label className="flex h-12 items-center justify-between rounded-2xl bg-gray-100 px-4 ring-[var(--sf-button,#1E40AF)]/20 focus-within:ring-2">
       <input
         type={type}
+        inputMode={inputMode}
         value={value}
         onChange={(e) => onChange?.(e.target.value)}
         placeholder={placeholder}
@@ -567,6 +579,7 @@ function ProductSummary({
   withTerms,
   accepted,
   onToggleAccepted,
+  applicationAmount,
 }: {
   kind: ProductKind
   application?: StorefrontApplication | null
@@ -574,10 +587,12 @@ function ProductSummary({
   withTerms: boolean
   accepted: boolean
   onToggleAccepted: () => void
+  applicationAmount?: number | null
 }) {
   const account = getApplicationAccount(application)
   const productName = application?.productName || `${prettyKind(kind)} application`
-  const amount = formatCurrency(application?.amount, application?.currency || 'NGN')
+  const resolvedAmount = applicationAmount ?? application?.amount
+  const amount = formatCurrency(resolvedAmount, application?.currency || 'NGN')
   const summaryRows = [
     ['Application status', application?.status || 'Initialized'],
     ['Product type', application?.productType || prettyKind(kind).toUpperCase()],
@@ -654,11 +669,17 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
   )
   const [activeStep, setActiveStep] = useState<StepId>('requirement')
   const [accepted, setAccepted] = useState(false)
-  const [sheet, setSheet] = useState<'create_account' | 'guarantor_form' | 'guarantor_added' | 'success' | null>(null)
+  const [sheet, setSheet] = useState<
+    'create_account' | 'guarantor_form' | 'guarantor_generating' | 'guarantor_success' | 'guarantor_added' | 'success' | null
+  >(null)
+  const [guarantorSubmitError, setGuarantorSubmitError] = useState<string | null>(null)
+  const [lastAddedGuarantor, setLastAddedGuarantor] = useState<Guarantor | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [creatingAccount, setCreatingAccount] = useState(false)
   const [createAccountError, setCreateAccountError] = useState<string | null>(null)
+  const [createAccountTermsAccepted, setCreateAccountTermsAccepted] = useState(false)
+  const [createAccountPrivacyAccepted, setCreateAccountPrivacyAccepted] = useState(false)
   const [draftHydrated, setDraftHydrated] = useState(false)
   const [draftNotice, setDraftNotice] = useState<string | null>(null)
   const [requirementSubmissions, setRequirementSubmissions] = useState<RequirementSubmission[]>([])
@@ -674,8 +695,13 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     phone: '',
     email: '',
   })
+  const [applicationAmount, setApplicationAmount] = useState('')
+  const [applicationRevision, setApplicationRevision] = useState(0)
   const productName = prettyKind(kind)
-  const initializedApplication = readInitializedApplication()
+  const initializedApplication = useMemo(() => {
+    void applicationRevision
+    return readInitializedApplication()
+  }, [applicationRevision])
   const providerName = applicationProvider(initializedApplication)
   const productId = sanitizeProductId(productIdProp || searchParams.get('productId') || initializedApplication?.productId || '')
   const applicationId = searchParams.get('applicationId') || initializedApplication?.id || initializedApplication?._id || ''
@@ -687,6 +713,21 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
   const requiresGuarantor = requirements?.security?.guarantor === true
   const applicationProgress = initializedApplication?.applicationProgress
   const applicationProgressKey = applicationProgress ? JSON.stringify(applicationProgress) : ''
+  const { product: catalogProduct } = useMobileProductDetail({
+    productId,
+    enabled: Boolean(productId),
+  })
+  const parsedApplicationAmount = parseApplicationAmount(applicationAmount)
+  const amountValidationError =
+    parsedApplicationAmount != null
+      ? validateApplicationAmount(
+          parsedApplicationAmount,
+          catalogProduct?.amountMin,
+          catalogProduct?.amountMax,
+        )
+      : applicationAmount.trim()
+        ? 'Enter a valid application amount.'
+        : null
 
   const goBackHref = kind === 'loan' ? '/mobile-v2/products/loan' : '/mobile-v2/products/mortgage'
   const activeIndex = steps.indexOf(activeStep)
@@ -724,6 +765,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       if (draft) {
         setActiveStep(steps.includes(draft.activeStep) ? draft.activeStep : 'requirement')
         setAccepted(Boolean(draft.accepted))
+        setApplicationAmount(draft.applicationAmount || '')
         setRequirementSubmissions(Array.isArray(draft.requirementSubmissions) ? draft.requirementSubmissions : [])
         setGuarantors(Array.isArray(draft.guarantors) ? draft.guarantors : [])
         setEmploymentDraft({
@@ -744,10 +786,21 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     setDraftHydrated(true)
   }, [draftHydrated, currentDraftKey, steps, applicationProgressKey])
 
+  useEffect(() => {
+    if (!draftHydrated || applicationAmount.trim()) return
+    setApplicationAmount(
+      defaultApplicationAmountValue(
+        initializedApplication?.amount,
+        catalogProduct?.amountMin,
+      ),
+    )
+  }, [draftHydrated, initializedApplication?.amount, catalogProduct?.amountMin, applicationAmount])
+
   const persistDraft = async (notice: string | null = 'Progress saved.') => {
     saveApplicationDraft(currentDraftKey, {
       activeStep,
       accepted,
+      applicationAmount,
       requirementSubmissions,
       guarantors,
       employmentDraft,
@@ -777,7 +830,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       void persistDraft(null)
     }, 800)
     return () => window.clearTimeout(timer)
-  }, [draftHydrated, currentDraftKey, activeStep, accepted, requirementSubmissions, guarantors, employmentDraft, guarantorDraft])
+  }, [draftHydrated, currentDraftKey, activeStep, accepted, applicationAmount, requirementSubmissions, guarantors, employmentDraft, guarantorDraft])
 
   const handleStepChange = (step: StepId) => {
     void persistDraft(null)
@@ -792,6 +845,45 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     })
   }
 
+  const syncApplicationAmount = async (): Promise<boolean> => {
+    if (!productId) {
+      setError('No product selected.')
+      return false
+    }
+
+    const parsed = parseApplicationAmount(applicationAmount)
+    if (!parsed) {
+      setError('Enter the amount you want to apply for.')
+      return false
+    }
+
+    const validationError = validateApplicationAmount(
+      parsed,
+      catalogProduct?.amountMin,
+      catalogProduct?.amountMax,
+    )
+    if (validationError) {
+      setError(validationError)
+      return false
+    }
+
+    if (initializedApplication?.amount === parsed && applicationId) {
+      return true
+    }
+
+    const result = await initializeProductApplication(productId, {
+      productType: kind === 'loan' ? 'LOAN' : 'MORTGAGE',
+      amount: parsed,
+    })
+    if (!result.ok) {
+      setError(result.error || 'Could not save your application amount.')
+      return false
+    }
+
+    setApplicationRevision((value) => value + 1)
+    return true
+  }
+
   const handleFinalSubmit = async () => {
     if (!applicationId || !userId) {
       setError('Application was not initialized. Please go back and create the account again.')
@@ -800,6 +892,13 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
 
     if (requiresGuarantor && guarantors.length === 0) {
       setError('Please add at least one guarantor before submitting.')
+      setActiveStep('requirement')
+      return
+    }
+
+    const parsed = parseApplicationAmount(applicationAmount)
+    if (!parsed) {
+      setError('Enter the amount you want to apply for.')
       setActiveStep('requirement')
       return
     }
@@ -826,7 +925,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
                 propertyName: 'Mortgage property',
                 propertyType: 'Mortgage',
                 quantity: 1,
-                total: 0,
+                total: parsed,
               },
             }
           : {}),
@@ -849,8 +948,91 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       void handleFinalSubmit()
       return
     }
+    if (activeStep === 'requirement') {
+      void (async () => {
+        setError(null)
+        const synced = await syncApplicationAmount()
+        if (!synced) return
+        void persistDraft(null)
+        setActiveStep(steps[Math.min(activeIndex + 1, steps.length - 1)])
+      })()
+      return
+    }
     void persistDraft(null)
     setActiveStep(steps[Math.min(activeIndex + 1, steps.length - 1)])
+  }
+
+  const closeCreateAccountSheet = () => {
+    setCreateAccountTermsAccepted(false)
+    setCreateAccountPrivacyAccepted(false)
+    setCreateAccountError(null)
+    setSheet(null)
+  }
+
+  const handleGenerateGuarantorKyc = async () => {
+    if (!applicationId || !userId) {
+      setError('Application was not initialized. Please go back and create the account again.')
+      setSheet(null)
+      return
+    }
+
+    const fullName = guarantorDraft.name.trim()
+    const email = guarantorDraft.email.trim()
+    const phone = guarantorDraft.phone.trim()
+
+    if (!fullName || !email || !phone) {
+      setGuarantorSubmitError('Please enter the guarantor full name, email, and phone.')
+      return
+    }
+
+    setGuarantorSubmitError(null)
+    setSheet('guarantor_generating')
+    const generatingStartedAt = Date.now()
+
+    try {
+      const result = await addApplicationGuarantor(applicationId, {
+        userId,
+        fullName,
+        email,
+        phone,
+        occupation: 'Not specified',
+        relationship: 'Not specified',
+        country: 'NG',
+      })
+
+      if (!result.ok) {
+        setGuarantorSubmitError(result.error)
+        setSheet('guarantor_form')
+        return
+      }
+
+      const addedGuarantor: Guarantor = {
+        name: result.data?.guarantor?.fullName || fullName,
+        phone: result.data?.guarantor?.phone || phone,
+        email: result.data?.guarantor?.email || email,
+        verificationUrl: result.data?.guarantor?.kyc?.verificationUrl,
+      }
+
+      setGuarantors([addedGuarantor])
+      setLastAddedGuarantor(addedGuarantor)
+
+      const minimumGeneratingMs = 1200
+      const elapsed = Date.now() - generatingStartedAt
+      if (elapsed < minimumGeneratingMs) {
+        await new Promise((resolve) => window.setTimeout(resolve, minimumGeneratingMs - elapsed))
+      }
+
+      setSheet('guarantor_success')
+    } catch {
+      setGuarantorSubmitError('Could not generate the KYC link. Please try again.')
+      setSheet('guarantor_form')
+    }
+  }
+
+  const closeGuarantorSuccess = () => {
+    setSheet(null)
+    setGuarantorSubmitError(null)
+    setGuarantorDraft({ name: '', phone: '', email: '' })
   }
 
   const handleCreateAccount = async () => {
@@ -859,16 +1041,39 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       return
     }
 
+    if (!createAccountTermsAccepted || !createAccountPrivacyAccepted) {
+      setCreateAccountError('Please accept the terms and privacy policy to continue.')
+      return
+    }
+
+    const parsed = parseApplicationAmount(applicationAmount)
+    if (!parsed) {
+      setCreateAccountError('Enter the amount you want to apply for.')
+      return
+    }
+
+    const validationError = validateApplicationAmount(
+      parsed,
+      catalogProduct?.amountMin,
+      catalogProduct?.amountMax,
+    )
+    if (validationError) {
+      setCreateAccountError(validationError)
+      return
+    }
+
     setCreatingAccount(true)
     setCreateAccountError(null)
     try {
       const result = await initializeProductApplication(productId, {
         productType: kind === 'loan' ? 'LOAN' : 'MORTGAGE',
+        amount: parsed,
       })
       if (!result.ok) {
         setCreateAccountError(result.error || `Could not create your ${productName.toLowerCase()} account.`)
         return
       }
+      setApplicationRevision((value) => value + 1)
       setActiveStep('requirement')
       setSheet(null)
     } finally {
@@ -901,6 +1106,23 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         <div className="pt-8">
           {activeStep === 'requirement' && (
             <div className="space-y-6">
+              <SectionTitle>{kind === 'loan' ? 'Loan amount' : 'Mortgage amount'}</SectionTitle>
+              <div className="space-y-2">
+                <InputPill
+                  placeholder={kind === 'loan' ? 'Amount to borrow' : 'Amount to apply for'}
+                  value={applicationAmount}
+                  onChange={setApplicationAmount}
+                  type="text"
+                  inputMode="numeric"
+                />
+                <p className="text-[11px] text-gray-500">
+                  {formatApplicationAmountHint(catalogProduct?.amountMin, catalogProduct?.amountMax)}
+                </p>
+                {amountValidationError ? (
+                  <p className="text-xs text-red-600">{amountValidationError}</p>
+                ) : null}
+              </div>
+
               <SectionTitle>Occupation</SectionTitle>
               <div className="space-y-3">
                 <InputPill
@@ -952,7 +1174,10 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
                 ) : null}
                 <button
                   type="button"
-                  onClick={() => setSheet(guarantors.length > 0 ? 'guarantor_added' : 'guarantor_form')}
+                  onClick={() => {
+                    setGuarantorSubmitError(null)
+                    setSheet(guarantors.length > 0 ? 'guarantor_added' : 'guarantor_form')
+                  }}
                   className={`inline-flex items-center gap-1 rounded-xl bg-gray-100 px-3 py-2 text-sm font-bold ${BRAND_INK}`}
                 >
                   <Plus className="h-3 w-3" /> Add a Guarantor
@@ -1027,6 +1252,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
               withTerms={false}
               accepted={accepted}
               onToggleAccepted={() => setAccepted((v) => !v)}
+              applicationAmount={parsedApplicationAmount}
             />
           )}
 
@@ -1038,6 +1264,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
               withTerms
               accepted={accepted}
               onToggleAccepted={() => setAccepted((v) => !v)}
+              applicationAmount={parsedApplicationAmount}
             />
           )}
         </div>
@@ -1056,7 +1283,11 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         </Button>
         <Button
           type="button"
-          disabled={(activeStep === 'product' && !accepted) || submitting}
+          disabled={
+            (activeStep === 'requirement' && (!parsedApplicationAmount || Boolean(amountValidationError))) ||
+            (activeStep === 'product' && !accepted) ||
+            submitting
+          }
           className={cn('h-10 rounded-full w-1/2 text-sm font-semibold disabled:opacity-50', PRIMARY)}
           onClick={goNext}
         >
@@ -1071,7 +1302,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       </div>
 
       {sheet === 'create_account' && (
-        <BottomSheet onClose={() => setSheet(null)}>
+        <BottomSheet onClose={closeCreateAccountSheet}>
           <div className="text-center">
             <h2 className={`text-xl font-bold ${BRAND_INK}`}>Create a {productName} Account</h2>
             <p className="mx-auto mt-4 max-w-xs text-xs leading-relaxed text-gray-500">
@@ -1092,15 +1323,49 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
                 Bank of Nigeria
               </span>
             </div>
+            <div className="mt-5 space-y-2 text-left">
+              <InputPill
+                placeholder={kind === 'loan' ? 'Amount to borrow' : 'Amount to apply for'}
+                value={applicationAmount}
+                onChange={setApplicationAmount}
+                inputMode="numeric"
+              />
+              <p className="text-[11px] text-gray-500">
+                {formatApplicationAmountHint(catalogProduct?.amountMin, catalogProduct?.amountMax)}
+              </p>
+            </div>
             <div className="mt-5 space-y-3 text-left text-xs text-gray-700">
-              <label className="flex items-center gap-2">
-                <Check className="h-4 w-4 rounded-full bg-[var(--sf-button,#1E40AF)] p-0.5 text-white" />
-                Accept Terms & Condition, Data Sharing with (Provider)
-              </label>
-              <label className="flex items-center gap-2">
-                <Check className="h-4 w-4 rounded-full bg-[var(--sf-button,#1E40AF)] p-0.5 text-white" />
-                Accept Data Privacy & Use of Data
-              </label>
+              {[
+                {
+                  checked: createAccountTermsAccepted,
+                  onClick: () => setCreateAccountTermsAccepted((value) => !value),
+                  label: `Accept Terms & Condition, Data Sharing with ${providerName}`,
+                },
+                {
+                  checked: createAccountPrivacyAccepted,
+                  onClick: () => setCreateAccountPrivacyAccepted((value) => !value),
+                  label: 'Accept Data Privacy & Use of Data',
+                },
+              ].map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={item.onClick}
+                  className="flex items-center gap-2"
+                >
+                  <span
+                    className={cn(
+                      'flex h-4 w-4 items-center justify-center rounded-full border',
+                      item.checked
+                        ? 'border-[var(--sf-button,#1E40AF)] bg-[var(--sf-button,#1E40AF)] text-white'
+                        : 'border-gray-400 bg-white',
+                    )}
+                  >
+                    {item.checked ? <Check className="h-3 w-3" /> : null}
+                  </span>
+                  <span>{item.label}</span>
+                </button>
+              ))}
             </div>
             {createAccountError ? (
               <p className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-center text-xs text-red-600">
@@ -1109,8 +1374,14 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
             ) : null}
             <Button
               type="button"
-              disabled={creatingAccount}
-              className={cn('mt-8 h-12 w-full rounded-full font-semibold', PRIMARY)}
+              disabled={
+                creatingAccount ||
+                !createAccountTermsAccepted ||
+                !createAccountPrivacyAccepted ||
+                !parsedApplicationAmount ||
+                Boolean(amountValidationError)
+              }
+              className={cn('mt-8 h-12 w-full rounded-full font-semibold disabled:opacity-50', PRIMARY)}
               onClick={() => void handleCreateAccount()}
             >
               {creatingAccount ? (
@@ -1122,7 +1393,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
                 'Go ahead, Create Bank account'
               )}
             </Button>
-            <button type="button" className={`mt-5 text-sm font-medium ${BRAND_INK}`} onClick={() => setSheet(null)}>
+            <button type="button" className={`mt-5 text-sm font-medium ${BRAND_INK}`} onClick={closeCreateAccountSheet}>
               No. Go back
             </button>
           </div>
@@ -1153,48 +1424,69 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
             <InputPill placeholder="Occupation" />
             <InputPill placeholder="Relationship with Guarantor" right={<ChevronDown className="h-4 w-4 text-gray-400" />} />
           </div>
+          {guarantorSubmitError ? (
+            <p className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-center text-xs text-red-600">{guarantorSubmitError}</p>
+          ) : null}
           <Button
             type="button"
             className={cn('mt-6 h-12 w-full rounded-full font-semibold', PRIMARY)}
-            onClick={async () => {
-              if (!applicationId || !userId) {
-                setError('Application was not initialized. Please go back and create the account again.')
-                setSheet(null)
-                return
-              }
-              const fullName = guarantorDraft.name.trim() || DEFAULT_GUARANTOR.name
-              const email = guarantorDraft.email.trim() || DEFAULT_GUARANTOR.email
-              const phone = guarantorDraft.phone.trim() || DEFAULT_GUARANTOR.phone
-              const result = await addApplicationGuarantor(applicationId, {
-                userId,
-                fullName,
-                email,
-                phone,
-                occupation: 'Not specified',
-                relationship: 'Not specified',
-                country: 'NG',
-              })
-              if (!result.ok) {
-                setError(result.error)
-                setSheet(null)
-                return
-              }
-              setGuarantors([
-                {
-                  name: result.data?.guarantor?.fullName || fullName,
-                  phone: result.data?.guarantor?.phone || phone,
-                  email: result.data?.guarantor?.email || email,
-                  verificationUrl: result.data?.guarantor?.kyc?.verificationUrl,
-                },
-              ])
-              setSheet('guarantor_added')
-            }}
+            onClick={() => void handleGenerateGuarantorKyc()}
           >
             Generate KYC link for Guarantor 1
           </Button>
           <button type="button" className={`mt-5 w-full text-center text-sm font-medium ${BRAND_INK}`} onClick={() => setSheet(null)}>
             No. Go back
           </button>
+        </BottomSheet>
+      )}
+
+      {sheet === 'guarantor_generating' && (
+        <BottomSheet onClose={() => undefined}>
+          <div className="flex flex-col items-center py-6 text-center">
+            <div className={`mb-6 flex h-20 w-20 items-center justify-center rounded-full ${BRAND_SOFT}`}>
+              <Loader2 className="h-10 w-10 animate-spin text-[var(--sf-button,#1E40AF)]" />
+            </div>
+            <h2 className={`text-xl font-bold ${BRAND_INK}`}>Generating KYC link</h2>
+            <p className="mx-auto mt-3 max-w-xs text-sm leading-relaxed text-gray-500">
+              Please wait while we generate a secure KYC verification link for your guarantor.
+            </p>
+          </div>
+        </BottomSheet>
+      )}
+
+      {sheet === 'guarantor_success' && (
+        <BottomSheet onClose={closeGuarantorSuccess}>
+          <div className="flex flex-col items-center py-4 text-center">
+            <div className={`mb-6 flex h-20 w-20 items-center justify-center rounded-full ${BRAND_SOFT}`}>
+              <CheckCircle className="h-10 w-10 text-[var(--sf-button,#1E40AF)]" />
+            </div>
+            <h2 className={`text-xl font-bold ${BRAND_INK}`}>KYC link generated</h2>
+            <p className="mx-auto mt-3 max-w-xs text-sm leading-relaxed text-gray-500">
+              The KYC verification link for{' '}
+              <strong>{lastAddedGuarantor?.name || 'your guarantor'}</strong> has been generated successfully.
+            </p>
+            <p className={`mx-auto mt-4 max-w-xs rounded-xl p-4 text-xs leading-relaxed ${BRAND_SOFT} ${BRAND_INK}`}>
+              An email has been sent to <strong>{lastAddedGuarantor?.email || 'the guarantor'}</strong> with
+              instructions to complete their KYC verification.
+            </p>
+            {lastAddedGuarantor?.verificationUrl ? (
+              <button
+                type="button"
+                onClick={() => void navigator.clipboard?.writeText(lastAddedGuarantor.verificationUrl || '')}
+                className={`mt-5 inline-flex items-center gap-1 text-xs font-bold ${BRAND_INK}`}
+              >
+                <Copy className="h-3 w-3" />
+                Copy KYC URL
+              </button>
+            ) : null}
+            <Button
+              type="button"
+              className={cn('mt-8 h-12 w-full rounded-full font-semibold', PRIMARY)}
+              onClick={closeGuarantorSuccess}
+            >
+              Back to application
+            </Button>
+          </div>
         </BottomSheet>
       )}
 
@@ -1227,7 +1519,15 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
               <Check className="h-3 w-3" />
             </span>
           </div>
-          <button type="button" className={`mt-5 text-sm font-bold ${BRAND_INK}`} onClick={() => setSheet('guarantor_form')}>
+          <button
+            type="button"
+            className={`mt-5 text-sm font-bold ${BRAND_INK}`}
+            onClick={() => {
+              setGuarantorSubmitError(null)
+              setGuarantorDraft({ name: '', phone: '', email: '' })
+              setSheet('guarantor_form')
+            }}
+          >
             + Add Another Guarantor
           </button>
           <Button
