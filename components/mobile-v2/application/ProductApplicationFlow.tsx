@@ -786,16 +786,6 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     setDraftHydrated(true)
   }, [draftHydrated, currentDraftKey, steps, applicationProgressKey])
 
-  useEffect(() => {
-    if (!draftHydrated || applicationAmount.trim()) return
-    setApplicationAmount(
-      defaultApplicationAmountValue(
-        initializedApplication?.amount,
-        catalogProduct?.amountMin,
-      ),
-    )
-  }, [draftHydrated, initializedApplication?.amount, catalogProduct?.amountMin, applicationAmount])
-
   const persistDraft = async (notice: string | null = 'Progress saved.') => {
     saveApplicationDraft(currentDraftKey, {
       activeStep,
@@ -1111,8 +1101,8 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
                 <InputPill
                   placeholder={kind === 'loan' ? 'Amount to borrow' : 'Amount to apply for'}
                   value={applicationAmount}
-                  onChange={setApplicationAmount}
-                  type="text"
+                  onChange={(value) => setApplicationAmount(value)}
+                  type="number"
                   inputMode="numeric"
                 />
                 <p className="text-[11px] text-gray-500">
@@ -1322,17 +1312,6 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
                 <strong>{providerName}</strong> is a licensed Financial Institution by the Central
                 Bank of Nigeria
               </span>
-            </div>
-            <div className="mt-5 space-y-2 text-left">
-              <InputPill
-                placeholder={kind === 'loan' ? 'Amount to borrow' : 'Amount to apply for'}
-                value={applicationAmount}
-                onChange={setApplicationAmount}
-                inputMode="numeric"
-              />
-              <p className="text-[11px] text-gray-500">
-                {formatApplicationAmountHint(catalogProduct?.amountMin, catalogProduct?.amountMax)}
-              </p>
             </div>
             <div className="mt-5 space-y-3 text-left text-xs text-gray-700">
               {[
