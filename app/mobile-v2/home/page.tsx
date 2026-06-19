@@ -3,7 +3,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-    Bell,
     ChevronRight,
     Home,
     User,
@@ -34,6 +33,7 @@ import { HomeStorefrontProducts } from '@/components/mobile-v2/HomeStorefrontPro
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
 import { useMobileProducts } from '@/hooks/useMobileProducts';
 import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
+import { MobileV2NotificationBell } from '@/components/mobile-v2/MobileV2NotificationBell';
 import {
     getDisplayProductType,
     storefrontProductTypeRoute,
@@ -211,9 +211,7 @@ export default function HomePage() {
                         )}
                     </p>
                 </div>
-                <button className="w-10 h-10 rounded-full bg-[var(--sf-tint,#E0E7FF)] flex items-center justify-center text-[var(--sf-primary,#2563EB)]">
-                    <Bell className="w-5 h-5" />
-                </button>
+                <MobileV2NotificationBell />
             </div>
 
             {/* Balance Card */}

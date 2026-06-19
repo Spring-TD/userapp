@@ -31,6 +31,7 @@ import {
   type StorefrontApplication,
 } from '@/lib/storefrontApplicationClient'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
+import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 import {
   defaultApplicationAmountValue,
   formatApplicationAmountHint,
@@ -170,8 +171,17 @@ function getApplicationAccount(application?: StorefrontApplication | null) {
   return application?.productWallet?.upstreamAccount ?? application?.account ?? null
 }
 
-function applicationProvider(application?: StorefrontApplication | null) {
-  return getApplicationAccount(application)?.bankName || 'your provider'
+function applicationProvider(
+  application: StorefrontApplication | null | undefined,
+  tenantDisplayName?: string | null,
+  tenantSubdomain?: string | null,
+) {
+  return (
+    getApplicationAccount(application)?.bankName ||
+    tenantDisplayName?.trim() ||
+    tenantSubdomain?.trim() ||
+    'Provider'
+  )
 }
 
 function InputPill({
@@ -254,6 +264,23 @@ function FileActionRow({
       : null,
   )
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const isDone = Boolean(done || submission?.fileUrl)
+    setUploaded(isDone)
+    if (submission?.fileUrl) {
+      setUploadedFile({
+        fileUrl: submission.fileUrl,
+        fileName: submission.fileName || 'Uploaded file',
+        fileType: submission.fileType,
+        fileSize: submission.fileSize,
+      })
+      return
+    }
+    if (!isDone) {
+      setUploadedFile(null)
+    }
+  }, [done, submission?.fileUrl, submission?.fileName, submission?.fileType, submission?.fileSize])
 
   const handleUpload = async (file?: File) => {
     if (!file) return
@@ -389,6 +416,23 @@ function CollateralRequirementRow({
       : null,
   )
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const isDone = Boolean(done || submission)
+    setUploaded(isDone)
+    if (submission?.fileUrl) {
+      setUploadedFile({
+        fileUrl: submission.fileUrl,
+        fileName: submission.fileName || 'Uploaded file',
+        fileType: submission.fileType,
+        fileSize: submission.fileSize,
+      })
+      return
+    }
+    if (!isDone) {
+      setUploadedFile(null)
+    }
+  }, [done, submission, submission?.fileUrl, submission?.fileName, submission?.fileType, submission?.fileSize])
 
   const title = requirement.label || requirement.requirementType || 'Requirement'
   const description = requirement.description || requirement.contentType || ''
@@ -695,6 +739,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     phone: '',
     email: '',
   })
+  const { displayName: tenantDisplayName, tenantSubdomain } = useMobileV2Tenant()
   const [applicationAmount, setApplicationAmount] = useState('')
   const [applicationRevision, setApplicationRevision] = useState(0)
   const productName = prettyKind(kind)
@@ -702,7 +747,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     void applicationRevision
     return readInitializedApplication()
   }, [applicationRevision])
-  const providerName = applicationProvider(initializedApplication)
+  const providerName = applicationProvider(initializedApplication, tenantDisplayName, tenantSubdomain)
   const productId = sanitizeProductId(productIdProp || searchParams.get('productId') || initializedApplication?.productId || '')
   const applicationId = searchParams.get('applicationId') || initializedApplication?.id || initializedApplication?._id || ''
   const currentDraftKey = draftStorageKey(kind, productId, applicationId)

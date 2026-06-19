@@ -3,7 +3,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-    Bell,
     Plus,
     Wallet,
 } from 'lucide-react';
@@ -18,6 +17,7 @@ import { fetchUserProductTypeSummary } from '@/lib/services/userWalletApi';
 import { fetchAuthUserProfile, type AuthUserProfile } from '@/lib/userProfileClient';
 import { formatWalletBalance } from '@/lib/userWallet';
 import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
+import { MobileV2NotificationBell } from '@/components/mobile-v2/MobileV2NotificationBell';
 import type { ProductApplication } from '@/types/productApplication';
 import type { ProductTypeSummaryItem, UserProductTypeSummary, WalletProductType } from '@/types/userWallet';
 
@@ -98,7 +98,7 @@ function ProductAccountCard({
                         {application.productName || application.productType || activeFilter}
                     </h3>
                     <p className="mt-1 text-sm font-medium text-[var(--sf-ink,#1E1B4B)]">
-                        {account?.accountNumber}
+                        {account?.accountNumber || 'Pending provisioning'}
                     </p>
                 </div>
                 <span className="shrink-0 rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-green-600">
@@ -107,12 +107,17 @@ function ProductAccountCard({
             </div>
 
             <div className="flex items-center justify-between gap-3 text-sm">
-                <p className="min-w-0 truncate text-gray-500">{account?.bankName}</p>
+                <p className="min-w-0 truncate text-gray-500">{account?.bankName || application.productName || 'Product account'}</p>
                 <div className="shrink-0 text-right text-xs">
                     <p className="text-gray-400">Application</p>
                     <p className="font-semibold text-[#1E293B]">{application.status || 'PENDING'}</p>
                 </div>
             </div>
+            {(application as { amount?: number }).amount != null ? (
+                <p className="mt-3 text-sm font-semibold text-[var(--sf-ink,#1E1B4B)]">
+                    {formatWalletBalance((application as { amount?: number }).amount || 0)}
+                </p>
+            ) : null}
         </div>
     );
 
@@ -238,13 +243,7 @@ export default function AccountsPage() {
                             )}
                         </p>
                     </div>
-                    <button
-                        type="button"
-                        className="w-10 h-10 rounded-full bg-[var(--sf-tint,#E0E7FF)] flex items-center justify-center text-[var(--sf-primary,#2563EB)]"
-                        aria-label="Notifications"
-                    >
-                        <Bell className="w-5 h-5" />
-                    </button>
+                    <MobileV2NotificationBell />
                 </div>
 
                 <div className="px-6 mb-6">
