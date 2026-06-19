@@ -98,11 +98,6 @@ function LoanApplyStartInner() {
       return
     }
 
-    if (!parsedAmount) {
-      setError('Enter the loan amount you want to apply for.')
-      return
-    }
-
     if (amountValidationError) {
       setError(amountValidationError)
       return
@@ -111,7 +106,7 @@ function LoanApplyStartInner() {
     setProcessing(true)
     setError(null)
     try {
-      const result = await initializeProductApplication(productId, { productType: 'LOAN', amount: parsedAmount })
+      const result = await initializeProductApplication(productId, { productType: 'LOAN'})
       if (!result.ok) {
         setError(result.error || 'Could not set up your loan account.')
         return
@@ -192,21 +187,7 @@ function LoanApplyStartInner() {
             </span>
           </div>
 
-          {!hasInitializedAccount ? (
-            <div className="mt-5 space-y-2 text-left">
-              <label className="block text-xs font-semibold text-gray-700">Loan amount</label>
-              <input
-                value={applicationAmount}
-                onChange={(event) => setApplicationAmount(event.target.value)}
-                placeholder="Amount to borrow"
-                inputMode="numeric"
-                className="h-12 w-full rounded-2xl bg-gray-100 px-4 text-sm text-[#1E293B] outline-none ring-[var(--sf-button,#1E40AF)]/20 placeholder:text-gray-400 focus:ring-2"
-              />
-              <p className="text-[11px] text-gray-500">
-                {formatApplicationAmountHint(product?.amountMin, product?.amountMax)}
-              </p>
-            </div>
-          ) : null}
+        
 
           <div className="mt-5 space-y-3 text-left text-xs text-gray-700">
             <button
@@ -251,7 +232,7 @@ function LoanApplyStartInner() {
             type="button"
             disabled={
               (!hasInitializedAccount &&
-                (!termsAccepted || !privacyAccepted || !parsedAmount || Boolean(amountValidationError))) ||
+                (!termsAccepted || !privacyAccepted)) ||
               processing
             }
             className="mt-8 h-12 w-full rounded-full bg-[var(--sf-button,#1E40AF)] font-semibold text-white disabled:opacity-50"

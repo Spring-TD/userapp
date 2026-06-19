@@ -23,8 +23,12 @@ function normalizeApplications(data: ProductApplicationInitResponse): ProductApp
   return []
 }
 
-function hasProvisionedAccount(application: ProductApplication): boolean {
-  return Boolean(application.productWallet?.upstreamAccount?.accountNumber?.trim())
+function shouldShowInAccounts(application: ProductApplication): boolean {
+  const status = String(application.status || "").toUpperCase()
+  if (status === "DRAFT" || status === "CANCELLED") return false
+  const wallet = application.productWallet?.upstreamAccount
+  if (wallet?.accountNumber?.trim() || wallet?.bankName?.trim() || wallet?.provisionStatus) return true
+  return Boolean(application.id && application.productId)
 }
 
 /** List user applications with provisioned product accounts (GET /v1/applications/user/{userId}). */
@@ -48,7 +52,7 @@ export async function fetchUserProductApplications(
     }
   }
 
-  const applications = normalizeApplications(data).filter(hasProvisionedAccount)
+  const applications = normalizeApplications(data).filter(shouldShowInAccounts)
   return {
     applications,
     error: null,
