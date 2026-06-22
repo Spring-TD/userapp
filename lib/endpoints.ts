@@ -346,6 +346,8 @@ export const ENDPOINTS = {
   kyc: {
     modularVerification: `${KYC_V1}/modular/verification`,
     modularVerificationUrl: `${KYC_V1}/modular/verification-url`,
+    modularStatus: (verificationId: string) =>
+      `${KYC_V1}/modular/status/${encodeURIComponent(verificationId)}`,
   },
   auth: {
     login: `${AUTH_BASE}/login`,
