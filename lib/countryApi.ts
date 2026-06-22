@@ -1,66 +1,51 @@
 /**
- * Country list from REST Countries (free, no API key).
- * https://restcountries.com/
+ * Country list via same-origin BFF (`/api/countries`).
+ * REST Countries v3.1 is deprecated in production; the BFF uses a stable ISO dataset.
  */
 
 export interface CountryOption {
-  code: string;
-  name: string;
+  code: string
+  name: string
   /** International dial code (e.g. "+234") */
-  dialCode: string;
-                                                                                                                   }
+  dialCode: string
+}
 
-// Includes IDD info so we can derive the international dial code (root like "+234")
-const REST_COUNTRIES_URL = "https://restcountries.com/v3.1/all?fields=cca2,name,idd";
+let cached: CountryOption[] | null = null
+let fetchPromise: Promise<CountryOption[]> | null = null
 
-let cached: CountryOption[] | null = null;
-let fetchPromise: Promise<CountryOption[]> | null = null;
+function normalizeCountryRows(data: unknown): CountryOption[] {
+  if (!Array.isArray(data)) return []
+  return data
+    .map((row) => {
+      if (!row || typeof row !== "object") return null
+      const r = row as Record<string, unknown>
+      const code = String(r.code || "").trim().toLowerCase()
+      const name = String(r.name || "").trim()
+      const dialCode = String(r.dialCode || "").trim()
+      if (!code || !name) return null
+      return { code, name, dialCode }
+    })
+    .filter((c): c is CountryOption => c !== null)
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
 
 export async function fetchCountries(): Promise<CountryOption[]> {
-  if (cached) return cached;
+  if (cached?.length) return cached
   if (!fetchPromise) {
     fetchPromise = (async () => {
-      const res = await fetch(REST_COUNTRIES_URL);
-      if (!res.ok) throw new Error("Failed to fetch countries");
-      const data = await res.json();
-      const result: CountryOption[] = data
-        .map(
-          (c: {
-            cca2: string
-            name: { common: string }
-            idd?: { root?: string | undefined; suffixes?: string[] | undefined }
-          }) => {
-            const dialRootRaw = c.idd?.root ?? ""
-            const dialRoot = dialRootRaw
-              ? dialRootRaw.startsWith("+")
-                ? dialRootRaw
-                : `+${dialRootRaw}`
-              : ""
-
-            // REST Countries often provides "+2" as root and ["34"] as suffixes (e.g. Nigeria).
-            // We build the common dial code by combining root + first suffix.
-            const firstSuffix = c.idd?.suffixes?.[0] ?? ""
-            const dialCode = dialRoot ? `${dialRoot}${firstSuffix}` : ""
-
-            return {
-              code: (c.cca2 || "").toLowerCase(),
-              name: c.name?.common ?? c.cca2 ?? "",
-              dialCode,
-            }
-          }
-        )
-        .filter((c: CountryOption) => c.code && c.name)
-        .sort((a: CountryOption, b: CountryOption) =>
-          a.name.localeCompare(b.name)
-        );
-      cached = result;
-      return result;
-    })();
+      const res = await fetch("/api/countries", { cache: "no-store" })
+      if (!res.ok) throw new Error("Failed to fetch countries")
+      const data = await res.json()
+      const result = normalizeCountryRows(data)
+      if (result.length === 0) throw new Error("No countries available")
+      cached = result
+      return result
+    })()
   }
-  return fetchPromise;
+  return fetchPromise
 }
 
 /** Call early (e.g. in root layout) to start loading countries before user opens a dropdown. */
 export function preloadCountries(): void {
-  if (!cached && !fetchPromise) fetchCountries();
+  if (!cached?.length) void fetchCountries().catch(() => undefined)
 }
