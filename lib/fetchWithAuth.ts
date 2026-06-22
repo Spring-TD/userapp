@@ -5,6 +5,7 @@
  */
 
 import { getAccessToken } from '@/lib/cookieAuth';
+import { attachTenantHeaders } from '@/lib/tenantRequestHeaders';
 
 export type FetchWithAuthOptions = RequestInit & {
   /** Skip adding Authorization header (e.g. for public endpoints) */
@@ -48,6 +49,7 @@ export async function fetchWithAuth(
   const headers = new Headers(init.headers);
   if (token && !skipAuth) headers.set('Authorization', `Bearer ${token}`);
   if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  attachTenantHeaders(headers);
 
   let res = await fetch(input, { ...init, headers, credentials: init.credentials ?? 'include' });
 

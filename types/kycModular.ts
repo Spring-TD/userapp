@@ -23,10 +23,27 @@ export interface KycModularVerificationCreateResponse {
   success?: boolean
   verification_url?: string
   verificationUrl?: string
+  verification_id?: string
+  reusedExistingVerification?: boolean
   data?: KycModularVerificationUrlData & {
     verification_url?: string
     verificationUrl?: string
+    verification_id?: string
+    url?: string
   }
+  error?: string
+  message?: string
+}
+
+export interface KycModularStatusResponse {
+  success?: boolean
+  data?: {
+    status?: string
+    overallStatus?: string
+    verificationId?: string
+    data?: { status?: string }
+  }
+  status?: string
   error?: string
   message?: string
 }

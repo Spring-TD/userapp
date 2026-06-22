@@ -374,6 +374,9 @@ function ProductPanel({
                 <InfoRow label="Mortgage type" value="Fixed Rate" />
                 <InfoRow label="Loan Tenure" value="7years" />
                 <InfoRow label="Down payment" value="10%" />
+                <InfoRow label="Fees & charges" value="Nil" />
+                <InfoRow label="Interest Rate" value={rate} />
+                <InfoRow label="Powered by:" value={provider} />
               </>
             ) : (
               <>
@@ -381,12 +384,11 @@ function ProductPanel({
                 <InfoRow label="Maximum amount" value={amount} />
                 <InfoRow label="Loan Tenure" value={duration} />
                 <InfoRow label="Collateral" value="Required where applicable" />
+                <InfoRow label="Fees & charges" value="Nil" />
+                <InfoRow label="Interest Rate" value={rate} />
+                <InfoRow label="Powered by:" value={provider} />
               </>
             )}
-            <InfoRow label="Fees & charges" value="Nil" />
-            <InfoRow label="Interest Rate" value={rate} />
-            <InfoRow label="Automation" value="Monthly" />
-            <InfoRow label="Powered by:" value={provider} />
           </div>
         </>
       )}
