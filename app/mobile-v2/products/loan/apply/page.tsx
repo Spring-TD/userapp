@@ -12,7 +12,7 @@ function LoanApplyInner() {
 
   if (!productId) {
     return (
-      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 bg-[#FAFAFA] px-6 text-center">
+      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 sf-page-bg px-6 text-center">
         <p className="text-sm text-gray-600">Missing product. Open this page from a loan product.</p>
         <Link href="/mobile-v2/products/loan" className="text-sm font-semibold text-[var(--sf-button,#1E40AF)] underline">
           Browse loans

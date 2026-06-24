@@ -1,6 +1,6 @@
 /**
  * Storefront brand utilities — use inside `MobileV2ThemedChrome` (vars from resolve `pwaManifest`).
- * Tailwind arbitrary classes reference these vars with fallbacks for pre-resolve paint.
+ * Falls back to default app UI when manifest has no theme/background colors.
  */
 
 .sf-storefront-root .sf-bg-button {
@@ -18,6 +18,15 @@
 .sf-storefront-root .sf-bg-tint {
   background-color: var(--sf-tint, #e0e7ff);
 }
+.sf-storefront-root .sf-page-bg {
+  background-color: var(--sf-page-bg, #fafafa);
+}
+.sf-storefront-root .sf-page-bg-tint {
+  background-color: var(--sf-page-bg-tint, #f5f7ff);
+}
+.sf-storefront-root .sf-accent-soft {
+  background-color: var(--sf-accent-soft, #eff6ff);
+}
 
 .sf-storefront-root .sf-text-primary {
   color: var(--sf-primary, #2563eb);
@@ -29,6 +38,13 @@
   color: var(--sf-ink, #1e1b4b);
 }
 
+.sf-storefront-root .sf-border-brand {
+  border-color: var(--sf-border, #dbeafe);
+}
+.sf-storefront-root .sf-border-subtle {
+  border-color: var(--sf-border-subtle, #e5e7eb);
+}
+
 .sf-storefront-root .sf-btn {
   background-color: var(--sf-button, #1e40af);
   color: #fff;
@@ -37,7 +53,7 @@
   background-color: var(--sf-button-hover, #1e3a8a);
 }
 .sf-storefront-root .sf-btn-outline {
-  border: 1px solid color-mix(in srgb, var(--sf-primary, #2563eb) 35%, transparent);
+  border: 1px solid var(--sf-border, #dbeafe);
   color: var(--sf-ink, #1e1b4b);
   background-color: #fff;
 }
@@ -57,4 +73,12 @@
 .sf-storefront-root .sf-ring-primary:focus {
   outline: none;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--sf-primary, #2563eb) 28%, transparent);
+}
+
+/* Branded shadcn buttons inside storefront shell */
+.sf-storefront-root [data-slot="button"].bg-primary {
+  background-color: var(--sf-button, #1e40af);
+}
+.sf-storefront-root [data-slot="button"].bg-primary:hover {
+  background-color: var(--sf-button-hover, #1e3a8a);
 }

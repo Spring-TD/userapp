@@ -31,6 +31,11 @@ import {
   type StorefrontApplication,
 } from '@/lib/storefrontApplicationClient'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
+import { mortgagePendingDetailHref } from '@/lib/mortgageApplyRoutes'
+import {
+  initMortgageWorkflowSubmitted,
+  type MortgageDownPaymentMethod,
+} from '@/lib/mortgageWorkflow'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 import {
   defaultApplicationAmountValue,
@@ -720,6 +725,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
   const [lastAddedGuarantor, setLastAddedGuarantor] = useState<Guarantor | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [submittedApplicationId, setSubmittedApplicationId] = useState<string | null>(null)
   const [creatingAccount, setCreatingAccount] = useState(false)
   const [createAccountError, setCreateAccountError] = useState<string | null>(null)
   const [createAccountTermsAccepted, setCreateAccountTermsAccepted] = useState(false)
@@ -775,6 +781,12 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         : null
 
   const goBackHref = kind === 'loan' ? '/mobile-v2/products/loan' : '/mobile-v2/products/mortgage'
+  const successContinueHref =
+    kind === 'mortgage' && submittedApplicationId
+      ? mortgagePendingDetailHref(submittedApplicationId)
+      : kind === 'mortgage'
+        ? '/mobile-v2/products/mortgage/pending'
+        : goBackHref
   const activeIndex = steps.indexOf(activeStep)
 
   const buildRequirementDrafts = (employment: EmploymentDraft, submissions: RequirementSubmission[]) => {
@@ -969,6 +981,21 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       if (!submitResult.ok) {
         setError(submitResult.error)
         return
+      }
+
+      const resolvedApplicationId = String(
+        submitResult.application?.id ?? submitResult.application?._id ?? applicationId,
+      )
+
+      if (kind === 'mortgage' && resolvedApplicationId) {
+        const methodKey = `mortgage_down_payment_method_${productId}`
+        const storedMethod = typeof window !== 'undefined' ? sessionStorage.getItem(methodKey) : null
+        const downPaymentMethod: MortgageDownPaymentMethod | undefined =
+          storedMethod === 'savings_plan' || storedMethod === 'equity_contribution'
+            ? storedMethod
+            : 'equity_contribution'
+        initMortgageWorkflowSubmitted(resolvedApplicationId, productId, downPaymentMethod)
+        setSubmittedApplicationId(resolvedApplicationId)
       }
 
       clearApplicationDraft(currentDraftKey)
@@ -1575,7 +1602,12 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
             </div>
             <h2 className={`text-xl font-bold ${BRAND_INK}`}>Application Submitted</h2>
             <p className="mt-2 text-sm text-gray-500">Your {productName.toLowerCase()} application has been submitted.</p>
-            <Link href={goBackHref} className="mt-8 w-full">
+            {kind === 'mortgage' ? (
+              <p className="mt-2 text-xs text-gray-400">
+                Track progress and next steps in Pending Mortgage.
+              </p>
+            ) : null}
+            <Link href={successContinueHref} className="mt-8 w-full">
               <Button className={cn('h-12 w-full rounded-full font-semibold', PRIMARY)}>Continue</Button>
             </Link>
           </div>

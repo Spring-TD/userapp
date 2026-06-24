@@ -129,7 +129,7 @@ export default function MortgageSurveyPage() {
                         Thank you for completing the mortgage eligibility survey.
                     </p>
                     
-                    <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 mt-6 w-full max-w-[300px]">
+                    <div className="bg-blue-50 border sf-border-brand rounded-2xl p-4 mt-6 w-full max-w-[300px]">
                         <p className="text-[var(--sf-button,#1E40AF)] font-semibold text-center text-sm mb-1">
                             Eligibility Status
                         </p>

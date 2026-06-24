@@ -17,7 +17,7 @@ export default function TargetDetailPage({ params }: { params: { id: string } })
     const [selectedDebitOption, setSelectedDebitOption] = useState('wallet');
 
     return (
-        <div className="flex flex-col h-full bg-[#FAFAFA] relative">
+        <div className="flex flex-col h-full sf-page-bg relative">
             <div className="flex-1 overflow-y-auto no-scrollbar pb-32">
 
                 {/* Header */}

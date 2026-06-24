@@ -58,6 +58,10 @@ function MobileV2Configured({
     const router = useRouter();
 
     const handleOnboardingComplete = () => {
+        router.push('/mobile-v2/auth/signup');
+    };
+
+    const handleOnboardingSignIn = () => {
         router.push('/mobile-v2/auth/login');
     };
 
@@ -90,6 +94,7 @@ function MobileV2Configured({
                     buttonColor={config.onboarding.buttonColor}
                     buttonTextColor={config.onboarding.buttonTextColor}
                     onComplete={handleOnboardingComplete}
+                    onSignIn={handleOnboardingSignIn}
                     onSkip={handleOnboardingComplete}
                     leadingSlot={<StorefrontPwaInstall installAppId={installAppId} />}
                 />

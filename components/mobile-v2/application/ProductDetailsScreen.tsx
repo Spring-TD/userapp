@@ -58,6 +58,8 @@ type ProductDetailsScreenProps = {
   imageUrl: string
   applyHref: string
   backHref: string
+  primaryActionLabel?: string
+  primaryActionHref?: string
   detailRows?: Array<{ label: string; value: React.ReactNode }>
   propertyRows?: Array<{ label: string; value: React.ReactNode }>
 }
@@ -260,9 +262,13 @@ function ProductPanel({
   provider,
   imageUrl,
   applyHref,
+  primaryActionLabel,
+  primaryActionHref,
   detailRows,
   propertyRows,
 }: ProductDetailsScreenProps) {
+  const actionHref = primaryActionHref ?? applyHref
+  const actionLabel = primaryActionLabel ?? 'Apply'
   const [mortgageProductTab, setMortgageProductTab] = useState<MortgageProductTab>('mortgage')
   const showMortgageTabs = kind === 'mortgage'
 
@@ -393,9 +399,9 @@ function ProductPanel({
         </>
       )}
 
-      <Link href={applyHref} className="block pt-2">
+      <Link href={actionHref} className="block pt-2">
         <Button className="h-12 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-sm font-semibold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]">
-          Apply
+          {actionLabel}
         </Button>
       </Link>
     </div>

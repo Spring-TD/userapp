@@ -17,7 +17,7 @@ export default function AboutPage() {
     const website = externalUrl(support.website);
 
     return (
-        <div className="flex flex-col h-full bg-[#FAFAFA] relative">
+        <div className="flex flex-col h-full sf-page-bg relative">
             <div className="flex-1 overflow-y-auto no-scrollbar pb-8">
                 <div className="pt-12 px-6 flex items-center mb-6 bg-white sticky top-0 z-10 border-b border-gray-50 pb-4">
                     <Link href="/mobile-v2/profile" className="w-10 h-10 flex items-center justify-center -ml-2 text-gray-700">

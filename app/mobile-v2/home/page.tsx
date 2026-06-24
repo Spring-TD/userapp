@@ -181,7 +181,7 @@ export default function HomePage() {
     const closeModal = () => setActiveModal('none');
 
     return (
-        <div className="flex min-h-full flex-col bg-[#FAFAFA] relative overflow-y-auto no-scrollbar pb-[calc(8rem+env(safe-area-inset-bottom))]">
+        <div className="flex min-h-full flex-col sf-page-bg relative overflow-y-auto no-scrollbar pb-[calc(8rem+env(safe-area-inset-bottom))]">
             {/* Header */}
             <div className="px-6 pt-12 pb-4 flex items-center justify-between">
                 <div>
@@ -467,7 +467,7 @@ export default function HomePage() {
                                     <CopyableDetailRow label="Bank Name" value={nuban?.bankName} />
                                 </>
                             ) : (
-                                <div className="rounded-2xl bg-[#EFF6FF] p-4">
+                                <div className="rounded-2xl sf-accent-soft p-4">
                                     <p className="text-sm font-semibold text-[var(--sf-ink,#1E1B4B)]">Bank account not active yet</p>
                                     <p className="mt-1 text-sm text-gray-600">{fundingUnavailableMessage}</p>
                                     <Link
@@ -520,7 +520,7 @@ export default function HomePage() {
                                     <CopyableDetailRow label="Provider Reference" value={nuban?.providerReference} />
                                 </>
                             ) : (
-                                <div className="rounded-2xl bg-[#EFF6FF] p-4">
+                                <div className="rounded-2xl sf-accent-soft p-4">
                                     <p className="text-sm font-semibold text-[var(--sf-ink,#1E1B4B)]">Account details unavailable</p>
                                     <p className="mt-1 text-sm text-gray-600">{fundingUnavailableMessage}</p>
                                     <Link

@@ -187,6 +187,10 @@ export function pickManifestIconUrl(manifest: WebAppManifestBranding | null): st
   return sorted.find((i) => i.src)?.src
 }
 
+export function manifestHasBrandColors(manifest: WebAppManifestBranding | null): boolean {
+  return Boolean(manifest?.theme_color?.trim() || manifest?.background_color?.trim())
+}
+
 /** Apply manifest JSON (theme_color, background_color, names, icons) onto the default mobile shell config. */
 export function applyManifestToMobileAppConfig(
   base: MobileAppConfig,
@@ -194,8 +198,14 @@ export function applyManifestToMobileAppConfig(
   displayNameOverride: string | null,
 ): MobileAppConfig {
   const name = displayNameOverride?.trim() || storefrontDisplayName(manifest) || base.appName
-  const primary = manifest?.theme_color?.trim() || base.theme.primaryColor
-  const shell = manifest?.background_color?.trim() || manifest?.theme_color?.trim() || base.onboarding.backgroundColor
+  const themed = manifestHasBrandColors(manifest)
+  const primary = themed && manifest?.theme_color?.trim() ? manifest.theme_color.trim() : base.theme.primaryColor
+  const shell =
+    themed && manifest?.background_color?.trim()
+      ? manifest.background_color.trim()
+      : themed && manifest?.theme_color?.trim()
+        ? manifest.theme_color.trim()
+        : base.onboarding.backgroundColor
   const logo = pickManifestIconUrl(manifest) || base.splash.logo
 
   return {
@@ -204,18 +214,18 @@ export function applyManifestToMobileAppConfig(
     splash: {
       ...base.splash,
       logo,
-      backgroundColor: shell,
+      backgroundColor: themed ? shell : base.splash.backgroundColor,
     },
     onboarding: {
       ...base.onboarding,
-      backgroundColor: shell,
-      secondaryBackgroundColor: primary,
-      buttonColor: primary,
+      backgroundColor: themed ? shell : base.onboarding.backgroundColor,
+      secondaryBackgroundColor: themed ? primary : base.onboarding.secondaryBackgroundColor,
+      buttonColor: themed ? primary : base.onboarding.buttonColor,
     },
     theme: {
       ...base.theme,
-      primaryColor: primary,
-      secondaryColor: primary,
+      primaryColor: themed ? primary : base.theme.primaryColor,
+      secondaryColor: themed ? primary : base.theme.secondaryColor,
     },
   }
 }

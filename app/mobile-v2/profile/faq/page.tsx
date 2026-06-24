@@ -28,7 +28,7 @@ export default function FAQPage() {
     }, [configuredFaqs, query]);
 
     return (
-        <div className="flex flex-col h-full bg-[#FAFAFA] relative">
+        <div className="flex flex-col h-full sf-page-bg relative">
             <div className="flex-1 overflow-y-auto no-scrollbar pb-8">
                 {/* Header */}
                 <div className="pt-12 px-6 flex items-center mb-6 bg-white sticky top-0 z-10 border-b border-gray-50 pb-4">

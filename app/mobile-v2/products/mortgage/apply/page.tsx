@@ -1,11 +1,10 @@
 'use client'
 
 import React, { Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
+import { ProductApplicationFlow } from '@/components/mobile-v2/application/ProductApplicationFlow'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
-import { MortgageApplyFlow } from '@/components/mobile-v2/mortgage/MortgageApplyFlow'
-import { MortgageApplyFlowSkeleton } from '@/components/mobile-v2/data-skeletons'
 
 function ApplyInner() {
   const searchParams = useSearchParams()
@@ -13,7 +12,7 @@ function ApplyInner() {
 
   if (!productId) {
     return (
-      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 bg-[#FAFAFA] px-6 text-center">
+      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 sf-page-bg px-6 text-center">
         <p className="text-sm text-gray-600">Missing product. Open this page from a mortgage product.</p>
         <Link href="/mobile-v2/products/mortgage" className="text-sm font-semibold text-[var(--sf-button,#1E40AF)] underline">
           Browse mortgages
@@ -22,14 +21,12 @@ function ApplyInner() {
     )
   }
 
-  return <MortgageApplyFlow productId={productId} />
+  return <ProductApplicationFlow kind="mortgage" productId={productId} />
 }
 
 export default function MortgageApplyPage() {
   return (
-    <Suspense
-      fallback={<MortgageApplyFlowSkeleton />}
-    >
+    <Suspense fallback={null}>
       <ApplyInner />
     </Suspense>
   )

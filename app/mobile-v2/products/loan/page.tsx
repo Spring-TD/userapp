@@ -7,7 +7,7 @@ import Link from 'next/link';
 
 export default function LoanProductPage() {
     return (
-        <div className="flex flex-col h-full bg-[#FAFAFA] relative">
+        <div className="flex flex-col h-full sf-page-bg relative">
             <div className="flex-1 overflow-y-auto no-scrollbar pb-32">
                 {/* Header with Tabs */}
                 <div className="pt-12 px-6 pb-2 bg-white sticky top-0 z-30">

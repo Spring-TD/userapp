@@ -146,7 +146,7 @@ export function WalletBalanceCardSkeleton({ className }: { className?: string })
 /** Accounts list row */
 export function WalletAccountRowSkeleton() {
   return (
-    <div className="w-full rounded-[24px] bg-[#EFF6FF] p-6" aria-busy="true">
+    <div className="w-full rounded-[24px] sf-accent-soft p-6" aria-busy="true">
       <Skeleton className={cn('h-8 w-8 rounded-lg mb-4', sk)} />
       <Skeleton className={cn('h-4 w-32 rounded-md mb-2', sk)} />
       <Skeleton className={cn('h-8 w-36 rounded-md', sk)} />
@@ -157,7 +157,7 @@ export function WalletAccountRowSkeleton() {
 /** Signup / auth screens waiting on `useSearchParams` */
 export function AuthRouteSkeleton() {
   return (
-    <div className="flex h-full flex-col bg-[#FAFAFA] p-6 pt-16" aria-busy="true" aria-live="polite">
+    <div className="flex h-full flex-col sf-page-bg p-6 pt-16" aria-busy="true" aria-live="polite">
       <Skeleton className={cn('mx-auto mb-8 h-8 w-40 rounded-md', sk)} />
       {Array.from({ length: 6 }).map((_, i) => (
         <Skeleton key={i} className={cn('mb-4 h-14 w-full rounded-2xl', sk)} />

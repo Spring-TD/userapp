@@ -59,7 +59,7 @@ export default function InvestDetailPage() {
 
     if (!tenantReady || loading) {
         return (
-            <div className="flex h-full flex-col bg-[#FAFAFA] px-6 pt-12">
+            <div className="flex h-full flex-col sf-page-bg px-6 pt-12">
                 <MobileV2ProductListSkeleton />
             </div>
         );
@@ -67,7 +67,7 @@ export default function InvestDetailPage() {
 
     if (!product) {
         return (
-            <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 bg-[#FAFAFA] px-6 text-center">
+            <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 sf-page-bg px-6 text-center">
                 <p className="text-sm text-gray-600">This investment product could not be found.</p>
                 <Link href="/mobile-v2/products/invest">
                     <Button className="rounded-full bg-[var(--sf-button,#1E40AF)] text-white">

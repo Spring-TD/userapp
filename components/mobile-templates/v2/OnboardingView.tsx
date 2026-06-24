@@ -16,6 +16,7 @@ interface OnboardingViewProps {
   buttonTextColor?: string;
   cardBackgroundColor?: string;
   onComplete?: () => void;
+  onSignIn?: () => void;
   onSkip?: () => void;
   initialStep?: number;
   showSkipButton?: boolean;
@@ -33,6 +34,7 @@ export function V2OnboardingView({
   buttonTextColor = '#FFFFFF',
   cardBackgroundColor = '#FFFFFF',
   onComplete,
+  onSignIn,
   onSkip,
   initialStep = 0,
   showSkipButton = true,
@@ -51,6 +53,10 @@ export function V2OnboardingView({
 
   const handleSkip = () => {
     onSkip?.() || onComplete?.();
+  };
+
+  const handleSignIn = () => {
+    onSignIn?.() || onComplete?.();
   };
 
   const currentStepData = steps[currentStep];
@@ -165,7 +171,7 @@ export function V2OnboardingView({
                     color: buttonTextColor,
                     boxShadow: `0 10px 15px -3px ${buttonColor}30`,
                   }}
-                  onClick={handleNext}
+                  onClick={() => onComplete?.()}
                 >
                   Get Started
                 </Button>
@@ -173,7 +179,7 @@ export function V2OnboardingView({
                   variant="ghost"
                   className="font-semibold text-lg hover:bg-transparent"
                   style={{ color: buttonColor }}
-                  onClick={onComplete}
+                  onClick={handleSignIn}
                 >
                   Sign In
                 </Button>

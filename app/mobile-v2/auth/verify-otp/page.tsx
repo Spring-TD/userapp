@@ -91,7 +91,7 @@ function VerifyOtpContent() {
   if (!email) return null;
 
   return (
-    <div className="flex h-full flex-col bg-[#FAFAFA] p-6 pt-12 text-[#1E293B]">
+    <div className="flex h-full flex-col sf-page-bg p-6 pt-12 text-[#1E293B]">
       <div className="mb-8 flex items-center justify-between">
         <Link href="/mobile-v2/auth/signup" className="-ml-2 rounded-full p-2 transition-colors hover:bg-black/5">
           <ChevronLeft className="h-6 w-6" />
@@ -163,7 +163,7 @@ export default function VerifyOtpPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex h-full items-center justify-center bg-[#FAFAFA] p-6 text-sm text-gray-500">Loading…</div>
+        <div className="flex h-full items-center justify-center sf-page-bg p-6 text-sm text-gray-500">Loading…</div>
       }
     >
       <VerifyOtpContent />

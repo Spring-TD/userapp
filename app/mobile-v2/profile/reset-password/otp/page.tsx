@@ -21,7 +21,7 @@ export default function OTPPage() {
     }, []);
 
     return (
-        <div className="flex flex-col h-full bg-[#FAFAFA] relative">
+        <div className="flex flex-col h-full sf-page-bg relative">
             <div className="pt-12 px-6 flex items-center mb-8">
                 <Link href="/mobile-v2/profile" className="w-10 h-10 flex items-center justify-center -ml-2 text-gray-700">
                     <ChevronLeft className="w-6 h-6" />
