@@ -64,7 +64,7 @@ export default function ContactSupportPage() {
     ].filter((item) => item.value && item.href);
 
     return (
-        <div className="flex flex-col h-full bg-[#FAFAFA] relative">
+        <div className="flex flex-col h-full sf-page-bg relative">
             <div className="flex-1 overflow-y-auto no-scrollbar">
                 {/* Header */}
                 <div className="pt-12 px-6 flex items-center mb-8">

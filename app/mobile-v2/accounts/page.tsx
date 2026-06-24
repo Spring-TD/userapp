@@ -88,7 +88,7 @@ function ProductAccountCard({
     const accountDetailsHref = productRoute(activeFilter);
     const provisionStatus = account?.provisionStatus || application.loanWorkflowStatus || application.status;
     const content = (
-        <div className="w-full rounded-[24px] border border-blue-100 bg-[#EFF6FF] p-5 shadow-sm">
+        <div className="w-full rounded-[24px] border sf-border-brand sf-accent-soft p-5 shadow-sm">
             <div className="mb-4 flex items-start justify-between gap-3">
                 <div className="min-w-0">
                     <p className="text-xs font-semibold uppercase tracking-wide text-[var(--sf-primary,#2563EB)]">
@@ -223,7 +223,7 @@ export default function AccountsPage() {
     const isSummaryBusy = walletLoading || summaryLoading || applicationsLoading;
 
     return (
-        <div className="flex min-h-full flex-col bg-[#FAFAFA] relative">
+        <div className="flex min-h-full flex-col sf-page-bg relative">
             <div className="flex-1 overflow-y-auto no-scrollbar pb-[calc(8rem+env(safe-area-inset-bottom))]">
                 <div className="px-6 pt-12 pb-4 flex items-center justify-between">
                     <div>

@@ -37,7 +37,7 @@ function LoanDetailInner() {
 
   if (!tenantReady || loading) {
     return (
-      <div className="flex h-full flex-col bg-[#FAFAFA]">
+      <div className="flex h-full flex-col sf-page-bg">
         <div className="sticky top-0 z-20 bg-white px-4 pb-3 pt-10 shadow-sm">
           <Skeleton className="mb-3 h-10 w-10 rounded-full bg-gray-200/90" />
           <Skeleton className="h-12 w-full rounded-full bg-gray-200/90" />
@@ -49,7 +49,7 @@ function LoanDetailInner() {
 
   if (!loan) {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 bg-[#FAFAFA] px-6 text-center">
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 sf-page-bg px-6 text-center">
         <p className="text-sm text-gray-600">This loan product could not be found.</p>
         <Link href="/mobile-v2/products/loan">
           <Button className="rounded-full bg-[var(--sf-button,#1E40AF)] text-white">
@@ -110,7 +110,7 @@ export default function LoanDetailPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-[40vh] bg-[#FAFAFA] px-4 pt-10">
+        <div className="min-h-[40vh] sf-page-bg px-4 pt-10">
           <MobileV2ProductListSkeleton />
         </div>
       }

@@ -8,7 +8,7 @@ import { motion } from 'framer-motion';
 
 export default function EmailSentPage() {
     return (
-        <div className="flex flex-col h-full bg-[#FAFAFA] text-[#1E293B] relative p-6 pt-12 items-center justify-center">
+        <div className="flex flex-col h-full sf-page-bg text-[#1E293B] relative p-6 pt-12 items-center justify-center">
 
             {/* Icon */}
             <motion.div

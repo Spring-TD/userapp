@@ -8,7 +8,7 @@ import { motion } from 'framer-motion';
 
 export default function PasswordResetSuccessPage() {
     return (
-        <div className="flex flex-col h-full bg-[#FAFAFA] relative items-center justify-center p-8 text-center">
+        <div className="flex flex-col h-full sf-page-bg relative items-center justify-center p-8 text-center">
 
             <motion.div
                 initial={{ scale: 0, rotate: -45 }}

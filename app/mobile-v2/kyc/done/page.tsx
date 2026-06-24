@@ -58,7 +58,7 @@ export default function KycDonePage() {
   }, []);
 
   return (
-    <div className="flex h-full flex-col bg-[#FAFAFA] px-6 pt-12">
+    <div className="flex h-full flex-col sf-page-bg px-6 pt-12">
       <Link href="/mobile-v2/profile" className="mb-8 inline-flex w-10 items-center justify-center text-gray-700">
         <ChevronLeft className="h-6 w-6" />
       </Link>

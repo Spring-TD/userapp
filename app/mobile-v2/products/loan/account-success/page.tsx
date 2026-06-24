@@ -23,7 +23,7 @@ function LoanAccountSuccessInner() {
   }, [continueHref, router])
 
   return (
-    <div className="flex min-h-full flex-col bg-[#FAFAFA]">
+    <div className="flex min-h-full flex-col sf-page-bg">
       <div className="flex flex-1 flex-col items-center justify-center px-8 pb-16 text-center">
         <div className="relative mb-8 h-32 w-32">
           <div className="absolute inset-0 rounded-full bg-[#2DD4BF] opacity-20" />
@@ -59,7 +59,7 @@ export default function LoanAccountSuccessPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-[60vh] items-center justify-center bg-[#FAFAFA]">
+        <div className="flex min-h-[60vh] items-center justify-center sf-page-bg">
           <div className="h-8 w-8 animate-pulse rounded-full bg-gray-200" />
         </div>
       }

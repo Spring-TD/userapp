@@ -101,7 +101,7 @@ export function MobileV2NotificationsSheet({
                 disabled={busyId === notification.id}
                 onClick={() => void handleMarkRead(notification)}
                 className={`w-full rounded-2xl border px-4 py-3 text-left shadow-sm transition-colors ${
-                  notification.isRead ? 'border-gray-100 bg-white' : 'border-blue-100 bg-[#EFF6FF]'
+                  notification.isRead ? 'border-gray-100 bg-white' : 'sf-border-brand border sf-accent-soft'
                 }`}
               >
                 <div className="flex items-start gap-2">

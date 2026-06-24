@@ -86,7 +86,7 @@ function CreateKycContent() {
   };
 
   return (
-    <div className="flex h-full flex-col bg-[#FAFAFA]">
+    <div className="flex h-full flex-col sf-page-bg">
       <div className="mb-2 flex items-center px-6 pt-12">
         <Link
           href={fromRegistration ? '/mobile-v2/auth/login' : '/mobile-v2/profile'}
@@ -141,7 +141,7 @@ function CreateKycContent() {
 
 export default function CreateKycPage() {
   return (
-    <Suspense fallback={<div className="flex h-full items-center justify-center bg-[#FAFAFA] text-sm text-gray-500">Loading KYC...</div>}>
+    <Suspense fallback={<div className="flex h-full items-center justify-center sf-page-bg text-sm text-gray-500">Loading KYC...</div>}>
       <CreateKycContent />
     </Suspense>
   );

@@ -89,7 +89,7 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="flex min-h-full flex-col bg-[#FAFAFA]">
+    <div className="flex min-h-full flex-col sf-page-bg">
       <div className="flex-1 overflow-y-auto no-scrollbar pb-[calc(7rem+env(safe-area-inset-bottom))]">
         <div className="flex items-center justify-between px-5 pt-12">
           <Link
@@ -134,7 +134,7 @@ export default function NotificationsPage() {
                   type="button"
                   onClick={() => void handleMarkRead(notification)}
                   className={`w-full rounded-2xl border px-4 py-4 text-left shadow-sm transition-colors ${
-                    notification.isRead ? "border-gray-100 bg-white" : "border-blue-100 bg-[#EFF6FF]"
+                    notification.isRead ? "border-gray-100 bg-white" : "sf-border-brand border sf-accent-soft"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">

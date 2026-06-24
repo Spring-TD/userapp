@@ -1,16 +1,22 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { Suspense, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useSearchParams } from 'next/navigation';
 import {
     ChevronLeft,
     X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
+import { mortgageApplyStartHref } from '@/lib/mortgageApplyRoutes';
+import { sanitizeProductId } from '@/lib/sanitizeProductId';
 
-export default function TargetSavingsPage() {
+function TargetSavingsContent() {
+    const searchParams = useSearchParams();
+    const fromMortgage = searchParams.get('from') === 'mortgage';
+    const mortgageProductId = sanitizeProductId(searchParams.get('productId'));
     const [showInfoBanner, setShowInfoBanner] = useState(true);
 
     // Mock data for target savings
@@ -22,7 +28,7 @@ export default function TargetSavingsPage() {
     ];
 
     return (
-        <div className="flex flex-col h-full bg-[#FAFAFA] relative">
+        <div className="flex flex-col h-full sf-page-bg relative">
             <div className="flex-1 overflow-y-auto no-scrollbar pb-32">
 
                 {/* Header */}
@@ -33,6 +39,20 @@ export default function TargetSavingsPage() {
                 </div>
 
                 <div className="px-6 space-y-6">
+                    {fromMortgage && mortgageProductId ? (
+                        <div className="rounded-[20px] border sf-border-brand sf-accent-soft p-5">
+                            <h3 className="text-sm font-bold text-[var(--sf-ink,#1E1B4B)]">Mortgage down payment savings</h3>
+                            <p className="mt-2 text-xs leading-relaxed text-gray-600">
+                                Build your down payment with AGMB Target Savings. When you are ready, continue your mortgage application.
+                            </p>
+                            <Link href={mortgageApplyStartHref(mortgageProductId)} className="mt-4 block">
+                                <Button className="h-11 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-sm font-semibold text-white">
+                                    Continue mortgage application
+                                </Button>
+                            </Link>
+                        </div>
+                    ) : null}
+
                     {/* Balance Card */}
                     <div className="bg-[var(--sf-button,#1E40AF)] rounded-[24px] p-6 text-center text-white relative overflow-hidden">
                         <p className="text-sm font-medium mb-1 text-blue-100">Target Saving Balance</p>
@@ -104,5 +124,13 @@ export default function TargetSavingsPage() {
             {/* Bottom Nav */}
             <MobileV2BottomNav active="products" />
         </div>
+    );
+}
+
+export default function TargetSavingsPage() {
+    return (
+        <Suspense fallback={null}>
+            <TargetSavingsContent />
+        </Suspense>
     );
 }

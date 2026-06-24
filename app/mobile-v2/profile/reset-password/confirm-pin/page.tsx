@@ -34,7 +34,7 @@ export default function ConfirmPinPage() {
     };
 
     return (
-        <div className="flex flex-col h-full bg-[#FAFAFA] relative">
+        <div className="flex flex-col h-full sf-page-bg relative">
             {/* Header */}
             <div className="pt-12 px-6 flex items-center mb-12">
                 <Link href="/mobile-v2/profile/reset-password/new-pin" className="w-10 h-10 flex items-center justify-center -ml-2 text-gray-700">

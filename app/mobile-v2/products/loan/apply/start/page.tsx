@@ -120,7 +120,7 @@ function LoanApplyStartInner() {
 
   if (checkingExisting) {
     return (
-      <div className="flex h-full flex-col items-center justify-center bg-[#FAFAFA] px-8 text-center">
+      <div className="flex h-full flex-col items-center justify-center sf-page-bg px-8 text-center">
         <Loader2 className="h-8 w-8 animate-spin text-[var(--sf-button,#1E40AF)]" />
         <p className="mt-4 text-sm font-medium text-[var(--sf-ink,#1E293B)]">
           Checking your loan application...
@@ -130,7 +130,7 @@ function LoanApplyStartInner() {
   }
 
   return (
-    <div className="relative flex h-full flex-col bg-[#FAFAFA] overflow-hidden">
+    <div className="relative flex h-full flex-col sf-page-bg overflow-hidden">
       <div className="px-6 pt-12">
         <Link
           href="/mobile-v2/products/loan"
@@ -264,7 +264,7 @@ function LoanApplyStartInner() {
 
 function LoanApplyStartFallback() {
   return (
-    <div className="flex min-h-[60vh] items-center justify-center bg-[#FAFAFA]">
+    <div className="flex min-h-[60vh] items-center justify-center sf-page-bg">
       <Loader2 className="h-8 w-8 animate-spin text-[var(--sf-button,#1E40AF)]" />
     </div>
   )

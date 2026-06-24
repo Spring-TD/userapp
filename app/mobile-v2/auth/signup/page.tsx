@@ -243,7 +243,7 @@ function SignupForm() {
   };
 
   return (
-    <div className="relative flex h-full flex-col bg-[#FAFAFA] p-6 pt-12 text-[#1E293B]">
+    <div className="relative flex h-full flex-col sf-page-bg p-6 pt-12 text-[#1E293B]">
       <div className="mb-8 flex items-center justify-between">
         <Link href="/mobile-v2" className="-ml-2 rounded-full p-2 transition-colors hover:bg-black/5">
           <ChevronLeft className="h-6 w-6" />

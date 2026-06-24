@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 
 export default function NewPasswordPage() {
     return (
-        <div className="flex flex-col h-full bg-[#FAFAFA] text-[#1E293B] relative p-6 pt-12">
+        <div className="flex flex-col h-full sf-page-bg text-[#1E293B] relative p-6 pt-12">
             {/* Header */}
             <div className="flex items-center justify-between mb-8">
                 <Link href="/mobile-v2/auth/forgot-password/sent" className="p-2 -ml-2 rounded-full hover:bg-black/5 transition-colors">

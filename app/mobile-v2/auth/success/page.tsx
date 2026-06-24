@@ -18,7 +18,7 @@ export default function SuccessPage() {
     }, [router]);
 
     return (
-        <div className="flex flex-col h-full bg-[#FAFAFA] items-center justify-center p-8 text-center relative">
+        <div className="flex flex-col h-full sf-page-bg items-center justify-center p-8 text-center relative">
 
             <div className="flex-1 flex flex-col items-center justify-center w-full">
                 <motion.div

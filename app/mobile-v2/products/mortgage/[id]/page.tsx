@@ -8,7 +8,7 @@ import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 import { MortgageDetailSkeleton } from '@/components/mobile-v2/data-skeletons'
 import { Skeleton } from '@/components/ui/skeleton'
-import { mortgageApplyStartHref } from '@/lib/mortgageApplyRoutes'
+import { mortgageApplyChoosePaymentHref } from '@/lib/mortgageApplyRoutes'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
 import { ProductDetailsScreen } from '@/components/mobile-v2/application/ProductDetailsScreen'
 import { amountRange, feeSummary, formatNgn, rateLabel, requirementSummary } from '@/lib/mobileProductDetailDisplay'
@@ -39,7 +39,7 @@ function MortgageDetailInner() {
 
   if (!tenantReady || loading) {
     return (
-      <div className="flex h-full flex-col bg-[#FAFAFA]" aria-busy="true" aria-live="polite">
+      <div className="flex h-full flex-col sf-page-bg" aria-busy="true" aria-live="polite">
         <div className="sticky top-0 z-20 bg-white px-4 pb-3 pt-10 shadow-sm">
           <div className="mb-3 flex items-center gap-2">
             <Skeleton className="h-8 w-20 rounded-md bg-gray-200/90" />
@@ -53,7 +53,7 @@ function MortgageDetailInner() {
 
   if (!product) {
     return (
-      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 bg-[#FAFAFA] px-6 text-center">
+      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 sf-page-bg px-6 text-center">
         <p className="text-sm text-gray-600">This mortgage product could not be found.</p>
         <Link href="/mobile-v2/products/mortgage">
           <Button className="rounded-full bg-[var(--sf-button,#1E40AF)] text-white">
@@ -85,7 +85,7 @@ function MortgageDetailInner() {
       rate={detailProduct ? rateLabel(detailProduct) : product?.interestRate || '3% p.a'}
       provider={lender}
       imageUrl={imageUrl}
-      applyHref={product?.id ? mortgageApplyStartHref(product.id) : '/mobile-v2/products/mortgage'}
+      applyHref={product?.id ? mortgageApplyChoosePaymentHref(product.id) : '/mobile-v2/products/mortgage'}
       backHref="/mobile-v2/products/mortgage"
       detailRows={
         detailProduct
@@ -127,7 +127,7 @@ export default function MortgageDetailPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-[40vh] bg-[#FAFAFA] px-4 pt-10">
+        <div className="min-h-[40vh] sf-page-bg px-4 pt-10">
           <MortgageDetailSkeleton />
         </div>
       }
