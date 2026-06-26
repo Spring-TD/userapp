@@ -11,24 +11,10 @@ import { clearAuthError, loginThunk } from '@/store/authSlice';
 import { clearMobileClientAuthError } from '@/store/mobileClientAuthSlice';
 import { AuthRouteSkeleton } from '@/components/mobile-v2/data-skeletons';
 import { showAuthError } from '@/lib/showAuthError';
+import { resolvePostLoginPath } from '@/lib/userKycRouting';
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
 
 const DEFAULT_POST_LOGIN = '/mobile-v2/home';
-
-/** Same-origin relative path only — avoids open redirects from `?next=`. */
-function safeReturnPath(raw: string | null): string {
-  if (!raw) return DEFAULT_POST_LOGIN;
-  try {
-    const decoded = decodeURIComponent(raw.trim());
-    if (!decoded.startsWith('/') || decoded.startsWith('//')) return DEFAULT_POST_LOGIN;
-    if (decoded.includes('://')) return DEFAULT_POST_LOGIN;
-    if (decoded.startsWith('/api')) return DEFAULT_POST_LOGIN;
-    if (decoded.startsWith('/mobile-v2/auth')) return DEFAULT_POST_LOGIN;
-    return decoded;
-  } catch {
-    return DEFAULT_POST_LOGIN;
-  }
-}
 
 function LoginPageInner() {
   const router = useRouter();
@@ -105,7 +91,8 @@ function LoginPageInner() {
     }
 
     toast.success('Signed in successfully.');
-    router.push(safeReturnPath(searchParams.get('next')));
+    const destination = await resolvePostLoginPath(searchParams.get('next'));
+    router.push(destination);
   };
 
   return (
@@ -124,7 +111,7 @@ function LoginPageInner() {
         <h2 className="mb-2 text-[28px] font-bold tracking-tight text-[var(--sf-ink,#1E1B4B)]">Welcome back</h2>
         <p className="px-4 text-[15px] leading-normal text-gray-500">
           {verifiedEmail
-            ? 'Your email is verified. Sign in to complete KYC and finish setup.'
+            ? 'Your email is verified. Sign in to complete identity verification with FusPay.'
             : 'Sign in with your email and password'}
         </p>
       </div>

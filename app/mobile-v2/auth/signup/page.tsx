@@ -145,13 +145,6 @@ function SignupForm() {
       }
 
       const normalizedPhone = normalizeRegistrationPhone(phone, country);
-      sessionStorage.setItem(
-        'mobile-v2-manual-kyc-prefill',
-        JSON.stringify({
-          email: email.trim().toLowerCase(),
-          phone: normalizedPhone,
-        }),
-      );
       const payload = buildMobileRegisterPayload({
         first_name: firstName,
         last_name: lastName,
@@ -185,7 +178,7 @@ function SignupForm() {
 
       if (!isFuspayCustomerLinked(regData)) {
         toast.message('Account created', {
-          description: 'Complete manual KYC after email verification to finish setup.',
+          description: 'After email verification, sign in and complete identity verification with FusPay.',
         });
       }
 

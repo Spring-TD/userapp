@@ -64,7 +64,7 @@ function VerifyOtpContent() {
     }
 
     await clearSecureTokens()
-    toast.success('Email verified. Sign in to complete KYC.')
+    toast.success('Email verified. Sign in to complete identity verification with FusPay.')
     const kycNext = `/mobile-v2/profile/kyc/create?from=registration&email=${encodeURIComponent(email)}`
     router.push(
       `/mobile-v2/auth/login?email=${encodeURIComponent(email)}&verified=1&next=${encodeURIComponent(kycNext)}`,

@@ -1,11 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
+import { isUserKycApprovedFromProfile } from '@/lib/kycApproval'
 import { fetchAuthUserProfile, type AuthUserProfile } from '@/lib/userProfileClient'
 
 export function useAuthUserProfile() {
   const [user, setUser] = useState<AuthUserProfile | null>(null)
+  const [kycStatus, setKycStatus] = useState<string | undefined>()
+  const [kycCompleted, setKycCompleted] = useState<boolean | undefined>()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -14,6 +17,8 @@ export function useAuthUserProfile() {
     setError(null)
     const result = await fetchAuthUserProfile()
     setUser(result.user)
+    setKycStatus(result.kycStatus)
+    setKycCompleted(result.kycCompleted)
     setError(result.error)
     setLoading(false)
     return result
@@ -23,5 +28,10 @@ export function useAuthUserProfile() {
     void refetch()
   }, [refetch])
 
-  return { user, loading, error, refetch }
+  const kycApproved = useMemo(
+    () => isUserKycApprovedFromProfile(kycStatus, kycCompleted),
+    [kycStatus, kycCompleted],
+  )
+
+  return { user, kycStatus, kycCompleted, kycApproved, loading, error, refetch }
 }
