@@ -15,6 +15,8 @@ import {
   openModularKycUrl,
   resolveModularKycLink,
 } from '@/lib/kycModularClient';
+import { fetchAuthUserProfile } from '@/lib/userProfileClient';
+import { isUserKycApprovedFromProfile } from '@/lib/kycApproval';
 
 function KycHero() {
   return (
@@ -58,6 +60,20 @@ function CreateKycContent() {
     const loginUrl = `/mobile-v2/auth/login?email=${encodeURIComponent(initialEmail)}&verified=1&next=${encodeURIComponent(loginRedirectPath)}`;
     router.replace(loginUrl);
   }, [fromRegistration, initialEmail, loginRedirectPath, router]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const profile = await fetchAuthUserProfile();
+      if (cancelled) return;
+      if (isUserKycApprovedFromProfile(profile.kycStatus, profile.kycCompleted)) {
+        router.replace('/mobile-v2/home');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   const handleStartKyc = async () => {
     setStarting(true);

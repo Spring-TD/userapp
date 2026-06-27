@@ -54,7 +54,7 @@ function statusLabel(user: AuthUserProfile | null) {
 export default function ProfilePage() {
     const router = useRouter();
     const dispatch = useAppDispatch();
-    const { user, loading, error } = useAuthUserProfile();
+    const { user, loading, error, kycApproved, kycStatus } = useAuthUserProfile();
     const [showLogoutModal, setShowLogoutModal] = useState(false);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const name = useMemo(() => fullName(user), [user]);
@@ -175,9 +175,19 @@ export default function ProfilePage() {
                     <div>
                         <h3 className="text-sm font-bold text-[#1E293B] mb-3 ml-1">Identity Verification</h3>
                         <div className="bg-white rounded-[24px] overflow-hidden shadow-sm border border-gray-100">
-                            <Link href="/mobile-v2/profile/kyc/create">
-                                <SettingItem icon={<ScanFace className="w-5 h-5" />} label="KYC Center" last />
-                            </Link>
+                            {kycApproved ? (
+                                <SettingItem
+                                    icon={<ScanFace className="w-5 h-5" />}
+                                    label="KYC Status"
+                                    value={kycStatus ? kycStatus.replace(/_/g, ' ') : 'Verified'}
+                                    loading={loading}
+                                    last
+                                />
+                            ) : (
+                                <Link href="/mobile-v2/profile/kyc/create">
+                                    <SettingItem icon={<ScanFace className="w-5 h-5" />} label="Complete KYC" last />
+                                </Link>
+                            )}
                         </div>
                     </div>
 

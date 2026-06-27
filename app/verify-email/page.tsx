@@ -111,15 +111,17 @@ function VerifyEmailContent() {
         await setSecureTokens(data.data.accessToken, data.data.refreshToken)
       }
 
-      sessionStorage.setItem(
-        "mobile-v2-manual-kyc-prefill",
-        JSON.stringify({ email: email.trim().toLowerCase() }),
-      )
       sessionStorage.removeItem("pendingEmail")
 
-      toast.success("✅ Email verified successfully!")
+      toast.success("Email verified. Complete identity verification with FusPay to finish setup.")
 
-      setTimeout(() => router.push(`/mobile-v2/profile/kyc/create?from=registration&email=${encodeURIComponent(email)}`), 500)
+      setTimeout(
+        () =>
+          router.push(
+            `/mobile-v2/profile/kyc/create?from=registration&email=${encodeURIComponent(email)}`,
+          ),
+        500,
+      )
     } catch (err: any) {
       console.error("Email verification failed", err)
       const errorMsg = err?.response?.data?.error || "Invalid or expired verification code"

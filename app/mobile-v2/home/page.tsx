@@ -21,8 +21,8 @@ import { CopyableDetailRow } from '@/components/mobile-v2/CopyableDetailRow';
 import { WalletBalanceCardSkeleton } from '@/components/mobile-v2/data-skeletons';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useUserWallet } from '@/hooks/useUserWallet';
+import { useAuthUserProfile } from '@/hooks/useAuthUserProfile';
 import { fetchUserWalletTransactions } from '@/lib/services/userWalletApi';
-import { fetchAuthUserProfile, type AuthUserProfile } from '@/lib/userProfileClient';
 import {
     formatWalletBalance,
     isVirtualNubanActive,
@@ -41,7 +41,7 @@ import {
 } from '@/lib/storefrontProducts';
 import type { WalletTransaction } from '@/types/userWallet';
 
-function profileAvatarUrl(user: AuthUserProfile | null): string | null {
+function profileAvatarUrl(user: ReturnType<typeof useAuthUserProfile>['user']): string | null {
     if (!user) return null
     const u = user as AuthUserProfile & { avatar_url?: string; profile_image?: string; image?: string }
     const raw = u.avatar_url || u.profile_image || u.image
@@ -49,7 +49,7 @@ function profileAvatarUrl(user: AuthUserProfile | null): string | null {
     return null
 }
 
-function displayNameFromProfile(user: AuthUserProfile | null): string {
+function displayNameFromProfile(user: ReturnType<typeof useAuthUserProfile>['user']): string {
     if (!user) return ''
     const first = (user.first_name || '').trim()
     const last = (user.last_name || '').trim()
@@ -59,7 +59,7 @@ function displayNameFromProfile(user: AuthUserProfile | null): string {
     return ''
 }
 
-function profileInitials(user: AuthUserProfile | null): string {
+function profileInitials(user: ReturnType<typeof useAuthUserProfile>['user']): string {
     if (!user) return ''
     const a = (user.first_name || '').trim()[0]
     const b = (user.last_name || '').trim()[0]
@@ -122,8 +122,7 @@ export default function HomePage() {
     const quickActions: QuickActionItem[] = [...productQuickLinks, ...utilityQuickActions];
 
     const [activeModal, setActiveModal] = useState<'none' | 'fund_options' | 'fund_bank' | 'account_details'>('none');
-    const [profile, setProfile] = useState<AuthUserProfile | null>(null);
-    const [profileLoading, setProfileLoading] = useState(true);
+    const { user: profile, loading: profileLoading, kycApproved } = useAuthUserProfile();
     const { wallet, formattedBalance, loading: walletLoading, error: walletError, notFound } = useUserWallet();
     const [recentTransactions, setRecentTransactions] = useState<WalletTransaction[]>([]);
     const [transactionsLoading, setTransactionsLoading] = useState(false);
@@ -131,21 +130,10 @@ export default function HomePage() {
     const nubanReady = isVirtualNubanActive(wallet);
     const accountHolder = wallet?.name || displayNameFromProfile(profile) || '—';
     const fundingUnavailableMessage = nuban?.provisionError ||
-        'Complete identity verification to activate your bank transfer account.';
-
-    useEffect(() => {
-        let cancelled = false;
-        void (async () => {
-            const { user } = await fetchAuthUserProfile();
-            if (!cancelled) {
-                setProfile(user);
-                setProfileLoading(false);
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, []);
+        (kycApproved
+            ? 'Your bank transfer account is still being activated.'
+            : 'Complete identity verification to activate your bank transfer account.');
+    const showCompleteKycCta = !nubanReady && !kycApproved;
 
     useEffect(() => {
         const userId = wallet?.userId;
@@ -470,12 +458,14 @@ export default function HomePage() {
                                 <div className="rounded-2xl sf-accent-soft p-4">
                                     <p className="text-sm font-semibold text-[var(--sf-ink,#1E1B4B)]">Bank account not active yet</p>
                                     <p className="mt-1 text-sm text-gray-600">{fundingUnavailableMessage}</p>
+                                    {showCompleteKycCta ? (
                                     <Link
                                         href="/mobile-v2/profile/kyc/create"
                                         className="mt-3 inline-flex h-10 items-center rounded-full bg-[var(--sf-button,#1E40AF)] px-4 text-sm font-semibold text-white"
                                     >
                                         Complete KYC
                                     </Link>
+                                    ) : null}
                                 </div>
                             )
                         )}
@@ -523,12 +513,14 @@ export default function HomePage() {
                                 <div className="rounded-2xl sf-accent-soft p-4">
                                     <p className="text-sm font-semibold text-[var(--sf-ink,#1E1B4B)]">Account details unavailable</p>
                                     <p className="mt-1 text-sm text-gray-600">{fundingUnavailableMessage}</p>
+                                    {showCompleteKycCta ? (
                                     <Link
                                         href="/mobile-v2/profile/kyc/create"
                                         className="mt-3 inline-flex h-10 items-center rounded-full bg-[var(--sf-button,#1E40AF)] px-4 text-sm font-semibold text-white"
                                     >
                                         Complete KYC
                                     </Link>
+                                    ) : null}
                                 </div>
                             )
                         )}

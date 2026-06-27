@@ -5,8 +5,9 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, ChevronLeft, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { MOBILE_USER_KYC_COMPLETE_KEY } from '@/lib/kycApproval';
+import { isUserKycApprovedFromProfile, MOBILE_USER_KYC_COMPLETE_KEY } from '@/lib/kycApproval';
 import { refreshModularKycStatus } from '@/lib/kycModularClient';
+import { fetchAuthUserProfile } from '@/lib/userProfileClient';
 
 /** Return target after modular KYC `redirect` (see `modularKycRedirectUrl`). */
 export default function KycDonePage() {
@@ -19,20 +20,36 @@ export default function KycDonePage() {
     let cancelled = false;
     let attempts = 0;
 
+    async function markCompleteAndRedirect() {
+      try {
+        localStorage.setItem(MOBILE_USER_KYC_COMPLETE_KEY, '1');
+      } catch {
+        /* ignore */
+      }
+      if (!cancelled) {
+        setComplete(true);
+        setChecking(false);
+        router.replace('/mobile-v2/home');
+      }
+    }
+
     async function poll() {
       attempts += 1;
       try {
+        const profile = await fetchAuthUserProfile();
+        if (cancelled) return;
+
+        if (isUserKycApprovedFromProfile(profile.kycStatus, profile.kycCompleted)) {
+          setStatus(profile.kycStatus || 'approved');
+          await markCompleteAndRedirect();
+          return;
+        }
+
         const result = await refreshModularKycStatus();
         if (cancelled) return;
-        setStatus(result.status || 'pending');
-        setComplete(result.complete);
+        setStatus(result.status || profile.kycStatus || 'pending');
         if (result.complete) {
-          try {
-            localStorage.setItem(MOBILE_USER_KYC_COMPLETE_KEY, '1');
-          } catch {
-            /* ignore */
-          }
-          setChecking(false);
+          await markCompleteAndRedirect();
           return;
         }
       } catch {
@@ -42,7 +59,7 @@ export default function KycDonePage() {
         }
       }
 
-      if (attempts < 8 && !cancelled) {
+      if (attempts < 10 && !cancelled) {
         window.setTimeout(() => {
           void poll();
         }, 2500);
@@ -55,7 +72,7 @@ export default function KycDonePage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [router]);
 
   return (
     <div className="flex h-full flex-col sf-page-bg px-6 pt-12">
@@ -69,7 +86,7 @@ export default function KycDonePage() {
             <Loader2 className="mb-4 h-10 w-10 animate-spin text-[var(--sf-button,#1E40AF)]" />
             <h1 className="mb-2 text-xl font-bold text-[#1E293B]">Checking verification</h1>
             <p className="max-w-sm text-sm text-gray-600">
-              We are syncing your FusPay verification status. This usually takes a few seconds.
+              We are confirming your identity with your profile. This usually takes a few seconds.
             </p>
           </>
         ) : complete ? (
@@ -79,7 +96,7 @@ export default function KycDonePage() {
             </div>
             <h1 className="mb-2 text-xl font-bold text-[#1E293B]">Verification complete</h1>
             <p className="mb-8 max-w-sm text-sm text-gray-600">
-              Your identity verification is complete. You can continue using the app.
+              Your identity verification is approved. Taking you back to the app…
             </p>
             <Button
               className="w-full max-w-sm rounded-xl bg-[var(--sf-button,#1E40AF)]"
@@ -92,7 +109,7 @@ export default function KycDonePage() {
           <>
             <h1 className="mb-2 text-xl font-bold text-[#1E293B]">Verification received</h1>
             <p className="mb-2 max-w-sm text-sm text-gray-600">
-              If you finished the hosted flow, your status will update when the provider calls our webhook.
+              If you finished the hosted flow, your status will update when the provider syncs with your profile.
             </p>
             <p className="mb-8 text-xs uppercase tracking-wide text-gray-400">Current status: {status}</p>
             <div className="flex w-full max-w-sm flex-col gap-3">
@@ -100,7 +117,7 @@ export default function KycDonePage() {
                 <Link href="/mobile-v2/profile/kyc/create">Back to KYC</Link>
               </Button>
               <Button asChild variant="outline" className="w-full rounded-xl">
-                <Link href="/mobile-v2/profile">Back to profile</Link>
+                <Link href="/mobile-v2/home">Go to Home</Link>
               </Button>
             </div>
           </>

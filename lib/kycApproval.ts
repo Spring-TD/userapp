@@ -59,6 +59,16 @@ export function isKycVerificationComplete(res: unknown): boolean {
   return isKycStatusApproved(res)
 }
 
+/** True when GET /api/v1/user/profile reports KYC done (`kycCompleted` or terminal `kycStatus`). */
+export function isUserKycApprovedFromProfile(
+  kycStatus?: string | null,
+  kycCompleted?: boolean | null,
+): boolean {
+  if (kycCompleted === true) return true
+  const s = (kycStatus || "").trim().toLowerCase().replace(/\s+/g, "_")
+  return LEGACY_PASS_STATUSES.has(s)
+}
+
 /** localStorage flag when status API confirmed KYC complete (offline fallback if later requests fail). */
 export const MOBILE_USER_KYC_COMPLETE_KEY = "mobile_user_kyc_complete_v1"
 

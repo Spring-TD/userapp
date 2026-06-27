@@ -32,9 +32,24 @@ export type AuthUserProfile = {
 
 type ProfileApiResponse = {
   success: boolean
-  data?: { user?: unknown } | (AuthUserProfile & Record<string, unknown>)
+  data?: { user?: unknown; kycStatus?: string; kycCompleted?: boolean } | (AuthUserProfile & Record<string, unknown>)
   error?: string
   message?: string
+}
+
+export type AuthUserProfilePayload = {
+  user: AuthUserProfile | null
+  kycStatus?: string
+  kycCompleted?: boolean
+  error: string | null
+}
+
+function extractProfileKycFields(inner: unknown): { kycStatus?: string; kycCompleted?: boolean } {
+  if (!inner || typeof inner !== "object") return {}
+  const d = inner as Record<string, unknown>
+  const kycStatus = typeof d.kycStatus === "string" ? d.kycStatus : undefined
+  const kycCompleted = typeof d.kycCompleted === "boolean" ? d.kycCompleted : undefined
+  return { kycStatus, kycCompleted }
 }
 
 export type UpdateAuthUserProfileInput = {
@@ -92,14 +107,13 @@ export function normalizeAuthUserProfile(raw: unknown): AuthUserProfile | null {
 
 /**
  * Loads the current user via Next BFF `GET /api/v1/user/profile`.
+ * Response may include sibling fields `kycStatus` and `kycCompleted` next to `user`.
  */
-export async function fetchAuthUserProfile(): Promise<{
-  user: AuthUserProfile | null
-  error: string | null
-}> {
+export async function fetchAuthUserProfile(): Promise<AuthUserProfilePayload> {
   try {
     const { data } = await api.get<ProfileApiResponse>('/v1/user/profile')
     const inner = data?.data
+    const { kycStatus, kycCompleted } = extractProfileKycFields(inner)
     const rawUser =
       inner && typeof inner === 'object' && 'user' in inner
         ? (inner as { user?: unknown }).user
@@ -108,10 +122,12 @@ export async function fetchAuthUserProfile(): Promise<{
           : null
     const user = rawUser ? normalizeAuthUserProfile(rawUser) : null
     if (data?.success && user) {
-      return { user, error: null }
+      return { user, kycStatus, kycCompleted, error: null }
     }
     return {
       user: null,
+      kycStatus,
+      kycCompleted,
       error: data?.error || data?.message || 'Unable to load profile',
     }
   } catch (e: unknown) {
