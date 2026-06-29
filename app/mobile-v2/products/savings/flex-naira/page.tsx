@@ -14,7 +14,7 @@ import { ProductFundingFlowSheet } from '@/components/mobile-v2/application/Prod
 import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeletons';
 import { useMobileProductDetail } from '@/hooks/useMobileProductDetail';
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
-import { amountRange, feeSummary, formatNgn, rateLabel } from '@/lib/mobileProductDetailDisplay';
+import { amountRange, feeSummary, formatNgn, poweredBy, rateLabel } from '@/lib/mobileProductDetailDisplay';
 
 export default function FlexNairaPage() {
     const searchParams = useSearchParams();
@@ -51,6 +51,7 @@ export default function FlexNairaPage() {
     const rate = rateLabel(product);
     const description = product.description || 'Savings product';
     const providerName = displayName || 'Provider';
+    const storefrontProvider = poweredBy(displayName || undefined);
     const amountRows =
         product.amountMin != null && product.amountMax != null
             ? [
@@ -84,7 +85,7 @@ export default function FlexNairaPage() {
                             {title}
                         </h1>
                         <span className="mt-1 shrink-0 rounded-full bg-white px-4 py-2 text-[10px] font-semibold text-gray-600">
-                            By {providerName}
+                            By {storefrontProvider}
                         </span>
                     </div>
                     <p className="max-w-[270px] text-[13px] font-medium leading-relaxed text-white/90">

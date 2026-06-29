@@ -1,3 +1,4 @@
+import { poweredBy } from "@/lib/mobileProductDetailDisplay"
 import type { MobileProduct } from "@/lib/storefrontProducts"
 import type { LoanCatalogItem } from "@/types/loanCatalog"
 
@@ -33,7 +34,7 @@ function amountRange(product: MobileProduct): { formatted: string; plain: string
 
 export function mapMobileProductToLoanCatalog(
   product: MobileProduct,
-  providerName = "—",
+  providerName = poweredBy(),
 ): LoanCatalogItem {
   const amount = amountRange(product)
   return {

@@ -10,6 +10,7 @@ import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeleto
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
 import { useMobileProducts } from '@/hooks/useMobileProducts';
 import type { MobileProduct } from '@/lib/storefrontProducts';
+import { poweredBy } from '@/lib/mobileProductDetailDisplay';
 
 const SAVINGS_ICONS = [PiggyBank, Target, LockKeyhole];
 
@@ -80,7 +81,7 @@ export default function SavingsProductPage() {
                     ) : orderedPlans.length > 0 ? (
                         <div className="grid grid-cols-2 gap-5">
                             {orderedPlans.map((plan, index) => (
-                                <SavingsCard key={plan.id} plan={plan} index={index} providerName={displayName || 'Provider'} />
+                                <SavingsCard key={plan.id} plan={plan} index={index} providerName={poweredBy(displayName || undefined)} />
                             ))}
                         </div>
                     ) : (
