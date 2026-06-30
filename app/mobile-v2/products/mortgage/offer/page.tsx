@@ -12,6 +12,7 @@ import {
 import { MortgageDetailSkeleton } from '@/components/mobile-v2/data-skeletons'
 import { mortgagePendingDetailHref } from '@/lib/mortgageApplyRoutes'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
+import { poweredBy } from '@/lib/mobileProductDetailDisplay'
 
 function parseInitialStep(value: string | null): MortgageOfferFlowStep {
   switch (value) {
@@ -55,7 +56,7 @@ function OfferPageContent() {
     )
   }
 
-  const provider = displayName || 'Provider'
+  const provider = poweredBy(displayName || undefined)
   const property = product?.properties?.[0]
   const backHref = applicationId
     ? mortgagePendingDetailHref(applicationId)

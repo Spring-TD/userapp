@@ -14,7 +14,7 @@ import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeleto
 import { useMobileProductDetail } from '@/hooks/useMobileProductDetail';
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
 import { ProductFundingFlowSheet } from '@/components/mobile-v2/application/ProductFundingFlowSheet';
-import { amountRange, feeSummary, formatNgn, rateLabel } from '@/lib/mobileProductDetailDisplay';
+import { amountRange, feeSummary, formatNgn, poweredBy, rateLabel } from '@/lib/mobileProductDetailDisplay';
 
 export default function InvestDetailPage() {
     const params = useParams();
@@ -44,6 +44,7 @@ export default function InvestDetailPage() {
     const returnDisplay = product ? `${rateLabel(product)} returns` : 'Returns available';
     const durationDisplay = product?.duration || 'Flexible duration';
     const providerName = displayName || 'Provider';
+    const storefrontProvider = poweredBy(displayName || undefined);
 
     const investmentDetails = useMemo(
         () => [
@@ -95,7 +96,7 @@ export default function InvestDetailPage() {
                             {product.name}
                         </h1>
                         <span className="mt-1 shrink-0 rounded-full bg-white/95 px-4 py-2 text-[10px] font-semibold text-[var(--sf-ink,#1E293B)]">
-                            By {providerName}
+                            By {storefrontProvider}
                         </span>
                     </div>
                     <p className="max-w-[270px] text-[13px] font-medium leading-relaxed text-white/90">

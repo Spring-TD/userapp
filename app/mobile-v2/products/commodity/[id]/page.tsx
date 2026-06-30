@@ -3,33 +3,67 @@
 import React, { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { Calendar, Check, ChevronDown, ChevronLeft, Loader2, Minus, Percent, Plus } from 'lucide-react'
+import {
+  AlertCircle,
+  Building2,
+  Calendar,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  HelpCircle,
+  Loader2,
+  Minus,
+  Percent,
+  Plus,
+  X,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { CopyableDetailRow } from '@/components/mobile-v2/CopyableDetailRow'
 import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
+import { useUserWallet } from '@/hooks/useUserWallet'
+import { useAuthUserProfile } from '@/hooks/useAuthUserProfile'
 import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeletons'
 import {
   asCommodityCatalogProduct,
   type CommodityCatalogProduct,
 } from '@/lib/commodityCatalog'
 import { buyCommodity } from '@/lib/storefrontApplicationClient'
-import {
-  formatApplicationAmountHint,
-  parseApplicationAmount,
-  validateApplicationAmount,
-} from '@/lib/applicationAmount'
+import { formatNgn, formatNaira, poweredBy } from '@/lib/mobileProductDetailDisplay'
+import { isVirtualNubanActive } from '@/lib/userWallet'
 
-function formatNgn(amount?: number | null) {
-  if (amount == null || Number.isNaN(amount)) return 'NGN—'
-  return `NGN${amount.toLocaleString('en-NG')}`
+type PurchaseSheet = 'purchase' | 'insufficient_funds' | 'fund_bank' | null
+
+type PurchaseSummary = {
+  productName: string
+  quantity: number
+  total: number
 }
 
-function formatNaira(amount?: number | null) {
-  if (amount == null || Number.isNaN(amount)) return 'N0.00'
-  return `N${amount.toLocaleString('en-NG', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+function formatWalletNgn(amount?: number | null) {
+  if (amount == null || Number.isNaN(amount)) return 'NGN 0.0'
+  return `NGN ${amount.toLocaleString('en-NG', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
   })}`
+}
+
+function displayNameFromProfile(user: ReturnType<typeof useAuthUserProfile>['user']): string {
+  if (!user) return ''
+  const first = (user.first_name || '').trim()
+  const last = (user.last_name || '').trim()
+  if (first && last) return `${first} ${last}`
+  return first || last || ''
+}
+
+function isInsufficientFundsError(message: string): boolean {
+  const m = message.toLowerCase()
+  return (
+    m.includes('insufficient') ||
+    m.includes('not enough') ||
+    m.includes('low balance') ||
+    m.includes('balance is not sufficient')
+  )
 }
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -64,27 +98,11 @@ function BottomSheet({
   )
 }
 
-function PinKey({ value, onClick }: { value: number | 'del' | ''; onClick: () => void }) {
-  if (value === '') return <div />
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="h-11 rounded-md bg-white text-center shadow-sm active:bg-gray-50"
-    >
-      {value === 'del' ? (
-        <span className="text-xl text-gray-500">⌫</span>
-      ) : (
-        <span className="block text-xl leading-none text-[#111827]">{value}</span>
-      )}
-    </button>
-  )
-}
-
 export default function CommodityDetailPage() {
   const params = useParams()
   const productId = typeof params?.id === 'string' ? decodeURIComponent(params.id) : ''
   const { ready: tenantReady, displayName } = useMobileV2Tenant()
+  const { user: profile } = useAuthUserProfile()
   const { product: detailProduct, loading } = useMobileProductDetail({
     productId,
     enabled: tenantReady && Boolean(productId),
@@ -97,27 +115,57 @@ export default function CommodityDetailPage() {
   }, [detailProduct, productId])
 
   const [quantity, setQuantity] = useState(1)
-  const [purchaseAmount, setPurchaseAmount] = useState('')
-  const [sheet, setSheet] = useState<'details' | 'account' | null>(null)
-  const [step, setStep] = useState<'details' | 'pin' | 'success'>('details')
-  const [pin, setPin] = useState<string[]>(['', '', '', ''])
+  const [sheet, setSheet] = useState<PurchaseSheet>(null)
+  const [step, setStep] = useState<'details' | 'success'>('details')
   const [processing, setProcessing] = useState(false)
   const [purchaseError, setPurchaseError] = useState<string | null>(null)
+  const [purchaseSummary, setPurchaseSummary] = useState<PurchaseSummary | null>(null)
+  const { wallet, balance: walletBalance, loading: walletLoading, refetch: refetchWallet } = useUserWallet()
 
-  const pushPin = (digit: number) => {
-    const firstEmpty = pin.findIndex((p) => !p)
-    if (firstEmpty === -1) return
-    const next = [...pin]
-    next[firstEmpty] = String(digit)
-    setPin(next)
-  }
+  const unitPrice = product?.price || product?.total || 1
+  const purchaseTotal = unitPrice * quantity
+  const shortfall = Math.max(0, purchaseTotal - walletBalance)
+  const hasEnoughFunds = walletBalance >= purchaseTotal
 
-  const popPin = () => {
-    const lastFilled = pin.findLastIndex((p) => Boolean(p))
-    if (lastFilled === -1) return
-    const next = [...pin]
-    next[lastFilled] = ''
-    setPin(next)
+  const providerName = poweredBy(displayName || undefined)
+  const detailTotal = unitPrice
+  const nuban = wallet?.virtualNuban
+  const nubanReady = isVirtualNubanActive(wallet)
+  const accountHolder = wallet?.name || displayNameFromProfile(profile) || '—'
+
+  const handlePurchase = async () => {
+    if (!product || quantity <= 0) return
+
+    if (!hasEnoughFunds) {
+      setPurchaseError(null)
+      setSheet('insufficient_funds')
+      return
+    }
+
+    setProcessing(true)
+    setPurchaseError(null)
+    try {
+      const result = await buyCommodity(product.id, quantity, purchaseTotal)
+      if (!result.ok) {
+        if (isInsufficientFundsError(result.error)) {
+          setSheet('insufficient_funds')
+          return
+        }
+        setPurchaseError(result.error)
+        return
+      }
+
+      await refetchWallet()
+      setPurchaseSummary({
+        productName: product.name,
+        quantity,
+        total: purchaseTotal,
+      })
+      setSheet(null)
+      setStep('success')
+    } finally {
+      setProcessing(false)
+    }
   }
 
   if (!tenantReady || loading) {
@@ -141,22 +189,7 @@ export default function CommodityDetailPage() {
     )
   }
 
-  const unitPrice = product.price || product.total || 1
-  const parsedPurchaseAmount = parseApplicationAmount(purchaseAmount)
-  const purchaseTotal = parsedPurchaseAmount ?? unitPrice * quantity
-  const purchaseAmountError =
-    parsedPurchaseAmount != null
-      ? validateApplicationAmount(parsedPurchaseAmount, product.amountMin, product.amountMax) ||
-        (parsedPurchaseAmount < product.minPurchase
-          ? `Amount must be at least ${formatNaira(product.minPurchase)}`
-          : null)
-      : purchaseAmount.trim()
-        ? 'Enter a valid purchase amount.'
-        : purchaseTotal < product.minPurchase
-          ? `Amount must be at least ${formatNaira(product.minPurchase)}`
-          : null
-
-  if (step === 'success') {
+  if (step === 'success' && purchaseSummary) {
     return (
       <div className="flex h-full flex-col items-center justify-center bg-[color-mix(in_srgb,var(--sf-button,#1E40AF)_6%,white)] px-8 text-center">
         <div className="relative mb-8 h-32 w-32">
@@ -166,83 +199,29 @@ export default function CommodityDetailPage() {
           </div>
         </div>
         <h1 className="text-xl font-bold text-[var(--sf-ink,#1E293B)]">Payment Done Successfully</h1>
-        <Link href="/mobile-v2/products/commodity" className="mt-10 w-full max-w-sm">
-          <Button className="h-14 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-base font-semibold text-white">
-            Done
-          </Button>
-        </Link>
-      </div>
-    )
-  }
-
-  const providerName = displayName || 'Provider'
-
-  if (step === 'pin') {
-    return (
-      <div className="flex h-full flex-col bg-[color-mix(in_srgb,var(--sf-button,#1E40AF)_6%,white)]">
-        <div className="px-6 pt-12">
-          <button
-            type="button"
-            onClick={() => setStep('details')}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-700 shadow-sm"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="flex flex-1 flex-col items-center px-8 pt-28 text-center">
-          <h1 className="mb-10 text-lg font-medium text-[var(--sf-ink,#111827)]">Enter your transaction pin</h1>
-          <div className="mb-12 flex gap-3">
-            {pin.map((digit, index) => (
-              <div
-                key={index}
-                className="flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--sf-button,#1E40AF)] bg-white text-lg text-[var(--sf-ink,#111827)]"
-              >
-                {digit}
-              </div>
-            ))}
-          </div>
-          {purchaseError ? <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">{purchaseError}</p> : null}
-          <Button
-            disabled={processing || pin.some((digit) => !digit)}
-            onClick={async () => {
-              setProcessing(true)
-              setPurchaseError(null)
-              try {
-                const result = await buyCommodity(product.id, quantity, purchaseTotal)
-                if (!result.ok) {
-                  setPurchaseError(result.error)
-                  return
-                }
-                setStep('success')
-              } finally {
-                setProcessing(false)
-              }
-            }}
-            className="h-14 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-base font-semibold text-white"
-          >
-            {processing ? (
-              <span className="inline-flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Processing...
-              </span>
-            ) : (
-              'Pay Now'
-            )}
-          </Button>
-        </div>
-
-        <div className="grid grid-cols-3 gap-1 bg-gray-300 px-1 pb-16 pt-1">
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9, '', 0, 'del'].map((key, index) => (
-            <PinKey
-              key={`${key}-${index}`}
-              value={key as number | 'del' | ''}
-              onClick={() => {
-                if (typeof key === 'number') pushPin(key)
-                if (key === 'del') popPin()
-              }}
-            />
-          ))}
+        <p className="mt-3 text-sm text-gray-600">
+          You purchased {purchaseSummary.quantity} unit{purchaseSummary.quantity === 1 ? '' : 's'} of{' '}
+          <span className="font-semibold text-[var(--sf-ink,#1E293B)]">{purchaseSummary.productName}</span> for{' '}
+          {formatWalletNgn(purchaseSummary.total)}.
+        </p>
+        <p className="mt-4 max-w-sm text-sm leading-relaxed text-gray-500">
+          Your central wallet has been debited. Check your notifications for purchase details and look out for a receipt
+          email with your transaction summary.
+        </p>
+        <div className="mt-10 flex w-full max-w-sm flex-col gap-3">
+          <Link href="/mobile-v2/notifications">
+            <Button
+              variant="outline"
+              className="h-12 w-full rounded-full border-[var(--sf-button,#1E40AF)] text-[var(--sf-button,#1E40AF)]"
+            >
+              View notifications
+            </Button>
+          </Link>
+          <Link href="/mobile-v2/products/commodity">
+            <Button className="h-14 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-base font-semibold text-white">
+              Done
+            </Button>
+          </Link>
         </div>
       </div>
     )
@@ -280,9 +259,7 @@ export default function CommodityDetailPage() {
             </div>
           </div>
 
-          <p className="mt-3 text-[11px] leading-relaxed text-gray-600">
-            {product.description}
-          </p>
+          <p className="mt-3 text-[11px] leading-relaxed text-gray-600">{product.description}</p>
 
           <div className="mt-4 flex gap-6 text-[11px] font-semibold text-gray-600">
             <span className="inline-flex items-center gap-2">
@@ -297,48 +274,6 @@ export default function CommodityDetailPage() {
 
           <div className="mt-10 space-y-8">
             <InfoRow label="Min purchase" value={formatNaira(product.minPurchase)} />
-            <div className="space-y-2">
-              <p className="text-sm text-gray-500">Purchase amount</p>
-              <input
-                value={purchaseAmount}
-                onChange={(event) => setPurchaseAmount(event.target.value)}
-                placeholder="Enter amount to purchase"
-                inputMode="numeric"
-                className="h-12 w-full rounded-2xl bg-gray-100 px-4 text-sm text-[var(--sf-ink,#1E293B)] outline-none ring-[var(--sf-button,#1E40AF)]/20 placeholder:text-gray-400 focus:ring-2"
-              />
-              <p className="text-[11px] text-gray-500">
-                {formatApplicationAmountHint(product.amountMin, product.amountMax)}
-              </p>
-              {purchaseAmountError ? (
-                <p className="text-xs text-red-600">{purchaseAmountError}</p>
-              ) : (
-                <p className="text-[11px] text-gray-500">
-                  Leave blank to use unit price x quantity ({formatNaira(unitPrice * quantity)}).
-                </p>
-              )}
-            </div>
-            <InfoRow
-              label="Buy more"
-              value={
-                <span className="inline-flex items-center gap-3">
-                  <button
-                    type="button"
-                    className="flex h-6 w-6 items-center justify-center rounded-full border border-gray-200"
-                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                  >
-                    <Minus className="h-3 w-3" />
-                  </button>
-                  {quantity}
-                  <button
-                    type="button"
-                    className="flex h-6 w-6 items-center justify-center rounded-full border border-gray-200"
-                    onClick={() => setQuantity((q) => q + 1)}
-                  >
-                    <Plus className="h-3 w-3" />
-                  </button>
-                </span>
-              }
-            />
             <InfoRow
               label="Start Date"
               value={
@@ -358,71 +293,210 @@ export default function CommodityDetailPage() {
               }
             />
             <InfoRow label="Powered by:" value={providerName} />
-            <InfoRow label="Total" value={formatNaira(purchaseTotal)} />
+            <InfoRow label="Total" value={formatNaira(detailTotal)} />
           </div>
 
           <Button
-            onClick={() => setSheet('details')}
-            disabled={Boolean(purchaseAmountError)}
-            className="mt-8 h-14 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-base font-semibold text-white disabled:opacity-50"
+            onClick={() => setSheet('purchase')}
+            className="mt-8 h-14 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-base font-semibold text-white"
           >
-            Purchase
+            Continue
           </Button>
         </div>
       </div>
 
-      {sheet === 'details' && (
-        <BottomSheet onClose={() => setSheet(null)}>
-          <h2 className="mb-7 text-center text-base font-bold text-[var(--sf-button,#1E40AF)]">
-            Details
-          </h2>
-          <div className="space-y-7">
-            <InfoRow label="Min purchase" value={formatNaira(product.minPurchase)} />
-            <InfoRow label="Purchase amount" value={formatNaira(purchaseTotal)} />
-            <InfoRow label="Unit" value={quantity} />
-            <InfoRow label="R.O.I" value={product.roi} />
-            <InfoRow label="Start Date" value={product.startDate} />
-            <InfoRow label="Maturity Date" value={product.maturityDate} />
-            <InfoRow label="Ref No:" value={product.refNo} />
-            <InfoRow label="Powered by:" value={providerName} />
+      {sheet === 'purchase' && (
+        <BottomSheet onClose={() => !processing && setSheet(null)}>
+          <h2 className="mb-7 text-center text-xl font-bold text-[var(--sf-ink,#1E293B)]">Commodity Purchase</h2>
+
+          <div className="space-y-6">
+            <div>
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div className="flex items-center gap-1.5 text-sm text-gray-700">
+                  <span>
+                    Counter Input<span className="text-[var(--sf-button,#1E40AF)]">*</span>
+                  </span>
+                  <span className="text-gray-400">(Optional)</span>
+                  <HelpCircle className="h-4 w-4 text-gray-400" aria-hidden />
+                </div>
+                <button type="button" className="shrink-0 text-sm text-gray-400 hover:text-gray-600">
+                  Help?
+                </button>
+              </div>
+
+              <div className="flex h-12 items-stretch overflow-hidden rounded-xl border border-gray-200 bg-white">
+                <button
+                  type="button"
+                  aria-label="Decrease quantity"
+                  onClick={() => setQuantity((value) => Math.max(1, value - 1))}
+                  className="flex w-12 shrink-0 items-center justify-center border-r border-gray-200 text-xl text-gray-500 transition-colors hover:bg-gray-50 active:bg-gray-100"
+                >
+                  <Minus className="h-4 w-4" />
+                </button>
+                <div className="flex flex-1 items-center justify-center text-2xl font-medium text-gray-400">
+                  {quantity}
+                </div>
+                <button
+                  type="button"
+                  aria-label="Increase quantity"
+                  onClick={() => setQuantity((value) => value + 1)}
+                  className="flex w-12 shrink-0 items-center justify-center border-l border-gray-200 text-xl text-gray-500 transition-colors hover:bg-gray-50 active:bg-gray-100"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
+
+              <p className="mt-4 flex gap-1.5 text-sm text-gray-500">
+                <HelpCircle className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
+                <span>
+                  Cost per purchase{' '}
+                  <span className="font-semibold text-[var(--sf-ink,#1E293B)]">{formatNgn(unitPrice)}</span>
+                </span>
+              </p>
+            </div>
+
+            <div className="space-y-3 text-sm">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-gray-500">From</span>
+                <span className="text-right font-medium text-[var(--sf-ink,#1E293B)]">
+                  Wallet Balance <span className="text-gray-400">→</span> {formatWalletNgn(walletBalance)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-gray-500">To</span>
+                <span className="text-right font-medium text-[var(--sf-ink,#1E293B)]">
+                  Investment Account Balance <span className="text-gray-400">→</span> NGN 0.0
+                </span>
+              </div>
+            </div>
+
+            <p className="text-center text-xs leading-5 text-gray-500">
+              Invest account is domiciled with {product.name.split(' ')[0] || providerName}, a CBN licensed entity.
+            </p>
+
+            <div className="rounded-2xl bg-[#E8F8EF] px-5 py-4 text-center text-base font-semibold text-[#1E293B]">
+              Total <span className="text-gray-400">→</span> {formatWalletNgn(purchaseTotal)}
+            </div>
+
+            {purchaseError ? (
+              <p className="rounded-xl bg-red-50 px-3 py-2 text-center text-xs text-red-600">{purchaseError}</p>
+            ) : null}
           </div>
+
           <Button
-            onClick={() => setSheet('account')}
-            className="mt-10 h-14 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-base font-semibold text-white"
+            onClick={() => void handlePurchase()}
+            disabled={processing || quantity <= 0}
+            className="mt-8 h-14 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-base font-semibold text-white disabled:opacity-50"
           >
-            Start Saving
+            {processing ? (
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Processing...
+              </span>
+            ) : (
+              'Purchase'
+            )}
           </Button>
         </BottomSheet>
       )}
 
-      {sheet === 'account' && (
-        <BottomSheet onClose={() => setSheet(null)}>
-          <h2 className="mb-7 text-center text-xl font-bold text-[var(--sf-ink,#1E293B)]">Account Details</h2>
-          <div className="space-y-5 px-2 text-sm">
-            <div>
-              <p className="text-[10px] text-gray-400">Bank Name</p>
-              <p className="font-bold text-[var(--sf-ink,#111827)]">{providerName}</p>
+      {sheet === 'insufficient_funds' && (
+        <BottomSheet onClose={() => setSheet('purchase')}>
+          <div className="text-center">
+            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-red-600">
+              <AlertCircle className="h-9 w-9" />
             </div>
-            <div className="flex items-center justify-between border-b border-dashed border-gray-200 pb-5">
-              <div>
-                <p className="text-[10px] text-gray-400">Account Number</p>
-                <p className="font-bold text-[var(--sf-ink,#111827)]">Pending after purchase</p>
-              </div>
-              <span className="h-4 w-4 rounded bg-gray-300" />
+            <h2 className="text-xl font-bold text-[var(--sf-ink,#1E293B)]">Insufficient balance</h2>
+            <p className="mx-auto mt-3 max-w-xs text-sm leading-relaxed text-gray-500">
+              Your central wallet does not have enough funds for this purchase. Fund your wallet with at least the
+              required amount and try again.
+            </p>
+          </div>
+
+          <div className="mt-6 space-y-4 rounded-2xl bg-gray-50 px-4 py-4 text-sm">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-gray-500">Purchase total</span>
+              <span className="font-semibold text-[var(--sf-ink,#1E293B)]">{formatWalletNgn(purchaseTotal)}</span>
             </div>
-            <div className="flex items-center justify-between">
-              <p className="text-gray-500">Commodity Wallet</p>
-              <span className="h-4 w-4 rounded-full border-4 border-[var(--sf-button,#1E40AF)]" />
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-gray-500">Wallet balance</span>
+              <span className="font-semibold text-[var(--sf-ink,#1E293B)]">{formatWalletNgn(walletBalance)}</span>
+            </div>
+            <div className="flex items-center justify-between gap-4 border-t border-gray-200 pt-4">
+              <span className="font-medium text-gray-700">Amount to fund</span>
+              <span className="font-bold text-[var(--sf-button,#1E40AF)]">{formatWalletNgn(shortfall)}</span>
             </div>
           </div>
+
+          <div className="mt-8 flex flex-col gap-3">
+            <Button
+              onClick={() => setSheet('fund_bank')}
+              className="h-14 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-base font-semibold text-white"
+            >
+              Fund wallet
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setSheet('purchase')}
+              className="h-12 w-full rounded-full"
+            >
+              Back to purchase
+            </Button>
+          </div>
+        </BottomSheet>
+      )}
+
+      {sheet === 'fund_bank' && (
+        <BottomSheet onClose={() => setSheet('insufficient_funds')}>
+          <div className="mb-6 flex items-center justify-between gap-3">
+            <h2 className="text-lg font-bold text-[var(--sf-ink,#1E1B4B)]">Fund wallet via bank transfer</h2>
+            <button type="button" onClick={() => setSheet('insufficient_funds')} aria-label="Close">
+              <X className="h-5 w-5 text-gray-400" />
+            </button>
+          </div>
+
+          <div className="mb-4 rounded-2xl bg-[#FEF3C7] px-4 py-3 text-xs leading-relaxed text-[#92400E]">
+            Transfer at least <strong>{formatWalletNgn(shortfall)}</strong> to your wallet, then return here to complete
+            your commodity purchase.
+          </div>
+
+          <div className="space-y-6">
+            {walletLoading ? (
+              <p className="text-sm text-gray-500">Loading account details...</p>
+            ) : nubanReady ? (
+              <>
+                <CopyableDetailRow label="Account Holder" value={accountHolder} />
+                <CopyableDetailRow label="Account Number" value={nuban?.accountNumber} />
+                <CopyableDetailRow label="Bank Name" value={nuban?.bankName} />
+              </>
+            ) : (
+              <div className="rounded-2xl sf-accent-soft p-4">
+                <div className="mb-3 flex items-start gap-3">
+                  <Building2 className="mt-0.5 h-5 w-5 shrink-0 text-[var(--sf-primary,#2563EB)]" />
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--sf-ink,#1E1B4B)]">Bank account not active yet</p>
+                    <p className="mt-1 text-sm text-gray-600">
+                      Complete identity verification to activate your bank transfer account, then fund your wallet.
+                    </p>
+                  </div>
+                </div>
+                <Link href="/mobile-v2/profile/kyc/create">
+                  <Button className="h-10 rounded-full bg-[var(--sf-button,#1E40AF)] px-4 text-sm font-semibold text-white">
+                    Complete KYC
+                  </Button>
+                </Link>
+              </div>
+            )}
+          </div>
+
           <Button
             onClick={() => {
-              setSheet(null)
-              setStep('pin')
+              void refetchWallet()
+              setSheet('purchase')
             }}
-            className="mt-10 h-14 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-base font-semibold text-white"
+            className="mt-8 h-14 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-base font-semibold text-white"
           >
-            Continue
+            I&apos;ve funded my wallet
           </Button>
         </BottomSheet>
       )}

@@ -9,6 +9,7 @@ import {
   FeaturedMortgageCard,
   MortgageProductCard,
 } from '@/app/mobile-v2/products/MobileV2ProductComponents'
+import { poweredBy } from '@/lib/mobileProductDetailDisplay'
 
 export function MobileV2MortgageCatalog() {
   const { appId, ready: tenantReady, displayName } = useMobileV2Tenant()
@@ -26,7 +27,7 @@ export function MobileV2MortgageCatalog() {
 
   const featured = orderedProducts[0]
   const hot = orderedProducts.slice(1)
-  const providerName = displayName || 'Provider'
+  const providerName = poweredBy(displayName || undefined)
 
   if (!tenantReady || loading) {
     return <MobileV2ProductListSkeleton />

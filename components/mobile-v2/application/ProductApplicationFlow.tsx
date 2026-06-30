@@ -44,6 +44,7 @@ import {
   validateApplicationAmount,
 } from '@/lib/applicationAmount'
 import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
+import { poweredBy } from '@/lib/mobileProductDetailDisplay'
 
 type ProductKind = 'loan' | 'mortgage'
 type StepId = 'requirement' | 'file' | 'property' | 'product'
@@ -648,7 +649,7 @@ function ProductSummary({
     ['Application amount', amount],
     ...(account?.bankName ? [['Bank name', account.bankName]] : []),
     ...(account?.accountNumber ? [['Account number', account.accountNumber]] : []),
-    ['Powered by:', providerName],
+    ['Powered by:', poweredBy()],
   ]
 
   return (

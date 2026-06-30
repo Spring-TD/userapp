@@ -9,6 +9,7 @@ import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeleto
 import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 import { mapMobileProductToLoanCatalog } from '@/lib/mapProductToLoanCatalog'
+import { poweredBy } from '@/lib/mobileProductDetailDisplay'
 import { loanApplyStartHref } from '@/lib/loanApplyRoutes'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
 import type { LoanCatalogItem } from '@/types/loanCatalog'
@@ -31,7 +32,7 @@ function LoanDetailInner() {
 
   const loan = useMemo<LoanCatalogItem | undefined>(() => {
     if (!productId) return undefined
-    if (product) return mapMobileProductToLoanCatalog(product, displayName || 'Provider')
+    if (product) return mapMobileProductToLoanCatalog(product, poweredBy(displayName || undefined))
     return undefined
   }, [displayName, product, productId])
 

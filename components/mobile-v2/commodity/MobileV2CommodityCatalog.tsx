@@ -12,6 +12,7 @@ import {
   type CommodityCatalogProduct,
 } from '@/lib/commodityCatalog'
 import { commodityDetailHref } from '@/lib/commodityApplyRoutes'
+import { poweredBy } from '@/lib/mobileProductDetailDisplay'
 import { cn } from '@/lib/utils'
 
 function formatNgn(amount?: number | null) {
@@ -125,7 +126,7 @@ export function MobileV2CommodityCatalog() {
   const commodities = useMemo(() => apiCommodities.map(asCommodityCatalogProduct), [apiCommodities])
   const featured = commodities[0]
   const otherCommodities = commodities.slice(1)
-  const providerName = displayName || 'Provider'
+  const providerName = poweredBy(displayName || undefined)
 
   if (!tenantReady || loading) {
     return <MobileV2ProductListSkeleton />

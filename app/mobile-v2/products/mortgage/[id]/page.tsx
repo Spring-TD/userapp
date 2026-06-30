@@ -11,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { mortgageApplyChoosePaymentHref } from '@/lib/mortgageApplyRoutes'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
 import { ProductDetailsScreen } from '@/components/mobile-v2/application/ProductDetailsScreen'
-import { amountRange, feeSummary, formatNgn, rateLabel, requirementSummary } from '@/lib/mobileProductDetailDisplay'
+import { amountRange, feeSummary, formatNgn, poweredBy, rateLabel, requirementSummary } from '@/lib/mobileProductDetailDisplay'
 
 function MortgageDetailInner() {
   const params = useParams()
@@ -32,7 +32,7 @@ function MortgageDetailInner() {
     return detailProduct ?? undefined
   }, [detailProduct, productId])
 
-  const lender = displayName || 'Provider'
+  const lender = poweredBy(displayName || undefined)
   const imageUrl =
     product?.image ||
     'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1200&auto=format&fit=crop'
