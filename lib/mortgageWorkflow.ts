@@ -1,5 +1,9 @@
 import type { StorefrontApplication } from '@/lib/storefrontApplicationClient'
 import { syncMortgageWorkflowPatchToApi } from '@/lib/mortgageWorkflowApi'
+import {
+  extractPostApprovalFulfillment,
+  type PostApprovalMortgageStatus,
+} from '@/lib/postApprovalMortgage'
 
 export type MortgageWorkflowStep =
   | 'awaiting_approval'
@@ -123,10 +127,41 @@ function isMerchantApproved(application: StorefrontApplication): boolean {
   )
 }
 
+function stepFromPostApproval(status: PostApprovalMortgageStatus): MortgageWorkflowStep {
+  switch (status) {
+    case 'offer_pending':
+      return 'accept_offer'
+    case 'offer_accepted':
+    case 'appointment_scheduled':
+      return 'schedule_inspection'
+    case 'inspection_in_progress':
+      return 'inspection_in_progress'
+    case 'down_payment_pending':
+    case 'down_payment_paid':
+      return 'down_payment'
+    case 'down_payment_confirmed':
+    case 'contract_issued':
+      return 'accept_contract'
+    case 'contract_signed':
+    case 'disbursed':
+      return 'disbursed'
+    case 'offer_declined':
+    case 'inspection_declined':
+      return 'declined'
+    default:
+      return 'awaiting_approval'
+  }
+}
+
 export function resolveMortgageWorkflowStep(
   application: StorefrontApplication,
   local: MortgageWorkflowLocalState | null,
 ): MortgageWorkflowStep {
+  const paf = extractPostApprovalFulfillment(application as unknown as Record<string, unknown>)
+  if (paf?.status) {
+    return stepFromPostApproval(paf.status)
+  }
+
   if (local?.offerDeclined) return 'declined'
   if (local?.contractAccepted) return 'disbursed'
   if (local?.downPaymentConfirmed) return 'accept_contract'

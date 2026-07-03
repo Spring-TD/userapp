@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button'
 import { MortgageSheet, MORTGAGE_PRIMARY } from '@/components/mobile-v2/mortgage/MortgageSheet'
 import { mortgagePendingDetailHref } from '@/lib/mortgageApplyRoutes'
 import { patchMortgageWorkflowAsync } from '@/lib/mortgageWorkflow'
+import { pendingApprovedMortgageApi } from '@/lib/pendingApprovedMortgageApi'
+import { useUserWallet } from '@/hooks/useUserWallet'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -15,10 +17,13 @@ import { toast } from 'sonner'
 function AcceptOfferContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { wallet } = useUserWallet()
+  const userId = wallet?.userId
   const productId = sanitizeProductId(searchParams.get('productId'))
   const applicationId = searchParams.get('applicationId')?.trim() || ''
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(true)
+  const [busy, setBusy] = useState(false)
 
   if (!productId || !applicationId) {
     return (
@@ -38,7 +43,16 @@ function AcceptOfferContent() {
       toast.error('Accept the terms and conditions to continue.')
       return
     }
-    await patchMortgageWorkflowAsync(applicationId, { offerAccepted: true, offerDeclined: false })
+    if (!userId) {
+      toast.error('Sign in to accept this offer.')
+      return
+    }
+    setBusy(true)
+    const apiRes = await pendingApprovedMortgageApi.respondToOffer(applicationId, userId, true)
+    if (!apiRes.ok) {
+      await patchMortgageWorkflowAsync(applicationId, { offerAccepted: true, offerDeclined: false })
+    }
+    setBusy(false)
     setSheetOpen(false)
     router.replace(
       `/mobile-v2/products/mortgage/offer?productId=${encodeURIComponent(productId)}&applicationId=${encodeURIComponent(applicationId)}&step=schedule_inspection`,
@@ -46,7 +60,16 @@ function AcceptOfferContent() {
   }
 
   const declineOffer = async () => {
-    await patchMortgageWorkflowAsync(applicationId, { offerDeclined: true, offerAccepted: false })
+    if (!userId) {
+      toast.error('Sign in to decline this offer.')
+      return
+    }
+    setBusy(true)
+    const apiRes = await pendingApprovedMortgageApi.respondToOffer(applicationId, userId, false)
+    if (!apiRes.ok) {
+      await patchMortgageWorkflowAsync(applicationId, { offerDeclined: true, offerAccepted: false })
+    }
+    setBusy(false)
     toast.message('Offer declined')
     setSheetOpen(false)
     router.replace(pendingHref)
@@ -100,7 +123,7 @@ function AcceptOfferContent() {
           <div className="mt-8 space-y-3">
             <Button
               className={cn('h-12 w-full rounded-full text-sm font-semibold', MORTGAGE_PRIMARY)}
-              disabled={!termsAccepted}
+              disabled={!termsAccepted || busy}
               onClick={acceptOffer}
             >
               Accept offer
