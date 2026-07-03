@@ -322,21 +322,16 @@ export async function fetchUserApplications(userId?: string) {
   }
 }
 
-export async function buyCommodity(productId: string, quantity: number, amount: number, options?: { currency?: string }) {
-  const built = await buildProductApplyBody(productId, { amount, currency: options?.currency })
-  if (!built.ok) return { ok: false as const, error: built.error }
-
-  const res = await apiClient.post<ApiEnvelope<unknown>>(
-    "/v1/commodities/buy",
-    { ...built.body, quantity },
-    { includeAuth: true, timeout: 60_000 },
-  )
-
-  if (res.data?.success === false || res.status >= 400) {
-    return { ok: false as const, error: parseApiError(res.data, res.status) }
-  }
-
-  return { ok: true as const, data: res.data?.data }
+export async function buyCommodity(
+  productId: string,
+  quantity: number,
+  _amount?: number,
+  options?: { currency?: string; requirementSubmissions?: unknown[] },
+) {
+  const { purchaseCommodity } = await import("@/lib/commodityApi")
+  return purchaseCommodity(productId, quantity, {
+    requirementSubmissions: options?.requirementSubmissions,
+  })
 }
 
 export async function uploadApplicationFile(file: File, userId?: string) {

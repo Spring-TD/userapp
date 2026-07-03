@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
+    Loader2,
     Plus,
     Wallet,
 } from 'lucide-react';
@@ -11,15 +12,31 @@ import {
     WalletBalanceCardSkeleton,
 } from '@/components/mobile-v2/data-skeletons';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
 import { useUserWallet } from '@/hooks/useUserWallet';
+import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
 import { fetchUserProductApplications } from '@/lib/services/productApplicationApi';
 import { fetchUserProductTypeSummary } from '@/lib/services/userWalletApi';
 import { fetchAuthUserProfile, type AuthUserProfile } from '@/lib/userProfileClient';
+import {
+    aggregateCommodityHoldingBalance,
+    canWithdrawCommodity,
+    withdrawCommodity,
+} from '@/lib/commodityApi';
 import { formatWalletBalance } from '@/lib/userWallet';
 import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
 import { MobileV2NotificationBell } from '@/components/mobile-v2/MobileV2NotificationBell';
 import type { ProductApplication } from '@/types/productApplication';
 import type { ProductTypeSummaryItem, UserProductTypeSummary, WalletProductType } from '@/types/userWallet';
+
+type CommodityContractSnapshot = {
+    commodityPrincipal?: number;
+    commodityHoldingStatus?: string;
+    maturityAt?: string;
+    expectedInterest?: number;
+    totalAtMaturity?: number;
+    fundedAt?: string;
+};
 
 const ACCOUNT_FILTERS = ['Mortgage', 'Loan', 'Savings', 'Invest', 'Commodity'] as const;
 type AccountFilter = typeof ACCOUNT_FILTERS[number];
@@ -77,16 +94,69 @@ function EmptyAccountState({ activeFilter }: { activeFilter: AccountFilter }) {
     );
 }
 
+function formatMaturityLabel(value?: string | null) {
+    if (!value) return '—';
+    try {
+        return new Date(value).toLocaleDateString('en-NG', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+        });
+    } catch {
+        return value;
+    }
+}
+
+function commoditySnapshot(application: ProductApplication): CommodityContractSnapshot | null {
+    const snapshot = (application as { contractSnapshot?: CommodityContractSnapshot }).contractSnapshot;
+    return snapshot && typeof snapshot === 'object' ? snapshot : null;
+}
+
 function ProductAccountCard({
     application,
     activeFilter,
+    userId,
+    onWithdrawComplete,
 }: {
     application: ProductApplication;
     activeFilter: AccountFilter;
+    userId?: string;
+    onWithdrawComplete?: () => void;
 }) {
+    const [withdrawing, setWithdrawing] = useState(false);
+    const [withdrawError, setWithdrawError] = useState<string | null>(null);
     const account = application.productWallet?.upstreamAccount;
     const accountDetailsHref = productRoute(activeFilter);
-    const provisionStatus = account?.provisionStatus || application.loanWorkflowStatus || application.status;
+    const snapshot = activeFilter === 'Commodity' ? commoditySnapshot(application) : null;
+    const holdingStatus = snapshot?.commodityHoldingStatus || application.status;
+    const provisionStatus = account?.provisionStatus || application.loanWorkflowStatus || holdingStatus || application.status;
+    const principal = snapshot?.commodityPrincipal ?? (application as { amount?: number }).amount;
+    const withdrawable = Boolean(
+        activeFilter === 'Commodity' &&
+        userId &&
+        canWithdrawCommodity({
+            holdingStatus: snapshot?.commodityHoldingStatus,
+            status: application.status,
+            maturityAt: snapshot?.maturityAt,
+        }),
+    );
+
+    const handleWithdraw = async (event: React.MouseEvent) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!userId || !application.id || withdrawing) return;
+
+        setWithdrawing(true);
+        setWithdrawError(null);
+        const result = await withdrawCommodity(application.id, userId);
+        setWithdrawing(false);
+        if (!result.ok) {
+            setWithdrawError(result.error);
+            return;
+        }
+        onWithdrawComplete?.();
+    };
+
     const content = (
         <div className="w-full rounded-[24px] border sf-border-brand sf-accent-soft p-5 shadow-sm">
             <div className="mb-4 flex items-start justify-between gap-3">
@@ -98,7 +168,9 @@ function ProductAccountCard({
                         {application.productName || application.productType || activeFilter}
                     </h3>
                     <p className="mt-1 text-sm font-medium text-[var(--sf-ink,#1E1B4B)]">
-                        {account?.accountNumber || 'Pending provisioning'}
+                        {activeFilter === 'Commodity'
+                            ? 'Commodity holding'
+                            : account?.accountNumber || 'Pending provisioning'}
                     </p>
                 </div>
                 <span className="shrink-0 rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-green-600">
@@ -107,19 +179,56 @@ function ProductAccountCard({
             </div>
 
             <div className="flex items-center justify-between gap-3 text-sm">
-                <p className="min-w-0 truncate text-gray-500">{account?.bankName || application.productName || 'Product account'}</p>
+                <p className="min-w-0 truncate text-gray-500">
+                    {activeFilter === 'Commodity'
+                        ? snapshot?.maturityAt
+                            ? `Unlocks ${formatMaturityLabel(snapshot.maturityAt)}`
+                            : 'Locked holding'
+                        : account?.bankName || application.productName || 'Product account'}
+                </p>
                 <div className="shrink-0 text-right text-xs">
                     <p className="text-gray-400">Application</p>
                     <p className="font-semibold text-[#1E293B]">{application.status || 'PENDING'}</p>
                 </div>
             </div>
-            {(application as { amount?: number }).amount != null ? (
+            {principal != null ? (
                 <p className="mt-3 text-sm font-semibold text-[var(--sf-ink,#1E1B4B)]">
-                    {formatWalletBalance((application as { amount?: number }).amount || 0)}
+                    {formatWalletBalance(principal)}
+                    {snapshot?.totalAtMaturity != null ? (
+                        <span className="ml-2 text-xs font-medium text-gray-500">
+                            → {formatWalletBalance(snapshot.totalAtMaturity)} at maturity
+                        </span>
+                    ) : null}
                 </p>
+            ) : null}
+            {withdrawable ? (
+                <div className="mt-4" onClick={(event) => event.preventDefault()}>
+                    <Button
+                        type="button"
+                        disabled={withdrawing}
+                        onClick={(event) => void handleWithdraw(event)}
+                        className="h-10 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-sm font-semibold text-white"
+                    >
+                        {withdrawing ? (
+                            <span className="inline-flex items-center gap-2">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Withdrawing...
+                            </span>
+                        ) : (
+                            'Withdraw principal + interest'
+                        )}
+                    </Button>
+                    {withdrawError ? (
+                        <p className="mt-2 text-center text-xs text-red-600">{withdrawError}</p>
+                    ) : null}
+                </div>
             ) : null}
         </div>
     );
+
+    if (activeFilter === 'Commodity' && withdrawable) {
+        return <div className="block">{content}</div>;
+    }
 
     return (
         <Link
@@ -136,7 +245,8 @@ export default function AccountsPage() {
     const [profile, setProfile] = useState<AuthUserProfile | null>(null);
     const [profileLoading, setProfileLoading] = useState(true);
     const [activeFilter, setActiveFilter] = useState<AccountFilter>('Mortgage');
-    const { wallet, loading: walletLoading, error: walletError } = useUserWallet();
+    const { appId } = useMobileV2Tenant();
+    const { wallet, loading: walletLoading, error: walletError, refetch: refetchWallet } = useUserWallet();
     const [productSummary, setProductSummary] = useState<UserProductTypeSummary | null>(null);
     const [applications, setApplications] = useState<ProductApplication[]>([]);
     const [summaryLoading, setSummaryLoading] = useState(false);
@@ -194,7 +304,12 @@ export default function AccountsPage() {
         setApplicationsLoading(true);
         setApplicationsError(null);
 
-        void fetchUserProductApplications(userId, { productType: activeProductType }).then((result) => {
+        const params =
+            activeProductType === 'COMMODITY' && appId
+                ? { productType: activeProductType, appId }
+                : { productType: activeProductType };
+
+        void fetchUserProductApplications(userId, params).then((result) => {
             if (cancelled) return;
             setApplications(result.applications);
             setApplicationsError(result.error);
@@ -204,7 +319,21 @@ export default function AccountsPage() {
         return () => {
             cancelled = true;
         };
-    }, [wallet?.userId, activeProductType]);
+    }, [wallet?.userId, activeProductType, appId]);
+
+    const reloadApplications = useCallback(() => {
+        const userId = wallet?.userId;
+        if (!userId) return;
+        const params =
+            activeProductType === 'COMMODITY' && appId
+                ? { productType: activeProductType, appId }
+                : { productType: activeProductType };
+        void fetchUserProductApplications(userId, params).then((result) => {
+            setApplications(result.applications);
+            setApplicationsError(result.error);
+        });
+        void refetchWallet();
+    }, [wallet?.userId, activeProductType, appId, refetchWallet]);
 
     const displayName = useMemo(() => displayNameFromProfile(profile), [profile]);
     const totalLabel = ACCOUNT_TOTAL_LABELS[activeFilter];
@@ -217,9 +346,18 @@ export default function AccountsPage() {
     const activeApplications = applications.filter(
         (application) => String(application.productType || '').toUpperCase() === activeProductType,
     );
+    const commodityHoldingTotal =
+        activeFilter === 'Commodity'
+            ? aggregateCommodityHoldingBalance(activeApplications)
+            : 0;
     const createdAccountCount = activeApplications.length;
     const displayedAccountCount = Math.max(activeSummary.accountCount, createdAccountCount);
-    const activeFormattedBalance = formatWalletBalance(activeSummary.totalAmount, activeSummary.currency);
+    const activeTotalAmount =
+        activeFilter === 'Commodity' ? commodityHoldingTotal : activeSummary.totalAmount;
+    const activeFormattedBalance = formatWalletBalance(
+        activeTotalAmount,
+        activeSummary.currency || wallet?.currency || 'NGN',
+    );
     const isSummaryBusy = walletLoading || summaryLoading || applicationsLoading;
 
     return (
@@ -313,6 +451,8 @@ export default function AccountsPage() {
                                 key={application.id}
                                 application={application}
                                 activeFilter={activeFilter}
+                                userId={wallet?.userId}
+                                onWithdrawComplete={reloadApplications}
                             />
                         ))
                     ) : (

@@ -34,10 +34,11 @@ function shouldShowInAccounts(application: ProductApplication): boolean {
 /** List user applications with provisioned product accounts (GET /v1/applications/user/{userId}). */
 export async function fetchUserProductApplications(
   userId: string,
-  params?: { productType?: string },
+  params?: { productType?: string; appId?: string },
 ): Promise<{ applications: ProductApplication[]; error: string | null; status: number }> {
   const qs = new URLSearchParams()
   if (params?.productType) qs.set("productType", params.productType)
+  if (params?.appId) qs.set("appId", params.appId)
 
   const path = ENDPOINTS.applications.user(userId)
   const url = bffUrl(qs.toString() ? `${path}?${qs}` : path)

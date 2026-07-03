@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import {
@@ -28,16 +28,30 @@ import {
   asCommodityCatalogProduct,
   type CommodityCatalogProduct,
 } from '@/lib/commodityCatalog'
-import { buyCommodity } from '@/lib/storefrontApplicationClient'
+import {
+  fetchCommodityProductMeta,
+  loadCommodityPurchaseContext,
+  purchaseCommodity,
+  resolveCommodityMinQuantity,
+  resolveCommodityUnitPrice,
+  type CommodityProductMeta,
+  type CommodityPurchaseContext,
+} from '@/lib/commodityApi'
 import { formatNgn, formatNaira, poweredBy } from '@/lib/mobileProductDetailDisplay'
 import { isVirtualNubanActive } from '@/lib/userWallet'
+import { walletSpendableBalance } from '@/lib/userWallet'
 
 type PurchaseSheet = 'purchase' | 'insufficient_funds' | 'fund_bank' | null
 
 type PurchaseSummary = {
   productName: string
   quantity: number
-  total: number
+  principal: number
+  commission: number
+  totalDebit: number
+  maturityAt?: string
+  totalAtMaturity?: number
+  applicationId?: string
 }
 
 function formatWalletNgn(amount?: number | null) {
@@ -48,6 +62,19 @@ function formatWalletNgn(amount?: number | null) {
   })}`
 }
 
+function formatDateLabel(value?: string | null) {
+  if (!value) return '—'
+  try {
+    return new Date(value).toLocaleDateString('en-NG', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    })
+  } catch {
+    return value
+  }
+}
+
 function displayNameFromProfile(user: ReturnType<typeof useAuthUserProfile>['user']): string {
   if (!user) return ''
   const first = (user.first_name || '').trim()
@@ -56,7 +83,8 @@ function displayNameFromProfile(user: ReturnType<typeof useAuthUserProfile>['use
   return first || last || ''
 }
 
-function isInsufficientFundsError(message: string): boolean {
+function isInsufficientFundsError(message: string, status?: number): boolean {
+  if (status === 402) return true
   const m = message.toLowerCase()
   return (
     m.includes('insufficient') ||
@@ -101,7 +129,7 @@ function BottomSheet({
 export default function CommodityDetailPage() {
   const params = useParams()
   const productId = typeof params?.id === 'string' ? decodeURIComponent(params.id) : ''
-  const { ready: tenantReady, displayName } = useMobileV2Tenant()
+  const { ready: tenantReady, displayName, appId } = useMobileV2Tenant()
   const { user: profile } = useAuthUserProfile()
   const { product: detailProduct, loading } = useMobileProductDetail({
     productId,
@@ -120,15 +148,93 @@ export default function CommodityDetailPage() {
   const [processing, setProcessing] = useState(false)
   const [purchaseError, setPurchaseError] = useState<string | null>(null)
   const [purchaseSummary, setPurchaseSummary] = useState<PurchaseSummary | null>(null)
-  const { wallet, balance: walletBalance, loading: walletLoading, refetch: refetchWallet } = useUserWallet()
+  const [purchaseContext, setPurchaseContext] = useState<CommodityPurchaseContext | null>(null)
+  const [productMeta, setProductMeta] = useState<CommodityProductMeta | null>(null)
+  const [contextLoading, setContextLoading] = useState(false)
+  const { wallet, loading: walletLoading, refetch: refetchWallet } = useUserWallet()
 
-  const unitPrice = product?.price || product?.total || 1
-  const purchaseTotal = unitPrice * quantity
-  const shortfall = Math.max(0, purchaseTotal - walletBalance)
-  const hasEnoughFunds = walletBalance >= purchaseTotal
+  const walletBalance = walletSpendableBalance(wallet)
+  const userId = wallet?.userId
+
+  const unitPrice = useMemo(() => {
+    if (!product) return 1
+    return resolveCommodityUnitPrice({
+      price: product.price,
+      unitAmount: product.unitAmount,
+      structure: productMeta?.structure,
+    })
+  }, [product, productMeta?.structure])
+
+  const minQuantity = useMemo(() => {
+    if (!product) return 1
+    return resolveCommodityMinQuantity({
+      minimumQuantity: product.minimumQuantity,
+      structure: productMeta?.structure,
+    })
+  }, [product, productMeta?.structure])
+
+  const loadPurchaseData = useCallback(async () => {
+    if (!product || !userId || !appId) {
+      setPurchaseContext(null)
+      return
+    }
+
+    setContextLoading(true)
+    try {
+      const meta = await fetchCommodityProductMeta(product.id)
+      setProductMeta(meta)
+      const context = await loadCommodityPurchaseContext({
+        userId,
+        appId,
+        productId: product.id,
+        product: {
+          price: product.price,
+          unitAmount: product.unitAmount,
+          minimumQuantity: product.minimumQuantity,
+          structure: meta.structure,
+        },
+        quantity,
+        walletBalance,
+      })
+      setPurchaseContext(context)
+    } finally {
+      setContextLoading(false)
+    }
+  }, [appId, product, quantity, userId, walletBalance])
+
+  useEffect(() => {
+    if (!product?.id) return
+    void fetchCommodityProductMeta(product.id).then(setProductMeta)
+  }, [product?.id])
+
+  useEffect(() => {
+    void loadPurchaseData()
+  }, [loadPurchaseData])
+
+  useEffect(() => {
+    if (sheet === 'purchase') {
+      void loadPurchaseData()
+    }
+  }, [sheet, loadPurchaseData])
+
+  const totals = purchaseContext ?? {
+    unitPrice,
+    minQuantity,
+    principal: unitPrice * quantity,
+    commission: 0,
+    totalDebit: unitPrice * quantity,
+    commissionRatePercent: 1,
+    walletBalance,
+    holdingBalance: 0,
+    canPurchase: walletBalance >= unitPrice * quantity,
+    pricing: null,
+  }
+
+  const shortfall = Math.max(0, totals.totalDebit - walletBalance)
+  const hasEnoughFunds = totals.canPurchase
 
   const providerName = poweredBy(displayName || undefined)
-  const detailTotal = unitPrice
+  const domicileName = productMeta?.merchantName || product?.name.split(' ')[0] || providerName
   const nuban = wallet?.virtualNuban
   const nubanReady = isVirtualNubanActive(wallet)
   const accountHolder = wallet?.name || displayNameFromProfile(profile) || '—'
@@ -145,9 +251,9 @@ export default function CommodityDetailPage() {
     setProcessing(true)
     setPurchaseError(null)
     try {
-      const result = await buyCommodity(product.id, quantity, purchaseTotal)
+      const result = await purchaseCommodity(product.id, quantity)
       if (!result.ok) {
-        if (isInsufficientFundsError(result.error)) {
+        if (isInsufficientFundsError(result.error, result.status)) {
           setSheet('insufficient_funds')
           return
         }
@@ -155,11 +261,20 @@ export default function CommodityDetailPage() {
         return
       }
 
+      const account = result.data.account
+      const purchase = account?.purchase
+
       await refetchWallet()
+      await loadPurchaseData()
       setPurchaseSummary({
         productName: product.name,
         quantity,
-        total: purchaseTotal,
+        principal: account?.principal ?? totals.principal,
+        commission: purchase?.commissionAmount ?? totals.commission,
+        totalDebit: purchase?.totalAmount ?? totals.totalDebit,
+        maturityAt: account?.maturityAt,
+        totalAtMaturity: account?.totalAtMaturity,
+        applicationId: result.data.applicationId || account?.applicationId || account?.id,
       })
       setSheet(null)
       setStep('success')
@@ -189,6 +304,19 @@ export default function CommodityDetailPage() {
     )
   }
 
+  if (!appId) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 sf-page-bg px-6 text-center">
+        <p className="text-sm text-gray-600">Store configuration is still loading. Please try again in a moment.</p>
+        <Link href="/mobile-v2/products/commodity">
+          <Button className="rounded-full bg-[var(--sf-button,#1E40AF)] text-white">
+            Back to commodities
+          </Button>
+        </Link>
+      </div>
+    )
+  }
+
   if (step === 'success' && purchaseSummary) {
     return (
       <div className="flex h-full flex-col items-center justify-center bg-[color-mix(in_srgb,var(--sf-button,#1E40AF)_6%,white)] px-8 text-center">
@@ -198,15 +326,37 @@ export default function CommodityDetailPage() {
             <Check className="h-16 w-16 stroke-[4] text-white" />
           </div>
         </div>
-        <h1 className="text-xl font-bold text-[var(--sf-ink,#1E293B)]">Payment Done Successfully</h1>
+        <h1 className="text-xl font-bold text-[var(--sf-ink,#1E293B)]">Commodity enrolled</h1>
         <p className="mt-3 text-sm text-gray-600">
           You purchased {purchaseSummary.quantity} unit{purchaseSummary.quantity === 1 ? '' : 's'} of{' '}
-          <span className="font-semibold text-[var(--sf-ink,#1E293B)]">{purchaseSummary.productName}</span> for{' '}
-          {formatWalletNgn(purchaseSummary.total)}.
+          <span className="font-semibold text-[var(--sf-ink,#1E293B)]">{purchaseSummary.productName}</span>.
         </p>
+        <div className="mt-5 w-full max-w-sm rounded-2xl border border-gray-100 bg-white px-4 py-4 text-left text-sm">
+          <div className="flex justify-between gap-4 py-1.5">
+            <span className="text-gray-500">Debited from wallet</span>
+            <span className="font-semibold">{formatWalletNgn(purchaseSummary.totalDebit)}</span>
+          </div>
+          <div className="flex justify-between gap-4 py-1.5">
+            <span className="text-gray-500">Holding value</span>
+            <span className="font-semibold">{formatWalletNgn(purchaseSummary.principal)}</span>
+          </div>
+          {purchaseSummary.maturityAt ? (
+            <div className="flex justify-between gap-4 py-1.5">
+              <span className="text-gray-500">Unlocks on</span>
+              <span className="font-semibold">{formatDateLabel(purchaseSummary.maturityAt)}</span>
+            </div>
+          ) : null}
+          {purchaseSummary.totalAtMaturity != null ? (
+            <div className="flex justify-between gap-4 border-t border-gray-100 pt-3">
+              <span className="text-gray-500">Expected at maturity</span>
+              <span className="font-semibold text-[var(--sf-button,#1E40AF)]">
+                {formatWalletNgn(purchaseSummary.totalAtMaturity)}
+              </span>
+            </div>
+          ) : null}
+        </div>
         <p className="mt-4 max-w-sm text-sm leading-relaxed text-gray-500">
-          Your central wallet has been debited. Check your notifications for purchase details and look out for a receipt
-          email with your transaction summary.
+          Funds are locked until maturity. Check your notifications for enrollment details and your receipt email.
         </p>
         <div className="mt-10 flex w-full max-w-sm flex-col gap-3">
           <Link href="/mobile-v2/notifications">
@@ -226,6 +376,9 @@ export default function CommodityDetailPage() {
       </div>
     )
   }
+
+  const holdingPeriod = productMeta?.moratoriumLabel || product.duration || '—'
+  const interestLabel = productMeta?.offerYieldLabel || product.interestRate || '—'
 
   return (
     <div className="relative flex h-full flex-col bg-[color-mix(in_srgb,var(--sf-button,#1E40AF)_6%,white)]">
@@ -251,11 +404,11 @@ export default function CommodityDetailPage() {
 
           <div className="mt-5 flex items-start justify-between gap-4">
             <h1 className="line-clamp-1 text-sm font-medium text-[var(--sf-ink,#1E293B)]">
-              {product.name}.....
+              {product.name}
             </h1>
             <div className="shrink-0 text-right">
-              <p className="text-[8px] text-gray-500">Current Price</p>
-              <p className="text-sm font-bold text-[var(--sf-ink,#1E293B)]">{formatNgn(product.price)}</p>
+              <p className="text-[8px] text-gray-500">Cost per unit</p>
+              <p className="text-sm font-bold text-[var(--sf-ink,#1E293B)]">{formatNgn(unitPrice)}</p>
             </div>
           </div>
 
@@ -264,40 +417,35 @@ export default function CommodityDetailPage() {
           <div className="mt-4 flex gap-6 text-[11px] font-semibold text-gray-600">
             <span className="inline-flex items-center gap-2">
               <Calendar className="h-3.5 w-3.5 text-gray-400" />
-              {product.duration}
+              {holdingPeriod}
             </span>
             <span className="inline-flex items-center gap-2">
               <Percent className="h-3.5 w-3.5 text-gray-400" />
-              {product.interestRate}
+              {interestLabel}
             </span>
           </div>
 
           <div className="mt-10 space-y-8">
-            <InfoRow label="Min purchase" value={formatNaira(product.minPurchase)} />
+            <InfoRow label="Min purchase" value={`${minQuantity} unit${minQuantity === 1 ? '' : 's'}`} />
+            <InfoRow label="Unit" value={product.unitOfMeasure || 'unit'} />
             <InfoRow
-              label="Start Date"
+              label="Holding period"
               value={
                 <span className="inline-flex items-center gap-1">
-                  {product.startDate}
-                  <ChevronDown className="h-4 w-4" />
-                </span>
-              }
-            />
-            <InfoRow
-              label="Investment Period"
-              value={
-                <span className="inline-flex items-center gap-1">
-                  1 year
+                  {holdingPeriod}
                   <ChevronDown className="h-4 w-4" />
                 </span>
               }
             />
             <InfoRow label="Powered by:" value={providerName} />
-            <InfoRow label="Total" value={formatNaira(detailTotal)} />
+            <InfoRow label="Cost per purchase" value={formatNaira(unitPrice)} />
           </div>
 
           <Button
-            onClick={() => setSheet('purchase')}
+            onClick={() => {
+              setQuantity(Math.max(minQuantity, quantity))
+              setSheet('purchase')
+            }}
             className="mt-8 h-14 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-base font-semibold text-white"
           >
             Continue
@@ -314,9 +462,8 @@ export default function CommodityDetailPage() {
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div className="flex items-center gap-1.5 text-sm text-gray-700">
                   <span>
-                    Counter Input<span className="text-[var(--sf-button,#1E40AF)]">*</span>
+                    Quantity<span className="text-[var(--sf-button,#1E40AF)]">*</span>
                   </span>
-                  <span className="text-gray-400">(Optional)</span>
                   <HelpCircle className="h-4 w-4 text-gray-400" aria-hidden />
                 </div>
                 <button type="button" className="shrink-0 text-sm text-gray-400 hover:text-gray-600">
@@ -328,7 +475,7 @@ export default function CommodityDetailPage() {
                 <button
                   type="button"
                   aria-label="Decrease quantity"
-                  onClick={() => setQuantity((value) => Math.max(1, value - 1))}
+                  onClick={() => setQuantity((value) => Math.max(minQuantity, value - 1))}
                   className="flex w-12 shrink-0 items-center justify-center border-r border-gray-200 text-xl text-gray-500 transition-colors hover:bg-gray-50 active:bg-gray-100"
                 >
                   <Minus className="h-4 w-4" />
@@ -349,8 +496,10 @@ export default function CommodityDetailPage() {
               <p className="mt-4 flex gap-1.5 text-sm text-gray-500">
                 <HelpCircle className="h-4 w-4 shrink-0 text-gray-400" aria-hidden />
                 <span>
-                  Cost per purchase{' '}
+                  Cost per unit{' '}
                   <span className="font-semibold text-[var(--sf-ink,#1E293B)]">{formatNgn(unitPrice)}</span>
+                  {' · '}
+                  Min {minQuantity}
                 </span>
               </p>
             </div>
@@ -359,23 +508,36 @@ export default function CommodityDetailPage() {
               <div className="flex items-center justify-between gap-4">
                 <span className="text-gray-500">From</span>
                 <span className="text-right font-medium text-[var(--sf-ink,#1E293B)]">
-                  Wallet Balance <span className="text-gray-400">→</span> {formatWalletNgn(walletBalance)}
+                  Central wallet <span className="text-gray-400">→</span>{' '}
+                  {walletLoading || contextLoading ? '…' : formatWalletNgn(walletBalance)}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-4">
                 <span className="text-gray-500">To</span>
                 <span className="text-right font-medium text-[var(--sf-ink,#1E293B)]">
-                  Investment Account Balance <span className="text-gray-400">→</span> NGN 0.0
+                  Commodity holding <span className="text-gray-400">→</span>{' '}
+                  {contextLoading ? '…' : formatWalletNgn(totals.holdingBalance)}
                 </span>
               </div>
             </div>
 
+            <div className="rounded-2xl bg-gray-50 px-4 py-3 text-xs text-gray-600">
+              <div className="flex justify-between gap-4">
+                <span>Principal</span>
+                <span className="font-medium">{formatWalletNgn(totals.principal)}</span>
+              </div>
+              <div className="mt-1 flex justify-between gap-4">
+                <span>Commission ({totals.commissionRatePercent}%)</span>
+                <span className="font-medium">{formatWalletNgn(totals.commission)}</span>
+              </div>
+            </div>
+
             <p className="text-center text-xs leading-5 text-gray-500">
-              Invest account is domiciled with {product.name.split(' ')[0] || providerName}, a CBN licensed entity.
+              Commodity holding is domiciled with {domicileName}, a CBN licensed entity.
             </p>
 
             <div className="rounded-2xl bg-[#E8F8EF] px-5 py-4 text-center text-base font-semibold text-[#1E293B]">
-              Total <span className="text-gray-400">→</span> {formatWalletNgn(purchaseTotal)}
+              Total debit <span className="text-gray-400">→</span> {formatWalletNgn(totals.totalDebit)}
             </div>
 
             {purchaseError ? (
@@ -408,15 +570,15 @@ export default function CommodityDetailPage() {
             </div>
             <h2 className="text-xl font-bold text-[var(--sf-ink,#1E293B)]">Insufficient balance</h2>
             <p className="mx-auto mt-3 max-w-xs text-sm leading-relaxed text-gray-500">
-              Your central wallet does not have enough funds for this purchase. Fund your wallet with at least the
-              required amount and try again.
+              Your central wallet does not have enough funds for this purchase (principal + commission). Fund your
+              wallet and try again.
             </p>
           </div>
 
           <div className="mt-6 space-y-4 rounded-2xl bg-gray-50 px-4 py-4 text-sm">
             <div className="flex items-center justify-between gap-4">
-              <span className="text-gray-500">Purchase total</span>
-              <span className="font-semibold text-[var(--sf-ink,#1E293B)]">{formatWalletNgn(purchaseTotal)}</span>
+              <span className="text-gray-500">Total debit</span>
+              <span className="font-semibold text-[var(--sf-ink,#1E293B)]">{formatWalletNgn(totals.totalDebit)}</span>
             </div>
             <div className="flex items-center justify-between gap-4">
               <span className="text-gray-500">Wallet balance</span>
@@ -492,6 +654,7 @@ export default function CommodityDetailPage() {
           <Button
             onClick={() => {
               void refetchWallet()
+              void loadPurchaseData()
               setSheet('purchase')
             }}
             className="mt-8 h-14 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-base font-semibold text-white"

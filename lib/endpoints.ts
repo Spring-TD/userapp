@@ -334,6 +334,16 @@ export const ENDPOINTS = {
     init: "/v1/applications/init",
     user: (userId: string) => `/v1/applications/user/${encodeURIComponent(userId)}`,
   },
+  pricing: {
+    product: (productId: string) => `/v1/pricing/product/${encodeURIComponent(productId)}`,
+  },
+  commodityAccounts: {
+    apply: "/v1/commodity-accounts/apply",
+    byId: (applicationId: string) =>
+      `/v1/commodity-accounts/${encodeURIComponent(applicationId)}`,
+    withdraw: (applicationId: string) =>
+      `/v1/commodity-accounts/${encodeURIComponent(applicationId)}/withdraw`,
+  },
   /**
    * Modular KYC — proxied via `/api/v1/kyc/*` → compliance-ms.
    * Flow: POST `modularVerification` (Bearer; `fuspay.customerId` from signup). Optional GET `modularVerificationUrl`.
