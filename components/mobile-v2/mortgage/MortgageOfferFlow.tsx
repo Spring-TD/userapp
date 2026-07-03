@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { CopyableDetailRow } from '@/components/mobile-v2/CopyableDetailRow'
 import { MortgageSheet, MORTGAGE_PRIMARY } from '@/components/mobile-v2/mortgage/MortgageSheet'
 import { mortgagePendingDetailHref } from '@/lib/mortgageApplyRoutes'
-import { patchMortgageWorkflow } from '@/lib/mortgageWorkflow'
+import { patchMortgageWorkflowAsync } from '@/lib/mortgageWorkflow'
 import { useUserWallet } from '@/hooks/useUserWallet'
 import { formatNaira, formatNgn } from '@/lib/mobileProductDetailDisplay'
 import { cn } from '@/lib/utils'
@@ -105,23 +105,23 @@ export function MortgageOfferFlow({
   const accountNumber = wallet?.virtualNuban?.accountNumber || '7012345678'
   const pendingHref = applicationId ? mortgagePendingDetailHref(applicationId) : backHref
 
-  const patch = (data: Parameters<typeof patchMortgageWorkflow>[1]) => {
+  const patch = async (data: Parameters<typeof patchMortgageWorkflowAsync>[1]) => {
     if (!applicationId) return
-    patchMortgageWorkflow(applicationId, data)
+    await patchMortgageWorkflowAsync(applicationId, data)
   }
 
   const finishToPending = () => {
     router.replace(pendingHref)
   }
 
-  const handleScheduleConfirm = () => {
-    patch({ inspectionScheduled: true })
+  const handleScheduleConfirm = async () => {
+    await patch({ inspectionScheduled: true })
     setStep('inspection')
     toast.success('Inspection appointment noted.')
   }
 
-  const advanceFromInspection = () => {
-    patch({ inspectionCompleted: true })
+  const advanceFromInspection = async () => {
+    await patch({ inspectionCompleted: true })
     setStep('down_payment')
   }
 
@@ -239,8 +239,8 @@ export function MortgageOfferFlow({
               </p>
               <Button
                 className={cn('mt-8 h-12 w-full max-w-xs rounded-full text-sm font-semibold', MORTGAGE_PRIMARY)}
-                onClick={() => {
-                  patch({ contractAccepted: true })
+                onClick={async () => {
+                  await patch({ contractAccepted: true })
                   toast.success('Loan contract accepted. Disbursement will follow.')
                   finishToPending()
                 }}
@@ -296,15 +296,15 @@ export function MortgageOfferFlow({
           <Button
             className={cn('mt-8 h-12 w-full rounded-full', MORTGAGE_PRIMARY)}
             disabled={!inspectionChoice}
-            onClick={() => {
+            onClick={async () => {
               setInspectionSheet('none')
               if (inspectionChoice === 'declined') {
-                patch({ offerDeclined: true })
+                await patch({ offerDeclined: true })
                 toast.message('Offer declined')
                 finishToPending()
                 return
               }
-              advanceFromInspection()
+              await advanceFromInspection()
             }}
           >
             Continue
@@ -321,8 +321,8 @@ export function MortgageOfferFlow({
           <p className="mt-2 text-sm text-gray-500">Your down payment has been submitted successfully</p>
           <Button
             className={cn('mt-8 h-12 w-full rounded-full', MORTGAGE_PRIMARY)}
-            onClick={() => {
-              patch({ downPaymentConfirmed: true })
+            onClick={async () => {
+              await patch({ downPaymentConfirmed: true })
               setPaymentSheet('none')
               setStep('contract')
             }}

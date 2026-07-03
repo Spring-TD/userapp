@@ -1,4 +1,5 @@
 import type { StorefrontApplication } from '@/lib/storefrontApplicationClient'
+import { syncMortgageWorkflowPatchToApi } from '@/lib/mortgageWorkflowApi'
 
 export type MortgageWorkflowStep =
   | 'awaiting_approval'
@@ -58,6 +59,35 @@ export function saveMortgageWorkflow(state: MortgageWorkflowLocalState) {
 }
 
 export function patchMortgageWorkflow(
+  applicationId: string,
+  patch: Partial<MortgageWorkflowLocalState>,
+): MortgageWorkflowLocalState | null {
+  const next = applyMortgageWorkflowPatch(applicationId, patch)
+  if (next) {
+    void syncMortgageWorkflowPatchToApi(applicationId, patch, next).then((result) => {
+      if (!result.ok) {
+        console.warn('[mortgageWorkflow] API sync failed:', result.error)
+      }
+    })
+  }
+  return next
+}
+
+/** Persist locally and await API sync (use before navigation on critical steps). */
+export async function patchMortgageWorkflowAsync(
+  applicationId: string,
+  patch: Partial<MortgageWorkflowLocalState>,
+): Promise<MortgageWorkflowLocalState | null> {
+  const next = applyMortgageWorkflowPatch(applicationId, patch)
+  if (!next) return null
+  const result = await syncMortgageWorkflowPatchToApi(applicationId, patch, next)
+  if (!result.ok) {
+    console.warn('[mortgageWorkflow] API sync failed:', result.error)
+  }
+  return next
+}
+
+function applyMortgageWorkflowPatch(
   applicationId: string,
   patch: Partial<MortgageWorkflowLocalState>,
 ): MortgageWorkflowLocalState | null {

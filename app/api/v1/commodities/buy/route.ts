@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.text()
-    const response = await fetch(`${getApiBaseUrl()}/api/v1/commodities/buy`, {
+    const response = await fetch(`${getApiBaseUrl()}/api/v1/commodity-accounts/apply`, {
       method: "POST",
       headers,
       body: body || "{}",

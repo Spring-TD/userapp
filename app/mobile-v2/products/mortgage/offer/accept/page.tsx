@@ -7,7 +7,7 @@ import { Check, ChevronLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { MortgageSheet, MORTGAGE_PRIMARY } from '@/components/mobile-v2/mortgage/MortgageSheet'
 import { mortgagePendingDetailHref } from '@/lib/mortgageApplyRoutes'
-import { patchMortgageWorkflow } from '@/lib/mortgageWorkflow'
+import { patchMortgageWorkflowAsync } from '@/lib/mortgageWorkflow'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -33,20 +33,20 @@ function AcceptOfferContent() {
 
   const pendingHref = mortgagePendingDetailHref(applicationId)
 
-  const acceptOffer = () => {
+  const acceptOffer = async () => {
     if (!termsAccepted) {
       toast.error('Accept the terms and conditions to continue.')
       return
     }
-    patchMortgageWorkflow(applicationId, { offerAccepted: true, offerDeclined: false })
+    await patchMortgageWorkflowAsync(applicationId, { offerAccepted: true, offerDeclined: false })
     setSheetOpen(false)
     router.replace(
       `/mobile-v2/products/mortgage/offer?productId=${encodeURIComponent(productId)}&applicationId=${encodeURIComponent(applicationId)}&step=schedule_inspection`,
     )
   }
 
-  const declineOffer = () => {
-    patchMortgageWorkflow(applicationId, { offerDeclined: true, offerAccepted: false })
+  const declineOffer = async () => {
+    await patchMortgageWorkflowAsync(applicationId, { offerDeclined: true, offerAccepted: false })
     toast.message('Offer declined')
     setSheetOpen(false)
     router.replace(pendingHref)
