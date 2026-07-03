@@ -10,6 +10,7 @@ import { CopyableDetailRow } from '@/components/mobile-v2/CopyableDetailRow'
 import { MortgageSheet, MORTGAGE_PRIMARY } from '@/components/mobile-v2/mortgage/MortgageSheet'
 import { mortgagePendingDetailHref } from '@/lib/mortgageApplyRoutes'
 import { patchMortgageWorkflowAsync } from '@/lib/mortgageWorkflow'
+import { pendingApprovedMortgageApi } from '@/lib/pendingApprovedMortgageApi'
 import { useUserWallet } from '@/hooks/useUserWallet'
 import { formatNaira, formatNgn } from '@/lib/mobileProductDetailDisplay'
 import { cn } from '@/lib/utils'
@@ -88,6 +89,7 @@ export function MortgageOfferFlow({
 }: MortgageOfferFlowProps) {
   const router = useRouter()
   const { wallet, formattedBalance, loading: walletLoading } = useUserWallet()
+  const userId = wallet?.userId
   const [step, setStep] = useState<MortgageOfferFlowStep>(initialStep)
   const [inspectionSheet, setInspectionSheet] = useState<InspectionSheet>('none')
   const [inspectionChoice, setInspectionChoice] = useState<'completed' | 'declined' | null>(null)
@@ -115,23 +117,79 @@ export function MortgageOfferFlow({
   }
 
   const handleScheduleConfirm = async () => {
-    await patch({ inspectionScheduled: true })
+    if (userId && applicationId) {
+      const res = await pendingApprovedMortgageApi.scheduleInspection(applicationId, userId)
+      if (!res.ok) {
+        await patch({ inspectionScheduled: true })
+      }
+    } else {
+      await patch({ inspectionScheduled: true })
+    }
     setStep('inspection')
     toast.success('Inspection appointment noted.')
   }
 
   const advanceFromInspection = async () => {
-    await patch({ inspectionCompleted: true })
+    if (userId && applicationId && inspectionChoice) {
+      const res = await pendingApprovedMortgageApi.completeInspection(
+        applicationId,
+        userId,
+        inspectionChoice === 'completed' ? 'completed' : 'declined',
+      )
+      if (!res.ok) {
+        await patch({ inspectionCompleted: true })
+      }
+    } else {
+      await patch({ inspectionCompleted: true })
+    }
+    if (inspectionChoice === 'declined') {
+      toast.message('Inspection declined')
+      finishToPending()
+      return
+    }
     setStep('down_payment')
   }
 
+  const handleStartInspection = async () => {
+    if (userId && applicationId) {
+      await pendingApprovedMortgageApi.startInspection(applicationId, userId)
+    }
+    setInspectionSheet('status')
+  }
+
   const handlePayNow = async () => {
+    if (!userId || !applicationId) {
+      toast.error('Sign in to pay down payment.')
+      return
+    }
     setPaying(true)
-    await new Promise((r) => setTimeout(r, 1200))
+    const res = await pendingApprovedMortgageApi.payDownPayment(applicationId, userId, 'wallet')
+    if (!res.ok) {
+      const balance = wallet?.balance ?? 0
+      const canPay = downPaymentAmount != null && balance >= downPaymentAmount
+      setPaying(false)
+      setPaymentSheet(canPay ? 'success' : 'pending')
+      if (canPay) await patch({ downPaymentConfirmed: true })
+      return
+    }
     setPaying(false)
-    const balance = wallet?.balance ?? 0
-    const canPay = downPaymentAmount != null && balance >= downPaymentAmount
-    setPaymentSheet(canPay ? 'success' : 'pending')
+    await patch({ downPaymentConfirmed: true })
+    setPaymentSheet('success')
+  }
+
+  const handleSignContract = async () => {
+    if (!userId || !applicationId) {
+      toast.error('Sign in to accept contract.')
+      return
+    }
+    const res = await pendingApprovedMortgageApi.signContract(applicationId, userId)
+    if (!res.ok) {
+      await patch({ contractAccepted: true })
+    } else {
+      await patch({ contractAccepted: true })
+    }
+    toast.success('Contract signed')
+    finishToPending()
   }
 
   const stepNumber = FLOW_STEPS.indexOf(step) + 1
@@ -183,7 +241,7 @@ export function MortgageOfferFlow({
               </p>
               <Button
                 className={cn('mt-8 h-12 w-full max-w-xs rounded-full text-sm font-semibold', MORTGAGE_PRIMARY)}
-                onClick={() => setInspectionSheet('progress')}
+                onClick={() => void handleStartInspection()}
               >
                 Start inspection
               </Button>
@@ -239,11 +297,7 @@ export function MortgageOfferFlow({
               </p>
               <Button
                 className={cn('mt-8 h-12 w-full max-w-xs rounded-full text-sm font-semibold', MORTGAGE_PRIMARY)}
-                onClick={async () => {
-                  await patch({ contractAccepted: true })
-                  toast.success('Loan contract accepted. Disbursement will follow.')
-                  finishToPending()
-                }}
+                onClick={() => void handleSignContract()}
               >
                 Sign Contract
               </Button>
