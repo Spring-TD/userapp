@@ -1,4 +1,5 @@
 import { applyProductOneShot, createSavingsAccount } from '@/lib/storefrontApplicationClient'
+import { pepStatusSubmission } from '@/lib/applicantProfileFields'
 
 type SavingsApplyResponse = {
   success?: boolean
@@ -22,14 +23,18 @@ export type EnsureSavingsAccountResult = {
 /** POST /api/v1/savings/apply — provision savings account before funding. */
 export async function ensureSavingsAccount(
   productId: string,
-  options?: { amount?: number; currency?: string },
+  options?: { amount?: number; currency?: string; politicallyExposed?: 'yes' | 'no' },
 ): Promise<EnsureSavingsAccountResult> {
   const hasAmount = options?.amount != null && options.amount > 0
+  const requirementSubmissions = options?.politicallyExposed
+    ? [pepStatusSubmission(options.politicallyExposed)]
+    : undefined
   const result = hasAmount
     ? await applyProductOneShot(productId, {
         amount: options!.amount,
         currency: options?.currency,
         productType: 'SAVINGS',
+        requirementSubmissions,
       })
     : await createSavingsAccount(productId, { currency: options?.currency })
 

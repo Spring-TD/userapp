@@ -1,4 +1,5 @@
 import { applyProductOneShot } from '@/lib/storefrontApplicationClient'
+import { pepStatusSubmission } from '@/lib/applicantProfileFields'
 
 type InvestmentApplyResponse = {
   success?: boolean
@@ -22,9 +23,18 @@ export type EnsureInvestmentAccountResult = {
 /** POST /api/v1/investments/apply — provision investment account before funding. */
 export async function ensureInvestmentAccount(
   productId: string,
-  options?: { amount?: number; currency?: string },
+  options?: { amount?: number; currency?: string; politicallyExposed?: 'yes' | 'no' },
 ): Promise<EnsureInvestmentAccountResult> {
-  const result = await applyProductOneShot(productId, options)
+  const requirementSubmissions = options?.politicallyExposed
+    ? [pepStatusSubmission(options.politicallyExposed)]
+    : undefined
+
+  const result = await applyProductOneShot(productId, {
+    amount: options?.amount,
+    currency: options?.currency,
+    productType: 'INVESTMENT',
+    requirementSubmissions,
+  })
   if (!result.ok) return { ok: false, accountCreated: false, error: result.error }
   return {
     ok: true,

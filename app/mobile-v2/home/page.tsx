@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
     ChevronRight,
     Home,
@@ -29,6 +30,7 @@ import {
     walletTransactionMethodLabel,
     walletTransactionTitle,
 } from '@/lib/userWallet';
+import type { AuthUserProfile } from '@/lib/userProfileClient';
 import { HomeStorefrontProducts } from '@/components/mobile-v2/HomeStorefrontProducts';
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
 import { useMobileProducts } from '@/hooks/useMobileProducts';
@@ -96,6 +98,7 @@ const PRODUCT_QUICK_ACTIONS: {
 ];
 
 export default function HomePage() {
+    const router = useRouter();
     const { appId, ready: tenantReady, error: tenantError } = useMobileV2Tenant();
     const {
         products: appProducts,
@@ -121,7 +124,7 @@ export default function HomePage() {
     ];
     const quickActions: QuickActionItem[] = [...productQuickLinks, ...utilityQuickActions];
 
-    const [activeModal, setActiveModal] = useState<'none' | 'fund_options' | 'fund_bank' | 'account_details'>('none');
+    const [activeModal, setActiveModal] = useState<'none' | 'fund_options' | 'fund_bank'>('none');
     const { user: profile, loading: profileLoading, kycApproved } = useAuthUserProfile();
     const { wallet, formattedBalance, loading: walletLoading, error: walletError, notFound } = useUserWallet();
     const [recentTransactions, setRecentTransactions] = useState<WalletTransaction[]>([]);
@@ -264,7 +267,7 @@ export default function HomePage() {
                     Fund
                 </button>
                 <button
-                    onClick={() => setActiveModal('account_details')}
+                    onClick={() => router.push('/mobile-v2/send')}
                     className="flex-1 w-full h-12 rounded-full bg-[#94A3B8] text-white hover:bg-[#94A3B8]/90 text-[13px] font-semibold flex items-center justify-center"
                 >
                     Send
@@ -373,7 +376,13 @@ export default function HomePage() {
                             <button
                                 key={idx}
                                 type="button"
-                                onClick={item.label === 'Top Up' ? () => setActiveModal('fund_options') : undefined}
+                                onClick={
+                                    item.label === 'Top Up'
+                                        ? () => setActiveModal('fund_options')
+                                        : item.label === 'Send'
+                                          ? () => router.push('/mobile-v2/send')
+                                          : undefined
+                                }
                                 className="flex flex-col items-center gap-2 group"
                             >
                                 {Content}
@@ -478,52 +487,6 @@ export default function HomePage() {
                             <li>Payments will take a few mins to reflect.</li>
                             <li>There are no additional fees on deposits.</li>
                         </ul>
-                    </div>
-                </div>
-            )}
-
-            {/* Modal 3: Account Details (Triggered by Send button) */}
-            {activeModal === 'account_details' && (
-                <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-[30px] p-6 pb-12 animate-in slide-in-from-bottom duration-300 md:left-1/2 md:right-auto md:w-[400px] md:-translate-x-1/2">
-                    <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-8" />
-                    <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-xl font-bold text-[var(--sf-ink,#1E1B4B)]">Account Details</h2>
-                        <button onClick={closeModal}><X className="w-5 h-5 text-gray-400" /></button>
-                    </div>
-
-                    <div className="space-y-6">
-                        {walletLoading ? (
-                            <>
-                                <Skeleton className="h-10 w-full rounded-md bg-gray-200/90" />
-                                <Skeleton className="h-10 w-full rounded-md bg-gray-200/90" />
-                                <Skeleton className="h-10 w-full rounded-md bg-gray-200/90" />
-                            </>
-                        ) : (
-                            nubanReady ? (
-                                <>
-                                    <CopyableDetailRow
-                                        label="Account Type"
-                                        value={nuban?.accountType || wallet?.walletType}
-                                    />
-                                    <CopyableDetailRow label="Account Number" value={nuban?.accountNumber} />
-                                    <CopyableDetailRow label="Bank Name" value={nuban?.bankName} />
-                                    <CopyableDetailRow label="Provider Reference" value={nuban?.providerReference} />
-                                </>
-                            ) : (
-                                <div className="rounded-2xl sf-accent-soft p-4">
-                                    <p className="text-sm font-semibold text-[var(--sf-ink,#1E1B4B)]">Account details unavailable</p>
-                                    <p className="mt-1 text-sm text-gray-600">{fundingUnavailableMessage}</p>
-                                    {showCompleteKycCta ? (
-                                    <Link
-                                        href="/mobile-v2/profile/kyc/create"
-                                        className="mt-3 inline-flex h-10 items-center rounded-full bg-[var(--sf-button,#1E40AF)] px-4 text-sm font-semibold text-white"
-                                    >
-                                        Complete KYC
-                                    </Link>
-                                    ) : null}
-                                </div>
-                            )
-                        )}
                     </div>
                 </div>
             )}

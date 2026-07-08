@@ -43,6 +43,23 @@ import {
   parseApplicationAmount,
   validateApplicationAmount,
 } from '@/lib/applicationAmount'
+import {
+  applicantProfileFromSubmissions,
+  applicantProfileSubmissions,
+  DEFAULT_APPLICANT_PROFILE,
+  LOAN_REASON_OPTIONS,
+  MARITAL_STATUS_OPTIONS,
+  mergeApplicantProfileSubmissions,
+  REPAYMENT_SOURCE_OPTIONS,
+  validateApplicantProfile,
+  type ApplicantProfileDraft,
+} from '@/lib/applicantProfileFields'
+import {
+  PepSearchNotice,
+  SelectField,
+  YesNoField,
+} from '@/components/mobile-v2/application/ApplicantProfileFields'
+import { isDuplicateAccountError } from '@/lib/resolveProductApplicationAccount'
 import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
 import { poweredBy } from '@/lib/mobileProductDetailDisplay'
 
@@ -72,6 +89,9 @@ type ApplicationDraft = {
   guarantors: Guarantor[]
   employmentDraft: EmploymentDraft
   guarantorDraft: Guarantor
+  applicantProfile: ApplicantProfileDraft
+  spouse: Guarantor | null
+  spouseDraft: Guarantor
   updatedAt: string
 }
 
@@ -720,9 +740,19 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
   const [activeStep, setActiveStep] = useState<StepId>('requirement')
   const [accepted, setAccepted] = useState(false)
   const [sheet, setSheet] = useState<
-    'create_account' | 'guarantor_form' | 'guarantor_generating' | 'guarantor_success' | 'guarantor_added' | 'success' | null
+    | 'create_account'
+    | 'guarantor_form'
+    | 'guarantor_generating'
+    | 'guarantor_success'
+    | 'guarantor_added'
+    | 'spouse_form'
+    | 'spouse_generating'
+    | 'spouse_success'
+    | 'success'
+    | null
   >(null)
   const [guarantorSubmitError, setGuarantorSubmitError] = useState<string | null>(null)
+  const [spouseSubmitError, setSpouseSubmitError] = useState<string | null>(null)
   const [lastAddedGuarantor, setLastAddedGuarantor] = useState<Guarantor | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -742,6 +772,13 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     hrEmail: '',
   })
   const [guarantorDraft, setGuarantorDraft] = useState<Guarantor>({
+    name: '',
+    phone: '',
+    email: '',
+  })
+  const [applicantProfile, setApplicantProfile] = useState<ApplicantProfileDraft>(DEFAULT_APPLICANT_PROFILE)
+  const [spouse, setSpouse] = useState<Guarantor | null>(null)
+  const [spouseDraft, setSpouseDraft] = useState<Guarantor>({
     name: '',
     phone: '',
     email: '',
@@ -790,9 +827,18 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         : goBackHref
   const activeIndex = steps.indexOf(activeStep)
 
-  const buildRequirementDrafts = (employment: EmploymentDraft, submissions: RequirementSubmission[]) => {
-    const drafts = submissions.filter((submission) => submission.type !== 'document' && !isEmploymentSubmission(submission))
-    return [...drafts, employmentSubmissionFromDraft(employment)]
+  const buildRequirementDrafts = (
+    employment: EmploymentDraft,
+    profile: ApplicantProfileDraft,
+    submissions: RequirementSubmission[],
+  ) => {
+    const drafts = submissions.filter(
+      (submission) => submission.type !== 'document' && !isEmploymentSubmission(submission),
+    )
+    return [
+      ...mergeApplicantProfileSubmissions(profile, drafts),
+      employmentSubmissionFromDraft(employment),
+    ]
   }
 
   const buildUploadedDrafts = (submissions: RequirementSubmission[]) =>
@@ -808,6 +854,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       ...requirementDrafts.filter((submission) => !isEmploymentSubmission(submission)),
       ...uploadedDrafts,
     ])
+    setApplicantProfile(applicantProfileFromSubmissions(requirementDrafts))
     if (employmentSubmission) {
       setEmploymentDraft(employmentDraftFromSubmission(employmentSubmission))
     }
@@ -838,6 +885,14 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
           email: draft.guarantorDraft?.email || '',
           verificationUrl: draft.guarantorDraft?.verificationUrl,
         })
+        setApplicantProfile(draft.applicantProfile || DEFAULT_APPLICANT_PROFILE)
+        setSpouse(draft.spouse || null)
+        setSpouseDraft({
+          name: draft.spouseDraft?.name || '',
+          phone: draft.spouseDraft?.phone || '',
+          email: draft.spouseDraft?.email || '',
+          verificationUrl: draft.spouseDraft?.verificationUrl,
+        })
         setDraftNotice('Saved progress restored.')
       }
     }
@@ -853,6 +908,9 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       guarantors,
       employmentDraft,
       guarantorDraft,
+      applicantProfile,
+      spouse,
+      spouseDraft,
     })
 
     if (applicationId && userId) {
@@ -860,7 +918,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         applicationId,
         userId,
         currentTab: progressTabForStep(activeStep),
-        requirementDrafts: buildRequirementDrafts(employmentDraft, requirementSubmissions),
+        requirementDrafts: buildRequirementDrafts(employmentDraft, applicantProfile, requirementSubmissions),
         uploadedDrafts: buildUploadedDrafts(requirementSubmissions),
       })
       if (!result.ok) {
@@ -878,7 +936,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       void persistDraft(null)
     }, 800)
     return () => window.clearTimeout(timer)
-  }, [draftHydrated, currentDraftKey, activeStep, accepted, applicationAmount, requirementSubmissions, guarantors, employmentDraft, guarantorDraft])
+  }, [draftHydrated, currentDraftKey, activeStep, accepted, applicationAmount, requirementSubmissions, guarantors, employmentDraft, guarantorDraft, applicantProfile, spouse, spouseDraft])
 
   const handleStepChange = (step: StepId) => {
     void persistDraft(null)
@@ -915,6 +973,10 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       return false
     }
 
+    if (applicationId && getApplicationAccount(initializedApplication)?.accountNumber) {
+      return true
+    }
+
     if (initializedApplication?.amount === parsed && applicationId) {
       return true
     }
@@ -924,6 +986,9 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       amount: parsed,
     })
     if (!result.ok) {
+      if (isDuplicateAccountError(result.error || '') && applicationId) {
+        return true
+      }
       setError(result.error || 'Could not save your application amount.')
       return false
     }
@@ -944,6 +1009,19 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       return
     }
 
+    if (applicantProfile.repayingWithSpouse === 'yes' && !spouse?.verificationUrl) {
+      setError('Please complete spouse KYC before submitting.')
+      setActiveStep('requirement')
+      return
+    }
+
+    const profileError = validateApplicantProfile(applicantProfile)
+    if (profileError) {
+      setError(profileError)
+      setActiveStep('requirement')
+      return
+    }
+
     const parsed = parseApplicationAmount(applicationAmount)
     if (!parsed) {
       setError('Enter the amount you want to apply for.')
@@ -955,7 +1033,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     setError(null)
     try {
       const submissions: RequirementSubmission[] = [
-        ...buildRequirementDrafts(employmentDraft, requirementSubmissions),
+        ...buildRequirementDrafts(employmentDraft, applicantProfile, requirementSubmissions),
         ...buildUploadedDrafts(requirementSubmissions),
       ]
       const requirementsResult = await submitApplicationRequirements(applicationId, userId, submissions)
@@ -1014,6 +1092,15 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     if (activeStep === 'requirement') {
       void (async () => {
         setError(null)
+        const profileError = validateApplicantProfile(applicantProfile)
+        if (profileError) {
+          setError(profileError)
+          return
+        }
+        if (applicantProfile.repayingWithSpouse === 'yes' && !spouse?.verificationUrl) {
+          setError('Please complete spouse KYC before continuing.')
+          return
+        }
         const synced = await syncApplicationAmount()
         if (!synced) return
         void persistDraft(null)
@@ -1096,6 +1183,71 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     setSheet(null)
     setGuarantorSubmitError(null)
     setGuarantorDraft({ name: '', phone: '', email: '' })
+  }
+
+  const handleGenerateSpouseKyc = async () => {
+    if (!applicationId || !userId) {
+      setError('Application was not initialized. Please go back and create the account again.')
+      setSheet(null)
+      return
+    }
+
+    const fullName = spouseDraft.name.trim()
+    const email = spouseDraft.email.trim()
+    const phone = spouseDraft.phone.trim()
+
+    if (!fullName || !email || !phone) {
+      setSpouseSubmitError('Please enter your spouse full name, email, and phone.')
+      return
+    }
+
+    setSpouseSubmitError(null)
+    setSheet('spouse_generating')
+    const generatingStartedAt = Date.now()
+
+    try {
+      const result = await addApplicationGuarantor(applicationId, {
+        userId,
+        fullName,
+        email,
+        phone,
+        occupation: 'Not specified',
+        relationship: 'Spouse',
+        country: 'NG',
+      })
+
+      if (!result.ok) {
+        setSpouseSubmitError(result.error)
+        setSheet('spouse_form')
+        return
+      }
+
+      const addedSpouse: Guarantor = {
+        name: result.data?.guarantor?.fullName || fullName,
+        phone: result.data?.guarantor?.phone || phone,
+        email: result.data?.guarantor?.email || email,
+        verificationUrl: result.data?.guarantor?.kyc?.verificationUrl,
+      }
+
+      setSpouse(addedSpouse)
+
+      const minimumGeneratingMs = 1200
+      const elapsed = Date.now() - generatingStartedAt
+      if (elapsed < minimumGeneratingMs) {
+        await new Promise((resolve) => window.setTimeout(resolve, minimumGeneratingMs - elapsed))
+      }
+
+      setSheet('spouse_success')
+    } catch {
+      setSpouseSubmitError('Could not generate the spouse KYC link. Please try again.')
+      setSheet('spouse_form')
+    }
+  }
+
+  const closeSpouseSuccess = () => {
+    setSheet(null)
+    setSpouseSubmitError(null)
+    setSpouseDraft({ name: '', phone: '', email: '' })
   }
 
   const handleCreateAccount = async () => {
@@ -1185,6 +1337,123 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
                   <p className="text-xs text-red-600">{amountValidationError}</p>
                 ) : null}
               </div>
+
+              <SectionTitle>Reason for the loan</SectionTitle>
+              <div className="space-y-3">
+                <SelectField
+                  placeholder="Select reason"
+                  value={applicantProfile.loanReason}
+                  onChange={(loanReason) =>
+                    setApplicantProfile((profile) => ({ ...profile, loanReason, loanReasonOther: '' }))
+                  }
+                  options={LOAN_REASON_OPTIONS}
+                />
+                {applicantProfile.loanReason === 'other' ? (
+                  <InputPill
+                    placeholder="Describe your reason"
+                    value={applicantProfile.loanReasonOther}
+                    onChange={(loanReasonOther) =>
+                      setApplicantProfile((profile) => ({ ...profile, loanReasonOther }))
+                    }
+                  />
+                ) : null}
+              </div>
+
+              <SectionTitle>Marital status</SectionTitle>
+              <SelectField
+                placeholder="Select marital status"
+                value={applicantProfile.maritalStatus}
+                onChange={(maritalStatus) =>
+                  setApplicantProfile((profile) => ({ ...profile, maritalStatus }))
+                }
+                options={MARITAL_STATUS_OPTIONS}
+              />
+
+              <SectionTitle>Monthly earnings</SectionTitle>
+              <InputPill
+                placeholder="How much do you earn monthly?"
+                value={applicantProfile.monthlyEarnings}
+                onChange={(monthlyEarnings) =>
+                  setApplicantProfile((profile) => ({ ...profile, monthlyEarnings }))
+                }
+                type="number"
+                inputMode="numeric"
+              />
+
+              <SectionTitle>Source of repayment</SectionTitle>
+              <div className="space-y-3">
+                <SelectField
+                  placeholder="Select source of repayment"
+                  value={applicantProfile.repaymentSource}
+                  onChange={(repaymentSource) =>
+                    setApplicantProfile((profile) => ({ ...profile, repaymentSource, repaymentSourceOther: '' }))
+                  }
+                  options={REPAYMENT_SOURCE_OPTIONS}
+                />
+                {applicantProfile.repaymentSource === 'other' ? (
+                  <InputPill
+                    placeholder="Describe your repayment source"
+                    value={applicantProfile.repaymentSourceOther}
+                    onChange={(repaymentSourceOther) =>
+                      setApplicantProfile((profile) => ({ ...profile, repaymentSourceOther }))
+                    }
+                  />
+                ) : null}
+              </div>
+
+              <YesNoField
+                label="Are you a politically exposed person?"
+                value={applicantProfile.politicallyExposed}
+                onChange={(politicallyExposed) =>
+                  setApplicantProfile((profile) => ({ ...profile, politicallyExposed }))
+                }
+              />
+              <PepSearchNotice isPep={applicantProfile.politicallyExposed === 'yes'} />
+
+              <YesNoField
+                label="Are you repaying this loan with a spouse?"
+                value={applicantProfile.repayingWithSpouse}
+                onChange={(repayingWithSpouse) => {
+                  setApplicantProfile((profile) => ({ ...profile, repayingWithSpouse }))
+                  if (repayingWithSpouse === 'no') setSpouse(null)
+                }}
+              />
+
+              {applicantProfile.repayingWithSpouse === 'yes' ? (
+                <div className="space-y-3">
+                  <SectionTitle>Spouse KYC</SectionTitle>
+                  {spouse?.verificationUrl ? (
+                    <div className="relative rounded-2xl bg-gray-100 p-4 pr-10">
+                      <p className={`text-sm font-bold ${BRAND_INK}`}>{spouse.name}</p>
+                      <p className="mt-1 text-[10px] text-gray-500">
+                        {spouse.phone} | {spouse.email}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => void navigator.clipboard?.writeText(spouse.verificationUrl || '')}
+                        className={`mt-3 inline-flex items-center gap-1 text-xs font-bold ${BRAND_INK}`}
+                      >
+                        <Copy className="h-3 w-3" />
+                        Copy spouse KYC URL
+                      </button>
+                      <span className="absolute right-4 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-[var(--sf-button,#1E40AF)] text-white">
+                        <Check className="h-3 w-3" />
+                      </span>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSpouseSubmitError(null)
+                        setSheet('spouse_form')
+                      }}
+                      className={`inline-flex items-center gap-1 rounded-xl bg-gray-100 px-3 py-2 text-sm font-bold ${BRAND_INK}`}
+                    >
+                      <Plus className="h-3 w-3" /> Add spouse for KYC
+                    </button>
+                  )}
+                </div>
+              ) : null}
 
               <SectionTitle>Occupation</SectionTitle>
               <div className="space-y-3">
@@ -1592,6 +1861,89 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
           <button type="button" className={`mt-5 w-full text-center text-sm font-medium ${BRAND_INK}`} onClick={() => setSheet(null)}>
             No. Go back
           </button>
+        </BottomSheet>
+      )}
+
+      {sheet === 'spouse_form' && (
+        <BottomSheet onClose={() => setSheet(null)}>
+          <h2 className={`mb-7 text-center text-xl font-bold ${BRAND_INK}`}>Spouse KYC</h2>
+          <div className="space-y-3">
+            <InputPill
+              placeholder="Spouse full name"
+              value={spouseDraft.name}
+              onChange={(name) => setSpouseDraft((g) => ({ ...g, name }))}
+            />
+            <InputPill
+              placeholder="Spouse email"
+              type="email"
+              value={spouseDraft.email}
+              onChange={(email) => setSpouseDraft((g) => ({ ...g, email }))}
+            />
+            <InputPill
+              placeholder="Spouse phone"
+              type="tel"
+              value={spouseDraft.phone}
+              onChange={(phone) => setSpouseDraft((g) => ({ ...g, phone }))}
+            />
+          </div>
+          {spouseSubmitError ? (
+            <p className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-center text-xs text-red-600">{spouseSubmitError}</p>
+          ) : null}
+          <Button
+            type="button"
+            className={cn('mt-6 h-12 w-full rounded-full font-semibold', PRIMARY)}
+            onClick={() => void handleGenerateSpouseKyc()}
+          >
+            Generate KYC link for spouse
+          </Button>
+          <button type="button" className={`mt-5 w-full text-center text-sm font-medium ${BRAND_INK}`} onClick={() => setSheet(null)}>
+            No. Go back
+          </button>
+        </BottomSheet>
+      )}
+
+      {sheet === 'spouse_generating' && (
+        <BottomSheet onClose={() => undefined}>
+          <div className="flex flex-col items-center py-6 text-center">
+            <div className={`mb-6 flex h-20 w-20 items-center justify-center rounded-full ${BRAND_SOFT}`}>
+              <Loader2 className="h-10 w-10 animate-spin text-[var(--sf-button,#1E40AF)]" />
+            </div>
+            <h2 className={`text-xl font-bold ${BRAND_INK}`}>Generating spouse KYC link</h2>
+            <p className="mx-auto mt-3 max-w-xs text-sm leading-relaxed text-gray-500">
+              Please wait while we generate a secure KYC verification link for your spouse.
+            </p>
+          </div>
+        </BottomSheet>
+      )}
+
+      {sheet === 'spouse_success' && (
+        <BottomSheet onClose={closeSpouseSuccess}>
+          <div className="flex flex-col items-center py-4 text-center">
+            <div className={`mb-6 flex h-20 w-20 items-center justify-center rounded-full ${BRAND_SOFT}`}>
+              <CheckCircle className="h-10 w-10 text-[var(--sf-button,#1E40AF)]" />
+            </div>
+            <h2 className={`text-xl font-bold ${BRAND_INK}`}>Spouse KYC link generated</h2>
+            <p className="mx-auto mt-3 max-w-xs text-sm leading-relaxed text-gray-500">
+              Share the verification link with <strong>{spouse?.name || 'your spouse'}</strong> to complete KYC.
+            </p>
+            {spouse?.verificationUrl ? (
+              <button
+                type="button"
+                onClick={() => void navigator.clipboard?.writeText(spouse.verificationUrl || '')}
+                className={`mt-5 inline-flex items-center gap-1 text-xs font-bold ${BRAND_INK}`}
+              >
+                <Copy className="h-3 w-3" />
+                Copy spouse KYC URL
+              </button>
+            ) : null}
+            <Button
+              type="button"
+              className={cn('mt-8 h-12 w-full rounded-full font-semibold', PRIMARY)}
+              onClick={closeSpouseSuccess}
+            >
+              Back to application
+            </Button>
+          </div>
         </BottomSheet>
       )}
 
