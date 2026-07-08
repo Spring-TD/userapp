@@ -5,14 +5,16 @@ import {
   type PostApprovalMortgageStatus,
 } from '@/lib/postApprovalMortgage'
 
+/** 8-step mortgage workflow aligned with Spring merchant spec. */
 export type MortgageWorkflowStep =
-  | 'awaiting_approval'
-  | 'accept_offer'
-  | 'schedule_inspection'
-  | 'inspection_in_progress'
+  | 'application_submission'
+  | 'offer_letter'
+  | 'inspection_booking'
+  | 'inspection_outcome'
   | 'down_payment'
-  | 'accept_contract'
-  | 'disbursed'
+  | 'contract_issued'
+  | 'contract_signed'
+  | 'loan_disbursement'
   | 'declined'
 
 export type MortgageDownPaymentMethod = 'savings_plan' | 'equity_contribution'
@@ -130,26 +132,28 @@ function isMerchantApproved(application: StorefrontApplication): boolean {
 function stepFromPostApproval(status: PostApprovalMortgageStatus): MortgageWorkflowStep {
   switch (status) {
     case 'offer_pending':
-      return 'accept_offer'
+      return 'offer_letter'
     case 'offer_accepted':
     case 'appointment_scheduled':
-      return 'schedule_inspection'
+      return 'inspection_booking'
     case 'inspection_in_progress':
-      return 'inspection_in_progress'
+      return 'inspection_outcome'
     case 'down_payment_pending':
     case 'down_payment_paid':
       return 'down_payment'
     case 'down_payment_confirmed':
+      return 'contract_issued'
     case 'contract_issued':
-      return 'accept_contract'
+      return 'contract_signed'
     case 'contract_signed':
+      return 'loan_disbursement'
     case 'disbursed':
-      return 'disbursed'
+      return 'loan_disbursement'
     case 'offer_declined':
     case 'inspection_declined':
       return 'declined'
     default:
-      return 'awaiting_approval'
+      return 'application_submission'
   }
 }
 
@@ -163,77 +167,89 @@ export function resolveMortgageWorkflowStep(
   }
 
   if (local?.offerDeclined) return 'declined'
-  if (local?.contractAccepted) return 'disbursed'
-  if (local?.downPaymentConfirmed) return 'accept_contract'
+  if (local?.contractAccepted) return 'loan_disbursement'
+  if (local?.downPaymentConfirmed) return 'contract_issued'
   if (local?.inspectionCompleted) return 'down_payment'
-  if (local?.inspectionScheduled) return 'inspection_in_progress'
-  if (local?.offerAccepted && !local.inspectionScheduled) return 'schedule_inspection'
-  if (isMerchantApproved(application) && !local?.offerAccepted) return 'accept_offer'
-  return 'awaiting_approval'
+  if (local?.inspectionScheduled) return 'inspection_outcome'
+  if (local?.offerAccepted) return 'inspection_booking'
+  if (isMerchantApproved(application)) return 'offer_letter'
+  return 'application_submission'
 }
 
 export type MortgageThreadItem = {
   step: MortgageWorkflowStep
+  stepNumber: number
   title: string
   description: string
   status: 'done' | 'current' | 'upcoming'
 }
 
 const THREAD_ORDER: MortgageWorkflowStep[] = [
-  'awaiting_approval',
-  'accept_offer',
-  'schedule_inspection',
-  'inspection_in_progress',
+  'application_submission',
+  'offer_letter',
+  'inspection_booking',
+  'inspection_outcome',
   'down_payment',
-  'accept_contract',
-  'disbursed',
+  'contract_issued',
+  'contract_signed',
+  'loan_disbursement',
 ]
 
-const STEP_META: Record<MortgageWorkflowStep, { title: string; description: string }> = {
-  awaiting_approval: {
-    title: 'Application submitted',
+const STEP_META: Record<
+  Exclude<MortgageWorkflowStep, 'declined'>,
+  { title: string; description: string }
+> = {
+  application_submission: {
+    title: 'Application Submission',
     description: 'Your application has been received. The merchant will review and respond shortly.',
   },
-  accept_offer: {
-    title: 'Accept offer',
+  offer_letter: {
+    title: 'Offer Letter',
     description: 'Your mortgage offer letter is ready. Review and accept to continue.',
   },
-  schedule_inspection: {
-    title: 'Schedule inspection',
+  inspection_booking: {
+    title: 'Inspection Booking',
     description: 'Book an appointment to inspect the property.',
   },
-  inspection_in_progress: {
-    title: 'Inspection in progress',
-    description: 'Visit the property within two to three working days.',
+  inspection_outcome: {
+    title: 'Inspection Outcome',
+    description: 'Complete your inspection and confirm the outcome.',
   },
   down_payment: {
-    title: 'Down payment',
+    title: 'Down Payment',
     description: 'Confirm your equity contribution to proceed.',
   },
-  accept_contract: {
-    title: 'Loan contract',
+  contract_issued: {
+    title: 'Contract Issued',
+    description: 'Your loan contract has been dispatched. Review it before signing.',
+  },
+  contract_signed: {
+    title: 'Contract Signed',
     description: 'Review and accept your loan approval contract.',
   },
-  disbursed: {
-    title: 'Disbursed',
-    description: 'Your mortgage has been approved and funds disbursed.',
-  },
-  declined: {
-    title: 'Offer declined',
-    description: 'You declined this mortgage offer.',
+  loan_disbursement: {
+    title: 'Loan Disbursement',
+    description: 'Your mortgage has been approved and funds will be disbursed.',
   },
 }
 
-export function buildMortgageThread(
-  current: MortgageWorkflowStep,
-): MortgageThreadItem[] {
+export function buildMortgageThread(current: MortgageWorkflowStep): MortgageThreadItem[] {
   if (current === 'declined') {
-    return [{ step: 'declined', ...STEP_META.declined, status: 'current' }]
+    return [
+      {
+        step: 'declined',
+        stepNumber: 0,
+        title: 'Offer declined',
+        description: 'You declined this mortgage offer.',
+        status: 'current',
+      },
+    ]
   }
 
   const currentIndex = THREAD_ORDER.indexOf(current)
   return THREAD_ORDER.map((step, index) => ({
     step,
+    stepNumber: index + 1,
     ...STEP_META[step],
     status: index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'upcoming',
   }))
@@ -244,36 +260,40 @@ export function mortgageStepCta(
   productId: string,
   applicationId: string,
 ): { label: string; href: string } | null {
+  const base = `/mobile-v2/products/mortgage`
+  const q = `productId=${encodeURIComponent(productId)}&applicationId=${encodeURIComponent(applicationId)}`
+
   switch (step) {
-    case 'awaiting_approval':
+    case 'application_submission':
       return null
-    case 'accept_offer':
+    case 'offer_letter':
       return {
         label: 'Continue',
-        href: `/mobile-v2/products/mortgage/offer/accept?productId=${encodeURIComponent(productId)}&applicationId=${encodeURIComponent(applicationId)}`,
+        href: `${base}/offer/accept?${q}`,
       }
-    case 'schedule_inspection':
+    case 'inspection_booking':
       return {
-        label: 'Continue',
-        href: `/mobile-v2/products/mortgage/offer?productId=${encodeURIComponent(productId)}&applicationId=${encodeURIComponent(applicationId)}&step=schedule_inspection`,
+        label: 'Book inspection',
+        href: `${base}/offer?${q}&step=schedule_inspection`,
       }
-    case 'inspection_in_progress':
+    case 'inspection_outcome':
       return {
-        label: 'Continue',
-        href: `/mobile-v2/products/mortgage/offer?productId=${encodeURIComponent(productId)}&applicationId=${encodeURIComponent(applicationId)}&step=inspection`,
+        label: 'Continue inspection',
+        href: `${base}/offer?${q}&step=inspection`,
       }
     case 'down_payment':
       return {
-        label: 'Continue',
-        href: `/mobile-v2/products/mortgage/offer?productId=${encodeURIComponent(productId)}&applicationId=${encodeURIComponent(applicationId)}&step=down_payment`,
+        label: 'Pay down payment',
+        href: `${base}/offer?${q}&step=down_payment`,
       }
-    case 'accept_contract':
+    case 'contract_issued':
+    case 'contract_signed':
       return {
-        label: 'Continue',
-        href: `/mobile-v2/products/mortgage/offer?productId=${encodeURIComponent(productId)}&applicationId=${encodeURIComponent(applicationId)}&step=contract`,
+        label: 'Review contract',
+        href: `${base}/offer?${q}&step=contract`,
       }
-    case 'disbursed':
-      return { label: 'View mortgage', href: '/mobile-v2/products/mortgage' }
+    case 'loan_disbursement':
+      return { label: 'View mortgage', href: `${base}` }
     default:
       return null
   }

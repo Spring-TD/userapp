@@ -40,6 +40,8 @@ import {
 import { formatNgn, formatNaira, poweredBy } from '@/lib/mobileProductDetailDisplay'
 import { isVirtualNubanActive } from '@/lib/userWallet'
 import { walletSpendableBalance } from '@/lib/userWallet'
+import { YesNoField, PepSearchNotice } from '@/components/mobile-v2/application/ApplicantProfileFields'
+import { pepStatusSubmission, type PepAnswer } from '@/lib/applicantProfileFields'
 
 type PurchaseSheet = 'purchase' | 'insufficient_funds' | 'fund_bank' | null
 
@@ -151,6 +153,7 @@ export default function CommodityDetailPage() {
   const [purchaseContext, setPurchaseContext] = useState<CommodityPurchaseContext | null>(null)
   const [productMeta, setProductMeta] = useState<CommodityProductMeta | null>(null)
   const [contextLoading, setContextLoading] = useState(false)
+  const [politicallyExposed, setPoliticallyExposed] = useState<PepAnswer>('')
   const { wallet, loading: walletLoading, refetch: refetchWallet } = useUserWallet()
 
   const walletBalance = walletSpendableBalance(wallet)
@@ -242,6 +245,11 @@ export default function CommodityDetailPage() {
   const handlePurchase = async () => {
     if (!product || quantity <= 0) return
 
+    if (politicallyExposed !== 'yes' && politicallyExposed !== 'no') {
+      setPurchaseError('Please indicate whether you are a politically exposed person.')
+      return
+    }
+
     if (!hasEnoughFunds) {
       setPurchaseError(null)
       setSheet('insufficient_funds')
@@ -251,7 +259,9 @@ export default function CommodityDetailPage() {
     setProcessing(true)
     setPurchaseError(null)
     try {
-      const result = await purchaseCommodity(product.id, quantity)
+      const result = await purchaseCommodity(product.id, quantity, {
+        requirementSubmissions: [pepStatusSubmission(politicallyExposed)],
+      })
       if (!result.ok) {
         if (isInsufficientFundsError(result.error, result.status)) {
           setSheet('insufficient_funds')
@@ -540,6 +550,13 @@ export default function CommodityDetailPage() {
               Total debit <span className="text-gray-400">→</span> {formatWalletNgn(totals.totalDebit)}
             </div>
 
+            <YesNoField
+              label="Are you a politically exposed person?"
+              value={politicallyExposed}
+              onChange={setPoliticallyExposed}
+            />
+            <PepSearchNotice isPep={politicallyExposed === 'yes'} />
+
             {purchaseError ? (
               <p className="rounded-xl bg-red-50 px-3 py-2 text-center text-xs text-red-600">{purchaseError}</p>
             ) : null}
@@ -547,7 +564,7 @@ export default function CommodityDetailPage() {
 
           <Button
             onClick={() => void handlePurchase()}
-            disabled={processing || quantity <= 0}
+            disabled={processing || quantity <= 0 || (politicallyExposed !== 'yes' && politicallyExposed !== 'no')}
             className="mt-8 h-14 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-base font-semibold text-white disabled:opacity-50"
           >
             {processing ? (

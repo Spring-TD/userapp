@@ -24,7 +24,7 @@ function isPendingApplication(application: StorefrontApplication, kind: PendingK
     const applicationId = String(application.id ?? application._id ?? '')
     const local = readMortgageWorkflow(applicationId)
     const step = resolveMortgageWorkflowStep(application, local)
-    if (step !== 'disbursed' && step !== 'declined') return true
+    if (step !== 'loan_disbursement' && step !== 'declined') return true
   }
 
   return status === 'pending' || PENDING_WORKFLOW_STATUSES.has(workflowStatus)

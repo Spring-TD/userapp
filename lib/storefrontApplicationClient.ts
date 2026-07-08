@@ -267,14 +267,26 @@ export async function initializeProductApplication(
 
 export async function applyProductOneShot(
   productId: string,
-  options?: { amount?: number; currency?: string; productType?: ProductApplyBody["productType"] },
+  options?: {
+    amount?: number
+    currency?: string
+    productType?: ProductApplyBody["productType"]
+    requirementSubmissions?: unknown[]
+  },
 ) {
   const built = await buildProductApplyBody(productId, options)
   if (!built.ok) return { ok: false as const, error: built.error }
 
-  const res = await apiClient.post<ApiEnvelope<StorefrontApplication>, ProductApplyBody>(
+  const payload = {
+    ...built.body,
+    ...(options?.requirementSubmissions?.length
+      ? { requirementSubmissions: options.requirementSubmissions }
+      : {}),
+  }
+
+  const res = await apiClient.post<ApiEnvelope<StorefrontApplication>, typeof payload>(
     "/v1/applications/apply",
-    built.body,
+    payload,
     { includeAuth: true, timeout: 60_000 },
   )
 

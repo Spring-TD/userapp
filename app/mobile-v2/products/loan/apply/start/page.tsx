@@ -7,8 +7,12 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Check, ChevronLeft, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
-import { getProductApplicationInitStatus, initializeProductApplication } from '@/lib/storefrontApplicationClient'
+import { initializeProductApplication } from '@/lib/storefrontApplicationClient'
 import { loanAccountSuccessHref, loanApplyHref } from '@/lib/loanApplyRoutes'
+import {
+  isDuplicateAccountError,
+  resolveProductApplicationAccount,
+} from '@/lib/resolveProductApplicationAccount'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 import { resolveWalletUserId } from '@/lib/resolveWalletUserId'
 import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
@@ -69,9 +73,10 @@ function LoanApplyStartInner() {
         const userId = await resolveWalletUserId()
         if (!userId) return
 
-        const result = await getProductApplicationInitStatus(userId, productId)
-        if (!cancelled && result.ok && result.status) {
-          setHasInitializedAccount(Boolean(result.status.hasInitializedApplication || result.status.hasUpstreamAccount))
+        const resolved = await resolveProductApplicationAccount(userId, productId)
+        if (!cancelled && resolved.hasAccount) {
+          setHasInitializedAccount(true)
+          router.replace(loanApplyHref(productId))
         }
       } catch (error) {
         console.warn('Could not check existing initialized loan application:', error)
@@ -108,6 +113,10 @@ function LoanApplyStartInner() {
     try {
       const result = await initializeProductApplication(productId, { productType: 'LOAN'})
       if (!result.ok) {
+        if (isDuplicateAccountError(result.error || '')) {
+          router.replace(loanApplyHref(productId))
+          return
+        }
         setError(result.error || 'Could not set up your loan account.')
         return
       }

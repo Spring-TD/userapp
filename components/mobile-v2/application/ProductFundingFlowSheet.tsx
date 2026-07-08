@@ -12,6 +12,8 @@ import {
     parseApplicationAmount,
     validateApplicationAmount,
 } from '@/lib/applicationAmount';
+import { YesNoField, PepSearchNotice } from '@/components/mobile-v2/application/ApplicantProfileFields';
+import type { PepAnswer } from '@/lib/applicantProfileFields';
 
 type FundingFlowStep = 'terms' | 'accountCreated' | 'application' | 'accountDetails' | 'success' | 'failure';
 
@@ -22,6 +24,7 @@ type FundingFlowForm = {
     frequency: string;
     amount: string;
     acceptedTerms: boolean;
+    politicallyExposed: PepAnswer;
 };
 
 type FundingAccountKind = 'savings' | 'investment';
@@ -97,6 +100,7 @@ export function ProductFundingFlowSheet({
         frequency: '',
         amount: '',
         acceptedTerms: false,
+        politicallyExposed: '',
     });
 
     if (!open) return null;
@@ -115,7 +119,8 @@ export function ProductFundingFlowSheet({
         form.frequency &&
         enteredAmount > 0 &&
         !amountValidationError &&
-        form.acceptedTerms,
+        form.acceptedTerms &&
+        (form.politicallyExposed === 'yes' || form.politicallyExposed === 'no'),
     );
 
     const close = () => {
@@ -147,7 +152,13 @@ export function ProductFundingFlowSheet({
         try {
             const ensure =
                 accountKind === 'investment' ? ensureInvestmentAccount : ensureSavingsAccount;
-            const result = await ensure(productId.trim(), { currency: 'NGN' });
+            const result = await ensure(productId.trim(), {
+                currency: 'NGN',
+                politicallyExposed:
+                    form.politicallyExposed === 'yes' || form.politicallyExposed === 'no'
+                        ? form.politicallyExposed
+                        : undefined,
+            });
             if (!result.ok) {
                 setSetupError(result.error || 'Could not create your account. Please try again.');
                 return;
@@ -170,7 +181,14 @@ export function ProductFundingFlowSheet({
         try {
             const ensure =
                 accountKind === 'investment' ? ensureInvestmentAccount : ensureSavingsAccount;
-            const result = await ensure(productId.trim(), { amount: enteredAmount, currency: 'NGN' });
+            const result = await ensure(productId.trim(), {
+                amount: enteredAmount,
+                currency: 'NGN',
+                politicallyExposed:
+                    form.politicallyExposed === 'yes' || form.politicallyExposed === 'no'
+                        ? form.politicallyExposed
+                        : undefined,
+            });
             if (!result.ok) {
                 setSetupError(result.error || 'Could not set up your account.');
                 setStep('application');
@@ -369,6 +387,12 @@ export function ProductFundingFlowSheet({
                             </span>
                             <span>Accept terms &amp; conditions</span>
                         </button>
+                        <YesNoField
+                            label="Are you a politically exposed person?"
+                            value={form.politicallyExposed}
+                            onChange={(politicallyExposed) => updateForm('politicallyExposed', politicallyExposed)}
+                        />
+                        <PepSearchNotice isPep={form.politicallyExposed === 'yes'} />
                     </div>
 
                     <Button

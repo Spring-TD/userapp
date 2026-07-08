@@ -216,7 +216,7 @@ export function MortgageOfferFlow({
 
           {step === 'schedule_inspection' ? (
             <>
-              <h2 className="text-xl font-bold text-[var(--sf-button,#1E40AF)]">Schedule inspection</h2>
+              <h2 className="text-xl font-bold text-[var(--sf-button,#1E40AF)]">Inspection Booking</h2>
               <p className="mx-auto mt-4 max-w-xs text-sm leading-relaxed text-gray-500">
                 Book an appointment to inspect <span className="font-medium text-gray-700">{productName}</span>.
                 Appointment scheduling will be available here soon.
@@ -235,9 +235,10 @@ export function MortgageOfferFlow({
 
           {step === 'inspection' ? (
             <>
-              <h2 className="text-xl font-bold text-[var(--sf-button,#1E40AF)]">Physical Inspection</h2>
+              <h2 className="text-xl font-bold text-[var(--sf-button,#1E40AF)]">Inspection Outcome</h2>
               <p className="mx-auto mt-4 max-w-xs text-sm leading-relaxed text-gray-500">
-                Kindly visit the property within two to three working days to complete your inspection.
+                Kindly visit the property within two to three working days, then confirm whether the inspection is
+                completed or you wish to decline the offer.
               </p>
               <Button
                 className={cn('mt-8 h-12 w-full max-w-xs rounded-full text-sm font-semibold', MORTGAGE_PRIMARY)}
@@ -290,9 +291,9 @@ export function MortgageOfferFlow({
 
           {step === 'contract' ? (
             <>
-              <h2 className="text-xl font-bold text-[var(--sf-button,#1E40AF)]">Contract Signing</h2>
+              <h2 className="text-xl font-bold text-[var(--sf-button,#1E40AF)]">Contract Signed</h2>
               <p className="mx-auto mt-4 max-w-xs text-sm leading-relaxed text-gray-500">
-                Your loan approval contract has been sent to your email. Review and accept to complete
+                Your loan approval contract has been sent to your email. Review and accept to proceed to
                 disbursement.
               </p>
               <Button
