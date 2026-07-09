@@ -18,6 +18,8 @@ import {
     BadgeCheck,
     ScanFace,
     AlertCircle,
+    Landmark,
+    KeyRound,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -169,6 +171,18 @@ export default function ProfilePage() {
                             <SettingItem icon={<FileText className="w-5 h-5" />} label="Country" value={user?.country || 'Not available'} loading={loading} />
                             <SettingItem icon={<FileText className="w-5 h-5" />} label="User Ref" value={user?.user_ref || 'Not available'} loading={loading} />
                             <SettingItem icon={<FileText className="w-5 h-5" />} label="Last Login" value={formatDate(user?.last_login_at)} loading={loading} last />
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 className="text-sm font-bold text-[#1E293B] mb-3 ml-1">Wallet & payouts</h3>
+                        <div className="bg-white rounded-[24px] overflow-hidden shadow-sm border border-gray-100">
+                            <Link href="/mobile-v2/bank-accounts">
+                                <SettingItem icon={<Landmark className="w-5 h-5" />} label="Bank accounts" />
+                            </Link>
+                            <Link href="/mobile-v2/transaction-pin">
+                                <SettingItem icon={<KeyRound className="w-5 h-5" />} label="Transaction PIN" last />
+                            </Link>
                         </div>
                     </div>
 

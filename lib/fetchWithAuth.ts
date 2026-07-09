@@ -5,6 +5,7 @@
  */
 
 import { getAccessToken } from '@/lib/cookieAuth';
+import { handleAuthFailure, isMobileV2AuthPublicPath } from '@/lib/mobileV2AuthSession';
 import { attachTenantHeaders } from '@/lib/tenantRequestHeaders';
 
 export type FetchWithAuthOptions = RequestInit & {
@@ -58,6 +59,8 @@ export async function fetchWithAuth(
     if (newToken) {
       headers.set('Authorization', `Bearer ${newToken}`);
       res = await fetch(input, { ...init, headers, credentials: init.credentials ?? 'include' });
+    } else if (typeof window !== 'undefined' && !isMobileV2AuthPublicPath(window.location.pathname)) {
+      void handleAuthFailure();
     }
   }
 

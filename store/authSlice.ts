@@ -1,7 +1,7 @@
 import { createAsyncThunk, createSlice, type PayloadAction } from "@reduxjs/toolkit"
 import { apiClient } from "@/lib/api"
 import { ENDPOINTS } from "@/lib/endpoints"
-import { setSecureTokens, clearSecureTokens, getUserFromToken } from "@/lib/tokenManager"
+import { setSecureTokens, clearSecureTokens } from "@/lib/tokenManager"
 import { cacheAuthUserId } from "@/lib/userWallet"
 import { clientAuthErrorFromResponse, normalizeClientAuthError } from "@/lib/normalizeClientAuthError"
 import type {
@@ -100,22 +100,20 @@ export const loadUserFromTokenThunk = createAsyncThunk<AuthUser | null>(
   async () => {
     try {
       const res = await fetch("/api/auth/validate", { method: "GET", credentials: "include" })
-      if (!res.ok) {
-        const user = getUserFromToken()
-        return (user as any) || null
-      }
-      const data = await res.json()
-      if (data?.valid && data?.user) {
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data?.valid && data?.user) {
         const mapped = mapLoginUser(data.user) || (data.user as AuthUser)
         if (mapped?.id) cacheAuthUserId(mapped.id)
         return mapped
       }
+      if (!res.ok) {
+        await clearSecureTokens()
+        return null
+      }
     } catch {
       /* ignore */
     }
-    const user = getUserFromToken()
-    if (user?.id) cacheAuthUserId(user.id)
-    return (user as AuthUser) || null
+    return null
   },
 )
 

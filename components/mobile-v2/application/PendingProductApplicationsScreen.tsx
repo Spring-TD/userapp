@@ -11,6 +11,7 @@ import {
   resolveMortgageWorkflowStep,
 } from '@/lib/mortgageWorkflow'
 import { mortgagePendingDetailHref } from '@/lib/mortgageApplyRoutes'
+import { loanPendingDetailHref } from '@/lib/loanApplyRoutes'
 
 type PendingKind = 'loan' | 'mortgage'
 
@@ -24,7 +25,8 @@ function isPendingApplication(application: StorefrontApplication, kind: PendingK
     const applicationId = String(application.id ?? application._id ?? '')
     const local = readMortgageWorkflow(applicationId)
     const step = resolveMortgageWorkflowStep(application, local)
-    if (step !== 'loan_disbursement' && step !== 'declined') return true
+    if (local?.allocationDownloaded) return false
+    if (step !== 'mortgage_allocation' && step !== 'declined') return true
   }
 
   return status === 'pending' || PENDING_WORKFLOW_STATUSES.has(workflowStatus)
@@ -145,7 +147,9 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingKind }
                 const detailHref =
                   kind === 'mortgage' && applicationId
                     ? mortgagePendingDetailHref(applicationId)
-                    : null
+                    : kind === 'loan' && applicationId
+                      ? loanPendingDetailHref(applicationId)
+                      : null
 
                 return (
                   <div
@@ -169,18 +173,16 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingKind }
                       </div>
                     </div>
 
-                    {kind === 'mortgage' && (cta || detailHref) ? (
+                    {detailHref ? (
                       <div className="mt-4 flex gap-2">
-                        {detailHref ? (
-                          <Link
-                            href={detailHref}
-                            className="flex flex-1 items-center justify-center gap-1 rounded-full border border-gray-200 py-2.5 text-xs font-semibold text-gray-700"
-                          >
-                            View thread
-                            <ChevronRight className="h-3.5 w-3.5" />
-                          </Link>
-                        ) : null}
-                        {cta ? (
+                        <Link
+                          href={detailHref}
+                          className="flex flex-1 items-center justify-center gap-1 rounded-full border border-gray-200 py-2.5 text-xs font-semibold text-gray-700"
+                        >
+                          View details
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </Link>
+                        {kind === 'mortgage' && cta ? (
                           <Link
                             href={cta.href}
                             className="flex flex-1 items-center justify-center rounded-full bg-[var(--sf-button,#1E40AF)] py-2.5 text-xs font-semibold text-white"

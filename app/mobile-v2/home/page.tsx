@@ -14,6 +14,7 @@ import {
     ShoppingCart,
     Plus,
     Send as SendIcon,
+    ArrowDownLeft,
     FileText,
     Building2,
     X,
@@ -83,6 +84,7 @@ function formatTransactionTime(value?: string): string {
 type QuickActionItem = {
     icon: React.ReactNode;
     label: string;
+    subtitle?: string;
     link?: string;
 };
 
@@ -116,13 +118,6 @@ export default function HomePage() {
         label: a.label,
         link: storefrontProductTypeRoute(a.type),
     }));
-    const utilityQuickActions: QuickActionItem[] = [
-        { icon: <Plus className="w-6 h-6" />, label: 'Top Up' },
-        { icon: <SendIcon className="w-6 h-6" />, label: 'Send' },
-        { icon: <CreditCard className="w-6 h-6" />, label: 'Add card' },
-        { icon: <FileText className="w-6 h-6" />, label: 'Orders' },
-    ];
-    const quickActions: QuickActionItem[] = [...productQuickLinks, ...utilityQuickActions];
 
     const [activeModal, setActiveModal] = useState<'none' | 'fund_options' | 'fund_bank'>('none');
     const { user: profile, loading: profileLoading, kycApproved } = useAuthUserProfile();
@@ -137,6 +132,20 @@ export default function HomePage() {
             ? 'Your bank transfer account is still being activated.'
             : 'Complete identity verification to activate your bank transfer account.');
     const showCompleteKycCta = !nubanReady && !kycApproved;
+
+    const quickActions: QuickActionItem[] = useMemo(() => {
+        const utilityQuickActions: QuickActionItem[] = [
+            { icon: <Plus className="w-6 h-6" />, label: 'Top Up' },
+            {
+                icon: <ArrowDownLeft className="w-6 h-6" />,
+                label: 'Withdraw',
+                subtitle: walletLoading ? '…' : formattedBalance,
+                link: '/mobile-v2/withdraw',
+            },
+            { icon: <FileText className="w-6 h-6" />, label: 'Orders' },
+        ];
+        return [...productQuickLinks, ...utilityQuickActions];
+    }, [productQuickLinks, walletLoading, formattedBalance]);
 
     useEffect(() => {
         const userId = wallet?.userId;
@@ -259,18 +268,27 @@ export default function HomePage() {
             </div>
 
             {/* Main Actions */}
-            <div className="px-6 flex gap-4 mb-6">
+            <div className="px-6 flex gap-3 mb-6">
                 <button
                     onClick={() => setActiveModal('fund_options')}
                     className="flex-1 w-full h-12 rounded-full bg-[var(--sf-ink,#1E1B4B)] text-white hover:bg-[var(--sf-ink,#1E1B4B)]/90 text-[13px] font-semibold flex items-center justify-center"
                 >
                     Fund
                 </button>
-                <button
+                {/* <button
                     onClick={() => router.push('/mobile-v2/send')}
                     className="flex-1 w-full h-12 rounded-full bg-[#94A3B8] text-white hover:bg-[#94A3B8]/90 text-[13px] font-semibold flex items-center justify-center"
                 >
                     Send
+                </button> */}
+                <button
+                    onClick={() => router.push('/mobile-v2/withdraw')}
+                    className="flex-1 w-full min-h-12 rounded-full bg-white border border-[#E5E7EB] text-[#111827] hover:bg-gray-50 text-[13px] font-semibold flex flex-col items-center justify-center gap-0.5 py-2"
+                >
+                    <span>Withdraw</span>
+                    <span className="text-[10px] font-medium text-[#64748B]">
+                        {walletLoading ? '…' : formattedBalance}
+                    </span>
                 </button>
             </div>
 
@@ -365,6 +383,11 @@ export default function HomePage() {
                                     {item.icon}
                                 </div>
                                 <span className="text-[11px] font-medium text-gray-500">{item.label}</span>
+                                {item.subtitle ? (
+                                    <span className="text-[9px] font-semibold text-[var(--sf-primary,#2563EB)]">
+                                        {item.subtitle}
+                                    </span>
+                                ) : null}
                             </>
                         );
 

@@ -1,16 +1,24 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Check, ChevronLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { MortgageWorkflowModals } from '@/components/mobile-v2/mortgage/MortgageWorkflowModals'
+import { VirtualTourSheet } from '@/components/mobile-v2/mortgage/VirtualTourSheet'
+import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
 import type { StorefrontApplication } from '@/lib/storefrontApplicationClient'
+import { buildPropertyTourData } from '@/lib/mortgagePropertyTour'
 import {
   buildMortgageThread,
   mortgageStepCta,
+  mortgageStepToModal,
+  patchMortgageWorkflow,
   readMortgageWorkflow,
   resolveMortgageWorkflowStep,
   type MortgageThreadItem,
+  type MortgageWorkflowModal,
 } from '@/lib/mortgageWorkflow'
 import { cn } from '@/lib/utils'
 
@@ -23,18 +31,18 @@ function formatAmount(application: StorefrontApplication) {
 
 function ThreadRow({
   item,
-  onNavigate,
+  onAction,
 }: {
   item: MortgageThreadItem
-  onNavigate?: () => void
+  onAction?: () => void
 }) {
-  const isClickable = item.status === 'current' && Boolean(onNavigate)
+  const isClickable = item.status === 'current' && Boolean(onAction)
 
   return (
     <button
       type="button"
       disabled={!isClickable}
-      onClick={() => onNavigate?.()}
+      onClick={() => onAction?.()}
       className={cn(
         'flex w-full gap-3 text-left',
         isClickable && 'cursor-pointer rounded-xl transition hover:bg-gray-50/80',
@@ -71,6 +79,11 @@ function ThreadRow({
             {isClickable ? 'Tap to continue' : 'In progress'}
           </span>
         ) : null}
+        {item.status === 'current' && item.actionLabel && isClickable ? (
+          <span className="mt-2 block text-[11px] font-semibold text-[var(--sf-button,#1E40AF)]">
+            {item.actionLabel}
+          </span>
+        ) : null}
       </div>
     </button>
   )
@@ -86,21 +99,72 @@ export function MortgagePendingThreadScreen({
   backHref = '/mobile-v2/products/mortgage/pending',
 }: MortgagePendingThreadScreenProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const applicationId = String(application.id ?? application._id ?? '')
   const productId = String(application.productId ?? '')
+  const [workflowVersion, setWorkflowVersion] = useState(0)
+  const [activeModal, setActiveModal] = useState<MortgageWorkflowModal | null>(null)
+  const [virtualTourOpen, setVirtualTourOpen] = useState(false)
+
+  const { product } = useMobileProductDetail({
+    productId,
+    enabled: Boolean(productId),
+  })
+
   const local = readMortgageWorkflow(applicationId)
   const currentStep = resolveMortgageWorkflowStep(application, local)
-  const thread = buildMortgageThread(currentStep)
-  const cta = productId && applicationId ? mortgageStepCta(currentStep, productId, applicationId) : null
+  const thread = buildMortgageThread(currentStep, { workflowComplete: Boolean(local?.allocationDownloaded) })
+  const cta =
+    productId && applicationId && !local?.allocationDownloaded
+      ? mortgageStepCta(currentStep, productId, applicationId)
+      : null
 
-  const navigateCurrentStep = cta?.href
-    ? () => {
-        router.push(cta.href)
+  const tourData = useMemo(
+    () => buildPropertyTourData(product, application),
+    [application, product],
+  )
+
+  const propertyValue = product?.properties?.[0]?.value ?? product?.propertyValue ?? product?.amountMax ?? application.amount
+  const downPaymentPercent = product?.equityContribution ?? 10
+
+  const openStepModal = useCallback(
+    (step = currentStep) => {
+      if (step === 'virtual_tour') {
+        setVirtualTourOpen(true)
+        return
       }
-    : undefined
+      const modal = mortgageStepToModal(step)
+      if (modal && modal !== 'virtual_tour') {
+        setActiveModal(modal)
+      }
+    },
+    [currentStep],
+  )
+
+  const refreshWorkflow = useCallback(() => {
+    setWorkflowVersion((value) => value + 1)
+  }, [])
+
+  useEffect(() => {
+    const action = searchParams.get('action') as MortgageWorkflowModal | null
+    if (!action) return
+    if (action === 'virtual_tour') {
+      setVirtualTourOpen(true)
+    } else {
+      setActiveModal(action)
+    }
+    router.replace(`/mobile-v2/products/mortgage/pending/${encodeURIComponent(applicationId)}`, {
+      scroll: false,
+    })
+  }, [applicationId, router, searchParams])
+
+  const handleVirtualTourComplete = () => {
+    patchMortgageWorkflow(applicationId, { virtualTourCompleted: true })
+    refreshWorkflow()
+  }
 
   return (
-    <div className="flex min-h-full flex-col sf-page-bg-tint">
+    <div className="flex min-h-full flex-col sf-page-bg-tint" key={workflowVersion}>
       <div className="flex-1 overflow-y-auto px-4 pb-32 pt-12 no-scrollbar">
         <div className="mb-6 grid grid-cols-3 items-center">
           <Link
@@ -116,7 +180,7 @@ export function MortgagePendingThreadScreen({
         <div className="mb-4 rounded-2xl bg-white px-4 py-4 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Application</p>
           <h2 className="mt-1 text-base font-bold text-[var(--sf-ink,#1E293B)]">
-            {application.productName || 'Mortgage application'}
+            {application.productName || product?.name || 'Mortgage application'}
           </h2>
           <p className="mt-2 text-lg font-bold text-[var(--sf-button,#1E40AF)]">{formatAmount(application)}</p>
         </div>
@@ -130,7 +194,7 @@ export function MortgagePendingThreadScreen({
             <ThreadRow
               key={item.step}
               item={item}
-              onNavigate={item.status === 'current' ? navigateCurrentStep : undefined}
+              onAction={item.status === 'current' && cta ? () => openStepModal(item.step) : undefined}
             />
           ))}
         </div>
@@ -140,12 +204,30 @@ export function MortgagePendingThreadScreen({
         <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-gray-100 bg-white px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:left-1/2 md:w-[400px] md:-translate-x-1/2">
           <Button
             className="h-12 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-sm font-semibold text-white"
-            onClick={() => router.push(cta.href)}
+            onClick={() => openStepModal()}
           >
             {cta.label}
           </Button>
         </div>
       ) : null}
+
+      <VirtualTourSheet
+        open={virtualTourOpen}
+        onClose={() => setVirtualTourOpen(false)}
+        tour={tourData}
+        onComplete={handleVirtualTourComplete}
+      />
+
+      <MortgageWorkflowModals
+        active={activeModal}
+        onClose={() => setActiveModal(null)}
+        applicationId={applicationId}
+        productId={productId}
+        product={product}
+        propertyValue={propertyValue}
+        downPaymentPercent={downPaymentPercent}
+        onStepAdvanced={refreshWorkflow}
+      />
     </div>
   )
 }

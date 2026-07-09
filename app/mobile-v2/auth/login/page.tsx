@@ -91,7 +91,9 @@ function LoginPageInner() {
     }
 
     toast.success('Signed in successfully.');
-    const destination = await resolvePostLoginPath(searchParams.get('next'));
+    const destination = await resolvePostLoginPath(
+      searchParams.get('returnTo') || searchParams.get('next'),
+    );
     router.push(destination);
   };
 

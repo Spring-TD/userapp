@@ -4,6 +4,10 @@ export function loanApplyHref(productId: string) {
   return `/mobile-v2/products/loan/apply?productId=${encodeURIComponent(sanitizeProductId(productId))}`
 }
 
+export function loanPendingDetailHref(applicationId: string) {
+  return `/mobile-v2/products/loan/pending/${encodeURIComponent(applicationId)}`
+}
+
 export function loanDetailHref(productId: string) {
   return `/mobile-v2/products/loan/${encodeURIComponent(sanitizeProductId(productId))}`
 }

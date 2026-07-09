@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Calendar, ChevronLeft, Filter, Percent, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -11,6 +12,7 @@ import {
   readInitializedApplication,
   type StorefrontApplication,
 } from '@/lib/storefrontApplicationClient'
+import { loanPendingDetailHref } from '@/lib/loanApplyRoutes'
 
 type DetailKind = 'loan' | 'mortgage'
 type DetailTab = 'history' | 'schedule' | 'property' | 'product'
@@ -192,12 +194,14 @@ function HistoryList({
   error,
   searchTerm,
   onSearchTermChange,
+  onRowClick,
 }: {
   rows: ApplicationHistoryRow[]
   loading: boolean
   error: string | null
   searchTerm: string
   onSearchTermChange: (value: string) => void
+  onRowClick?: (row: ApplicationHistoryRow) => void
 }) {
   const normalizedSearch = searchTerm.trim().toLowerCase()
   const filteredRows = normalizedSearch
@@ -219,7 +223,15 @@ function HistoryList({
             No application history yet. Submitted applications will appear here.
           </p>
         ) : filteredRows.map(({ id, name, amount, status, color, date }) => (
-          <div key={id} className="flex items-start justify-between py-3">
+          <button
+            key={id}
+            type="button"
+            onClick={() => onRowClick?.({ id, name, amount, status, color, date })}
+            className={cn(
+              'flex w-full items-start justify-between py-3 text-left',
+              onRowClick && 'cursor-pointer rounded-xl px-1 transition hover:bg-gray-50',
+            )}
+          >
             <div>
               <p className={`text-sm font-semibold ${BRAND_INK}`}>{name}</p>
               <p className={cn('mt-1 text-[10px]', color)}>{status}</p>
@@ -228,7 +240,7 @@ function HistoryList({
               <p className={`text-xs font-bold ${BRAND_INK}`}>{amount}</p>
               <p className="mt-1 text-[9px] text-gray-400">{date}</p>
             </div>
-          </div>
+          </button>
         ))}
       </div>
     </div>
@@ -410,6 +422,7 @@ function ProductPanel({
 
 export function ProductDetailsScreen(props: ProductDetailsScreenProps) {
   const { kind, backHref, productId, provider, imageUrl, title, initialTab = 'history', detailsOnly = false } = props
+  const router = useRouter()
   const tabs = kind === 'mortgage'
     ? (['history', 'schedule', 'property', 'product'] as DetailTab[])
     : (['history', 'schedule', 'product'] as DetailTab[])
@@ -534,6 +547,13 @@ export function ProductDetailsScreen(props: ProductDetailsScreenProps) {
                 error={applicationsError}
                 searchTerm={searchTerm}
                 onSearchTermChange={setSearchTerm}
+                onRowClick={
+                  kind === 'loan'
+                    ? (row) => {
+                        if (row.id) router.push(loanPendingDetailHref(row.id))
+                      }
+                    : undefined
+                }
               />
             ) : null}
             {activeTab === 'schedule' ? (

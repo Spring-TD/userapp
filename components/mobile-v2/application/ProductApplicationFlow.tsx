@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useSearchParams } from 'next/navigation'
@@ -44,6 +44,11 @@ import {
   validateApplicationAmount,
 } from '@/lib/applicationAmount'
 import {
+  collectRequirementStepIssues,
+  validateFileUploadStep,
+  type EmploymentDraft,
+} from '@/lib/applicationFlowValidation'
+import {
   applicantProfileFromSubmissions,
   applicantProfileSubmissions,
   DEFAULT_APPLICANT_PROFILE,
@@ -51,7 +56,6 @@ import {
   MARITAL_STATUS_OPTIONS,
   mergeApplicantProfileSubmissions,
   REPAYMENT_SOURCE_OPTIONS,
-  validateApplicantProfile,
   type ApplicantProfileDraft,
 } from '@/lib/applicantProfileFields'
 import {
@@ -60,8 +64,10 @@ import {
   YesNoField,
 } from '@/components/mobile-v2/application/ApplicantProfileFields'
 import { isDuplicateAccountError } from '@/lib/resolveProductApplicationAccount'
+import { buildLoanApplicationDetails } from '@/lib/loanApplicationDetails'
 import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
 import { poweredBy } from '@/lib/mobileProductDetailDisplay'
+import type { MobileProduct } from '@/lib/storefrontProducts'
 
 type ProductKind = 'loan' | 'mortgage'
 type StepId = 'requirement' | 'file' | 'property' | 'product'
@@ -71,13 +77,6 @@ type Guarantor = {
   phone: string
   email: string
   verificationUrl?: string
-}
-
-type EmploymentDraft = {
-  occupation: string
-  placeOfWork: string
-  hrName: string
-  hrEmail: string
 }
 
 type ApplicationDraft = {
@@ -646,6 +645,7 @@ function ProductSummary({
   kind,
   application,
   providerName,
+  catalogProduct,
   withTerms,
   accepted,
   onToggleAccepted,
@@ -654,6 +654,7 @@ function ProductSummary({
   kind: ProductKind
   application?: StorefrontApplication | null
   providerName: string
+  catalogProduct?: MobileProduct | null
   withTerms: boolean
   accepted: boolean
   onToggleAccepted: () => void
@@ -663,14 +664,34 @@ function ProductSummary({
   const productName = application?.productName || `${prettyKind(kind)} application`
   const resolvedAmount = applicationAmount ?? application?.amount
   const amount = formatCurrency(resolvedAmount, application?.currency || 'NGN')
-  const summaryRows = [
-    ['Application status', application?.status || 'Initialized'],
-    ['Product type', application?.productType || prettyKind(kind).toUpperCase()],
-    ['Application amount', amount],
-    ...(account?.bankName ? [['Bank name', account.bankName]] : []),
-    ...(account?.accountNumber ? [['Account number', account.accountNumber]] : []),
-    ['Powered by:', poweredBy()],
-  ]
+
+  const loanDetails =
+    kind === 'loan' && application
+      ? buildLoanApplicationDetails(
+          { ...application, amount: resolvedAmount ?? application.amount },
+          { product: catalogProduct, providerName },
+        )
+      : null
+
+  const summaryRows = loanDetails
+    ? [
+        ['Disbursement Date', loanDetails.disbursementDate],
+        ['Loan Amount', loanDetails.loanAmount],
+        ['Loan ID', loanDetails.loanId],
+        ['Automation', loanDetails.automation],
+        ['Interest', loanDetails.interest],
+        ['Total to be repaid', loanDetails.totalToRepay],
+        ['Bank Name', loanDetails.bankName],
+        ['Powered by', loanDetails.poweredBy],
+      ]
+    : [
+        ['Application status', application?.status || 'Initialized'],
+        ['Product type', application?.productType || prettyKind(kind).toUpperCase()],
+        ['Application amount', amount],
+        ...(account?.bankName ? [['Bank name', account.bankName]] : []),
+        ...(account?.accountNumber ? [['Account number', account.accountNumber]] : []),
+        ['Powered by:', poweredBy()],
+      ]
 
   return (
     <div className="space-y-5">
@@ -755,6 +776,8 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
   const [spouseSubmitError, setSpouseSubmitError] = useState<string | null>(null)
   const [lastAddedGuarantor, setLastAddedGuarantor] = useState<Guarantor | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [stepErrors, setStepErrors] = useState<string[]>([])
+  const feedbackRef = useRef<HTMLDivElement>(null)
   const [submitting, setSubmitting] = useState(false)
   const [submittedApplicationId, setSubmittedApplicationId] = useState<string | null>(null)
   const [creatingAccount, setCreatingAccount] = useState(false)
@@ -894,12 +917,58 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
           verificationUrl: draft.spouseDraft?.verificationUrl,
         })
         setDraftNotice('Saved progress restored.')
+      } else if (initializedApplication?.amount) {
+        setApplicationAmount(
+          defaultApplicationAmountValue(
+            initializedApplication.amount,
+            catalogProduct?.amountMin,
+          ),
+        )
       }
     }
     setDraftHydrated(true)
-  }, [draftHydrated, currentDraftKey, steps, applicationProgressKey])
+  }, [draftHydrated, currentDraftKey, steps, applicationProgressKey, initializedApplication?.amount, catalogProduct?.amountMin])
 
-  const persistDraft = async (notice: string | null = 'Progress saved.') => {
+  useEffect(() => {
+    if (!draftHydrated || applicationAmount.trim()) return
+    const amount = initializedApplication?.amount
+    if (amount != null && amount > 0) {
+      setApplicationAmount(defaultApplicationAmountValue(amount, catalogProduct?.amountMin))
+    }
+  }, [draftHydrated, applicationAmount, initializedApplication?.amount, catalogProduct?.amountMin])
+
+  const scrollToFeedback = () => {
+    feedbackRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+
+  const collectCurrentStepIssues = (step: StepId): string[] => {
+    if (step === 'requirement') {
+      return collectRequirementStepIssues({
+        applicationAmount,
+        amountMin: catalogProduct?.amountMin,
+        amountMax: catalogProduct?.amountMax,
+        applicantProfile,
+        employment: employmentDraft,
+        otherRequirements,
+        requirementSubmissions,
+        requiresGuarantor,
+        guarantorsCount: guarantors.length,
+        spouseRequired: applicantProfile.repayingWithSpouse === 'yes',
+        spouseVerified: Boolean(spouse?.verificationUrl),
+        productKind: kind,
+      })
+    }
+    if (step === 'file') {
+      const fileError = validateFileUploadStep(documentsToDownload, requirementSubmissions)
+      return fileError ? [fileError] : []
+    }
+    if (step === 'product') {
+      return accepted ? [] : ['Accept the terms and conditions before submitting.']
+    }
+    return []
+  }
+
+  const persistDraft = async (notice: string | null = 'Progress saved.'): Promise<{ synced: boolean }> => {
     saveApplicationDraft(currentDraftKey, {
       activeStep,
       accepted,
@@ -923,11 +992,12 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       })
       if (!result.ok) {
         if (notice) setDraftNotice('Progress saved locally. We could not sync it yet.')
-        return
+        return { synced: false }
       }
     }
 
     if (notice) setDraftNotice(notice)
+    return { synced: true }
   }
 
   useEffect(() => {
@@ -939,8 +1009,40 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
   }, [draftHydrated, currentDraftKey, activeStep, accepted, applicationAmount, requirementSubmissions, guarantors, employmentDraft, guarantorDraft, applicantProfile, spouse, spouseDraft])
 
   const handleStepChange = (step: StepId) => {
+    const targetIndex = steps.indexOf(step)
+    if (targetIndex > activeIndex) {
+      const issues = collectCurrentStepIssues(activeStep)
+      if (issues.length > 0) {
+        setStepErrors(issues)
+        setError(null)
+        scrollToFeedback()
+        return
+      }
+    }
+    setStepErrors([])
+    setError(null)
     void persistDraft(null)
     setActiveStep(step)
+  }
+
+  const handleSaveProgress = async () => {
+    const issues = collectCurrentStepIssues(activeStep)
+    const { synced } = await persistDraft(null)
+
+    if (issues.length > 0) {
+      setStepErrors(issues)
+      setDraftNotice('Progress saved locally. Complete the items below to continue.')
+      setError(null)
+    } else {
+      setStepErrors([])
+      setDraftNotice(synced ? 'Progress saved.' : 'Progress saved locally. We could not sync to the server yet.')
+      setError(
+        synced
+          ? null
+          : 'Progress saved on this device, but we could not sync to the server. Check your connection and try again.',
+      )
+    }
+    scrollToFeedback()
   }
 
   const upsertSubmission = (submission: RequirementSubmission) => {
@@ -954,12 +1056,14 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
   const syncApplicationAmount = async (): Promise<boolean> => {
     if (!productId) {
       setError('No product selected.')
+      scrollToFeedback()
       return false
     }
 
     const parsed = parseApplicationAmount(applicationAmount)
     if (!parsed) {
       setError('Enter the amount you want to apply for.')
+      scrollToFeedback()
       return false
     }
 
@@ -970,6 +1074,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     )
     if (validationError) {
       setError(validationError)
+      scrollToFeedback()
       return false
     }
 
@@ -990,6 +1095,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         return true
       }
       setError(result.error || 'Could not save your application amount.')
+      scrollToFeedback()
       return false
     }
 
@@ -1000,25 +1106,35 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
   const handleFinalSubmit = async () => {
     if (!applicationId || !userId) {
       setError('Application was not initialized. Please go back and create the account again.')
+      scrollToFeedback()
       return
     }
 
-    if (requiresGuarantor && guarantors.length === 0) {
-      setError('Please add at least one guarantor before submitting.')
+    const requirementIssues = collectRequirementStepIssues({
+      applicationAmount,
+      amountMin: catalogProduct?.amountMin,
+      amountMax: catalogProduct?.amountMax,
+      applicantProfile,
+      employment: employmentDraft,
+      otherRequirements,
+      requirementSubmissions,
+      requiresGuarantor,
+      guarantorsCount: guarantors.length,
+      spouseRequired: applicantProfile.repayingWithSpouse === 'yes',
+      spouseVerified: Boolean(spouse?.verificationUrl),
+      productKind: kind,
+    })
+    const fileIssues = validateFileUploadStep(documentsToDownload, requirementSubmissions)
+    const issues = [
+      ...requirementIssues,
+      ...(fileIssues ? [fileIssues] : []),
+      ...(accepted ? [] : ['Accept the terms and conditions before submitting.']),
+    ]
+    if (issues.length > 0) {
+      setStepErrors(issues)
+      setError(null)
       setActiveStep('requirement')
-      return
-    }
-
-    if (applicantProfile.repayingWithSpouse === 'yes' && !spouse?.verificationUrl) {
-      setError('Please complete spouse KYC before submitting.')
-      setActiveStep('requirement')
-      return
-    }
-
-    const profileError = validateApplicantProfile(applicantProfile)
-    if (profileError) {
-      setError(profileError)
-      setActiveStep('requirement')
+      scrollToFeedback()
       return
     }
 
@@ -1026,11 +1142,13 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     if (!parsed) {
       setError('Enter the amount you want to apply for.')
       setActiveStep('requirement')
+      scrollToFeedback()
       return
     }
 
     setSubmitting(true)
     setError(null)
+    setStepErrors([])
     try {
       const submissions: RequirementSubmission[] = [
         ...buildRequirementDrafts(employmentDraft, applicantProfile, requirementSubmissions),
@@ -1038,7 +1156,8 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       ]
       const requirementsResult = await submitApplicationRequirements(applicationId, userId, submissions)
       if (!requirementsResult.ok) {
-        setError(requirementsResult.error)
+        setError(requirementsResult.error || 'Could not save your application requirements.')
+        scrollToFeedback()
         return
       }
 
@@ -1058,7 +1177,8 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       })
 
       if (!submitResult.ok) {
-        setError(submitResult.error)
+        setError(submitResult.error || 'Could not submit your application.')
+        scrollToFeedback()
         return
       }
 
@@ -1089,25 +1209,29 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       void handleFinalSubmit()
       return
     }
+
+    const issues = collectCurrentStepIssues(activeStep)
+    if (issues.length > 0) {
+      setStepErrors(issues)
+      setError(null)
+      scrollToFeedback()
+      return
+    }
+
     if (activeStep === 'requirement') {
       void (async () => {
+        setStepErrors([])
         setError(null)
-        const profileError = validateApplicantProfile(applicantProfile)
-        if (profileError) {
-          setError(profileError)
-          return
-        }
-        if (applicantProfile.repayingWithSpouse === 'yes' && !spouse?.verificationUrl) {
-          setError('Please complete spouse KYC before continuing.')
-          return
-        }
         const synced = await syncApplicationAmount()
         if (!synced) return
-        void persistDraft(null)
+        await persistDraft(null)
         setActiveStep(steps[Math.min(activeIndex + 1, steps.length - 1)])
       })()
       return
     }
+
+    setStepErrors([])
+    setError(null)
     void persistDraft(null)
     setActiveStep(steps[Math.min(activeIndex + 1, steps.length - 1)])
   }
@@ -1338,7 +1462,9 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
                 ) : null}
               </div>
 
-              <SectionTitle>Reason for the loan</SectionTitle>
+              <SectionTitle>
+                {kind === 'loan' ? 'Reason for the loan' : 'Reason for the mortgage'}
+              </SectionTitle>
               <div className="space-y-3">
                 <SelectField
                   placeholder="Select reason"
@@ -1402,16 +1528,11 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
               </div>
 
               <YesNoField
-                label="Are you a politically exposed person?"
-                value={applicantProfile.politicallyExposed}
-                onChange={(politicallyExposed) =>
-                  setApplicantProfile((profile) => ({ ...profile, politicallyExposed }))
+                label={
+                  kind === 'loan'
+                    ? 'Are you repaying this loan with a spouse?'
+                    : 'Are you repaying this mortgage with a spouse?'
                 }
-              />
-              <PepSearchNotice isPep={applicantProfile.politicallyExposed === 'yes'} />
-
-              <YesNoField
-                label="Are you repaying this loan with a spouse?"
                 value={applicantProfile.repayingWithSpouse}
                 onChange={(repayingWithSpouse) => {
                   setApplicantProfile((profile) => ({ ...profile, repayingWithSpouse }))
@@ -1479,6 +1600,15 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
                   onChange={(hrEmail) => setEmploymentDraft((draft) => ({ ...draft, hrEmail }))}
                 />
               </div>
+
+              <YesNoField
+                label="Are you a politically exposed person?"
+                value={applicantProfile.politicallyExposed}
+                onChange={(politicallyExposed) =>
+                  setApplicantProfile((profile) => ({ ...profile, politicallyExposed }))
+                }
+              />
+              <PepSearchNotice isPep={applicantProfile.politicallyExposed === 'yes'} />
 
               {requiresGuarantor ? (
               <div className="space-y-3">
@@ -1581,6 +1711,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
               kind={kind}
               application={initializedApplication}
               providerName={providerName}
+              catalogProduct={catalogProduct}
               withTerms={false}
               accepted={accepted}
               onToggleAccepted={() => setAccepted((v) => !v)}
@@ -1593,6 +1724,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
               kind={kind}
               application={initializedApplication}
               providerName={providerName}
+              catalogProduct={catalogProduct}
               withTerms
               accepted={accepted}
               onToggleAccepted={() => setAccepted((v) => !v)}
@@ -1602,24 +1734,39 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         </div>
       </div>
 
-      <div className="absolute bottom-6 left-5 right-5 bg-white mt-5 items-center">
+      <div ref={feedbackRef} className="absolute bottom-6 left-5 right-5 bg-white mt-5 items-center">
+        {stepErrors.length > 0 ? (
+          <div className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">
+            <p className="font-semibold">Please complete the following before continuing:</p>
+            <ul className="mt-1 list-disc space-y-1 pl-4">
+              {stepErrors.map((issue) => (
+                <li key={issue}>{issue}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         {error ? <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">{error}</p> : null}
-        {/* {draftNotice ? <p className="mb-3 rounded-xl bg-green-50 px-3 py-2 text-xs text-green-700">{draftNotice}</p> : null} */}
+        {draftNotice ? (
+          <p
+            className={cn(
+              'mb-3 rounded-xl px-3 py-2 text-xs',
+              stepErrors.length > 0 ? 'bg-amber-50 text-amber-800' : 'bg-green-50 text-green-700',
+            )}
+          >
+            {draftNotice}
+          </p>
+        ) : null}
         <div className="flex flex-row justify-between gap-3 w-full items-center align-middle">
         <Button
           type="button"
           className={cn(` h-10 w-1/2 rounded-full border border-[var(--sf-button,#1E40AF)] text-xs font-bold `, OUTLINE)}
-          onClick={() => void persistDraft()}
+          onClick={() => void handleSaveProgress()}
         >
           Save progress
         </Button>
         <Button
           type="button"
-          disabled={
-            (activeStep === 'requirement' && (!parsedApplicationAmount || Boolean(amountValidationError))) ||
-            (activeStep === 'product' && !accepted) ||
-            submitting
-          }
+          disabled={(activeStep === 'product' && !accepted) || submitting}
           className={cn('h-10 rounded-full w-1/2 text-sm font-semibold disabled:opacity-50', PRIMARY)}
           onClick={goNext}
         >
