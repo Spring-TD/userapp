@@ -14,6 +14,7 @@ declare module "axios" {
   }
 }
 import { getAccessToken } from "@/lib/cookieAuth"
+import { handleAuthFailure, isMobileV2AuthPublicPath } from "@/lib/mobileV2AuthSession"
 import {
   TENANT_APP_ID_STORAGE_KEY,
   TENANT_MERCHANT_ID_STORAGE_KEY,
@@ -174,6 +175,9 @@ api.interceptors.response.use(
         return api(originalRequest)
       }
       delete api.defaults.headers.common.Authorization
+      if (typeof window !== "undefined" && !isMobileV2AuthPublicPath(window.location.pathname)) {
+        void handleAuthFailure()
+      }
     }
     return Promise.reject(error)
   },

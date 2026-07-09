@@ -329,6 +329,19 @@ export const ENDPOINTS = {
       `${WALLET_BASE}/user/${encodeURIComponent(userId)}/product-type-summary`,
     userTransactions: (userId: string) =>
       `${WALLET_BASE}/user/${encodeURIComponent(userId)}/transactions`,
+    banks: `${WALLET_BASE}/banks`,
+    nameEnquiry: `${WALLET_BASE}/banks/name-enquiry`,
+    externalBankAccounts: (userId: string) =>
+      `${WALLET_BASE}/user/${encodeURIComponent(userId)}/external-bank-accounts`,
+    externalBankAccountById: (userId: string, accountId: string) =>
+      `${WALLET_BASE}/user/${encodeURIComponent(userId)}/external-bank-accounts/${encodeURIComponent(accountId)}`,
+    externalBankAccountDefault: (userId: string, accountId: string) =>
+      `${WALLET_BASE}/user/${encodeURIComponent(userId)}/external-bank-accounts/${encodeURIComponent(accountId)}/default`,
+    payout: (userId: string) => `${WALLET_BASE}/user/${encodeURIComponent(userId)}/payout`,
+    transactionPin: (userId: string) =>
+      `${WALLET_BASE}/user/${encodeURIComponent(userId)}/transaction-pin`,
+    transactionPinStatus: (userId: string) =>
+      `${WALLET_BASE}/user/${encodeURIComponent(userId)}/transaction-pin/status`,
   },
   applications: {
     init: "/v1/applications/init",

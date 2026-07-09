@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { useSelector } from "react-redux"
 
 import { resolveWalletUserIdCandidates } from "@/lib/resolveWalletUserId"
+import { handleAuthFailure, hasValidAccessToken, isAuthFailureMessage, isAuthFailureStatus } from "@/lib/mobileV2AuthSession"
 import { fetchUserWallet } from "@/lib/services/userWalletApi"
 import {
   formatWalletBalance,
@@ -47,8 +48,12 @@ export function useUserWallet(explicitUserId?: string | null): UseUserWalletRetu
     const primaryUserId = userIds[0]
     if (!primaryUserId) {
       setLoading(false)
-      setError("Not authenticated")
       setWallet(null)
+      if (!hasValidAccessToken()) {
+        void handleAuthFailure()
+      } else {
+        setError("Not authenticated")
+      }
       return
     }
 
@@ -76,6 +81,11 @@ export function useUserWallet(explicitUserId?: string | null): UseUserWalletRetu
       }
 
       if (fetchError) {
+        if (isAuthFailureStatus(status) || isAuthFailureMessage(fetchError)) {
+          setWallet(null)
+          void handleAuthFailure()
+          return
+        }
         if (status === 404) {
           if (cachedWallet) {
             setWallet(cachedWallet)

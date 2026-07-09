@@ -8,13 +8,13 @@ import {
 /** 8-step mortgage workflow aligned with Spring merchant spec. */
 export type MortgageWorkflowStep =
   | 'application_submission'
+  | 'virtual_tour'
   | 'offer_letter'
-  | 'inspection_booking'
-  | 'inspection_outcome'
+  | 'book_inspection'
+  | 'accept_offer'
   | 'down_payment'
-  | 'contract_issued'
-  | 'contract_signed'
-  | 'loan_disbursement'
+  | 'contract_signing'
+  | 'mortgage_allocation'
   | 'declined'
 
 export type MortgageDownPaymentMethod = 'savings_plan' | 'equity_contribution'
@@ -23,12 +23,17 @@ export type MortgageWorkflowLocalState = {
   applicationId: string
   productId: string
   downPaymentMethod?: MortgageDownPaymentMethod
+  virtualTourCompleted?: boolean
+  offerLetterDownloaded?: boolean
+  inspectionScheduled?: boolean
   offerAccepted?: boolean
   offerDeclined?: boolean
-  inspectionScheduled?: boolean
+  signedOfferUploaded?: boolean
+  /** @deprecated Legacy workflow flag */
   inspectionCompleted?: boolean
   downPaymentConfirmed?: boolean
   contractAccepted?: boolean
+  allocationDownloaded?: boolean
   updatedAt: string
 }
 
@@ -129,26 +134,32 @@ function isMerchantApproved(application: StorefrontApplication): boolean {
   )
 }
 
-function stepFromPostApproval(status: PostApprovalMortgageStatus): MortgageWorkflowStep {
+function stepFromPostApproval(
+  status: PostApprovalMortgageStatus,
+  local: MortgageWorkflowLocalState | null,
+): MortgageWorkflowStep {
   switch (status) {
     case 'offer_pending':
+      if (!local?.virtualTourCompleted) return 'virtual_tour'
       return 'offer_letter'
     case 'offer_accepted':
+      if (!local?.offerLetterDownloaded) return 'offer_letter'
+      if (!local?.inspectionScheduled) return 'book_inspection'
+      return 'accept_offer'
     case 'appointment_scheduled':
-      return 'inspection_booking'
+      return local?.offerAccepted ? 'down_payment' : 'accept_offer'
     case 'inspection_in_progress':
-      return 'inspection_outcome'
+      return 'accept_offer'
     case 'down_payment_pending':
     case 'down_payment_paid':
       return 'down_payment'
     case 'down_payment_confirmed':
-      return 'contract_issued'
+      return 'contract_signing'
     case 'contract_issued':
-      return 'contract_signed'
     case 'contract_signed':
-      return 'loan_disbursement'
+      return local?.contractAccepted ? 'mortgage_allocation' : 'contract_signing'
     case 'disbursed':
-      return 'loan_disbursement'
+      return 'mortgage_allocation'
     case 'offer_declined':
     case 'inspection_declined':
       return 'declined'
@@ -163,16 +174,19 @@ export function resolveMortgageWorkflowStep(
 ): MortgageWorkflowStep {
   const paf = extractPostApprovalFulfillment(application as unknown as Record<string, unknown>)
   if (paf?.status) {
-    return stepFromPostApproval(paf.status)
+    return stepFromPostApproval(paf.status, local)
   }
 
   if (local?.offerDeclined) return 'declined'
-  if (local?.contractAccepted) return 'loan_disbursement'
-  if (local?.downPaymentConfirmed) return 'contract_issued'
+  if (local?.allocationDownloaded) return 'mortgage_allocation'
+  if (local?.contractAccepted) return 'mortgage_allocation'
+  if (local?.downPaymentConfirmed) return 'contract_signing'
+  if (local?.offerAccepted || local?.signedOfferUploaded) return 'down_payment'
   if (local?.inspectionCompleted) return 'down_payment'
-  if (local?.inspectionScheduled) return 'inspection_outcome'
-  if (local?.offerAccepted) return 'inspection_booking'
-  if (isMerchantApproved(application)) return 'offer_letter'
+  if (local?.inspectionScheduled) return 'accept_offer'
+  if (local?.offerLetterDownloaded) return 'book_inspection'
+  if (local?.virtualTourCompleted) return 'offer_letter'
+  if (isMerchantApproved(application)) return 'virtual_tour'
   return 'application_submission'
 }
 
@@ -182,58 +196,69 @@ export type MortgageThreadItem = {
   title: string
   description: string
   status: 'done' | 'current' | 'upcoming'
+  actionLabel?: string
 }
 
 const THREAD_ORDER: MortgageWorkflowStep[] = [
   'application_submission',
+  'virtual_tour',
   'offer_letter',
-  'inspection_booking',
-  'inspection_outcome',
+  'book_inspection',
+  'accept_offer',
   'down_payment',
-  'contract_issued',
-  'contract_signed',
-  'loan_disbursement',
+  'contract_signing',
+  'mortgage_allocation',
 ]
 
 const STEP_META: Record<
   Exclude<MortgageWorkflowStep, 'declined'>,
-  { title: string; description: string }
+  { title: string; description: string; actionLabel?: string }
 > = {
   application_submission: {
     title: 'Application Submission',
     description: 'Your application has been received. The merchant will review and respond shortly.',
   },
+  virtual_tour: {
+    title: 'Virtual Tour',
+    description: 'Explore the property location, video tour, and photos before continuing.',
+    actionLabel: 'Start virtual tour',
+  },
   offer_letter: {
     title: 'Offer Letter',
-    description: 'Your mortgage offer letter is ready. Review and accept to continue.',
+    description: 'Your mortgage offer letter is ready. Download and review it to continue.',
+    actionLabel: 'Download offer letter',
   },
-  inspection_booking: {
-    title: 'Inspection Booking',
-    description: 'Book an appointment to inspect the property.',
+  book_inspection: {
+    title: 'Book Inspection',
+    description: 'Choose an available time slot to inspect the property in person.',
+    actionLabel: 'Book inspection',
   },
-  inspection_outcome: {
-    title: 'Inspection Outcome',
-    description: 'Complete your inspection and confirm the outcome.',
+  accept_offer: {
+    title: 'Accept Offer',
+    description: 'Accept the offer and upload your signed offer document.',
+    actionLabel: 'Accept offer',
   },
   down_payment: {
     title: 'Down Payment',
-    description: 'Confirm your equity contribution to proceed.',
+    description: 'Review your wallet balance and pay the required down payment.',
+    actionLabel: 'Make payment',
   },
-  contract_issued: {
-    title: 'Contract Issued',
-    description: 'Your loan contract has been dispatched. Review it before signing.',
+  contract_signing: {
+    title: 'Contract Signing',
+    description: 'Download the contract, sign it, and upload the signed copy.',
+    actionLabel: 'Sign contract',
   },
-  contract_signed: {
-    title: 'Contract Signed',
-    description: 'Review and accept your loan approval contract.',
-  },
-  loan_disbursement: {
-    title: 'Loan Disbursement',
-    description: 'Your mortgage has been approved and funds will be disbursed.',
+  mortgage_allocation: {
+    title: 'Mortgage Allocation',
+    description: 'Your mortgage allocation document is ready to download.',
+    actionLabel: 'Download allocation',
   },
 }
 
-export function buildMortgageThread(current: MortgageWorkflowStep): MortgageThreadItem[] {
+export function buildMortgageThread(
+  current: MortgageWorkflowStep,
+  options?: { workflowComplete?: boolean },
+): MortgageThreadItem[] {
   if (current === 'declined') {
     return [
       {
@@ -246,7 +271,7 @@ export function buildMortgageThread(current: MortgageWorkflowStep): MortgageThre
     ]
   }
 
-  const currentIndex = THREAD_ORDER.indexOf(current)
+  const currentIndex = options?.workflowComplete ? THREAD_ORDER.length : THREAD_ORDER.indexOf(current)
   return THREAD_ORDER.map((step, index) => ({
     step,
     stepNumber: index + 1,
@@ -255,45 +280,91 @@ export function buildMortgageThread(current: MortgageWorkflowStep): MortgageThre
   }))
 }
 
+export type MortgageWorkflowModal =
+  | 'virtual_tour'
+  | 'offer_letter'
+  | 'book_inspection'
+  | 'accept_offer'
+  | 'down_payment'
+  | 'contract_signing'
+  | 'mortgage_allocation'
+
+export function mortgageStepToModal(step: MortgageWorkflowStep): MortgageWorkflowModal | null {
+  switch (step) {
+    case 'virtual_tour':
+      return 'virtual_tour'
+    case 'offer_letter':
+      return 'offer_letter'
+    case 'book_inspection':
+      return 'book_inspection'
+    case 'accept_offer':
+      return 'accept_offer'
+    case 'down_payment':
+      return 'down_payment'
+    case 'contract_signing':
+      return 'contract_signing'
+    case 'mortgage_allocation':
+      return 'mortgage_allocation'
+    default:
+      return null
+  }
+}
+
 export function mortgageStepCta(
   step: MortgageWorkflowStep,
   productId: string,
   applicationId: string,
-): { label: string; href: string } | null {
+): { label: string; href: string; modal?: MortgageWorkflowModal } | null {
   const base = `/mobile-v2/products/mortgage`
+  const pendingHref = `${base}/pending/${encodeURIComponent(applicationId)}`
   const q = `productId=${encodeURIComponent(productId)}&applicationId=${encodeURIComponent(applicationId)}`
+  const modal = mortgageStepToModal(step)
 
   switch (step) {
     case 'application_submission':
       return null
+    case 'virtual_tour':
+      return {
+        label: STEP_META.virtual_tour.actionLabel ?? 'Start virtual tour',
+        href: `${pendingHref}?action=virtual_tour`,
+        modal: 'virtual_tour',
+      }
     case 'offer_letter':
       return {
-        label: 'Continue',
-        href: `${base}/offer/accept?${q}`,
+        label: STEP_META.offer_letter.actionLabel ?? 'Download offer letter',
+        href: `${pendingHref}?action=offer_letter`,
+        modal: 'offer_letter',
       }
-    case 'inspection_booking':
+    case 'book_inspection':
       return {
-        label: 'Book inspection',
-        href: `${base}/offer?${q}&step=schedule_inspection`,
+        label: STEP_META.book_inspection.actionLabel ?? 'Book inspection',
+        href: `${pendingHref}?action=book_inspection`,
+        modal: 'book_inspection',
       }
-    case 'inspection_outcome':
+    case 'accept_offer':
       return {
-        label: 'Continue inspection',
-        href: `${base}/offer?${q}&step=inspection`,
+        label: STEP_META.accept_offer.actionLabel ?? 'Accept offer',
+        href: `${pendingHref}?action=accept_offer`,
+        modal: 'accept_offer',
       }
     case 'down_payment':
       return {
-        label: 'Pay down payment',
-        href: `${base}/offer?${q}&step=down_payment`,
+        label: STEP_META.down_payment.actionLabel ?? 'Make payment',
+        href: `${pendingHref}?action=down_payment`,
+        modal: 'down_payment',
       }
-    case 'contract_issued':
-    case 'contract_signed':
+    case 'contract_signing':
       return {
-        label: 'Review contract',
-        href: `${base}/offer?${q}&step=contract`,
+        label: STEP_META.contract_signing.actionLabel ?? 'Sign contract',
+        href: `${pendingHref}?action=contract_signing`,
+        modal: 'contract_signing',
       }
-    case 'loan_disbursement':
-      return { label: 'View mortgage', href: `${base}` }
+    case 'mortgage_allocation':
+      return {
+        label: STEP_META.mortgage_allocation.actionLabel ?? 'Download allocation',
+        href: `${pendingHref}?action=mortgage_allocation`,
+        modal: 'mortgage_allocation',
+      }
     default:
       return null
   }

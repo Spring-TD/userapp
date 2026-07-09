@@ -176,10 +176,14 @@ export function mergeApplicantProfileSubmissions(
   return [...withoutProfile, ...applicantProfileSubmissions(profile)]
 }
 
-export function validateApplicantProfile(profile: ApplicantProfileDraft): string | null {
-  if (!profile.loanReason) return 'Select the reason for this loan.'
+export function validateLoanApplicantProfile(
+  profile: ApplicantProfileDraft,
+  productLabel: 'loan' | 'mortgage' = 'loan',
+): string | null {
+  const product = productLabel === 'mortgage' ? 'mortgage' : 'loan'
+  if (!profile.loanReason) return `Select the reason for this ${product}.`
   if (profile.loanReason === 'other' && !profile.loanReasonOther.trim()) {
-    return 'Enter the reason for this loan.'
+    return `Enter the reason for this ${product}.`
   }
   if (!profile.maritalStatus) return 'Select your marital status.'
   if (!profile.monthlyEarnings.trim()) return 'Enter your monthly earnings.'
@@ -187,13 +191,22 @@ export function validateApplicantProfile(profile: ApplicantProfileDraft): string
   if (profile.repaymentSource === 'other' && !profile.repaymentSourceOther.trim()) {
     return 'Enter your source of repayment.'
   }
+  if (!profile.repayingWithSpouse) {
+    return `Please indicate whether you are repaying this ${product} with a spouse.`
+  }
+  return null
+}
+
+export function validatePepAnswer(profile: ApplicantProfileDraft): string | null {
   if (!profile.politicallyExposed) {
     return 'Please indicate whether you are a politically exposed person.'
   }
-  if (!profile.repayingWithSpouse) {
-    return 'Please indicate whether you are repaying this loan with a spouse.'
-  }
   return null
+}
+
+/** @deprecated Use `validateLoanApplicantProfile` and `validatePepAnswer` separately. */
+export function validateApplicantProfile(profile: ApplicantProfileDraft): string | null {
+  return validateLoanApplicantProfile(profile) || validatePepAnswer(profile)
 }
 
 export function pepStatusSubmission(pep: 'yes' | 'no'): RequirementSubmission {

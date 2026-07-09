@@ -50,13 +50,15 @@ function AcceptOfferContent() {
     setBusy(true)
     const apiRes = await pendingApprovedMortgageApi.respondToOffer(applicationId, userId, true)
     if (!apiRes.ok) {
-      await patchMortgageWorkflowAsync(applicationId, { offerAccepted: true, offerDeclined: false })
+      await patchMortgageWorkflowAsync(applicationId, {
+        offerAccepted: true,
+        offerDeclined: false,
+        signedOfferUploaded: true,
+      })
     }
     setBusy(false)
     setSheetOpen(false)
-    router.replace(
-      `/mobile-v2/products/mortgage/offer?productId=${encodeURIComponent(productId)}&applicationId=${encodeURIComponent(applicationId)}&step=schedule_inspection`,
-    )
+    router.replace(pendingHref)
   }
 
   const declineOffer = async () => {
