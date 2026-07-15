@@ -142,7 +142,7 @@ export default function HomePage() {
                 subtitle: walletLoading ? '…' : formattedBalance,
                 link: '/mobile-v2/withdraw',
             },
-            { icon: <FileText className="w-6 h-6" />, label: 'Orders' },
+            { icon: <FileText className="w-6 h-6" />, label: 'Orders', link: '/mobile-v2/orders' },
         ];
         return [...productQuickLinks, ...utilityQuickActions];
     }, [productQuickLinks, walletLoading, formattedBalance]);
@@ -181,7 +181,8 @@ export default function HomePage() {
     const closeModal = () => setActiveModal('none');
 
     return (
-        <div className="flex min-h-full flex-col sf-page-bg relative overflow-y-auto no-scrollbar pb-[calc(8rem+env(safe-area-inset-bottom))]">
+        <div className="relative flex h-full min-h-0 flex-col sf-page-bg">
+            <div className="min-h-0 flex-1 overflow-y-auto no-scrollbar pb-[calc(7rem+env(safe-area-inset-bottom))]">
             {/* Header */}
             <div className="px-6 pt-12 pb-4 flex items-center justify-between">
                 <div>
@@ -286,9 +287,6 @@ export default function HomePage() {
                     className="flex-1 w-full min-h-12 rounded-full bg-white border border-[#E5E7EB] text-[#111827] hover:bg-gray-50 text-[13px] font-semibold flex flex-col items-center justify-center gap-0.5 py-2"
                 >
                     <span>Withdraw</span>
-                    <span className="text-[10px] font-medium text-[#64748B]">
-                        {walletLoading ? '…' : formattedBalance}
-                    </span>
                 </button>
             </div>
 
@@ -300,6 +298,49 @@ export default function HomePage() {
                 appId={appId}
                 tenantError={tenantError}
             /> */}
+
+            {/* Quick Actions Grid */}
+            <div className="px-6 mb-6">
+                <h3 className="font-bold text-[#1E293B] mb-4">Quick Actions</h3>
+                <div className="grid grid-cols-4 gap-y-6 gap-x-2">
+                    {quickActions.map((item, idx) => {
+                        const Content = (
+                            <>
+                                <div className="w-[50px] h-[50px] rounded-[18px] bg-white border border-gray-100 shadow-sm flex items-center justify-center text-[var(--sf-primary,#2563EB)] group-hover:bg-[var(--sf-tint,#E0E7FF)] transition-colors">
+                                    {item.icon}
+                                </div>
+                                <span className="text-[11px] font-medium text-gray-500">{item.label}</span>
+                                {item.subtitle ? (
+                                    <span className="text-[9px] font-semibold text-[var(--sf-primary,#2563EB)]">
+                                        {item.subtitle}
+                                    </span>
+                                ) : null}
+                            </>
+                        );
+
+                        return item.link ? (
+                            <Link key={idx} href={item.link} className="flex flex-col items-center gap-2 group">
+                                {Content}
+                            </Link>
+                        ) : (
+                            <button
+                                key={idx}
+                                type="button"
+                                onClick={
+                                    item.label === 'Top Up'
+                                        ? () => setActiveModal('fund_options')
+                                        : item.label === 'Send'
+                                          ? () => router.push('/mobile-v2/send')
+                                          : undefined
+                                }
+                                className="flex flex-col items-center gap-2 group"
+                            >
+                                {Content}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
 
             {/* Last Transaction */}
             <div className="px-6 mb-5">
@@ -371,48 +412,6 @@ export default function HomePage() {
                     <p className="rounded-2xl bg-white px-4 py-4 text-sm text-gray-500 shadow-sm">No recent transactions yet.</p>
                 )}
             </section>
-
-            {/* Quick Actions Grid */}
-            <div className="px-6">
-                <h3 className="font-bold text-[#1E293B] mb-4">Quick Actions</h3>
-                <div className="grid grid-cols-4 gap-y-6 gap-x-2">
-                    {quickActions.map((item, idx) => {
-                        const Content = (
-                            <>
-                                <div className="w-[50px] h-[50px] rounded-[18px] bg-white border border-gray-100 shadow-sm flex items-center justify-center text-[var(--sf-primary,#2563EB)] group-hover:bg-[var(--sf-tint,#E0E7FF)] transition-colors">
-                                    {item.icon}
-                                </div>
-                                <span className="text-[11px] font-medium text-gray-500">{item.label}</span>
-                                {item.subtitle ? (
-                                    <span className="text-[9px] font-semibold text-[var(--sf-primary,#2563EB)]">
-                                        {item.subtitle}
-                                    </span>
-                                ) : null}
-                            </>
-                        );
-
-                        return item.link ? (
-                            <Link key={idx} href={item.link} className="flex flex-col items-center gap-2 group">
-                                {Content}
-                            </Link>
-                        ) : (
-                            <button
-                                key={idx}
-                                type="button"
-                                onClick={
-                                    item.label === 'Top Up'
-                                        ? () => setActiveModal('fund_options')
-                                        : item.label === 'Send'
-                                          ? () => router.push('/mobile-v2/send')
-                                          : undefined
-                                }
-                                className="flex flex-col items-center gap-2 group"
-                            >
-                                {Content}
-                            </button>
-                        );
-                    })}
-                </div>
             </div>
 
             {/* --- MODALS --- */}
@@ -420,14 +419,14 @@ export default function HomePage() {
             {/* Backdrop */}
             {activeModal !== 'none' && (
                 <div
-                    className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+                    className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
                     onClick={closeModal}
                 />
             )}
 
             {/* Modal 1: Fund Options */}
             {activeModal === 'fund_options' && (
-                <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-[30px] p-6 pb-12 animate-in slide-in-from-bottom duration-300 md:left-1/2 md:right-auto md:w-[400px] md:-translate-x-1/2">
+                <div className="absolute bottom-0 left-0 right-0 z-50 bg-white rounded-t-[30px] p-6 pb-12 animate-in slide-in-from-bottom duration-300">
                     <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-8" />
                     <div className="flex justify-between items-center mb-6">
                         <h2 className="text-xl font-bold text-[var(--sf-ink,#1E1B4B)]">Choose ways to Fund wallet</h2>
@@ -465,7 +464,7 @@ export default function HomePage() {
 
             {/* Modal 2: Fund via Bank Details */}
             {activeModal === 'fund_bank' && (
-                <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-[30px] p-6 pb-12 animate-in slide-in-from-bottom duration-300 md:left-1/2 md:right-auto md:w-[400px] md:-translate-x-1/2">
+                <div className="absolute bottom-0 left-0 right-0 z-50 bg-white rounded-t-[30px] p-6 pb-12 animate-in slide-in-from-bottom duration-300">
                     <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-8" />
                     <div className="flex justify-between items-center mb-6">
                         <h2 className="text-lg font-bold text-[var(--sf-ink,#1E1B4B)] pr-8">Fund wallet via Bank Transfer</h2>

@@ -67,8 +67,8 @@ export default function SavingsProductPage() {
     }, [savingsPlans]);
 
     return (
-        <div className="flex flex-col h-full sf-page-bg relative">
-            <div className="flex-1 overflow-y-auto no-scrollbar pb-32">
+        <div className="relative flex h-full min-h-0 flex-col sf-page-bg">
+            <div className="min-h-0 flex-1 overflow-y-auto no-scrollbar pb-32">
                 {/* Header with Tabs */}
                 <div className="pt-12 px-6 pb-4 bg-white sticky top-0 z-30">
                     <MobileV2TabBar activeTab="Savings" />

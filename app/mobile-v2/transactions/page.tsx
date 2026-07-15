@@ -1,14 +1,22 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, Search, SlidersHorizontal } from 'lucide-react';
 
 import { Skeleton } from '@/components/ui/skeleton';
+import { useAuthUserProfile } from '@/hooks/useAuthUserProfile';
 import { useUserWallet } from '@/hooks/useUserWallet';
 import { fetchUserWalletTransactions } from '@/lib/services/userWalletApi';
+import { walletTransactionToReceipt } from '@/lib/transactionReceipt';
 import { formatWalletBalance, walletTransactionMethodLabel, walletTransactionTitle } from '@/lib/userWallet';
 import type { WalletTransaction } from '@/types/userWallet';
+import { TransactionReceiptSheet } from '@/components/mobile-v2/transactions/TransactionReceiptSheet';
+import {
+    DEFAULT_TRANSACTION_FILTERS,
+    TransactionFilterSheet,
+    type TransactionFilters,
+} from '@/components/mobile-v2/transactions/TransactionFilterSheet';
 
 function formatTransactionTime(value?: string): string {
     if (!value) return '12:00 pm';
@@ -21,11 +29,21 @@ function formatTransactionTime(value?: string): string {
     }).toLowerCase();
 }
 
-function TransactionRow({ transaction }: { transaction: WalletTransaction }) {
+function TransactionRow({
+    transaction,
+    onSelect,
+}: {
+    transaction: WalletTransaction;
+    onSelect: (transaction: WalletTransaction) => void;
+}) {
     const isCredit = transaction.type === 'CREDIT';
 
     return (
-        <article className="flex min-h-[66px] items-center justify-between rounded-xl bg-white px-3.5 py-3 shadow-[0_8px_24px_rgba(15,23,42,0.03)]">
+        <button
+            type="button"
+            onClick={() => onSelect(transaction)}
+            className="flex min-h-[66px] w-full items-center justify-between rounded-xl bg-white px-3.5 py-3 text-left shadow-[0_8px_24px_rgba(15,23,42,0.03)]"
+        >
             <div className="min-w-0">
                 <p className="mb-1.5 text-[9px] font-medium text-[#9CA3AF]">{walletTransactionMethodLabel(transaction)}</p>
                 <h2 className="truncate text-[13px] font-semibold text-[#111827]">{walletTransactionTitle(transaction)}</h2>
@@ -36,7 +54,7 @@ function TransactionRow({ transaction }: { transaction: WalletTransaction }) {
                 </p>
                 <p className="mt-1.5 text-[9px] font-medium text-[#9CA3AF]">{formatTransactionTime(transaction.createdAt)}</p>
             </div>
-        </article>
+        </button>
     );
 }
 
@@ -63,31 +81,39 @@ function TransactionListSkeleton() {
 
 export default function TransactionsPage() {
     const router = useRouter();
+    const { user: profile } = useAuthUserProfile();
     const { wallet, loading: walletLoading, error: walletError } = useUserWallet();
     const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [filters, setFilters] = useState<TransactionFilters>(DEFAULT_TRANSACTION_FILTERS);
+    const [draftFilters, setDraftFilters] = useState<TransactionFilters>(DEFAULT_TRANSACTION_FILTERS);
+    const [showFilters, setShowFilters] = useState(false);
+    const [selectedTransaction, setSelectedTransaction] = useState<WalletTransaction | null>(null);
 
-    useEffect(() => {
+    const loadTransactions = useCallback(async () => {
         const userId = wallet?.userId;
         if (!userId) return;
 
-        let cancelled = false;
         setLoading(true);
         setError(null);
 
-        void fetchUserWalletTransactions(userId, { limit: 50 }).then((result) => {
-            if (cancelled) return;
-            setTransactions(result.transactions);
-            setError(result.error);
-            setLoading(false);
+        const result = await fetchUserWalletTransactions(userId, {
+            limit: 100,
+            ...(filters.type ? { type: filters.type } : {}),
+            ...(filters.startDate ? { startDate: filters.startDate } : {}),
+            ...(filters.endDate ? { endDate: filters.endDate } : {}),
         });
 
-        return () => {
-            cancelled = true;
-        };
-    }, [wallet?.userId]);
+        setTransactions(result.transactions);
+        setError(result.error);
+        setLoading(false);
+    }, [wallet?.userId, filters]);
+
+    useEffect(() => {
+        void loadTransactions();
+    }, [loadTransactions]);
 
     const visibleTransactions = useMemo(() => {
         const query = searchQuery.trim().toLowerCase();
@@ -112,10 +138,19 @@ export default function TransactionsPage() {
 
         return [...filtered].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }, [transactions, searchQuery]);
+
+    const selectedReceipt = selectedTransaction
+        ? walletTransactionToReceipt(selectedTransaction, {
+              accountHolder: wallet?.name,
+              currency: wallet?.currency,
+          })
+        : null;
+
     const isLoading = walletLoading || loading;
+    const activeFilterCount = Number(Boolean(filters.type)) + Number(Boolean(filters.startDate)) + Number(Boolean(filters.endDate));
 
     return (
-        <div className="min-h-full bg-[#F5F6FB] pb-[calc(2rem+env(safe-area-inset-bottom))]">
+        <div className="relative min-h-full bg-[#F5F6FB] pb-[calc(2rem+env(safe-area-inset-bottom))]">
             <header className="flex h-[102px] items-end justify-between bg-[#F4F6FF] px-7 pb-4">
                 <button
                     type="button"
@@ -128,10 +163,19 @@ export default function TransactionsPage() {
                 <h1 className="pb-1 text-[15px] font-semibold text-[#111827]">Transactions</h1>
                 <button
                     type="button"
-                    className="flex h-8 w-8 items-center justify-center rounded-full bg-white/70 text-[#111827] shadow-sm"
+                    onClick={() => {
+                        setDraftFilters(filters);
+                        setShowFilters(true);
+                    }}
+                    className="relative flex h-8 w-8 items-center justify-center rounded-full bg-white/70 text-[#111827] shadow-sm"
                     aria-label="Filter transactions"
                 >
                     <SlidersHorizontal className="h-4 w-4" />
+                    {activeFilterCount > 0 ? (
+                        <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#111827] text-[9px] font-bold text-white">
+                            {activeFilterCount}
+                        </span>
+                    ) : null}
                 </button>
             </header>
 
@@ -149,6 +193,15 @@ export default function TransactionsPage() {
                     />
                 </label>
 
+                {activeFilterCount > 0 ? (
+                    <p className="mb-4 text-xs text-[#64748B]">
+                        Showing filtered results
+                        {filters.type ? ` · ${filters.type.toLowerCase()}` : ''}
+                        {filters.startDate ? ` · from ${filters.startDate}` : ''}
+                        {filters.endDate ? ` · to ${filters.endDate}` : ''}
+                    </p>
+                ) : null}
+
                 {isLoading ? (
                     <TransactionListSkeleton />
                 ) : error || walletError ? (
@@ -159,13 +212,17 @@ export default function TransactionsPage() {
                 ) : visibleTransactions.length > 0 ? (
                     <div className="space-y-2.5">
                         {visibleTransactions.map((transaction) => (
-                            <TransactionRow key={transaction.id} transaction={transaction} />
+                            <TransactionRow
+                                key={transaction.id}
+                                transaction={transaction}
+                                onSelect={setSelectedTransaction}
+                            />
                         ))}
                     </div>
-                ) : searchQuery.trim() ? (
+                ) : searchQuery.trim() || activeFilterCount > 0 ? (
                     <div className="rounded-2xl bg-[#F8FAFC] px-4 py-8 text-center">
                         <p className="text-sm font-semibold text-[#111827]">No matching transactions</p>
-                        <p className="mt-1 text-xs text-[#9CA3AF]">Try another name, amount, type, or reference.</p>
+                        <p className="mt-1 text-xs text-[#9CA3AF]">Try another search or adjust your filters.</p>
                     </div>
                 ) : (
                     <div className="rounded-2xl bg-[#F8FAFC] px-4 py-8 text-center">
@@ -174,6 +231,31 @@ export default function TransactionsPage() {
                     </div>
                 )}
             </main>
+
+            {showFilters ? (
+                <TransactionFilterSheet
+                    filters={draftFilters}
+                    onChange={setDraftFilters}
+                    onApply={() => {
+                        setFilters(draftFilters);
+                        setShowFilters(false);
+                    }}
+                    onReset={() => {
+                        setDraftFilters(DEFAULT_TRANSACTION_FILTERS);
+                        setFilters(DEFAULT_TRANSACTION_FILTERS);
+                        setShowFilters(false);
+                    }}
+                    onClose={() => setShowFilters(false)}
+                />
+            ) : null}
+
+            {selectedReceipt ? (
+                <TransactionReceiptSheet
+                    receipt={selectedReceipt}
+                    userEmail={profile?.email}
+                    onClose={() => setSelectedTransaction(null)}
+                />
+            ) : null}
         </div>
     );
 }

@@ -3,10 +3,9 @@ import {
   validateApplicationAmount,
 } from '@/lib/applicationAmount'
 import {
-  validateLoanApplicantProfile,
-  validatePepAnswer,
-  type ApplicantProfileDraft,
-} from '@/lib/applicantProfileFields'
+  validatePlatformFieldsDraft,
+  type PlatformFieldsDraft,
+} from '@/lib/platformApplicationFields'
 import type { RequirementSubmission } from '@/lib/storefrontApplicationClient'
 
 export type EmploymentDraft = {
@@ -93,7 +92,7 @@ export function collectRequirementStepIssues(input: {
   applicationAmount: string
   amountMin?: number | null
   amountMax?: number | null
-  applicantProfile: ApplicantProfileDraft
+  platformFields: PlatformFieldsDraft
   employment: EmploymentDraft
   otherRequirements: CollateralRequirement[]
   requirementSubmissions: RequirementSubmission[]
@@ -113,14 +112,11 @@ export function collectRequirementStepIssues(input: {
     if (amountError) issues.push(amountError)
   }
 
-  const loanProfileError = validateLoanApplicantProfile(
-    input.applicantProfile,
-    input.productKind ?? 'loan',
+  const platformFieldsError = validatePlatformFieldsDraft(
+    input.platformFields,
+    input.productKind === 'mortgage' ? 'MORTGAGE' : 'LOAN',
   )
-  if (loanProfileError) issues.push(loanProfileError)
-
-  const pepError = validatePepAnswer(input.applicantProfile)
-  if (pepError) issues.push(pepError)
+  if (platformFieldsError) issues.push(platformFieldsError)
 
   const employmentError = validateEmploymentDraft(input.employment)
   if (employmentError) issues.push(employmentError)

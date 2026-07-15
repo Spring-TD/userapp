@@ -18,6 +18,27 @@ export function SelectField({
   options: readonly string[]
 }) {
   return (
+    <LabeledSelectField
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      options={options.map((option) => ({ value: option, label: option.replace(/\b\w/g, (c) => c.toUpperCase()) }))}
+    />
+  )
+}
+
+export function LabeledSelectField({
+  value,
+  onChange,
+  placeholder,
+  options,
+}: {
+  value: string
+  onChange: (value: string) => void
+  placeholder: string
+  options: Array<{ value: string; label: string }>
+}) {
+  return (
     <label className="relative flex h-12 items-center rounded-2xl bg-gray-100 px-4 ring-[var(--sf-button,#1E40AF)]/20 focus-within:ring-2">
       <select
         value={value}
@@ -29,8 +50,8 @@ export function SelectField({
       >
         <option value="">{placeholder}</option>
         {options.map((option) => (
-          <option key={option} value={option}>
-            {option.replace(/\b\w/g, (c) => c.toUpperCase())}
+          <option key={option.value} value={option.value}>
+            {option.label}
           </option>
         ))}
       </select>
@@ -49,22 +70,43 @@ export function YesNoField({
   label: string
 }) {
   return (
+    <YesNoBooleanField
+      label={label}
+      value={value === 'yes' ? true : value === 'no' ? false : undefined}
+      onChange={(next) => onChange(next ? 'yes' : 'no')}
+    />
+  )
+}
+
+export function YesNoBooleanField({
+  value,
+  onChange,
+  label,
+}: {
+  value: boolean | undefined
+  onChange: (value: boolean) => void
+  label: string
+}) {
+  return (
     <div className="space-y-2">
       <p className={`text-xs font-medium ${BRAND_INK}`}>{label}</p>
       <div className="grid grid-cols-2 gap-3">
-        {(['yes', 'no'] as const).map((option) => (
+        {([
+          { key: true, label: 'Yes' },
+          { key: false, label: 'No' },
+        ] as const).map((option) => (
           <button
-            key={option}
+            key={String(option.key)}
             type="button"
-            onClick={() => onChange(option)}
+            onClick={() => onChange(option.key)}
             className={cn(
-              'h-11 rounded-2xl text-xs font-semibold capitalize',
-              value === option
+              'h-11 rounded-2xl text-xs font-semibold',
+              value === option.key
                 ? 'bg-[var(--sf-button,#1E40AF)] text-white'
                 : 'bg-gray-100 text-gray-600',
             )}
           >
-            {option}
+            {option.label}
           </button>
         ))}
       </div>
