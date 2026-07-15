@@ -61,13 +61,13 @@ export function MortgageDetailSkeleton() {
       <Skeleton className={cn('h-4 w-full rounded-md', sk)} />
       <Skeleton className={cn('h-4 w-full rounded-md', sk)} />
       <Skeleton className={cn('h-4 w-[75%] rounded-md', sk)} />
-      <motionlessMortgageDetailMeta />
-      <motionlessMortgageDetailRows />
+      <MotionlessMortgageDetailMeta />
+      <MotionlessMortgageDetailRows />
     </div>
   )
 }
 
-function motionlessMortgageDetailMeta() {
+function MotionlessMortgageDetailMeta() {
   return (
     <div className="flex gap-8 pt-2">
       <Skeleton className={cn('h-4 w-24 rounded-md', sk)} />
@@ -76,7 +76,7 @@ function motionlessMortgageDetailMeta() {
   )
 }
 
-function motionlessMortgageDetailRows() {
+function MotionlessMortgageDetailRows() {
   return (
     <div className="space-y-3 border-t border-gray-200 pt-6">
       {Array.from({ length: 8 }).map((_, i) => (
@@ -159,6 +159,53 @@ export function AuthRouteSkeleton() {
         <Skeleton key={i} className={cn('mb-4 h-14 w-full rounded-2xl', sk)} />
       ))}
       <Skeleton className={cn('mt-4 h-14 w-full rounded-full', sk)} />
+    </div>
+  )
+}
+
+/** Pending loan / mortgage thread detail while application loads */
+export function PendingApplicationThreadSkeleton({
+  title = 'Pending application',
+}: {
+  title?: string
+}) {
+  return (
+    <div className="flex min-h-full flex-col sf-page-bg-tint" aria-busy="true" aria-live="polite">
+      <div className="flex-1 overflow-y-auto px-4 pb-32 pt-12 no-scrollbar">
+        <div className="mb-6 grid grid-cols-3 items-center">
+          <Skeleton className={cn('h-9 w-9 rounded-full', sk)} />
+          <Skeleton className={cn('mx-auto h-5 w-32 rounded-md', sk)} aria-label={title} />
+          <div />
+        </div>
+
+        <div className="mb-4 rounded-2xl bg-white px-4 py-4 shadow-sm">
+          <Skeleton className={cn('h-3 w-20 rounded-md', sk)} />
+          <Skeleton className={cn('mt-3 h-5 w-[72%] rounded-md', sk)} />
+          <Skeleton className={cn('mt-3 h-7 w-36 rounded-md', sk)} />
+          <Skeleton className={cn('mt-3 h-3 w-24 rounded-md', sk)} />
+        </div>
+
+        <div className="rounded-2xl bg-white px-4 py-5 shadow-sm">
+          <Skeleton className={cn('h-3 w-16 rounded-md', sk)} />
+          <Skeleton className={cn('mt-2 h-3 w-full rounded-md', sk)} />
+          <div className="mt-5 space-y-5">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <div key={index} className="flex gap-3">
+                <Skeleton className={cn('h-7 w-7 shrink-0 rounded-full', sk)} />
+                <div className="min-w-0 flex-1 space-y-2 pb-2">
+                  <Skeleton className={cn('h-4 w-[58%] rounded-md', sk)} />
+                  <Skeleton className={cn('h-3 w-full rounded-md', sk)} />
+                  <Skeleton className={cn('h-3 w-[88%] rounded-md', sk)} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t border-gray-100 bg-white px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+        <Skeleton className={cn('h-12 w-full rounded-full', sk)} />
+      </div>
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import { formatWalletBalance, walletTransactionMethodLabel, walletTransactionTitle } from '@/lib/userWallet'
+import { SF_BRAND_DEFAULTS } from '@/lib/storefrontBranding'
 import type { WalletTransaction } from '@/types/userWallet'
 
 export type TransactionReceiptKind = 'WALLET' | 'WITHDRAWAL' | 'PAYMENT'
@@ -123,13 +124,50 @@ function receiptRows(receipt: TransactionReceiptData): Array<[string, string]> {
   return rows
 }
 
+type ReceiptBrandColors = {
+  pageBg: string
+  ink: string
+  primary: string
+  button: string
+  accentSoft: string
+  borderSubtle: string
+}
+
+function readStorefrontBrandColors(): ReceiptBrandColors {
+  if (typeof document === 'undefined') {
+    return {
+      pageBg: SF_BRAND_DEFAULTS.pageBg,
+      ink: SF_BRAND_DEFAULTS.ink,
+      primary: SF_BRAND_DEFAULTS.primary,
+      button: SF_BRAND_DEFAULTS.button,
+      accentSoft: SF_BRAND_DEFAULTS.accentSoft,
+      borderSubtle: '#e2e8f0',
+    }
+  }
+
+  const root = document.querySelector('.sf-storefront-root') ?? document.documentElement
+  const style = getComputedStyle(root)
+
+  const read = (name: string, fallback: string) => style.getPropertyValue(name).trim() || fallback
+
+  return {
+    pageBg: read('--sf-page-bg', SF_BRAND_DEFAULTS.pageBg),
+    ink: read('--sf-ink', SF_BRAND_DEFAULTS.ink),
+    primary: read('--sf-primary', SF_BRAND_DEFAULTS.primary),
+    button: read('--sf-button', SF_BRAND_DEFAULTS.button),
+    accentSoft: read('--sf-accent-soft', SF_BRAND_DEFAULTS.accentSoft),
+    borderSubtle: read('--sf-border-subtle', '#e2e8f0'),
+  }
+}
+
 export function buildReceiptHtml(receipt: TransactionReceiptData): string {
+  const brand = readStorefrontBrandColors()
   const rows = receiptRows(receipt)
     .map(
       ([label, value]) => `
         <tr>
-          <td style="padding:10px 0;color:#64748B;font-size:13px;width:42%;vertical-align:top;">${label}</td>
-          <td style="padding:10px 0;color:#0F172A;font-size:13px;font-weight:600;vertical-align:top;">${value}</td>
+          <td style="padding:10px 0;color:color-mix(in srgb, ${brand.ink} 55%, #94a3b8);font-size:13px;width:42%;vertical-align:top;">${label}</td>
+          <td style="padding:10px 0;color:${brand.ink};font-size:13px;font-weight:600;vertical-align:top;">${value}</td>
         </tr>`,
     )
     .join('')
@@ -140,13 +178,13 @@ export function buildReceiptHtml(receipt: TransactionReceiptData): string {
   <meta charset="utf-8" />
   <title>Transaction Receipt - ${receipt.id}</title>
   <style>
-    body { font-family: Arial, sans-serif; background:#F8FAFC; margin:0; padding:32px; color:#0F172A; }
-    .card { max-width:640px; margin:0 auto; background:#fff; border-radius:16px; padding:32px; box-shadow:0 10px 30px rgba(15,23,42,.08); }
-    h1 { margin:0 0 8px; font-size:24px; }
-    .meta { color:#64748B; font-size:13px; margin-bottom:24px; }
+    body { font-family: Arial, sans-serif; background:${brand.pageBg}; margin:0; padding:32px; color:${brand.ink}; }
+    .card { max-width:640px; margin:0 auto; background:#fff; border-radius:16px; padding:32px; box-shadow:0 10px 30px color-mix(in srgb, ${brand.ink} 8%, transparent); border-top:4px solid ${brand.button}; }
+    h1 { margin:0 0 8px; font-size:24px; color:${brand.ink}; }
+    .meta { color:color-mix(in srgb, ${brand.ink} 55%, #94a3b8); font-size:13px; margin-bottom:24px; }
     .amount { font-size:32px; font-weight:700; margin:16px 0 24px; color:${receipt.type === 'CREDIT' ? '#059669' : '#DC2626'}; }
     table { width:100%; border-collapse:collapse; }
-    .footer { margin-top:28px; padding-top:16px; border-top:1px solid #E2E8F0; color:#94A3B8; font-size:12px; }
+    .footer { margin-top:28px; padding-top:16px; border-top:1px solid ${brand.borderSubtle}; color:color-mix(in srgb, ${brand.ink} 45%, #94a3b8); font-size:12px; }
   </style>
 </head>
 <body>

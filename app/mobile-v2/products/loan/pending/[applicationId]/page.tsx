@@ -3,25 +3,17 @@
 import React, { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { Loader2 } from 'lucide-react'
-import { LoanApplicationDetailsScreen } from '@/components/mobile-v2/loan/LoanApplicationDetailsScreen'
-import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
-import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
+import { PendingApplicationThreadSkeleton } from '@/components/mobile-v2/data-skeletons'
+import { LoanPendingThreadScreen } from '@/components/mobile-v2/loan/LoanPendingThreadScreen'
 import { fetchUserApplications, type StorefrontApplication } from '@/lib/storefrontApplicationClient'
+import { initLoanWorkflowSubmitted, readLoanWorkflow } from '@/lib/loanWorkflow'
 
 function PendingLoanDetailContent() {
   const params = useParams()
   const applicationId = typeof params?.applicationId === 'string' ? params.applicationId : ''
-  const { ready: tenantReady, displayName } = useMobileV2Tenant()
   const [application, setApplication] = useState<StorefrontApplication | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-
-  const productId = String(application?.productId ?? '')
-  const { product } = useMobileProductDetail({
-    productId,
-    enabled: tenantReady && Boolean(productId),
-  })
 
   useEffect(() => {
     let cancelled = false
@@ -44,12 +36,14 @@ function PendingLoanDetailContent() {
     }
   }, [applicationId])
 
+  useEffect(() => {
+    if (!application || !applicationId) return
+    if (readLoanWorkflow(applicationId)) return
+    initLoanWorkflowSubmitted(applicationId, String(application.productId ?? ''))
+  }, [application, applicationId])
+
   if (loading) {
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center sf-page-bg-tint">
-        <Loader2 className="h-8 w-8 animate-spin text-[var(--sf-button,#1E40AF)]" />
-      </div>
-    )
+    return <PendingApplicationThreadSkeleton title="Pending Loan" />
   }
 
   if (error || !application) {
@@ -63,24 +57,12 @@ function PendingLoanDetailContent() {
     )
   }
 
-  return (
-    <LoanApplicationDetailsScreen
-      application={application}
-      product={product}
-      providerName={displayName || undefined}
-    />
-  )
+  return <LoanPendingThreadScreen application={application} />
 }
 
 export default function LoanPendingDetailPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-[40vh] items-center justify-center sf-page-bg-tint text-sm text-gray-500">
-          Loading…
-        </div>
-      }
-    >
+    <Suspense fallback={<PendingApplicationThreadSkeleton title="Pending Loan" />}>
       <PendingLoanDetailContent />
     </Suspense>
   )

@@ -669,6 +669,11 @@ function ProductSummary({
 
   const summaryRows = loanDetails
     ? [
+        ['Status', loanDetails.status],
+        ...(application?.loanWorkflowStatus &&
+        loanDetails.workflowStatus.toLowerCase() !== loanDetails.status.toLowerCase()
+          ? [['Workflow status', loanDetails.workflowStatus] as [string, string]]
+          : []),
         ['Disbursement Date', loanDetails.disbursementDate],
         ['Loan Amount', loanDetails.loanAmount],
         ['Loan ID', loanDetails.loanId],

@@ -2,10 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { ChevronLeft } from 'lucide-react'
-
 import { Skeleton } from '@/components/ui/skeleton'
+import { MobileFlowShell } from '@/components/mobile-v2/MobileFlowShell'
 import { useUserWallet } from '@/hooks/useUserWallet'
 import { fetchUserProductApplications } from '@/lib/services/productApplicationApi'
 import { fetchUserWalletTransactions } from '@/lib/services/userWalletApi'
@@ -79,9 +77,8 @@ function applicationActivityRows(applications: ProductApplication[], tab: OrderA
 }
 
 export default function OrdersPage() {
-  const router = useRouter()
   const { user: profile } = useAuthUserProfile()
-  const { wallet } = useUserWallet()
+  const { wallet, loading: walletLoading } = useUserWallet()
   const [activeTab, setActiveTab] = useState<OrderActivityTab>('All')
   const [transactions, setTransactions] = useState<WalletTransaction[]>([])
   const [applications, setApplications] = useState<ProductApplication[]>([])
@@ -91,6 +88,10 @@ export default function OrdersPage() {
 
   useEffect(() => {
     const userId = wallet?.userId
+    if (walletLoading) {
+      setLoading(true)
+      return
+    }
     if (!userId) {
       setLoading(false)
       return
@@ -113,7 +114,7 @@ export default function OrdersPage() {
     return () => {
       cancelled = true
     }
-  }, [wallet?.userId])
+  }, [wallet?.userId, walletLoading])
 
   const walletRows = useMemo(
     () =>
@@ -149,99 +150,85 @@ export default function OrdersPage() {
     : null
 
   return (
-    <div className="relative min-h-full bg-[#F5F6FB] pb-[calc(2rem+env(safe-area-inset-bottom))]">
-      <header className="flex h-[102px] items-end justify-between bg-[#F4F6FF] px-7 pb-4">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-white/70 text-[#111827] shadow-sm"
-        >
-          <ChevronLeft className="h-5 w-5" />
-        </button>
-        <h1 className="pb-1 text-[15px] font-semibold text-[#111827]">All activities</h1>
-        <div className="h-8 w-8" />
-      </header>
+    <MobileFlowShell title="All records">
+      <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-gray-200" />
 
-      <main className="-mt-1 rounded-t-[8px] bg-white px-4 pb-8 pt-4">
-        <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-[#E5E7EB]" />
+      <div className="mb-5 flex gap-2 overflow-x-auto no-scrollbar">
+        {ORDER_ACTIVITY_TABS.map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setActiveTab(tab)}
+            className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold ${
+              activeTab === tab
+                ? 'sf-btn text-white'
+                : 'sf-accent-soft sf-text-ink'
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
 
-        <div className="mb-5 flex gap-2 overflow-x-auto no-scrollbar">
-          {ORDER_ACTIVITY_TABS.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setActiveTab(tab)}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold ${
-                activeTab === tab
-                  ? 'bg-[#111827] text-white'
-                  : 'bg-[#F3F4F6] text-[#6B7280]'
-              }`}
-            >
-              {tab}
-            </button>
+      {loading ? (
+        <div className="space-y-3">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <Skeleton key={index} className="h-16 w-full rounded-2xl bg-gray-200/90" />
           ))}
         </div>
-
-        {loading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 5 }).map((_, index) => (
-              <Skeleton key={index} className="h-16 w-full rounded-2xl bg-gray-200/90" />
-            ))}
-          </div>
-        ) : error ? (
-          <div className="rounded-2xl bg-[#F8FAFC] px-4 py-8 text-center text-sm text-[#6B7280]">{error}</div>
-        ) : rows.length > 0 ? (
-          <div className="space-y-3">
-            {rows.map((row) =>
-              row.kind === 'wallet' ? (
-                <button
-                  key={row.id}
-                  type="button"
-                  onClick={() => setSelectedTransaction(row.transaction)}
-                  className="flex w-full items-center justify-between rounded-2xl bg-[#F8FAFC] px-4 py-4 text-left"
-                >
-                  <div>
-                    <p className="text-sm font-semibold text-[#111827]">{row.title}</p>
-                    <p className="mt-1 text-xs text-[#9CA3AF]">{row.subtitle}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold text-[#111827]">
-                      {row.amount != null ? formatWalletBalance(row.amount, wallet?.currency) : '—'}
-                    </p>
-                    <p className="mt-1 text-[10px] text-[#9CA3AF]">
-                      {new Date(row.createdAt).toLocaleDateString('en-NG')}
-                    </p>
-                  </div>
-                </button>
-              ) : (
-                <Link
-                  key={row.id}
-                  href={`/mobile-v2/accounts/${row.id.replace('app-', '')}`}
-                  className="flex items-center justify-between rounded-2xl bg-[#F8FAFC] px-4 py-4"
-                >
-                  <div>
-                    <p className="text-sm font-semibold text-[#111827]">{row.title}</p>
-                    <p className="mt-1 text-xs text-[#9CA3AF]">{row.subtitle}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold text-[#111827]">
-                      {row.amount != null ? formatWalletBalance(row.amount, wallet?.currency) : 'Application'}
-                    </p>
-                    <p className="mt-1 text-[10px] text-[#9CA3AF]">
-                      {new Date(row.createdAt).toLocaleDateString('en-NG')}
-                    </p>
-                  </div>
-                </Link>
-              ),
-            )}
-          </div>
-        ) : (
-          <div className="rounded-2xl bg-[#F8FAFC] px-4 py-8 text-center">
-            <p className="text-sm font-semibold text-[#111827]">No activities yet</p>
-            <p className="mt-1 text-xs text-[#9CA3AF]">Orders and product transactions will appear here.</p>
-          </div>
-        )}
-      </main>
+      ) : error ? (
+        <div className="sf-accent-soft rounded-2xl px-4 py-8 text-center text-sm text-gray-500">{error}</div>
+      ) : rows.length > 0 ? (
+        <div className="space-y-3">
+          {rows.map((row) =>
+            row.kind === 'wallet' ? (
+              <button
+                key={row.id}
+                type="button"
+                onClick={() => setSelectedTransaction(row.transaction)}
+                className="sf-accent-soft flex w-full items-center justify-between rounded-2xl px-4 py-4 text-left"
+              >
+                <div>
+                  <p className="text-sm font-semibold sf-text-ink">{row.title}</p>
+                  <p className="mt-1 text-xs text-gray-400">{row.subtitle}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold sf-text-ink">
+                    {row.amount != null ? formatWalletBalance(row.amount, wallet?.currency) : '—'}
+                  </p>
+                  <p className="mt-1 text-[10px] text-gray-400">
+                    {new Date(row.createdAt).toLocaleDateString('en-NG')}
+                  </p>
+                </div>
+              </button>
+            ) : (
+              <Link
+                key={row.id}
+                href={`/mobile-v2/accounts/${row.id.replace('app-', '')}`}
+                className="sf-accent-soft flex items-center justify-between rounded-2xl px-4 py-4"
+              >
+                <div>
+                  <p className="text-sm font-semibold sf-text-ink">{row.title}</p>
+                  <p className="mt-1 text-xs text-gray-400">{row.subtitle}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold sf-text-ink">
+                    {row.amount != null ? formatWalletBalance(row.amount, wallet?.currency) : 'Application'}
+                  </p>
+                  <p className="mt-1 text-[10px] text-gray-400">
+                    {new Date(row.createdAt).toLocaleDateString('en-NG')}
+                  </p>
+                </div>
+              </Link>
+            ),
+          )}
+        </div>
+      ) : (
+        <div className="sf-accent-soft rounded-2xl px-4 py-8 text-center">
+          <p className="text-sm font-semibold sf-text-ink">No records yet</p>
+          <p className="mt-1 text-xs text-gray-400">Product applications and transactions will appear here.</p>
+        </div>
+      )}
 
       {selectedReceipt ? (
         <TransactionReceiptSheet
@@ -250,6 +237,6 @@ export default function OrdersPage() {
           onClose={() => setSelectedTransaction(null)}
         />
       ) : null}
-    </div>
+    </MobileFlowShell>
   )
 }

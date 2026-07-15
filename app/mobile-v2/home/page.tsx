@@ -139,13 +139,12 @@ export default function HomePage() {
             {
                 icon: <ArrowDownLeft className="w-6 h-6" />,
                 label: 'Withdraw',
-                subtitle: walletLoading ? '…' : formattedBalance,
                 link: '/mobile-v2/withdraw',
             },
-            { icon: <FileText className="w-6 h-6" />, label: 'Orders', link: '/mobile-v2/orders' },
+            { icon: <FileText className="w-6 h-6" />, label: 'Records', link: '/mobile-v2/orders' },
         ];
         return [...productQuickLinks, ...utilityQuickActions];
-    }, [productQuickLinks, walletLoading, formattedBalance]);
+    }, [productQuickLinks]);
 
     useEffect(() => {
         const userId = wallet?.userId;

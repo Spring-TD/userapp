@@ -5,20 +5,15 @@ import { Check, Download, Loader2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { MortgageSheet, MORTGAGE_PRIMARY } from '@/components/mobile-v2/mortgage/MortgageSheet'
-import { patchMortgageWorkflowAsync } from '@/lib/mortgageWorkflow'
+import { patchMortgageWorkflowAsync, type MortgageWorkflowModal } from '@/lib/mortgageWorkflow'
 import { pendingApprovedMortgageApi } from '@/lib/pendingApprovedMortgageApi'
 import { useUserWallet } from '@/hooks/useUserWallet'
 import { formatNaira } from '@/lib/mobileProductDetailDisplay'
 import { cn } from '@/lib/utils'
 import type { MobileProduct } from '@/lib/storefrontProducts'
 
-type WorkflowModalKind =
-  | 'offer_letter'
-  | 'book_inspection'
-  | 'accept_offer'
-  | 'down_payment'
-  | 'contract_signing'
-  | 'mortgage_allocation'
+/** Sheet modals only — virtual tour uses VirtualTourSheet instead. */
+export type WorkflowModalKind = Exclude<MortgageWorkflowModal, 'virtual_tour'>
 
 type MortgageWorkflowModalsProps = {
   active: WorkflowModalKind | null

@@ -45,14 +45,14 @@ function TransactionRow({
             className="flex min-h-[66px] w-full items-center justify-between rounded-xl bg-white px-3.5 py-3 text-left shadow-[0_8px_24px_rgba(15,23,42,0.03)]"
         >
             <div className="min-w-0">
-                <p className="mb-1.5 text-[9px] font-medium text-[#9CA3AF]">{walletTransactionMethodLabel(transaction)}</p>
-                <h2 className="truncate text-[13px] font-semibold text-[#111827]">{walletTransactionTitle(transaction)}</h2>
+                <p className="mb-1.5 text-[9px] font-medium text-gray-400">{walletTransactionMethodLabel(transaction)}</p>
+                <h2 className="truncate text-[13px] font-semibold sf-text-ink">{walletTransactionTitle(transaction)}</h2>
             </div>
             <div className="shrink-0 text-right">
-                <p className={`text-[11px] font-semibold ${isCredit ? 'text-[#00A83B]' : 'text-[#FF0000]'}`}>
+                <p className={`text-[11px] font-semibold ${isCredit ? 'text-emerald-600' : 'text-red-600'}`}>
                     {formatWalletBalance(transaction.amount)}
                 </p>
-                <p className="mt-1.5 text-[9px] font-medium text-[#9CA3AF]">{formatTransactionTime(transaction.createdAt)}</p>
+                <p className="mt-1.5 text-[9px] font-medium text-gray-400">{formatTransactionTime(transaction.createdAt)}</p>
             </div>
         </button>
     );
@@ -150,29 +150,29 @@ export default function TransactionsPage() {
     const activeFilterCount = Number(Boolean(filters.type)) + Number(Boolean(filters.startDate)) + Number(Boolean(filters.endDate));
 
     return (
-        <div className="relative min-h-full bg-[#F5F6FB] pb-[calc(2rem+env(safe-area-inset-bottom))]">
-            <header className="flex h-[102px] items-end justify-between bg-[#F4F6FF] px-7 pb-4">
+        <div className="relative min-h-full sf-page-bg pb-[calc(2rem+env(safe-area-inset-bottom))]">
+            <header className="flex h-[102px] items-end justify-between sf-page-bg-tint px-7 pb-4">
                 <button
                     type="button"
                     onClick={() => router.back()}
-                    className="flex h-8 w-8 items-center justify-center rounded-full bg-white/70 text-[#111827] shadow-sm"
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-white/70 sf-text-ink shadow-sm"
                     aria-label="Go back"
                 >
                     <ChevronLeft className="h-5 w-5" />
                 </button>
-                <h1 className="pb-1 text-[15px] font-semibold text-[#111827]">Transactions</h1>
+                <h1 className="pb-1 text-[15px] font-semibold sf-text-ink">Transactions</h1>
                 <button
                     type="button"
                     onClick={() => {
                         setDraftFilters(filters);
                         setShowFilters(true);
                     }}
-                    className="relative flex h-8 w-8 items-center justify-center rounded-full bg-white/70 text-[#111827] shadow-sm"
+                    className="relative flex h-8 w-8 items-center justify-center rounded-full bg-white/70 sf-text-ink shadow-sm"
                     aria-label="Filter transactions"
                 >
                     <SlidersHorizontal className="h-4 w-4" />
                     {activeFilterCount > 0 ? (
-                        <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#111827] text-[9px] font-bold text-white">
+                        <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full sf-bg-button text-[9px] font-bold text-white">
                             {activeFilterCount}
                         </span>
                     ) : null}
@@ -180,21 +180,21 @@ export default function TransactionsPage() {
             </header>
 
             <main className="-mt-1 rounded-t-[8px] bg-white px-6 pb-8 pt-4 shadow-[0_-4px_20px_rgba(15,23,42,0.02)]">
-                <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-[#E5E7EB]" />
+                <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-gray-200" />
 
-                <label className="mb-5 flex h-[43px] items-center gap-3 rounded-[22px] border border-[#EEF0F6] bg-[#FAFBFF] px-4">
-                    <Search className="h-4 w-4 text-[#A5B4FC]" />
+                <label className="mb-5 flex h-[43px] items-center gap-3 rounded-[22px] border sf-border-subtle sf-page-bg-tint px-4">
+                    <Search className="h-4 w-4 sf-text-primary" />
                     <input
                         type="search"
                         placeholder="Search transactions"
                         value={searchQuery}
                         onChange={(event) => setSearchQuery(event.target.value)}
-                        className="h-full min-w-0 flex-1 bg-transparent text-[12px] text-[#111827] outline-none placeholder:text-[#A0A7B5]"
+                        className="h-full min-w-0 flex-1 bg-transparent text-[12px] sf-text-ink outline-none placeholder:text-gray-400"
                     />
                 </label>
 
                 {activeFilterCount > 0 ? (
-                    <p className="mb-4 text-xs text-[#64748B]">
+                    <p className="mb-4 text-xs text-gray-500">
                         Showing filtered results
                         {filters.type ? ` · ${filters.type.toLowerCase()}` : ''}
                         {filters.startDate ? ` · from ${filters.startDate}` : ''}
@@ -205,9 +205,9 @@ export default function TransactionsPage() {
                 {isLoading ? (
                     <TransactionListSkeleton />
                 ) : error || walletError ? (
-                    <div className="rounded-2xl bg-[#F8FAFC] px-4 py-8 text-center">
-                        <p className="text-sm font-semibold text-[#111827]">Transactions unavailable</p>
-                        <p className="mt-1 text-xs text-[#9CA3AF]">{error || walletError}</p>
+                    <div className="sf-accent-soft rounded-2xl px-4 py-8 text-center">
+                        <p className="text-sm font-semibold sf-text-ink">Transactions unavailable</p>
+                        <p className="mt-1 text-xs text-gray-400">{error || walletError}</p>
                     </div>
                 ) : visibleTransactions.length > 0 ? (
                     <div className="space-y-2.5">
@@ -220,14 +220,14 @@ export default function TransactionsPage() {
                         ))}
                     </div>
                 ) : searchQuery.trim() || activeFilterCount > 0 ? (
-                    <div className="rounded-2xl bg-[#F8FAFC] px-4 py-8 text-center">
-                        <p className="text-sm font-semibold text-[#111827]">No matching transactions</p>
-                        <p className="mt-1 text-xs text-[#9CA3AF]">Try another search or adjust your filters.</p>
+                    <div className="sf-accent-soft rounded-2xl px-4 py-8 text-center">
+                        <p className="text-sm font-semibold sf-text-ink">No matching transactions</p>
+                        <p className="mt-1 text-xs text-gray-400">Try another search or adjust your filters.</p>
                     </div>
                 ) : (
-                    <div className="rounded-2xl bg-[#F8FAFC] px-4 py-8 text-center">
-                        <p className="text-sm font-semibold text-[#111827]">No transactions yet</p>
-                        <p className="mt-1 text-xs text-[#9CA3AF]">Your wallet activity will appear here.</p>
+                    <div className="sf-accent-soft rounded-2xl px-4 py-8 text-center">
+                        <p className="text-sm font-semibold sf-text-ink">No transactions yet</p>
+                        <p className="mt-1 text-xs text-gray-400">Your wallet activity will appear here.</p>
                     </div>
                 )}
             </main>

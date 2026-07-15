@@ -10,6 +10,12 @@ import {
   readMortgageWorkflow,
   resolveMortgageWorkflowStep,
 } from '@/lib/mortgageWorkflow'
+import {
+  loanNextStepLabel,
+  loanStepCta,
+  readLoanWorkflow,
+  resolveLoanWorkflowStep,
+} from '@/lib/loanWorkflow'
 import { mortgagePendingDetailHref } from '@/lib/mortgageApplyRoutes'
 import { loanPendingDetailHref } from '@/lib/loanApplyRoutes'
 
@@ -20,13 +26,21 @@ const PENDING_WORKFLOW_STATUSES = new Set(['account_created', 'requested', 'unde
 function isPendingApplication(application: StorefrontApplication, kind: PendingKind) {
   const status = String(application.status || '').toLowerCase()
   const workflowStatus = String(application.loanWorkflowStatus || '').toLowerCase()
+  const applicationId = String(application.id ?? application._id ?? '')
 
   if (kind === 'mortgage') {
-    const applicationId = String(application.id ?? application._id ?? '')
     const local = readMortgageWorkflow(applicationId)
     const step = resolveMortgageWorkflowStep(application, local)
     if (local?.allocationDownloaded) return false
     if (step !== 'mortgage_allocation' && step !== 'declined') return true
+  }
+
+  if (kind === 'loan') {
+    const local = readLoanWorkflow(applicationId)
+    const step = resolveLoanWorkflowStep(application, local)
+    if (local?.offerDeclined) return false
+    if (step === 'loan_disbursed' && local?.disbursementSeen) return false
+    if (step !== 'declined') return true
   }
 
   return status === 'pending' || PENDING_WORKFLOW_STATUSES.has(workflowStatus)
@@ -110,11 +124,11 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingKind }
   return (
     <div className="flex h-full flex-col sf-page-bg-tint">
       <div className="flex-1 overflow-y-auto px-4 pb-10 pt-12 no-scrollbar">
-        <div className="mb-7 grid grid-cols-3 items-center">
+        <div className="mb-4 grid grid-cols-3 items-center">
           <Link href={backHref} className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-gray-900 shadow-sm">
             <ChevronLeft className="h-5 w-5" />
           </Link>
-          <h1 className="text-center text-base font-medium text-gray-950">{title}</h1>
+          <h1 className="text-center text-base font-medium text-gray-950 whitespace-nowrap">{title}</h1>
           <div />
         </div>
 
@@ -138,18 +152,28 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingKind }
               {pendingApplications.map((application) => {
                 const applicationId = String(application.id ?? application._id ?? '')
                 const productId = String(application.productId ?? '')
-                const local = readMortgageWorkflow(applicationId)
-                const step = kind === 'mortgage' ? resolveMortgageWorkflowStep(application, local) : null
-                const cta =
-                  kind === 'mortgage' && productId && applicationId
-                    ? mortgageStepCta(step!, productId, applicationId)
+                const mortgageLocal = readMortgageWorkflow(applicationId)
+                const loanLocal = readLoanWorkflow(applicationId)
+                const mortgageStep =
+                  kind === 'mortgage' ? resolveMortgageWorkflowStep(application, mortgageLocal) : null
+                const loanStep = kind === 'loan' ? resolveLoanWorkflowStep(application, loanLocal) : null
+                const mortgageCta =
+                  kind === 'mortgage' && productId && applicationId && mortgageStep
+                    ? mortgageStepCta(mortgageStep, productId, applicationId)
                     : null
+                const loanCta =
+                  kind === 'loan' && applicationId && loanStep ? loanStepCta(loanStep, applicationId) : null
+                const cta = kind === 'mortgage' ? mortgageCta : loanCta
                 const detailHref =
                   kind === 'mortgage' && applicationId
                     ? mortgagePendingDetailHref(applicationId)
                     : kind === 'loan' && applicationId
                       ? loanPendingDetailHref(applicationId)
                       : null
+                const nextStepLabel =
+                  kind === 'mortgage'
+                    ? mortgageNextStepLabel(application)
+                    : loanNextStepLabel(application)
 
                 return (
                   <div
@@ -159,13 +183,9 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingKind }
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
                         <h2 className="truncate text-sm font-medium text-gray-950">{titleFor(application, kind)}</h2>
-                        {kind === 'mortgage' ? (
-                          <p className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--sf-button,#1E40AF)]">
-                            Next: {mortgageNextStepLabel(application)}
-                          </p>
-                        ) : (
-                          <p className="mt-2 text-[10px] text-orange-400">Pending</p>
-                        )}
+                        <p className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--sf-button,#1E40AF)]">
+                          Next: {nextStepLabel}
+                        </p>
                       </div>
                       <div className="shrink-0 text-right">
                         <p className="text-sm font-semibold text-gray-950">{formatAmount(application)}</p>
@@ -182,7 +202,7 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingKind }
                           View details
                           <ChevronRight className="h-3.5 w-3.5" />
                         </Link>
-                        {kind === 'mortgage' && cta ? (
+                        {cta ? (
                           <Link
                             href={cta.href}
                             className="flex flex-1 items-center justify-center rounded-full bg-[var(--sf-button,#1E40AF)] py-2.5 text-xs font-semibold text-white"

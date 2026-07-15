@@ -33,8 +33,15 @@ export function LoanApplicationDetailsScreen({
 }: LoanApplicationDetailsScreenProps) {
   const router = useRouter()
   const details = buildLoanApplicationDetails(application, { product, providerName })
+  const showWorkflowStatus =
+    Boolean(application.loanWorkflowStatus) &&
+    details.workflowStatus.toLowerCase() !== details.status.toLowerCase()
 
   const rows: Array<{ label: string; value: string }> = [
+    { label: "Status", value: details.status },
+    ...(showWorkflowStatus
+      ? [{ label: "Workflow status", value: details.workflowStatus }]
+      : []),
     { label: "Disbursement Date", value: details.disbursementDate },
     { label: "Loan Amount", value: details.loanAmount },
     { label: "Loan ID", value: details.loanId },
@@ -51,7 +58,12 @@ export function LoanApplicationDetailsScreen({
         <div className="rounded-lg bg-white px-4 pb-6 pt-4 shadow-[0_18px_45px_rgba(15,23,42,0.04)]">
           <div className="mx-auto mb-6 h-1.5 w-12 rounded-full bg-gray-200" />
 
-          <h1 className={`mb-6 text-center text-base font-semibold ${BRAND_INK}`}>{details.title}</h1>
+          <h1 className={`mb-3 text-center text-base font-semibold ${BRAND_INK}`}>{details.title}</h1>
+          <div className="mb-6 flex justify-center">
+            <span className="rounded-full bg-[color-mix(in_srgb,var(--sf-button,#1E40AF)_12%,white)] px-3 py-1 text-[11px] font-semibold text-[var(--sf-button,#1E40AF)]">
+              {details.status}
+            </span>
+          </div>
 
           <div className="divide-y divide-gray-100">
             {rows.map((row) => (
