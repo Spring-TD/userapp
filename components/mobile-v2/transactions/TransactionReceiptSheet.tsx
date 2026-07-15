@@ -29,18 +29,18 @@ export function TransactionReceiptSheet({
         <div className="mb-5 flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Transaction receipt</p>
-            <h2 className="mt-1 text-lg font-bold text-[#111827]">{receipt.title}</h2>
+            <h2 className="mt-1 text-lg font-bold sf-text-ink">{receipt.title}</h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-600"
+            className="flex h-8 w-8 items-center justify-center rounded-full sf-accent-soft text-gray-600"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="rounded-2xl bg-[#F8FAFC] px-4 py-5 text-center">
+        <div className="sf-accent-soft rounded-2xl px-4 py-5 text-center">
           <p className={`text-3xl font-bold ${isCredit ? 'text-emerald-600' : 'text-red-600'}`}>
             {formatWalletBalance(receipt.amount, receipt.currency)}
           </p>
@@ -63,7 +63,7 @@ export function TransactionReceiptSheet({
           ].map(([label, value]) => (
             <div key={label} className="flex items-start justify-between gap-4 border-b border-gray-100 pb-3">
               <dt className="text-gray-500">{label}</dt>
-              <dd className="max-w-[58%] text-right font-medium text-[#111827]">{value}</dd>
+              <dd className="max-w-[58%] text-right font-medium sf-text-ink">{value}</dd>
             </div>
           ))}
         </dl>
@@ -72,7 +72,7 @@ export function TransactionReceiptSheet({
           <button
             type="button"
             onClick={() => downloadReceipt(receipt)}
-            className="flex h-11 flex-col items-center justify-center gap-1 rounded-xl bg-[#111827] text-[10px] font-semibold text-white"
+            className="sf-btn flex h-11 flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-semibold"
           >
             <Download className="h-4 w-4" />
             Download
@@ -80,7 +80,7 @@ export function TransactionReceiptSheet({
           <button
             type="button"
             onClick={() => printReceipt(receipt)}
-            className="flex h-11 flex-col items-center justify-center gap-1 rounded-xl bg-gray-100 text-[10px] font-semibold text-[#111827]"
+            className="flex h-11 flex-col items-center justify-center gap-1 rounded-xl sf-accent-soft text-[10px] font-semibold sf-text-ink"
           >
             <Printer className="h-4 w-4" />
             Print
@@ -89,7 +89,7 @@ export function TransactionReceiptSheet({
             type="button"
             disabled={!userEmail}
             onClick={() => userEmail && emailReceipt(receipt, userEmail)}
-            className="flex h-11 flex-col items-center justify-center gap-1 rounded-xl bg-gray-100 text-[10px] font-semibold text-[#111827] disabled:opacity-50"
+            className="flex h-11 flex-col items-center justify-center gap-1 rounded-xl sf-accent-soft text-[10px] font-semibold sf-text-ink disabled:opacity-50"
           >
             <Mail className="h-4 w-4" />
             Email

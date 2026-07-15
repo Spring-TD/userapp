@@ -112,6 +112,35 @@ function commoditySnapshot(application: ProductApplication): CommodityContractSn
     return snapshot && typeof snapshot === 'object' ? snapshot : null;
 }
 
+function provisionStatusTone(status?: string | null): string {
+    const normalized = String(status || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[_-]+/g, ' ')
+
+    if (
+        normalized.includes('account requested') ||
+        normalized === 'requested' ||
+        normalized.includes('pending') ||
+        normalized.includes('under review') ||
+        normalized.includes('provision')
+    ) {
+        return 'text-orange-500'
+    }
+
+    if (
+        normalized.includes('active') ||
+        normalized.includes('approved') ||
+        normalized.includes('disbursed') ||
+        normalized.includes('successful') ||
+        normalized.includes('completed')
+    ) {
+        return 'text-green-600'
+    }
+
+    return 'text-orange-500'
+}
+
 function ProductAccountCard({
     application,
     activeFilter,
@@ -130,6 +159,7 @@ function ProductAccountCard({
     const snapshot = activeFilter === 'Commodity' ? commoditySnapshot(application) : null;
     const holdingStatus = snapshot?.commodityHoldingStatus || application.status;
     const provisionStatus = account?.provisionStatus || application.loanWorkflowStatus || holdingStatus || application.status;
+    const statusLabel = String(provisionStatus || 'pending').replace(/_/g, ' ');
     const principal = snapshot?.commodityPrincipal ?? (application as { amount?: number }).amount;
     const withdrawable = Boolean(
         activeFilter === 'Commodity' &&
@@ -173,8 +203,8 @@ function ProductAccountCard({
                             : account?.accountNumber || 'Pending provisioning'}
                     </p>
                 </div>
-                <span className="shrink-0 rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-green-600">
-                    {String(provisionStatus || 'pending').replace(/_/g, ' ')}
+                <span className={`shrink-0 rounded-full bg-white px-3 py-1 text-[11px] font-semibold uppercase ${provisionStatusTone(statusLabel)}`}>
+                    {statusLabel}
                 </span>
             </div>
 

@@ -3,7 +3,7 @@
 import React, { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { Loader2 } from 'lucide-react'
+import { PendingApplicationThreadSkeleton } from '@/components/mobile-v2/data-skeletons'
 import { MortgagePendingThreadScreen } from '@/components/mobile-v2/mortgage/MortgagePendingThreadScreen'
 import { fetchUserApplications, type StorefrontApplication } from '@/lib/storefrontApplicationClient'
 import { initMortgageWorkflowSubmitted, readMortgageWorkflow } from '@/lib/mortgageWorkflow'
@@ -47,11 +47,7 @@ function PendingDetailContent() {
   }, [application, applicationId])
 
   if (loading) {
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center sf-page-bg-tint">
-        <Loader2 className="h-8 w-8 animate-spin text-[var(--sf-button,#1E40AF)]" />
-      </div>
-    )
+    return <PendingApplicationThreadSkeleton title="Pending Mortgage" />
   }
 
   if (error || !application) {
@@ -70,13 +66,7 @@ function PendingDetailContent() {
 
 export default function MortgagePendingDetailPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-[40vh] items-center justify-center sf-page-bg-tint text-sm text-gray-500">
-          Loading…
-        </div>
-      }
-    >
+    <Suspense fallback={<PendingApplicationThreadSkeleton title="Pending Mortgage" />}>
       <PendingDetailContent />
     </Suspense>
   )

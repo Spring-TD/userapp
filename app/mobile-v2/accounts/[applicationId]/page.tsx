@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useParams, useRouter } from 'next/navigation'
-import { ChevronLeft } from 'lucide-react'
-
+import { useParams } from 'next/navigation'
+import { Check, Copy } from 'lucide-react'
+import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
+import { MobileFlowShell } from '@/components/mobile-v2/MobileFlowShell'
 import { useUserWallet } from '@/hooks/useUserWallet'
 import { fetchUserProductApplications } from '@/lib/services/productApplicationApi'
 import { formatWalletBalance } from '@/lib/userWallet'
@@ -16,13 +17,13 @@ function accountNumberFor(application: ProductApplication | null): string {
 }
 
 export default function AccountDetailPage() {
-  const router = useRouter()
   const params = useParams<{ applicationId: string }>()
   const applicationId = params.applicationId
   const { wallet } = useUserWallet()
   const [applications, setApplications] = useState<ProductApplication[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     const userId = wallet?.userId
@@ -60,76 +61,92 @@ export default function AccountDetailPage() {
   }, [applications, selectedApplication])
 
   const account = selectedApplication?.productWallet?.upstreamAccount
+  const accountNumber = account?.accountNumber?.trim() || ''
+
+  const copyAccountNumber = async () => {
+    if (!accountNumber) return
+    try {
+      await navigator.clipboard.writeText(accountNumber)
+      setCopied(true)
+      toast.success('Account number copied')
+      window.setTimeout(() => setCopied(false), 1600)
+    } catch {
+      toast.error('Unable to copy account number')
+    }
+  }
 
   return (
-    <div className="min-h-full bg-[#F5F6FB] pb-[calc(2rem+env(safe-area-inset-bottom))]">
-      <header className="flex h-[102px] items-end justify-between bg-[#F4F6FF] px-7 pb-4">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-white/70 text-[#111827] shadow-sm"
-        >
-          <ChevronLeft className="h-5 w-5" />
-        </button>
-        <h1 className="pb-1 text-[15px] font-semibold text-[#111827]">Account products</h1>
-        <div className="h-8 w-8" />
-      </header>
+    <MobileFlowShell title="Account products">
+      <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-gray-200" />
 
-      <main className="-mt-1 rounded-t-[8px] bg-white px-6 pb-8 pt-4">
-        <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-[#E5E7EB]" />
+      {loading ? (
+        <div className="space-y-3">
+          <Skeleton className="h-28 w-full rounded-2xl bg-gray-200/90" />
+          <Skeleton className="h-20 w-full rounded-2xl bg-gray-200/90" />
+          <Skeleton className="h-20 w-full rounded-2xl bg-gray-200/90" />
+        </div>
+      ) : error || !selectedApplication ? (
+        <div className="sf-accent-soft rounded-2xl px-4 py-8 text-center text-sm text-gray-500">
+          {error || 'Account record not found.'}
+        </div>
+      ) : (
+        <>
+          <div className="sf-bg-button rounded-2xl px-5 py-5 text-white">
+            <p className="text-xs text-white/70">Account number</p>
+            <div className="mt-1 flex items-center gap-3">
+              <p className="min-w-0 flex-1 break-all text-lg font-bold">{accountNumber || '—'}</p>
+              {accountNumber ? (
+                <button
+                  type="button"
+                  onClick={() => void copyAccountNumber()}
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25"
+                  aria-label="Copy account number"
+                >
+                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </button>
+              ) : null}
+            </div>
+            <p className="mt-3 text-sm text-white/80">{account?.bankName || 'Provider bank'}</p>
+            <p className="mt-1 text-xs text-white/60">
+              {relatedApplications.length} product{relatedApplications.length === 1 ? '' : 's'} running on this account
+            </p>
+          </div>
 
-        {loading ? (
+          <h2 className="mb-3 mt-6 text-sm font-bold sf-text-ink">Products on this account</h2>
           <div className="space-y-3">
-            <Skeleton className="h-28 w-full rounded-2xl bg-gray-200/90" />
-            <Skeleton className="h-20 w-full rounded-2xl bg-gray-200/90" />
-            <Skeleton className="h-20 w-full rounded-2xl bg-gray-200/90" />
-          </div>
-        ) : error || !selectedApplication ? (
-          <div className="rounded-2xl bg-[#F8FAFC] px-4 py-8 text-center text-sm text-[#6B7280]">
-            {error || 'Account record not found.'}
-          </div>
-        ) : (
-          <>
-            <div className="rounded-2xl bg-[#111827] px-5 py-5 text-white">
-              <p className="text-xs text-white/70">Account number</p>
-              <p className="mt-1 text-lg font-bold">{account?.accountNumber || '—'}</p>
-              <p className="mt-3 text-sm text-white/80">{account?.bankName || 'Provider bank'}</p>
-              <p className="mt-1 text-xs text-white/60">
-                {relatedApplications.length} product{relatedApplications.length === 1 ? '' : 's'} running on this account
-              </p>
-            </div>
-
-            <h2 className="mb-3 mt-6 text-sm font-bold text-[#111827]">Products on this account</h2>
-            <div className="space-y-3">
-              {relatedApplications.map((application) => (
-                <div key={application.id} className="rounded-2xl border border-[#EEF0F6] px-4 py-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-[#111827]">
-                        {application.productName || application.productType}
-                      </p>
-                      <p className="mt-1 text-xs text-[#9CA3AF]">{application.productType}</p>
-                    </div>
-                    <span className="rounded-full bg-[#F3F4F6] px-2.5 py-1 text-[10px] font-semibold text-[#111827]">
-                      {application.status}
-                    </span>
+            {relatedApplications.map((application) => (
+              <div key={application.id} className="rounded-2xl border sf-border-subtle px-4 py-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold sf-text-ink">
+                      {application.productName || application.productType}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-400">{application.productType}</p>
                   </div>
-                  <div className="mt-3 flex items-center justify-between text-xs text-[#6B7280]">
-                    <span>
-                      {(application as { amount?: number }).amount != null
-                        ? formatWalletBalance((application as { amount?: number }).amount!, wallet?.currency)
-                        : 'Active product'}
-                    </span>
-                    <Link href={`/mobile-v2/products/${String(application.productType || '').toLowerCase()}`} className="font-semibold text-[#4F46E5]">
-                      Open product
-                    </Link>
-                  </div>
+                  <span className="sf-accent-soft rounded-full px-2.5 py-1 text-[10px] font-semibold sf-text-ink">
+                    {application.status}
+                  </span>
                 </div>
-              ))}
-            </div>
-          </>
-        )}
-      </main>
-    </div>
+                <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
+                  <span>
+                    {(application as { amount?: number }).amount != null
+                      ? formatWalletBalance((application as { amount?: number }).amount!, wallet?.currency)
+                      : 'Active product'}
+                  </span>
+                  <Link
+                    href={`/mobile-v2/accounts/${encodeURIComponent(application.id)}/product`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-semibold sf-text-button"
+                  >
+                    Open product
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </MobileFlowShell>
   )
 }

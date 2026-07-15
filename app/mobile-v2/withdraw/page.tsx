@@ -159,11 +159,11 @@ export default function WithdrawPage() {
     return (
       <MobileFlowShell title="Withdraw">
         <div className="py-6 text-center">
-          <h2 className="text-lg font-semibold text-[#111827]">Withdrawal submitted</h2>
-          <p className="mt-2 text-sm text-[#6B7280]">
+          <h2 className="text-lg font-semibold sf-text-ink">Withdrawal submitted</h2>
+          <p className="mt-2 text-sm text-gray-500">
             {formatWalletBalance(receipt.amount, receipt.currency)} is being sent to your bank account.
           </p>
-          <p className="mt-2 text-xs text-[#9CA3AF]">
+          <p className="mt-2 text-xs text-gray-400">
             A confirmation receipt is ready. You can download it or email it to yourself.
           </p>
 
@@ -171,7 +171,7 @@ export default function WithdrawPage() {
             <button
               type="button"
               onClick={() => downloadReceipt(receipt)}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#111827] text-sm font-semibold text-white"
+              className="sf-btn inline-flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-semibold"
             >
               <Download className="h-4 w-4" />
               Download receipt
@@ -180,7 +180,7 @@ export default function WithdrawPage() {
               type="button"
               disabled={!profile?.email}
               onClick={() => profile?.email && emailReceipt(receipt, profile.email)}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-gray-100 text-sm font-semibold text-[#111827] disabled:opacity-50"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl sf-accent-soft text-sm font-semibold sf-text-ink disabled:opacity-50"
             >
               <Mail className="h-4 w-4" />
               Email receipt
@@ -190,7 +190,7 @@ export default function WithdrawPage() {
           <button
             type="button"
             onClick={() => setShowReceiptSheet(true)}
-            className="mt-3 w-full text-sm font-semibold text-[#4F46E5]"
+            className="mt-3 w-full text-sm font-semibold sf-text-button"
           >
             View receipt details
           </button>
@@ -198,7 +198,7 @@ export default function WithdrawPage() {
           <button
             type="button"
             onClick={() => router.push('/mobile-v2/home')}
-            className="mt-8 h-12 w-full rounded-xl bg-[#111827] text-sm font-semibold text-white"
+            className="sf-btn mt-8 h-12 w-full rounded-xl text-sm font-semibold"
           >
             Back to home
           </button>
@@ -217,24 +217,24 @@ export default function WithdrawPage() {
 
   return (
     <MobileFlowShell title="Withdraw">
-      <p className="text-sm text-[#6B7280]">
+      <p className="text-sm text-gray-500">
         Withdraw from your primary wallet to a saved bank account in your name.
       </p>
 
-      <div className="mt-4 rounded-2xl bg-[#F4F6FF] px-4 py-3">
-        <p className="text-xs text-[#6B7280]">Available balance (central wallet)</p>
-        <p className="text-lg font-bold text-[#111827]">{walletLoading ? '…' : formattedBalance}</p>
+      <div className="mt-4 rounded-2xl sf-page-bg-tint px-4 py-3">
+        <p className="text-xs text-gray-500">Available balance (central wallet)</p>
+        <p className="text-lg font-bold sf-text-ink">{walletLoading ? '…' : formattedBalance}</p>
       </div>
 
       {loading ? (
-        <p className="mt-8 text-center text-sm text-[#6B7280]">Loading accounts…</p>
+        <p className="mt-8 text-center text-sm text-gray-500">Loading accounts…</p>
       ) : accounts.length === 0 ? (
-        <div className="mt-6 rounded-2xl border border-dashed border-[#E5E7EB] px-4 py-8 text-center">
-          <p className="text-sm font-semibold text-[#111827]">No saved bank accounts</p>
-          <p className="mt-1 text-xs text-[#6B7280]">Add a bank account before withdrawing.</p>
+        <div className="mt-6 rounded-2xl border border-dashed sf-border-subtle px-4 py-8 text-center">
+          <p className="text-sm font-semibold sf-text-ink">No saved bank accounts</p>
+          <p className="mt-1 text-xs text-gray-500">Add a bank account before withdrawing.</p>
           <Link
             href="/mobile-v2/bank-accounts/add"
-            className="mt-4 inline-flex h-11 items-center justify-center rounded-xl bg-[#111827] px-6 text-sm font-semibold text-white"
+            className="sf-btn mt-4 inline-flex h-11 items-center justify-center rounded-xl px-6 text-sm font-semibold"
           >
             Add bank account
           </Link>
@@ -242,11 +242,11 @@ export default function WithdrawPage() {
       ) : (
         <div className="mt-5 space-y-4">
           <div>
-            <label className="text-xs font-semibold text-[#111827]">Destination account</label>
+            <label className="text-xs font-semibold sf-text-ink">Destination account</label>
             <select
               value={selectedId ?? ''}
               onChange={(e) => setSelectedId(e.target.value)}
-              className="mt-2 h-12 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm text-[#111827]"
+              className="mt-2 h-12 w-full rounded-xl border sf-border-subtle bg-white px-4 text-sm sf-text-ink"
             >
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -255,19 +255,19 @@ export default function WithdrawPage() {
                 </option>
               ))}
             </select>
-            <Link href="/mobile-v2/bank-accounts/add" className="mt-2 inline-block text-xs font-semibold text-[#4F46E5]">
+            <Link href="/mobile-v2/bank-accounts/add" className="mt-2 inline-block text-xs font-semibold sf-text-button">
               Add another beneficiary account
             </Link>
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-[#111827]">Amount ({currency})</label>
+            <label className="text-xs font-semibold sf-text-ink">Amount ({currency})</label>
             <input
               value={amount}
               onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))}
               placeholder="0.00"
               inputMode="decimal"
-              className="mt-2 h-12 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm text-[#111827] placeholder:text-[#9CA3AF]"
+              className="mt-2 h-12 w-full rounded-xl border sf-border-subtle bg-white px-4 text-sm sf-text-ink placeholder:text-gray-400"
             />
             {amountNum > balance ? (
               <p className="mt-1 text-xs text-red-600">Amount exceeds available balance.</p>
@@ -275,11 +275,11 @@ export default function WithdrawPage() {
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-[#111827]">Description (optional)</label>
+            <label className="text-xs font-semibold sf-text-ink">Description (optional)</label>
             <input
               value={narration}
               onChange={(e) => setNarration(e.target.value)}
-              className="mt-2 h-12 w-full rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm text-[#111827]"
+              className="mt-2 h-12 w-full rounded-xl border sf-border-subtle bg-white px-4 text-sm sf-text-ink"
             />
           </div>
 
@@ -297,7 +297,7 @@ export default function WithdrawPage() {
             </div>
           ) : (
             <div>
-              <label className="text-xs font-semibold text-[#111827]">Transaction PIN</label>
+              <label className="text-xs font-semibold sf-text-ink">Transaction PIN</label>
               <div className="mt-3">
                 <PinInput value={pin} onChange={setPin} autoFocus={false} />
               </div>
@@ -316,7 +316,7 @@ export default function WithdrawPage() {
             disabled={!canSubmit}
             onClick={() => void handleSubmit()}
             className={`h-12 w-full rounded-xl text-sm font-semibold ${
-              canSubmit ? 'bg-[#111827] text-white' : 'bg-[#E5E7EB] text-[#9CA3AF]'
+              canSubmit ? 'sf-btn' : 'bg-gray-200 text-gray-400'
             }`}
           >
             {submitting ? 'Processing…' : 'Withdraw'}

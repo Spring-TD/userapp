@@ -20,6 +20,7 @@ import {
   type MortgageThreadItem,
   type MortgageWorkflowModal,
 } from '@/lib/mortgageWorkflow'
+import type { WorkflowModalKind } from '@/components/mobile-v2/mortgage/MortgageWorkflowModals'
 import { cn } from '@/lib/utils'
 
 function formatAmount(application: StorefrontApplication) {
@@ -103,7 +104,7 @@ export function MortgagePendingThreadScreen({
   const applicationId = String(application.id ?? application._id ?? '')
   const productId = String(application.productId ?? '')
   const [workflowVersion, setWorkflowVersion] = useState(0)
-  const [activeModal, setActiveModal] = useState<MortgageWorkflowModal | null>(null)
+  const [activeModal, setActiveModal] = useState<WorkflowModalKind | null>(null)
   const [virtualTourOpen, setVirtualTourOpen] = useState(false)
 
   const { product } = useMobileProductDetail({
@@ -173,7 +174,7 @@ export function MortgagePendingThreadScreen({
           >
             <ChevronLeft className="h-5 w-5" />
           </Link>
-          <h1 className="text-center text-base font-bold text-gray-950">Pending Mortgage</h1>
+          <h1 className="text-center text-base font-bold text-gray-950 whitespace-nowrap">Pending Mortgage</h1>
           <div />
         </div>
 

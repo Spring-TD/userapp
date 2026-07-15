@@ -3,6 +3,8 @@ import type { StorefrontApplication } from "@/lib/storefrontApplicationClient"
 
 export type LoanApplicationDetails = {
   title: string
+  status: string
+  workflowStatus: string
   disbursementDate: string
   loanAmount: string
   loanId: string
@@ -46,6 +48,15 @@ function isApprovedStatus(status?: string): boolean {
   return ["approved", "active", "disbursed", "successful", "completed"].some((s) =>
     normalized.includes(s),
   )
+}
+
+function formatStatusLabel(status?: string | null, fallback = "Pending"): string {
+  const raw = String(status || "").trim()
+  if (!raw) return fallback
+  return raw
+    .replace(/[_-]+/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
 function loanReference(application: StorefrontApplication): string {
@@ -92,8 +103,16 @@ export function buildLoanApplicationDetails(
     ? application.updatedAt || application.createdAt
     : application.createdAt || application.updatedAt
 
+  const status = formatStatusLabel(application.status, "Pending")
+  const workflowStatus = formatStatusLabel(
+    application.loanWorkflowStatus,
+    status,
+  )
+
   return {
     title: approved ? "Loan Approved" : "Loan Application Details",
+    status,
+    workflowStatus,
     disbursementDate: formatDate(disbursementSource),
     loanAmount: formatNgn(amount, currency),
     loanId: loanReference(application),

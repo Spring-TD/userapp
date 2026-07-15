@@ -127,7 +127,7 @@ export async function signMortgageContract(applicationId: string, userId: string
 export const pendingApprovedMortgageApi = {
   list: listPendingApprovedMortgages,
   getDetail: getPendingApprovedMortgage,
-  respondToOffer,
+  respondToOffer: respondToMortgageOffer,
   scheduleInspection: scheduleMortgageInspection,
   startInspection: startMortgageInspection,
   completeInspection: completeMortgageInspection,
