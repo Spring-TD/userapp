@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { PendingApplicationsListSkeleton } from '@/components/mobile-v2/data-skeletons'
 import { fetchUserApplications, type StorefrontApplication } from '@/lib/storefrontApplicationClient'
 import {
   buildMortgageThread,
@@ -136,10 +137,7 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingKind }
           <div className="mx-auto mb-7 h-1.5 w-12 rounded-full bg-gray-200" />
 
           {loading ? (
-            <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 text-sm text-gray-500">
-              <Loader2 className="h-6 w-6 animate-spin text-[var(--sf-button,#1E40AF)]" />
-              Loading pending {kind} applications...
-            </div>
+            <PendingApplicationsListSkeleton />
           ) : error ? (
             <div className="rounded-2xl bg-red-50 px-4 py-6 text-center text-sm text-red-600">{error}</div>
           ) : pendingApplications.length === 0 ? (

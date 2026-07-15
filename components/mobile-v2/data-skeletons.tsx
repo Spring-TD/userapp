@@ -163,6 +163,32 @@ export function AuthRouteSkeleton() {
   )
 }
 
+/** Pending loan / mortgage applications list while data loads */
+export function PendingApplicationsListSkeleton() {
+  return (
+    <div className="space-y-3" aria-busy="true" aria-live="polite">
+      {Array.from({ length: 3 }).map((_, index) => (
+        <div key={index} className="rounded-xl bg-white px-4 py-4 shadow-[0_10px_28px_rgba(15,23,42,0.06)]">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1 space-y-2">
+              <Skeleton className={cn('h-4 w-[68%] rounded-md', sk)} />
+              <Skeleton className={cn('h-3 w-32 rounded-md', sk)} />
+            </div>
+            <div className="shrink-0 space-y-2 text-right">
+              <Skeleton className={cn('ml-auto h-4 w-20 rounded-md', sk)} />
+              <Skeleton className={cn('ml-auto h-3 w-16 rounded-md', sk)} />
+            </div>
+          </div>
+          <div className="mt-4 flex gap-2">
+            <Skeleton className={cn('h-10 flex-1 rounded-full', sk)} />
+            <Skeleton className={cn('h-10 flex-1 rounded-full', sk)} />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /** Pending loan / mortgage thread detail while application loads */
 export function PendingApplicationThreadSkeleton({
   title = 'Pending application',

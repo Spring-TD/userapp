@@ -19,20 +19,30 @@ function accountNumberFor(application: ProductApplication | null): string {
 export default function AccountDetailPage() {
   const params = useParams<{ applicationId: string }>()
   const applicationId = params.applicationId
-  const { wallet } = useUserWallet()
+  const { wallet, loading: walletLoading } = useUserWallet()
   const [applications, setApplications] = useState<ProductApplication[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
+    if (walletLoading) {
+      setLoading(true)
+      return
+    }
+
     const userId = wallet?.userId
     if (!userId) {
+      setApplications([])
+      setError('Unable to verify your account.')
       setLoading(false)
       return
     }
 
     let cancelled = false
+    setLoading(true)
+    setError(null)
+
     void fetchUserProductApplications(userId).then((result) => {
       if (cancelled) return
       setApplications(result.applications)
@@ -43,7 +53,7 @@ export default function AccountDetailPage() {
     return () => {
       cancelled = true
     }
-  }, [wallet?.userId])
+  }, [wallet?.userId, walletLoading])
 
   const selectedApplication = useMemo(
     () => applications.find((application) => application.id === applicationId) ?? null,
