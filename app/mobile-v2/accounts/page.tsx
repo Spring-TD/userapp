@@ -126,7 +126,7 @@ function ProductAccountCard({
     const [withdrawing, setWithdrawing] = useState(false);
     const [withdrawError, setWithdrawError] = useState<string | null>(null);
     const account = application.productWallet?.upstreamAccount;
-    const accountDetailsHref = productRoute(activeFilter);
+    const accountDetailsHref = `/mobile-v2/accounts/${application.id}`;
     const snapshot = activeFilter === 'Commodity' ? commoditySnapshot(application) : null;
     const holdingStatus = snapshot?.commodityHoldingStatus || application.status;
     const provisionStatus = account?.provisionStatus || application.loanWorkflowStatus || holdingStatus || application.status;
@@ -227,7 +227,13 @@ function ProductAccountCard({
     );
 
     if (activeFilter === 'Commodity' && withdrawable) {
-        return <div className="block">{content}</div>;
+        return (
+            <div className="block">
+                <Link href={accountDetailsHref} className="block">
+                    {content}
+                </Link>
+            </div>
+        );
     }
 
     return (
@@ -361,8 +367,8 @@ export default function AccountsPage() {
     const isSummaryBusy = walletLoading || summaryLoading || applicationsLoading;
 
     return (
-        <div className="flex min-h-full flex-col sf-page-bg relative">
-            <div className="flex-1 overflow-y-auto no-scrollbar pb-[calc(8rem+env(safe-area-inset-bottom))]">
+        <div className="relative flex h-full min-h-0 flex-col sf-page-bg">
+            <div className="min-h-0 flex-1 overflow-y-auto no-scrollbar pb-[calc(7rem+env(safe-area-inset-bottom))]">
                 <div className="px-6 pt-12 pb-4 flex items-center justify-between">
                     <div>
                         <h1 className="text-[19px] font-bold text-[#1E293B]">

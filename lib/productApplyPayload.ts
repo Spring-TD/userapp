@@ -4,7 +4,10 @@ import { sanitizeProductId } from '@/lib/sanitizeProductId'
 import { fetchAuthUserProfile, type AuthUserProfile } from '@/lib/userProfileClient'
 import { isUserKycApprovedFromProfile } from '@/lib/kycApproval'
 import { resolveWalletUserId } from '@/lib/resolveWalletUserId'
-import { TENANT_MERCHANT_ID_STORAGE_KEY } from '@/lib/mobileTenant/storageKeys'
+import {
+  TENANT_APP_ID_STORAGE_KEY,
+  TENANT_MERCHANT_ID_STORAGE_KEY,
+} from '@/lib/mobileTenant/storageKeys'
 
 export type ProductApplyBody = {
   userId: string
@@ -18,6 +21,7 @@ export type ProductApplyBody = {
   phone: string
   bvn: string
   country?: string
+  appId?: string
 }
 
 export type BuildProductApplyBodyResult =
@@ -123,6 +127,10 @@ export async function buildProductApplyBody(
     typeof window !== 'undefined'
       ? sessionStorage.getItem(TENANT_MERCHANT_ID_STORAGE_KEY)?.trim() || undefined
       : undefined
+  const sessionAppId =
+    typeof window !== 'undefined'
+      ? sessionStorage.getItem(TENANT_APP_ID_STORAGE_KEY)?.trim() || undefined
+      : undefined
   const merchantId = resolveMerchantId(sessionMerchantId, user)
   const applicantName = [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim()
   const email = user?.email?.trim() || ''
@@ -150,6 +158,7 @@ export async function buildProductApplyBody(
       phone,
       bvn,
       ...(user?.country ? { country: user.country } : {}),
+      ...(sessionAppId ? { appId: sessionAppId } : {}),
     },
   }
 }

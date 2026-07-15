@@ -63,7 +63,8 @@ export function MobileV2ThemedChrome({ children }: { children: ReactNode }) {
           className="pointer-events-none absolute top-0 left-1/2 z-50 hidden h-7 w-40 -translate-x-1/2 rounded-b-3xl bg-gray-900 md:block"
           aria-hidden
         />
-        <div className="relative min-h-0 flex-1 w-full overflow-y-auto overflow-x-hidden no-scrollbar bg-[var(--sf-page-bg-tint,var(--sf-shell,#2563EB))] transition-[background-color] duration-300">
+        {/* Pages fill the frame; they own scrolling + sticky bottom nav */}
+        <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-[var(--sf-page-bg-tint,var(--sf-shell,#2563EB))] transition-[background-color] duration-300">
           {children}
         </div>
       </div>

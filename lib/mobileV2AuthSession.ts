@@ -10,7 +10,8 @@ export const MOBILE_V2_LOGIN_PATH = "/mobile-v2/auth/login"
 const AUTH_PUBLIC_PREFIXES = ["/mobile-v2/auth/"] as const
 
 export function isMobileV2AuthPublicPath(pathname: string): boolean {
-  if (pathname === "/mobile-v2") return true
+  // Root serves the storefront splash/onboarding entry.
+  if (pathname === "/" || pathname === "/mobile-v2") return true
   return AUTH_PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))
 }
 

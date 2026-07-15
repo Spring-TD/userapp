@@ -49,20 +49,14 @@ import {
   type EmploymentDraft,
 } from '@/lib/applicationFlowValidation'
 import {
-  applicantProfileFromSubmissions,
-  applicantProfileSubmissions,
-  DEFAULT_APPLICANT_PROFILE,
-  LOAN_REASON_OPTIONS,
-  MARITAL_STATUS_OPTIONS,
-  mergeApplicantProfileSubmissions,
-  REPAYMENT_SOURCE_OPTIONS,
-  type ApplicantProfileDraft,
-} from '@/lib/applicantProfileFields'
-import {
-  PepSearchNotice,
-  SelectField,
-  YesNoField,
-} from '@/components/mobile-v2/application/ApplicantProfileFields'
+  DEFAULT_PLATFORM_FIELDS_DRAFT,
+  platformFieldsDraftFromApi,
+  platformFieldsDraftFromLegacyApplicantProfile,
+  platformFieldsFromDraft,
+  type PlatformFieldsDraft,
+} from '@/lib/platformApplicationFields'
+import { PlatformApplicationFieldsForm } from '@/components/mobile-v2/application/PlatformApplicationFieldsForm'
+import { usePlatformApplicationFieldCatalog } from '@/hooks/usePlatformApplicationFieldCatalog'
 import { isDuplicateAccountError } from '@/lib/resolveProductApplicationAccount'
 import { buildLoanApplicationDetails } from '@/lib/loanApplicationDetails'
 import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
@@ -88,7 +82,7 @@ type ApplicationDraft = {
   guarantors: Guarantor[]
   employmentDraft: EmploymentDraft
   guarantorDraft: Guarantor
-  applicantProfile: ApplicantProfileDraft
+  platformFields: PlatformFieldsDraft
   spouse: Guarantor | null
   spouseDraft: Guarantor
   updatedAt: string
@@ -799,7 +793,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     phone: '',
     email: '',
   })
-  const [applicantProfile, setApplicantProfile] = useState<ApplicantProfileDraft>(DEFAULT_APPLICANT_PROFILE)
+  const [platformFields, setPlatformFields] = useState<PlatformFieldsDraft>(DEFAULT_PLATFORM_FIELDS_DRAFT)
   const [spouse, setSpouse] = useState<Guarantor | null>(null)
   const [spouseDraft, setSpouseDraft] = useState<Guarantor>({
     name: '',
@@ -830,6 +824,12 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     enabled: Boolean(productId),
   })
   const parsedApplicationAmount = parseApplicationAmount(applicationAmount)
+  const productType = kind === 'loan' ? 'LOAN' : 'MORTGAGE'
+  const { fields: platformFieldCatalog, optionsByPath, loading: platformFieldsLoading } =
+    usePlatformApplicationFieldCatalog(productType)
+  const triggersSpouseKyc = platformFieldCatalog.some(
+    (field) => field.key === 'repayingWithSpouse' && field.triggersSpouseKyc,
+  )
   const amountValidationError =
     parsedApplicationAmount != null
       ? validateApplicationAmount(
@@ -852,16 +852,12 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
 
   const buildRequirementDrafts = (
     employment: EmploymentDraft,
-    profile: ApplicantProfileDraft,
     submissions: RequirementSubmission[],
   ) => {
     const drafts = submissions.filter(
       (submission) => submission.type !== 'document' && !isEmploymentSubmission(submission),
     )
-    return [
-      ...mergeApplicantProfileSubmissions(profile, drafts),
-      employmentSubmissionFromDraft(employment),
-    ]
+    return [employmentSubmissionFromDraft(employment), ...drafts]
   }
 
   const buildUploadedDrafts = (submissions: RequirementSubmission[]) =>
@@ -871,13 +867,17 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     const requirementDrafts = Array.isArray(progress.requirementDrafts) ? progress.requirementDrafts : []
     const uploadedDrafts = Array.isArray(progress.uploadedDrafts) ? progress.uploadedDrafts : []
     const employmentSubmission = requirementDrafts.find(isEmploymentSubmission)
+    const savedPlatformFields =
+      progress.metadata?.platformFields || initializedApplication?.platformFields || null
 
     setActiveStep(steps.includes(stepForProgressTab(progress.currentTab)) ? stepForProgressTab(progress.currentTab) : 'requirement')
     setRequirementSubmissions([
       ...requirementDrafts.filter((submission) => !isEmploymentSubmission(submission)),
       ...uploadedDrafts,
     ])
-    setApplicantProfile(applicantProfileFromSubmissions(requirementDrafts))
+    if (savedPlatformFields) {
+      setPlatformFields(platformFieldsDraftFromApi(savedPlatformFields))
+    }
     if (employmentSubmission) {
       setEmploymentDraft(employmentDraftFromSubmission(employmentSubmission))
     }
@@ -908,7 +908,13 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
           email: draft.guarantorDraft?.email || '',
           verificationUrl: draft.guarantorDraft?.verificationUrl,
         })
-        setApplicantProfile(draft.applicantProfile || DEFAULT_APPLICANT_PROFILE)
+        setPlatformFields(
+          draft.platformFields ||
+            platformFieldsDraftFromLegacyApplicantProfile(
+              (draft as { applicantProfile?: Parameters<typeof platformFieldsDraftFromLegacyApplicantProfile>[0] })
+                .applicantProfile || {},
+            ),
+        )
         setSpouse(draft.spouse || null)
         setSpouseDraft({
           name: draft.spouseDraft?.name || '',
@@ -917,6 +923,8 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
           verificationUrl: draft.spouseDraft?.verificationUrl,
         })
         setDraftNotice('Saved progress restored.')
+      } else if (initializedApplication?.platformFields) {
+        setPlatformFields(platformFieldsDraftFromApi(initializedApplication.platformFields))
       } else if (initializedApplication?.amount) {
         setApplicationAmount(
           defaultApplicationAmountValue(
@@ -947,13 +955,13 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         applicationAmount,
         amountMin: catalogProduct?.amountMin,
         amountMax: catalogProduct?.amountMax,
-        applicantProfile,
+        platformFields,
         employment: employmentDraft,
         otherRequirements,
         requirementSubmissions,
         requiresGuarantor,
         guarantorsCount: guarantors.length,
-        spouseRequired: applicantProfile.repayingWithSpouse === 'yes',
+        spouseRequired: platformFields.repayingWithSpouse === true && triggersSpouseKyc,
         spouseVerified: Boolean(spouse?.verificationUrl),
         productKind: kind,
       })
@@ -977,7 +985,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       guarantors,
       employmentDraft,
       guarantorDraft,
-      applicantProfile,
+      platformFields,
       spouse,
       spouseDraft,
     })
@@ -986,8 +994,10 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       const result = await saveApplicationProgress({
         applicationId,
         userId,
+        currentStep: activeStep === 'requirement' ? 'platform_fields' : 'apply',
         currentTab: progressTabForStep(activeStep),
-        requirementDrafts: buildRequirementDrafts(employmentDraft, applicantProfile, requirementSubmissions),
+        platformFields: platformFieldsFromDraft(platformFields),
+        requirementDrafts: buildRequirementDrafts(employmentDraft, requirementSubmissions),
         uploadedDrafts: buildUploadedDrafts(requirementSubmissions),
       })
       if (!result.ok) {
@@ -1006,7 +1016,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       void persistDraft(null)
     }, 800)
     return () => window.clearTimeout(timer)
-  }, [draftHydrated, currentDraftKey, activeStep, accepted, applicationAmount, requirementSubmissions, guarantors, employmentDraft, guarantorDraft, applicantProfile, spouse, spouseDraft])
+  }, [draftHydrated, currentDraftKey, activeStep, accepted, applicationAmount, requirementSubmissions, guarantors, employmentDraft, guarantorDraft, platformFields, spouse, spouseDraft])
 
   const handleStepChange = (step: StepId) => {
     const targetIndex = steps.indexOf(step)
@@ -1114,13 +1124,13 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       applicationAmount,
       amountMin: catalogProduct?.amountMin,
       amountMax: catalogProduct?.amountMax,
-      applicantProfile,
-      employment: employmentDraft,
-      otherRequirements,
-      requirementSubmissions,
-      requiresGuarantor,
-      guarantorsCount: guarantors.length,
-      spouseRequired: applicantProfile.repayingWithSpouse === 'yes',
+        platformFields,
+        employment: employmentDraft,
+        otherRequirements,
+        requirementSubmissions,
+        requiresGuarantor,
+        guarantorsCount: guarantors.length,
+        spouseRequired: platformFields.repayingWithSpouse === true && triggersSpouseKyc,
       spouseVerified: Boolean(spouse?.verificationUrl),
       productKind: kind,
     })
@@ -1151,7 +1161,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     setStepErrors([])
     try {
       const submissions: RequirementSubmission[] = [
-        ...buildRequirementDrafts(employmentDraft, applicantProfile, requirementSubmissions),
+        ...buildRequirementDrafts(employmentDraft, requirementSubmissions),
         ...buildUploadedDrafts(requirementSubmissions),
       ]
       const requirementsResult = await submitApplicationRequirements(applicationId, userId, submissions)
@@ -1164,6 +1174,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       const submitResult = await submitInitializedApplication(applicationId, {
         userId,
         acceptedTerms: true,
+        ...platformFieldsFromDraft(platformFields),
         ...(kind === 'mortgage'
           ? {
               mortgageSelection: {
@@ -1354,6 +1365,12 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       }
 
       setSpouse(addedSpouse)
+      setPlatformFields((current) => ({
+        ...current,
+        spouseFullName: addedSpouse.name,
+        spouseEmail: addedSpouse.email,
+        spousePhone: addedSpouse.phone,
+      }))
 
       const minimumGeneratingMs = 1200
       const elapsed = Date.now() - generatingStartedAt
@@ -1462,85 +1479,19 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
                 ) : null}
               </div>
 
-              <SectionTitle>
-                {kind === 'loan' ? 'Reason for the loan' : 'Reason for the mortgage'}
-              </SectionTitle>
-              <div className="space-y-3">
-                <SelectField
-                  placeholder="Select reason"
-                  value={applicantProfile.loanReason}
-                  onChange={(loanReason) =>
-                    setApplicantProfile((profile) => ({ ...profile, loanReason, loanReasonOther: '' }))
-                  }
-                  options={LOAN_REASON_OPTIONS}
-                />
-                {applicantProfile.loanReason === 'other' ? (
-                  <InputPill
-                    placeholder="Describe your reason"
-                    value={applicantProfile.loanReasonOther}
-                    onChange={(loanReasonOther) =>
-                      setApplicantProfile((profile) => ({ ...profile, loanReasonOther }))
-                    }
-                  />
-                ) : null}
-              </div>
-
-              <SectionTitle>Marital status</SectionTitle>
-              <SelectField
-                placeholder="Select marital status"
-                value={applicantProfile.maritalStatus}
-                onChange={(maritalStatus) =>
-                  setApplicantProfile((profile) => ({ ...profile, maritalStatus }))
-                }
-                options={MARITAL_STATUS_OPTIONS}
-              />
-
-              <SectionTitle>Monthly earnings</SectionTitle>
-              <InputPill
-                placeholder="How much do you earn monthly?"
-                value={applicantProfile.monthlyEarnings}
-                onChange={(monthlyEarnings) =>
-                  setApplicantProfile((profile) => ({ ...profile, monthlyEarnings }))
-                }
-                type="number"
-                inputMode="numeric"
-              />
-
-              <SectionTitle>Source of repayment</SectionTitle>
-              <div className="space-y-3">
-                <SelectField
-                  placeholder="Select source of repayment"
-                  value={applicantProfile.repaymentSource}
-                  onChange={(repaymentSource) =>
-                    setApplicantProfile((profile) => ({ ...profile, repaymentSource, repaymentSourceOther: '' }))
-                  }
-                  options={REPAYMENT_SOURCE_OPTIONS}
-                />
-                {applicantProfile.repaymentSource === 'other' ? (
-                  <InputPill
-                    placeholder="Describe your repayment source"
-                    value={applicantProfile.repaymentSourceOther}
-                    onChange={(repaymentSourceOther) =>
-                      setApplicantProfile((profile) => ({ ...profile, repaymentSourceOther }))
-                    }
-                  />
-                ) : null}
-              </div>
-
-              <YesNoField
-                label={
-                  kind === 'loan'
-                    ? 'Are you repaying this loan with a spouse?'
-                    : 'Are you repaying this mortgage with a spouse?'
-                }
-                value={applicantProfile.repayingWithSpouse}
-                onChange={(repayingWithSpouse) => {
-                  setApplicantProfile((profile) => ({ ...profile, repayingWithSpouse }))
-                  if (repayingWithSpouse === 'no') setSpouse(null)
+              <PlatformApplicationFieldsForm
+                fields={platformFieldCatalog}
+                optionsByPath={optionsByPath}
+                draft={platformFields}
+                onChange={(next) => {
+                  setPlatformFields(next)
+                  if (next.repayingWithSpouse === false) setSpouse(null)
                 }}
+                loading={platformFieldsLoading}
+                productKind={kind}
               />
 
-              {applicantProfile.repayingWithSpouse === 'yes' ? (
+              {platformFields.repayingWithSpouse === true && triggersSpouseKyc ? (
                 <div className="space-y-3">
                   <SectionTitle>Spouse KYC</SectionTitle>
                   {spouse?.verificationUrl ? (
@@ -1566,6 +1517,11 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
                       type="button"
                       onClick={() => {
                         setSpouseSubmitError(null)
+                        setSpouseDraft({
+                          name: platformFields.spouseFullName,
+                          email: platformFields.spouseEmail,
+                          phone: platformFields.spousePhone,
+                        })
                         setSheet('spouse_form')
                       }}
                       className={`inline-flex items-center gap-1 rounded-xl bg-gray-100 px-3 py-2 text-sm font-bold ${BRAND_INK}`}
@@ -1600,15 +1556,6 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
                   onChange={(hrEmail) => setEmploymentDraft((draft) => ({ ...draft, hrEmail }))}
                 />
               </div>
-
-              <YesNoField
-                label="Are you a politically exposed person?"
-                value={applicantProfile.politicallyExposed}
-                onChange={(politicallyExposed) =>
-                  setApplicantProfile((profile) => ({ ...profile, politicallyExposed }))
-                }
-              />
-              <PepSearchNotice isPep={applicantProfile.politicallyExposed === 'yes'} />
 
               {requiresGuarantor ? (
               <div className="space-y-3">
@@ -2018,19 +1965,28 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
             <InputPill
               placeholder="Spouse full name"
               value={spouseDraft.name}
-              onChange={(name) => setSpouseDraft((g) => ({ ...g, name }))}
+              onChange={(name) => {
+                setSpouseDraft((g) => ({ ...g, name }))
+                setPlatformFields((current) => ({ ...current, spouseFullName: name }))
+              }}
             />
             <InputPill
               placeholder="Spouse email"
               type="email"
               value={spouseDraft.email}
-              onChange={(email) => setSpouseDraft((g) => ({ ...g, email }))}
+              onChange={(email) => {
+                setSpouseDraft((g) => ({ ...g, email }))
+                setPlatformFields((current) => ({ ...current, spouseEmail: email }))
+              }}
             />
             <InputPill
               placeholder="Spouse phone"
               type="tel"
               value={spouseDraft.phone}
-              onChange={(phone) => setSpouseDraft((g) => ({ ...g, phone }))}
+              onChange={(phone) => {
+                setSpouseDraft((g) => ({ ...g, phone }))
+                setPlatformFields((current) => ({ ...current, spousePhone: phone }))
+              }}
             />
           </div>
           {spouseSubmitError ? (

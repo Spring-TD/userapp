@@ -1,5 +1,6 @@
 import { apiClient } from "@/lib/api"
 import { buildProductApplyBody, type ProductApplyBody } from "@/lib/productApplyPayload"
+import type { PlatformFields } from "@/lib/platformApplicationFields"
 import { resolveWalletUserId } from "@/lib/resolveWalletUserId"
 import { sanitizeProductId } from "@/lib/sanitizeProductId"
 import { TENANT_MERCHANT_ID_STORAGE_KEY } from "@/lib/mobileTenant/storageKeys"
@@ -20,10 +21,13 @@ export type RequirementSubmission = {
 export type ApplicationProgressTab = "requirement" | "fileUpload" | "loan" | string
 
 export type ApplicationProgress = {
-  currentStep?: "apply" | string
+  currentStep?: "apply" | "platform_fields" | string
   currentTab?: ApplicationProgressTab
   requirementDrafts?: RequirementSubmission[]
   uploadedDrafts?: RequirementSubmission[]
+  metadata?: {
+    platformFields?: PlatformFields
+  }
   lastSavedAt?: string
 }
 
@@ -43,6 +47,7 @@ export type StorefrontApplication = {
   createdAt?: string
   updatedAt?: string
   applicationProgress?: ApplicationProgress
+  platformFields?: PlatformFields
   account?: {
     id?: string
     accountNumber?: string
@@ -246,14 +251,24 @@ function humanizeApplicationError(message: string): string {
 
 export async function initializeProductApplication(
   productId: string,
-  options?: { amount?: number; currency?: string; productType?: ProductApplyBody["productType"] },
+  options?: {
+    amount?: number
+    currency?: string
+    productType?: ProductApplyBody["productType"]
+    platformFields?: PlatformFields
+  },
 ) {
   const built = await buildProductApplyBody(productId, options)
   if (!built.ok) return { ok: false as const, error: built.error }
 
-  const res = await apiClient.post<ApiEnvelope<StorefrontApplication>, ProductApplyBody>(
+  const payload = {
+    ...built.body,
+    ...(options?.platformFields ? { ...options.platformFields } : {}),
+  }
+
+  const res = await apiClient.post<ApiEnvelope<StorefrontApplication>, typeof payload>(
     "/v1/applications/init",
-    built.body,
+    payload,
     { includeAuth: true, timeout: 60_000 },
   )
 
@@ -396,25 +411,36 @@ export async function submitApplicationRequirements(
 export async function saveApplicationProgress({
   applicationId,
   userId,
+  currentStep,
   currentTab,
+  platformFields,
   requirementDrafts,
   uploadedDrafts,
 }: {
   applicationId: string
   userId: string
+  currentStep?: "apply" | "platform_fields" | string
   currentTab: ApplicationProgressTab
+  platformFields?: PlatformFields
   requirementDrafts?: RequirementSubmission[]
   uploadedDrafts?: RequirementSubmission[]
 }) {
+  const progressPayload: Record<string, unknown> = {
+    userId,
+    currentStep: currentStep || "apply",
+    currentTab,
+    ...(requirementDrafts !== undefined ? { requirementDrafts } : {}),
+    ...(uploadedDrafts !== undefined ? { uploadedDrafts } : {}),
+  }
+
+  if (platformFields && Object.keys(platformFields).length > 0) {
+    progressPayload.metadata = { platformFields }
+    Object.assign(progressPayload, platformFields)
+  }
+
   const res = await apiClient.patch<ApiEnvelope<StorefrontApplication>>(
     `/v1/applications/${encodeURIComponent(applicationId)}/progress`,
-    {
-      userId,
-      currentStep: "apply",
-      currentTab,
-      ...(requirementDrafts !== undefined ? { requirementDrafts } : {}),
-      ...(uploadedDrafts !== undefined ? { uploadedDrafts } : {}),
-    },
+    progressPayload,
     { includeAuth: true, timeout: 30_000 },
   )
 
@@ -454,7 +480,11 @@ export async function addApplicationGuarantor(
 
 export async function submitInitializedApplication(
   applicationId: string,
-  body: { userId: string; acceptedTerms: boolean; mortgageSelection?: Record<string, unknown> },
+  body: {
+    userId: string
+    acceptedTerms: boolean
+    mortgageSelection?: Record<string, unknown>
+  } & PlatformFields,
 ) {
   const res = await apiClient.post<ApiEnvelope<StorefrontApplication>>(
     `/v1/applications/${encodeURIComponent(applicationId)}/submit`,
