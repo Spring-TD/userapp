@@ -1,13 +1,21 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 
+import { LoanPendingThreadScreen } from '@/components/mobile-v2/loan/LoanPendingThreadScreen'
+import { MortgagePendingThreadScreen } from '@/components/mobile-v2/mortgage/MortgagePendingThreadScreen'
 import { MobileFlowShell } from '@/components/mobile-v2/MobileFlowShell'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useUserWallet } from '@/hooks/useUserWallet'
 import { fetchMobileProductById } from '@/lib/fetchMobileProductById'
+import { initLoanWorkflowSubmitted, readLoanWorkflow } from '@/lib/loanWorkflow'
+import {
+  initMortgageWorkflowSubmitted,
+  readMortgageWorkflow,
+} from '@/lib/mortgageWorkflow'
 import { fetchUserProductApplications } from '@/lib/services/productApplicationApi'
+import type { StorefrontApplication } from '@/lib/storefrontApplicationClient'
 import type { MobileProduct } from '@/lib/storefrontProducts'
 import { formatWalletBalance } from '@/lib/userWallet'
 import type { ProductApplication } from '@/types/productApplication'
@@ -38,6 +46,62 @@ function productFacts(product: MobileProduct, currency: string): Array<[string, 
     ['Unit', product.unitOfMeasure || ''],
     ['Return on investment', product.roi || ''],
   ].filter((row): row is [string, string] => Boolean(row[1]))
+}
+
+function normalizeType(value?: string | null): string {
+  return String(value || '').trim().toUpperCase()
+}
+
+function isPendingApplication(status?: string | null): boolean {
+  const normalized = String(status || '').trim().toLowerCase()
+  if (!normalized) return true
+  if (['completed', 'disbursed', 'active', 'allocated', 'rejected', 'declined', 'cancelled', 'canceled'].some((token) =>
+    normalized.includes(token),
+  )) {
+    return false
+  }
+  return (
+    normalized.includes('pending') ||
+    normalized.includes('submitted') ||
+    normalized.includes('review') ||
+    normalized.includes('approved') ||
+    normalized.includes('offer') ||
+    normalized.includes('awaiting') ||
+    normalized.includes('progress') ||
+    normalized.includes('inspection') ||
+    normalized.includes('payment') ||
+    normalized.includes('contract')
+  )
+}
+
+function toStorefrontApplication(application: ProductApplication): StorefrontApplication {
+  return {
+    id: application.id,
+    _id: application.id,
+    userId: application.userId,
+    productId: application.productId,
+    productName: application.productName,
+    productType: application.productType,
+    status: application.status,
+    loanWorkflowStatus: application.loanWorkflowStatus,
+    requirementsSnapshot: application.requirementsSnapshot as StorefrontApplication['requirementsSnapshot'],
+    productWallet: application.productWallet,
+    createdAt: application.createdAt,
+    updatedAt: application.updatedAt,
+    amount: (application as { amount?: number }).amount,
+    currency: (application as { currency?: string }).currency,
+  }
+}
+
+function EmbeddedWorkflowFallback() {
+  return (
+    <div className="space-y-3 rounded-2xl border sf-border-subtle px-4 py-5">
+      <Skeleton className="h-4 w-24 bg-gray-200/90" />
+      <Skeleton className="h-3 w-48 bg-gray-200/90" />
+      <Skeleton className="h-16 w-full bg-gray-200/90" />
+      <Skeleton className="h-16 w-full bg-gray-200/90" />
+    </div>
+  )
 }
 
 export default function AppliedProductDetailPage() {
@@ -97,6 +161,27 @@ export default function AppliedProductDetailPage() {
     }
   }, [applicationId, wallet?.userId, walletLoading])
 
+  const productType = normalizeType(application?.productType || product?.type)
+  const isLoan = productType === 'LOAN'
+  const isMortgage = productType === 'MORTGAGE'
+  const showWorkflow =
+    Boolean(application) && (isLoan || isMortgage) && isPendingApplication(application?.status)
+
+  useEffect(() => {
+    if (!application || !showWorkflow) return
+    if (isLoan && !readLoanWorkflow(application.id)) {
+      initLoanWorkflowSubmitted(application.id, application.productId)
+    }
+    if (isMortgage && !readMortgageWorkflow(application.id)) {
+      initMortgageWorkflowSubmitted(application.id, application.productId, 'equity_contribution')
+    }
+  }, [application, isLoan, isMortgage, showWorkflow])
+
+  const storefrontApplication = useMemo(
+    () => (application ? toStorefrontApplication(application) : null),
+    [application],
+  )
+
   const currency = wallet?.currency || 'NGN'
   const facts = product ? productFacts(product, currency) : []
 
@@ -152,12 +237,28 @@ export default function AppliedProductDetailPage() {
             </section>
           ) : null}
 
-          {product.requirements?.length ? (
+          {showWorkflow && storefrontApplication ? (
+            <section>
+              <h2 className="mb-3 text-sm font-bold sf-text-ink">
+                {isMortgage ? 'Mortgage workflow' : 'Loan workflow'}
+              </h2>
+              <Suspense fallback={<EmbeddedWorkflowFallback />}>
+                {isMortgage ? (
+                  <MortgagePendingThreadScreen application={storefrontApplication} embedded />
+                ) : (
+                  <LoanPendingThreadScreen application={storefrontApplication} embedded />
+                )}
+              </Suspense>
+            </section>
+          ) : product.requirements?.length ? (
             <section>
               <h2 className="mb-3 text-sm font-bold sf-text-ink">Requirements</h2>
               <div className="space-y-2">
                 {product.requirements.map((requirement, index) => (
-                  <div key={`${requirement.requirementType || 'requirement'}-${index}`} className="sf-accent-soft rounded-xl px-4 py-3">
+                  <div
+                    key={`${requirement.requirementType || 'requirement'}-${index}`}
+                    className="sf-accent-soft rounded-xl px-4 py-3"
+                  >
                     <p className="text-xs font-semibold sf-text-ink">
                       {requirement.requirementType || requirement.contentType || 'Requirement'}
                     </p>

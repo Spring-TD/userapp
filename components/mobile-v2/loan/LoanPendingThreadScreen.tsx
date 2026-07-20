@@ -92,11 +92,14 @@ function ThreadRow({
 type LoanPendingThreadScreenProps = {
   application: StorefrontApplication
   backHref?: string
+  /** When true, render only the workflow (no page chrome / duplicate summary). */
+  embedded?: boolean
 }
 
 export function LoanPendingThreadScreen({
   application,
   backHref = '/mobile-v2/products/loan/pending',
+  embedded = false,
 }: LoanPendingThreadScreenProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -137,13 +140,72 @@ export function LoanPendingThreadScreen({
   )
 
   useEffect(() => {
+    if (embedded) return
     const action = searchParams.get('action') as LoanWorkflowModal | null
     if (!action) return
     setActiveModal(action)
     router.replace(`/mobile-v2/products/loan/pending/${encodeURIComponent(applicationId)}`, {
       scroll: false,
     })
-  }, [applicationId, router, searchParams])
+  }, [applicationId, embedded, router, searchParams])
+
+  const handleCta = () => {
+    if (!cta) return
+    if (cta.modal) {
+      openStepModal(currentStep)
+      return
+    }
+    if (currentStep === 'loan_disbursed') {
+      openStepModal('loan_disbursed')
+      return
+    }
+    router.push(cta.href)
+  }
+
+  const workflowCard = (
+    <div className="rounded-2xl border sf-border-subtle bg-white px-4 py-5 shadow-sm">
+      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Workflow</p>
+      <p className="mb-4 text-xs text-gray-500">
+        Follow each step below. Tap the current step to continue.
+      </p>
+      {thread.map((item) => (
+        <ThreadRow
+          key={item.step}
+          item={item}
+          onAction={
+            item.status === 'current' && cta
+              ? () => openStepModal(item.step)
+              : undefined
+          }
+        />
+      ))}
+      {embedded && cta ? (
+        <Button
+          className="mt-2 h-12 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-sm font-semibold text-white"
+          onClick={handleCta}
+        >
+          {cta.label}
+        </Button>
+      ) : null}
+    </div>
+  )
+
+  if (embedded) {
+    return (
+      <div key={workflowVersion}>
+        {workflowCard}
+        <LoanWorkflowModals
+          active={activeModal}
+          onClose={() => setActiveModal(null)}
+          application={application}
+          applicationId={applicationId}
+          product={product}
+          providerName={displayName || undefined}
+          onStepAdvanced={refreshWorkflow}
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="relative flex min-h-full flex-col sf-page-bg-tint" key={workflowVersion}>
@@ -170,40 +232,14 @@ export function LoanPendingThreadScreen({
           </p>
         </div>
 
-        <div className="rounded-2xl bg-white px-4 py-5 shadow-sm">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Workflow</p>
-          <p className="mb-4 text-xs text-gray-500">
-            Follow each step below. Tap the current step to continue.
-          </p>
-          {thread.map((item) => (
-            <ThreadRow
-              key={item.step}
-              item={item}
-              onAction={
-                item.status === 'current' && cta
-                  ? () => openStepModal(item.step)
-                  : undefined
-              }
-            />
-          ))}
-        </div>
+        {workflowCard}
       </div>
 
       {cta ? (
         <div className="absolute bottom-0 left-0 right-0 z-40 border-t border-gray-100 bg-white px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
           <Button
             className="h-12 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-sm font-semibold text-white"
-            onClick={() => {
-              if (cta.modal) {
-                openStepModal(currentStep)
-                return
-              }
-              if (currentStep === 'loan_disbursed') {
-                openStepModal('loan_disbursed')
-                return
-              }
-              router.push(cta.href)
-            }}
+            onClick={handleCta}
           >
             {cta.label}
           </Button>

@@ -21,8 +21,16 @@ import { mortgagePendingDetailHref } from '@/lib/mortgageApplyRoutes'
 import { loanPendingDetailHref } from '@/lib/loanApplyRoutes'
 
 type PendingKind = 'loan' | 'mortgage'
+type PendingScreenKind = PendingKind | 'all'
 
 const PENDING_WORKFLOW_STATUSES = new Set(['account_created', 'requested', 'under_review', 'pending'])
+
+function applicationPendingKind(application: StorefrontApplication): PendingKind | null {
+  const type = String(application.productType || '').toUpperCase()
+  if (type === 'LOAN') return 'loan'
+  if (type === 'MORTGAGE') return 'mortgage'
+  return null
+}
 
 function isPendingApplication(application: StorefrontApplication, kind: PendingKind) {
   const status = String(application.status || '').toLowerCase()
@@ -80,13 +88,19 @@ function mortgageNextStepLabel(application: StorefrontApplication) {
   return current?.title ?? 'In progress'
 }
 
-export function PendingProductApplicationsScreen({ kind }: { kind: PendingKind }) {
+export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreenKind }) {
   const [applications, setApplications] = useState<StorefrontApplication[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const productType = kind === 'loan' ? 'LOAN' : 'MORTGAGE'
-  const backHref = kind === 'loan' ? '/mobile-v2/products/loan' : '/mobile-v2/products/mortgage'
-  const title = kind === 'loan' ? 'My Loan' : 'Pending Mortgage'
+  const backHref =
+    kind === 'loan'
+      ? '/mobile-v2/products/loan'
+      : kind === 'mortgage'
+        ? '/mobile-v2/products/mortgage'
+        : '/mobile-v2/home'
+  const title =
+    kind === 'loan' ? 'My Loan' : kind === 'mortgage' ? 'Pending Mortgage' : 'Pending applications'
+  const emptyLabel = kind === 'all' ? 'applications' : `${kind} applications`
 
   useEffect(() => {
     let cancelled = false
@@ -116,10 +130,14 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingKind }
   const pendingApplications = useMemo(
     () =>
       applications
-        .filter((application) => String(application.productType || '').toUpperCase() === productType)
-        .filter((application) => isPendingApplication(application, kind))
+        .filter((application) => {
+          const appKind = applicationPendingKind(application)
+          if (!appKind) return false
+          if (kind !== 'all' && appKind !== kind) return false
+          return isPendingApplication(application, appKind)
+        })
         .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime()),
-    [applications, kind, productType],
+    [applications, kind],
   )
 
   return (
@@ -142,7 +160,7 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingKind }
             <div className="rounded-2xl bg-red-50 px-4 py-6 text-center text-sm text-red-600">{error}</div>
           ) : pendingApplications.length === 0 ? (
             <div className="rounded-2xl bg-gray-50 px-4 py-8 text-center">
-              <p className="text-sm font-semibold text-gray-900">No pending {kind} applications</p>
+              <p className="text-sm font-semibold text-gray-900">No pending {emptyLabel}</p>
               <p className="mt-1 text-xs text-gray-500">Pending applications will appear here once you start an application.</p>
             </div>
           ) : (
@@ -150,26 +168,28 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingKind }
               {pendingApplications.map((application) => {
                 const applicationId = String(application.id ?? application._id ?? '')
                 const productId = String(application.productId ?? '')
+                const appKind = applicationPendingKind(application)
+                if (!appKind) return null
                 const mortgageLocal = readMortgageWorkflow(applicationId)
                 const loanLocal = readLoanWorkflow(applicationId)
                 const mortgageStep =
-                  kind === 'mortgage' ? resolveMortgageWorkflowStep(application, mortgageLocal) : null
-                const loanStep = kind === 'loan' ? resolveLoanWorkflowStep(application, loanLocal) : null
+                  appKind === 'mortgage' ? resolveMortgageWorkflowStep(application, mortgageLocal) : null
+                const loanStep = appKind === 'loan' ? resolveLoanWorkflowStep(application, loanLocal) : null
                 const mortgageCta =
-                  kind === 'mortgage' && productId && applicationId && mortgageStep
+                  appKind === 'mortgage' && productId && applicationId && mortgageStep
                     ? mortgageStepCta(mortgageStep, productId, applicationId)
                     : null
                 const loanCta =
-                  kind === 'loan' && applicationId && loanStep ? loanStepCta(loanStep, applicationId) : null
-                const cta = kind === 'mortgage' ? mortgageCta : loanCta
+                  appKind === 'loan' && applicationId && loanStep ? loanStepCta(loanStep, applicationId) : null
+                const cta = appKind === 'mortgage' ? mortgageCta : loanCta
                 const detailHref =
-                  kind === 'mortgage' && applicationId
+                  appKind === 'mortgage' && applicationId
                     ? mortgagePendingDetailHref(applicationId)
-                    : kind === 'loan' && applicationId
+                    : appKind === 'loan' && applicationId
                       ? loanPendingDetailHref(applicationId)
                       : null
                 const nextStepLabel =
-                  kind === 'mortgage'
+                  appKind === 'mortgage'
                     ? mortgageNextStepLabel(application)
                     : loanNextStepLabel(application)
 
@@ -180,7 +200,12 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingKind }
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
-                        <h2 className="truncate text-sm font-medium text-gray-950">{titleFor(application, kind)}</h2>
+                        <h2 className="truncate text-sm font-medium text-gray-950">{titleFor(application, appKind)}</h2>
+                        {kind === 'all' ? (
+                          <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                            {appKind}
+                          </p>
+                        ) : null}
                         <p className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--sf-button,#1E40AF)]">
                           Next: {nextStepLabel}
                         </p>

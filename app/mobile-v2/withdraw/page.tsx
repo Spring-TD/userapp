@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ChevronLeft, Download, Mail } from 'lucide-react'
+import { Download, Mail, Plus } from 'lucide-react'
 
 import { MobileFlowShell } from '@/components/mobile-v2/MobileFlowShell'
 import { PinInput } from '@/components/mobile-v2/transaction-pin/PinInput'
@@ -23,6 +23,8 @@ import type { TransactionReceiptData } from '@/lib/transactionReceipt'
 function accountLabel(a: SavedExternalBankAccount): string {
   return a.label?.trim() || `${a.bankName} · ${a.accountNumber}`
 }
+
+const ADD_BENEFICIARY_HREF = '/mobile-v2/bank-accounts/add?returnTo=/mobile-v2/withdraw'
 
 export default function WithdrawPage() {
   const router = useRouter()
@@ -54,40 +56,47 @@ export default function WithdrawPage() {
     [accounts, selectedId],
   )
 
-  useEffect(() => {
+  const loadAccounts = useCallback(async () => {
     if (!userId) {
       setLoading(false)
       return
     }
 
-    let cancelled = false
-    void (async () => {
-      setLoading(true)
-      const [accountsResult, pinResult] = await Promise.all([
-        fetchExternalBankAccounts(userId),
-        fetchTransactionPinStatus(userId),
-      ])
-      if (cancelled) return
+    setLoading(true)
+    const [accountsResult, pinResult] = await Promise.all([
+      fetchExternalBankAccounts(userId),
+      fetchTransactionPinStatus(userId),
+    ])
 
-      const active = accountsResult.accounts.filter((a) => a.status !== 'deleted')
-      setAccounts(active)
+    const active = accountsResult.accounts.filter((a) => a.status !== 'deleted')
+    setAccounts(active)
+    setSelectedId((current) => {
+      if (current && active.some((a) => a.id === current)) return current
       const defaultAccount = active.find((a) => a.isDefault) ?? active[0] ?? null
-      setSelectedId(defaultAccount?.id ?? null)
-      setError(accountsResult.error)
+      return defaultAccount?.id ?? null
+    })
+    setError(accountsResult.error)
 
-      if (pinResult.status) {
-        setPinRequired(!pinResult.status.hasTransactionPin)
-        setPinLocked(pinResult.status.locked)
-        setLockedUntil(pinResult.status.lockedUntil)
-      }
-
-      setLoading(false)
-    })()
-
-    return () => {
-      cancelled = true
+    if (pinResult.status) {
+      setPinRequired(!pinResult.status.hasTransactionPin)
+      setPinLocked(pinResult.status.locked)
+      setLockedUntil(pinResult.status.lockedUntil)
     }
+
+    setLoading(false)
   }, [userId])
+
+  useEffect(() => {
+    void loadAccounts()
+  }, [loadAccounts])
+
+  useEffect(() => {
+    const onFocus = () => {
+      void loadAccounts()
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [loadAccounts])
 
   const amountNum = useMemo(() => {
     const n = Number(amount.replace(/,/g, ''))
@@ -233,16 +242,26 @@ export default function WithdrawPage() {
           <p className="text-sm font-semibold sf-text-ink">No saved bank accounts</p>
           <p className="mt-1 text-xs text-gray-500">Add a bank account before withdrawing.</p>
           <Link
-            href="/mobile-v2/bank-accounts/add"
-            className="sf-btn mt-4 inline-flex h-11 items-center justify-center rounded-xl px-6 text-sm font-semibold"
+            href={ADD_BENEFICIARY_HREF}
+            className="sf-btn mt-4 inline-flex h-11 items-center justify-center gap-2 rounded-xl px-6 text-sm font-semibold"
           >
-            Add bank account
+            <Plus className="h-4 w-4" />
+            Add beneficiary account
           </Link>
         </div>
       ) : (
         <div className="mt-5 space-y-4">
           <div>
-            <label className="text-xs font-semibold sf-text-ink">Destination account</label>
+            <div className="flex items-center justify-between gap-3">
+              <label className="text-xs font-semibold sf-text-ink">Destination account</label>
+              <Link
+                href={ADD_BENEFICIARY_HREF}
+                className="inline-flex items-center gap-1 text-xs font-semibold sf-text-button"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add new
+              </Link>
+            </div>
             <select
               value={selectedId ?? ''}
               onChange={(e) => setSelectedId(e.target.value)}
@@ -255,8 +274,12 @@ export default function WithdrawPage() {
                 </option>
               ))}
             </select>
-            <Link href="/mobile-v2/bank-accounts/add" className="mt-2 inline-block text-xs font-semibold sf-text-button">
-              Add another beneficiary account
+            <Link
+              href={ADD_BENEFICIARY_HREF}
+              className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border sf-border-subtle bg-white text-sm font-semibold sf-text-button"
+            >
+              <Plus className="h-4 w-4" />
+              Add new beneficiary account
             </Link>
           </div>
 

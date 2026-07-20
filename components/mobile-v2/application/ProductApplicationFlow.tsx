@@ -53,6 +53,7 @@ import {
   platformFieldsDraftFromApi,
   platformFieldsDraftFromLegacyApplicantProfile,
   platformFieldsFromDraft,
+  resolvePlatformFieldsFromApplication,
   type PlatformFieldsDraft,
 } from '@/lib/platformApplicationFields'
 import { PlatformApplicationFieldsForm } from '@/components/mobile-v2/application/PlatformApplicationFieldsForm'
@@ -88,7 +89,7 @@ type ApplicationDraft = {
   updatedAt: string
 }
 
-type ProgressTab = 'requirement' | 'fileUpload' | 'loan'
+type ProgressTab = 'requirement' | 'fileUpload' | 'loan' | 'pep_and_reason'
 
 const PRIMARY = 'bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white'
 const BRAND_INK = 'text-[var(--sf-ink,#1E293B)]'
@@ -142,12 +143,14 @@ function clearApplicationDraft(key: string) {
 function progressTabForStep(step: StepId): ProgressTab {
   if (step === 'file') return 'fileUpload'
   if (step === 'property' || step === 'product') return 'loan'
+  if (step === 'requirement') return 'pep_and_reason'
   return 'requirement'
 }
 
 function stepForProgressTab(tab?: string): StepId {
   if (tab === 'fileUpload') return 'file'
   if (tab === 'loan') return 'product'
+  if (tab === 'pep_and_reason') return 'requirement'
   return 'requirement'
 }
 
@@ -872,8 +875,10 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     const requirementDrafts = Array.isArray(progress.requirementDrafts) ? progress.requirementDrafts : []
     const uploadedDrafts = Array.isArray(progress.uploadedDrafts) ? progress.uploadedDrafts : []
     const employmentSubmission = requirementDrafts.find(isEmploymentSubmission)
-    const savedPlatformFields =
-      progress.metadata?.platformFields || initializedApplication?.platformFields || null
+    const savedPlatformFields = resolvePlatformFieldsFromApplication({
+      platformFields: progress.metadata?.platformFields ?? initializedApplication?.platformFields ?? undefined,
+      applicationProgress: progress,
+    })
 
     setActiveStep(steps.includes(stepForProgressTab(progress.currentTab)) ? stepForProgressTab(progress.currentTab) : 'requirement')
     setRequirementSubmissions([
@@ -928,15 +933,18 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
           verificationUrl: draft.spouseDraft?.verificationUrl,
         })
         setDraftNotice('Saved progress restored.')
-      } else if (initializedApplication?.platformFields) {
-        setPlatformFields(platformFieldsDraftFromApi(initializedApplication.platformFields))
-      } else if (initializedApplication?.amount) {
-        setApplicationAmount(
-          defaultApplicationAmountValue(
-            initializedApplication.amount,
-            catalogProduct?.amountMin,
-          ),
-        )
+      } else {
+        const savedPlatformFields = resolvePlatformFieldsFromApplication(initializedApplication)
+        if (savedPlatformFields) {
+          setPlatformFields(platformFieldsDraftFromApi(savedPlatformFields))
+        } else if (initializedApplication?.amount) {
+          setApplicationAmount(
+            defaultApplicationAmountValue(
+              initializedApplication.amount,
+              catalogProduct?.amountMin,
+            ),
+          )
+        }
       }
     }
     setDraftHydrated(true)

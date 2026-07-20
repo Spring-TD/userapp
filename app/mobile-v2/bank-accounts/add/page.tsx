@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Loader2, Search } from "lucide-react"
 
 import { MobileFlowShell } from "@/components/mobile-v2/MobileFlowShell"
@@ -13,8 +13,16 @@ import {
 } from "@/lib/services/externalBankAccountApi"
 import type { BankPickerItem } from "@/types/externalBankAccount"
 
+function safeReturnPath(raw: string | null): string {
+  if (!raw) return "/mobile-v2/bank-accounts"
+  if (!raw.startsWith("/mobile-v2/")) return "/mobile-v2/bank-accounts"
+  return raw
+}
+
 export default function AddBankAccountPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const returnTo = safeReturnPath(searchParams.get("returnTo"))
   const { wallet } = useUserWallet()
   const userId = wallet?.userId ?? null
 
@@ -97,7 +105,7 @@ export default function AddBankAccountPage() {
       return
     }
 
-    router.replace("/mobile-v2/bank-accounts")
+    router.replace(returnTo)
   }
 
   return (
