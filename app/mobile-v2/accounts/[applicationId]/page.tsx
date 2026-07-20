@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
 import { MobileFlowShell } from '@/components/mobile-v2/MobileFlowShell'
 import { useUserWallet } from '@/hooks/useUserWallet'
-import { fetchUserProductApplications } from '@/lib/services/productApplicationApi'
+import { resolveUserProductApplication } from '@/lib/services/productApplicationApi'
 import { formatWalletBalance } from '@/lib/userWallet'
 import type { ProductApplication } from '@/types/productApplication'
 
@@ -18,9 +18,10 @@ function accountNumberFor(application: ProductApplication | null): string {
 
 export default function AccountDetailPage() {
   const params = useParams<{ applicationId: string }>()
-  const applicationId = params.applicationId
+  const applicationId = decodeURIComponent(String(params.applicationId || ''))
   const { wallet, loading: walletLoading } = useUserWallet()
   const [applications, setApplications] = useState<ProductApplication[]>([])
+  const [selectedApplication, setSelectedApplication] = useState<ProductApplication | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -34,7 +35,16 @@ export default function AccountDetailPage() {
     const userId = wallet?.userId
     if (!userId) {
       setApplications([])
+      setSelectedApplication(null)
       setError('Unable to verify your account.')
+      setLoading(false)
+      return
+    }
+
+    if (!applicationId) {
+      setApplications([])
+      setSelectedApplication(null)
+      setError('Account record not found.')
       setLoading(false)
       return
     }
@@ -43,31 +53,29 @@ export default function AccountDetailPage() {
     setLoading(true)
     setError(null)
 
-    void fetchUserProductApplications(userId).then((result) => {
+    void resolveUserProductApplication(userId, applicationId).then((result) => {
       if (cancelled) return
+      setSelectedApplication(result.application)
       setApplications(result.applications)
-      setError(result.error)
+      setError(result.application ? null : result.error || 'Account record not found.')
       setLoading(false)
     })
 
     return () => {
       cancelled = true
     }
-  }, [wallet?.userId, walletLoading])
-
-  const selectedApplication = useMemo(
-    () => applications.find((application) => application.id === applicationId) ?? null,
-    [applications, applicationId],
-  )
+  }, [applicationId, wallet?.userId, walletLoading])
 
   const relatedApplications = useMemo(() => {
     const accountNumber = accountNumberFor(selectedApplication)
     if (!accountNumber) {
       return selectedApplication ? [selectedApplication] : []
     }
-    return applications.filter(
+    const related = applications.filter(
       (application) => accountNumberFor(application) === accountNumber,
     )
+    if (related.length > 0) return related
+    return selectedApplication ? [selectedApplication] : []
   }, [applications, selectedApplication])
 
   const account = selectedApplication?.productWallet?.upstreamAccount
@@ -118,7 +126,8 @@ export default function AccountDetailPage() {
             </div>
             <p className="mt-3 text-sm text-white/80">{account?.bankName || 'Provider bank'}</p>
             <p className="mt-1 text-xs text-white/60">
-              {relatedApplications.length} product{relatedApplications.length === 1 ? '' : 's'} running on this account
+              {relatedApplications.length} product{relatedApplications.length === 1 ? '' : 's'} running on this
+              account
             </p>
           </div>
 

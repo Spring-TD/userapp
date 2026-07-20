@@ -141,6 +141,63 @@ function provisionStatusTone(status?: string | null): string {
     return 'text-orange-500'
 }
 
+function normalizeStatusToken(status?: string | null): string {
+    return String(status || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[_-]+/g, ' ')
+}
+
+function isLiveStatusToken(normalized: string): boolean {
+    if (!normalized) return false
+    return (
+        /\bactive\b/.test(normalized) ||
+        normalized.includes('disbursed') ||
+        normalized.includes('successful') ||
+        normalized.includes('completed')
+    )
+}
+
+function isPendingProvisionToken(normalized: string): boolean {
+    if (!normalized) return false
+    return (
+        normalized.includes('account requested') ||
+        normalized === 'requested' ||
+        normalized.includes('pending') ||
+        normalized.includes('under review') ||
+        normalized.includes('provision') ||
+        normalized.includes('draft') ||
+        normalized.includes('cancelled') ||
+        normalized.includes('canceled') ||
+        normalized.includes('rejected') ||
+        normalized.includes('failed')
+    )
+}
+
+/**
+ * Count "Active" from the same badge the card shows (provision status),
+ * not application workflow status — e.g. provision ACTIVE + application PENDING is still Active.
+ */
+function isActiveProductApplication(application: ProductApplication): boolean {
+    const provision = normalizeStatusToken(
+        application.productWallet?.upstreamAccount?.provisionStatus,
+    )
+    if (provision) {
+        if (isLiveStatusToken(provision)) return true
+        if (isPendingProvisionToken(provision)) return false
+    }
+
+    const status = normalizeStatusToken(application.status)
+    const workflow = normalizeStatusToken(application.loanWorkflowStatus)
+    if (isLiveStatusToken(status) || isLiveStatusToken(workflow)) return true
+    return false
+}
+
+function isActiveSummaryAccount(status?: string | null): boolean {
+    const normalized = normalizeStatusToken(status)
+    return isLiveStatusToken(normalized)
+}
+
 function ProductAccountCard({
     application,
     activeFilter,
@@ -386,8 +443,11 @@ export default function AccountsPage() {
         activeFilter === 'Commodity'
             ? aggregateCommodityHoldingBalance(activeApplications)
             : 0;
-    const createdAccountCount = activeApplications.length;
-    const displayedAccountCount = Math.max(activeSummary.accountCount, createdAccountCount);
+    const activeStatusApplications = activeApplications.filter(isActiveProductApplication);
+    const activeStatusFromSummary = (activeSummary.accounts || []).filter((account) =>
+        isActiveSummaryAccount(account.status),
+    ).length;
+    const displayedAccountCount = Math.max(activeStatusApplications.length, activeStatusFromSummary);
     const activeTotalAmount =
         activeFilter === 'Commodity' ? commodityHoldingTotal : activeSummary.totalAmount;
     const activeFormattedBalance = formatWalletBalance(
