@@ -17,6 +17,7 @@ import {
     ArrowDownLeft,
     FileText,
     Building2,
+    Clock,
     X,
 } from 'lucide-react';
 import { CopyableDetailRow } from '@/components/mobile-v2/CopyableDetailRow';
@@ -141,6 +142,7 @@ export default function HomePage() {
                 label: 'Withdraw',
                 link: '/mobile-v2/withdraw',
             },
+            { icon: <Clock className="w-6 h-6" />, label: 'Pending', link: '/mobile-v2/pending' },
             { icon: <FileText className="w-6 h-6" />, label: 'Records', link: '/mobile-v2/orders' },
         ];
         return [...productQuickLinks, ...utilityQuickActions];

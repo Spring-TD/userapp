@@ -70,6 +70,31 @@ export const DEFAULT_PLATFORM_FIELDS_DRAFT: PlatformFieldsDraft = {
   spouseCountry: '',
 }
 
+/** Bind PEP + platform fields from GET application (submitted or draft progress). */
+export function resolvePlatformFieldsFromApplication(
+  application?: {
+    platformFields?: PlatformFields | null
+    applicationProgress?: { metadata?: { platformFields?: PlatformFields } } | null
+  } | null,
+): PlatformFields | undefined {
+  if (!application) return undefined
+  const topLevel = application.platformFields ?? undefined
+  const fromProgress = application.applicationProgress?.metadata?.platformFields ?? undefined
+  if (!topLevel && !fromProgress) return undefined
+  return { ...(fromProgress ?? {}), ...(topLevel ?? {}) }
+}
+
+export function resolveIsPoliticallyExposedPerson(
+  application?: {
+    platformFields?: PlatformFields | null
+    applicationProgress?: { metadata?: { platformFields?: PlatformFields } } | null
+  } | null,
+): boolean | undefined {
+  const pep = resolvePlatformFieldsFromApplication(application)?.isPoliticallyExposedPerson
+  if (typeof pep === 'boolean') return pep
+  return undefined
+}
+
 const FALLBACK_FIELD_CATALOG: PlatformFieldDefinition[] = [
   {
     key: 'isPoliticallyExposedPerson',

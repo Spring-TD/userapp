@@ -93,11 +93,14 @@ function ThreadRow({
 type MortgagePendingThreadScreenProps = {
   application: StorefrontApplication
   backHref?: string
+  /** When true, render only the workflow (no page chrome / duplicate summary). */
+  embedded?: boolean
 }
 
 export function MortgagePendingThreadScreen({
   application,
   backHref = '/mobile-v2/products/mortgage/pending',
+  embedded = false,
 }: MortgagePendingThreadScreenProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -147,6 +150,7 @@ export function MortgagePendingThreadScreen({
   }, [])
 
   useEffect(() => {
+    if (embedded) return
     const action = searchParams.get('action') as MortgageWorkflowModal | null
     if (!action) return
     if (action === 'virtual_tour') {
@@ -157,11 +161,66 @@ export function MortgagePendingThreadScreen({
     router.replace(`/mobile-v2/products/mortgage/pending/${encodeURIComponent(applicationId)}`, {
       scroll: false,
     })
-  }, [applicationId, router, searchParams])
+  }, [applicationId, embedded, router, searchParams])
 
   const handleVirtualTourComplete = () => {
     patchMortgageWorkflow(applicationId, { virtualTourCompleted: true })
     refreshWorkflow()
+  }
+
+  const workflowCard = (
+    <div className="rounded-2xl border sf-border-subtle bg-white px-4 py-5 shadow-sm">
+      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Workflow</p>
+      <p className="mb-4 text-xs text-gray-500">
+        Follow each step below. Tap the current step to continue.
+      </p>
+      {thread.map((item) => (
+        <ThreadRow
+          key={item.step}
+          item={item}
+          onAction={item.status === 'current' && cta ? () => openStepModal(item.step) : undefined}
+        />
+      ))}
+      {embedded && cta ? (
+        <Button
+          className="mt-2 h-12 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-sm font-semibold text-white"
+          onClick={() => openStepModal()}
+        >
+          {cta.label}
+        </Button>
+      ) : null}
+    </div>
+  )
+
+  const modals = (
+    <>
+      <VirtualTourSheet
+        open={virtualTourOpen}
+        onClose={() => setVirtualTourOpen(false)}
+        tour={tourData}
+        onComplete={handleVirtualTourComplete}
+      />
+
+      <MortgageWorkflowModals
+        active={activeModal}
+        onClose={() => setActiveModal(null)}
+        applicationId={applicationId}
+        productId={productId}
+        product={product}
+        propertyValue={propertyValue}
+        downPaymentPercent={downPaymentPercent}
+        onStepAdvanced={refreshWorkflow}
+      />
+    </>
+  )
+
+  if (embedded) {
+    return (
+      <div key={workflowVersion}>
+        {workflowCard}
+        {modals}
+      </div>
+    )
   }
 
   return (
@@ -186,19 +245,7 @@ export function MortgagePendingThreadScreen({
           <p className="mt-2 text-lg font-bold text-[var(--sf-button,#1E40AF)]">{formatAmount(application)}</p>
         </div>
 
-        <div className="rounded-2xl bg-white px-4 py-5 shadow-sm">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Workflow</p>
-          <p className="mb-4 text-xs text-gray-500">
-            Follow each step below. Tap the current step to continue.
-          </p>
-          {thread.map((item) => (
-            <ThreadRow
-              key={item.step}
-              item={item}
-              onAction={item.status === 'current' && cta ? () => openStepModal(item.step) : undefined}
-            />
-          ))}
-        </div>
+        {workflowCard}
       </div>
 
       {cta ? (
@@ -212,23 +259,7 @@ export function MortgagePendingThreadScreen({
         </div>
       ) : null}
 
-      <VirtualTourSheet
-        open={virtualTourOpen}
-        onClose={() => setVirtualTourOpen(false)}
-        tour={tourData}
-        onComplete={handleVirtualTourComplete}
-      />
-
-      <MortgageWorkflowModals
-        active={activeModal}
-        onClose={() => setActiveModal(null)}
-        applicationId={applicationId}
-        productId={productId}
-        product={product}
-        propertyValue={propertyValue}
-        downPaymentPercent={downPaymentPercent}
-        onStepAdvanced={refreshWorkflow}
-      />
+      {modals}
     </div>
   )
 }
