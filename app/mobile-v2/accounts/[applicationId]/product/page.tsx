@@ -14,7 +14,7 @@ import {
   initMortgageWorkflowSubmitted,
   readMortgageWorkflow,
 } from '@/lib/mortgageWorkflow'
-import { fetchUserProductApplications } from '@/lib/services/productApplicationApi'
+import { resolveUserProductApplication } from '@/lib/services/productApplicationApi'
 import type { StorefrontApplication } from '@/lib/storefrontApplicationClient'
 import type { MobileProduct } from '@/lib/storefrontProducts'
 import { formatWalletBalance } from '@/lib/userWallet'
@@ -106,7 +106,7 @@ function EmbeddedWorkflowFallback() {
 
 export default function AppliedProductDetailPage() {
   const params = useParams<{ applicationId: string }>()
-  const applicationId = params.applicationId
+  const applicationId = decodeURIComponent(String(params.applicationId || ''))
   const { wallet, loading: walletLoading } = useUserWallet()
   const [application, setApplication] = useState<ProductApplication | null>(null)
   const [product, setProduct] = useState<MobileProduct | null>(null)
@@ -130,13 +130,12 @@ export default function AppliedProductDetailPage() {
       setLoading(true)
       setError(null)
 
-      const applicationResult = await fetchUserProductApplications(userId)
+      const resolved = await resolveUserProductApplication(userId, applicationId)
       if (cancelled) return
 
-      const matchedApplication =
-        applicationResult.applications.find((item) => item.id === applicationId) ?? null
-      if (applicationResult.error || !matchedApplication) {
-        setError(applicationResult.error || 'This product application was not found.')
+      const matchedApplication = resolved.application
+      if (resolved.error || !matchedApplication) {
+        setError(resolved.error || 'This product application was not found.')
         setLoading(false)
         return
       }

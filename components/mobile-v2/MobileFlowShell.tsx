@@ -15,7 +15,7 @@ export function MobileFlowHeader({
   const router = useRouter()
 
   return (
-    <header className="flex h-[102px] items-end justify-between sf-page-bg-tint px-7 pb-4">
+    <header className="flex h-[102px] shrink-0 items-end justify-between sf-page-bg-tint px-7 pb-4">
       <button
         type="button"
         onClick={onBack ?? (() => router.back())}
@@ -42,9 +42,9 @@ export function MobileFlowShell({
   children: React.ReactNode
 }) {
   return (
-    <div className="relative min-h-full sf-page-bg pb-[calc(2rem+env(safe-area-inset-bottom))]">
+    <div className="relative flex h-full min-h-0 flex-col sf-page-bg">
       <MobileFlowHeader title={title} onBack={onBack} rightSlot={rightSlot} />
-      <main className="-mt-1 rounded-t-[8px] bg-white px-6 pb-10 pt-6 shadow-[0_-4px_20px_rgba(15,23,42,0.02)]">
+      <main className="min-h-0 flex-1 overflow-y-auto no-scrollbar -mt-1 rounded-t-[8px] bg-white px-6 pb-[calc(2.5rem+env(safe-area-inset-bottom))] pt-6 shadow-[0_-4px_20px_rgba(15,23,42,0.02)]">
         {children}
       </main>
     </div>
