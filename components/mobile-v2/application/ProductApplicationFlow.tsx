@@ -18,9 +18,11 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 import {
   addApplicationGuarantor,
   initializeProductApplication,
+  isApplicationAlreadySubmitted,
   readInitializedApplication,
   saveApplicationProgress,
   submitApplicationRequirements,
@@ -426,7 +428,7 @@ function CollateralRequirementRow({
     fileUrl: string
     fileName: string
     fileType?: string
-    fileSize?: number
+    fileSize?: number 
   } | null>(
     submission?.fileUrl
       ? {
@@ -781,6 +783,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
   const [stepErrors, setStepErrors] = useState<string[]>([])
   const feedbackRef = useRef<HTMLDivElement>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [advancing, setAdvancing] = useState(false)
   const [submittedApplicationId, setSubmittedApplicationId] = useState<string | null>(null)
   const [creatingAccount, setCreatingAccount] = useState(false)
   const [createAccountError, setCreateAccountError] = useState<string | null>(null)
@@ -1079,6 +1082,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
   const syncApplicationAmount = async (): Promise<boolean> => {
     if (!productId) {
       setError('No product selected.')
+      toast.error('No product selected.')
       scrollToFeedback()
       return false
     }
@@ -1086,6 +1090,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     const parsed = parseApplicationAmount(applicationAmount)
     if (!parsed) {
       setError('Enter the amount you want to apply for.')
+      toast.error('Enter the amount you want to apply for.')
       scrollToFeedback()
       return false
     }
@@ -1097,15 +1102,14 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     )
     if (validationError) {
       setError(validationError)
+      toast.error(validationError)
       scrollToFeedback()
       return false
     }
 
-    if (applicationId && getApplicationAccount(initializedApplication)?.accountNumber) {
-      return true
-    }
-
-    if (initializedApplication?.amount === parsed && applicationId) {
+    // Existing application (with or without account) — never re-call /init.
+    // Re-init throws/fails for APPROVED/PENDING apps and blocks Next silently.
+    if (applicationId) {
       return true
     }
 
@@ -1114,10 +1118,12 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       amount: parsed,
     })
     if (!result.ok) {
-      if (isDuplicateAccountError(result.error || '') && applicationId) {
+      if (isDuplicateAccountError(result.error || '')) {
+        // Account already exists for this product — allow continuing with local draft
         return true
       }
       setError(result.error || 'Could not save your application amount.')
+      toast.error(result.error || 'Could not save your application amount.')
       scrollToFeedback()
       return false
     }
@@ -1128,8 +1134,40 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
 
   const handleFinalSubmit = async () => {
     if (!applicationId || !userId) {
-      setError('Application was not initialized. Please go back and create the account again.')
+      const message = 'Application was not initialized. Please go back and create the account again.'
+      setError(message)
+      toast.error(message)
       scrollToFeedback()
+      return
+    }
+
+    const finishMortgageSuccess = (resolvedId: string) => {
+      const methodKey = `mortgage_down_payment_method_${productId}`
+      const storedMethod = typeof window !== 'undefined' ? sessionStorage.getItem(methodKey) : null
+      const downPaymentMethod: MortgageDownPaymentMethod | undefined =
+        storedMethod === 'savings_plan' || storedMethod === 'equity_contribution'
+          ? storedMethod
+          : 'equity_contribution'
+      initMortgageWorkflowSubmitted(resolvedId, productId, downPaymentMethod)
+      setSubmittedApplicationId(resolvedId)
+      clearApplicationDraft(currentDraftKey)
+      setSheet('success')
+    }
+
+    // Already past draft (e.g. APPROVED) — don't call submit again; continue to pending.
+    if (isApplicationAlreadySubmitted(initializedApplication?.status)) {
+      setError(null)
+      setStepErrors([])
+      setDraftNotice(null)
+      toast.message(
+        `This application is already ${String(initializedApplication?.status).toUpperCase()}. Continuing to next steps.`,
+      )
+      if (kind === 'mortgage') {
+        finishMortgageSuccess(applicationId)
+      } else {
+        clearApplicationDraft(currentDraftKey)
+        setSheet('success')
+      }
       return
     }
 
@@ -1137,13 +1175,13 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       applicationAmount,
       amountMin: catalogProduct?.amountMin,
       amountMax: catalogProduct?.amountMax,
-        platformFields,
-        employment: employmentDraft,
-        otherRequirements,
-        requirementSubmissions,
-        requiresGuarantor,
-        guarantorsCount: guarantors.length,
-        spouseRequired: platformFields.repayingWithSpouse === true && triggersSpouseKyc,
+      platformFields,
+      employment: employmentDraft,
+      otherRequirements,
+      requirementSubmissions,
+      requiresGuarantor,
+      guarantorsCount: guarantors.length,
+      spouseRequired: platformFields.repayingWithSpouse === true && triggersSpouseKyc,
       spouseVerified: Boolean(spouse?.verificationUrl),
       productKind: kind,
     })
@@ -1157,13 +1195,16 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       setStepErrors(issues)
       setError(null)
       setActiveStep('requirement')
+      toast.error('Please complete the missing items before submitting.')
       scrollToFeedback()
       return
     }
 
     const parsed = parseApplicationAmount(applicationAmount)
     if (!parsed) {
-      setError('Enter the amount you want to apply for.')
+      const message = 'Enter the amount you want to apply for.'
+      setError(message)
+      toast.error(message)
       setActiveStep('requirement')
       scrollToFeedback()
       return
@@ -1172,6 +1213,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     setSubmitting(true)
     setError(null)
     setStepErrors([])
+    setDraftNotice(null)
     try {
       const submissions: RequirementSubmission[] = [
         ...buildRequirementDrafts(employmentDraft, requirementSubmissions),
@@ -1179,7 +1221,9 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       ]
       const requirementsResult = await submitApplicationRequirements(applicationId, userId, submissions)
       if (!requirementsResult.ok) {
-        setError(requirementsResult.error || 'Could not save your application requirements.')
+        const message = requirementsResult.error || 'Could not save your application requirements.'
+        setError(message)
+        toast.error(message)
         scrollToFeedback()
         return
       }
@@ -1201,7 +1245,18 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       })
 
       if (!submitResult.ok) {
-        setError(submitResult.error || 'Could not submit your application.')
+        const message = submitResult.error || 'Could not submit your application.'
+        // If backend says already submitted, continue to pending for mortgage.
+        if (
+          kind === 'mortgage' &&
+          /already|not in draft|invalid status/i.test(message)
+        ) {
+          toast.message(message)
+          finishMortgageSuccess(applicationId)
+          return
+        }
+        setError(message)
+        toast.error(message)
         scrollToFeedback()
         return
       }
@@ -1211,18 +1266,20 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       )
 
       if (kind === 'mortgage' && resolvedApplicationId) {
-        const methodKey = `mortgage_down_payment_method_${productId}`
-        const storedMethod = typeof window !== 'undefined' ? sessionStorage.getItem(methodKey) : null
-        const downPaymentMethod: MortgageDownPaymentMethod | undefined =
-          storedMethod === 'savings_plan' || storedMethod === 'equity_contribution'
-            ? storedMethod
-            : 'equity_contribution'
-        initMortgageWorkflowSubmitted(resolvedApplicationId, productId, downPaymentMethod)
-        setSubmittedApplicationId(resolvedApplicationId)
+        finishMortgageSuccess(resolvedApplicationId)
+      } else {
+        clearApplicationDraft(currentDraftKey)
+        setSheet('success')
       }
-
-      clearApplicationDraft(currentDraftKey)
-      setSheet('success')
+      toast.success('Application submitted successfully.')
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Something went wrong while submitting. Please try again.'
+      setError(message)
+      toast.error(message)
+      scrollToFeedback()
     } finally {
       setSubmitting(false)
     }
@@ -1238,24 +1295,41 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     if (issues.length > 0) {
       setStepErrors(issues)
       setError(null)
+      setDraftNotice(null)
+      toast.error(issues[0] || 'Please complete the required fields before continuing.')
       scrollToFeedback()
       return
     }
 
     if (activeStep === 'requirement') {
       void (async () => {
+        setAdvancing(true)
         setStepErrors([])
         setError(null)
-        const synced = await syncApplicationAmount()
-        if (!synced) return
-        await persistDraft(null)
-        setActiveStep(steps[Math.min(activeIndex + 1, steps.length - 1)])
+        setDraftNotice(null)
+        try {
+          const synced = await syncApplicationAmount()
+          if (!synced) return
+          await persistDraft(null)
+          setActiveStep(steps[Math.min(activeIndex + 1, steps.length - 1)])
+        } catch (error: unknown) {
+          const message =
+            error instanceof Error && error.message
+              ? error.message
+              : 'Could not continue. Please try again.'
+          setError(message)
+          toast.error(message)
+          scrollToFeedback()
+        } finally {
+          setAdvancing(false)
+        }
       })()
       return
     }
 
     setStepErrors([])
     setError(null)
+    setDraftNotice(null)
     void persistDraft(null)
     setActiveStep(steps[Math.min(activeIndex + 1, steps.length - 1)])
   }
@@ -1694,7 +1768,10 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         </div>
       </div>
 
-      <div ref={feedbackRef} className="absolute bottom-6 left-5 right-5 bg-white mt-5 items-center">
+      <div
+        ref={feedbackRef}
+        className="absolute bottom-6 left-5 right-5 z-20 bg-white pt-2 items-center"
+      >
         {stepErrors.length > 0 ? (
           <div className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">
             <p className="font-semibold">Please complete the following before continuing:</p>
@@ -1705,7 +1782,12 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
             </ul>
           </div>
         ) : null}
-        {error ? <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">{error}</p> : null}
+        {error ? (
+          <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700">
+            <p className="font-semibold">Submission failed</p>
+            <p className="mt-1 leading-relaxed">{error}</p>
+          </div>
+        ) : null}
         {draftNotice ? (
           <p
             className={cn(
@@ -1726,16 +1808,24 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         </Button>
         <Button
           type="button"
-          disabled={(activeStep === 'product' && !accepted) || submitting}
+          disabled={(activeStep === 'product' && !accepted) || submitting || advancing}
           className={cn('h-10 rounded-full w-1/2 text-sm font-semibold disabled:opacity-50', PRIMARY)}
           onClick={goNext}
         >
-          {submitting ? (
+          {submitting || advancing ? (
             <span className="inline-flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Submitting...
+              {submitting ? 'Submitting...' : 'Please wait...'}
             </span>
-          ) : activeStep === 'product' ? 'Submit application' : 'Next'}
+          ) : activeStep === 'product' ? (
+            isApplicationAlreadySubmitted(initializedApplication?.status) ? (
+              'Continue'
+            ) : (
+              'Submit application'
+            )
+          ) : (
+            'Next'
+          )}
         </Button>
         </div>
       </div>
