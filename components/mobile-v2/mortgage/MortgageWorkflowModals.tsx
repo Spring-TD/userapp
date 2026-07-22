@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Download, Loader2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { MortgageSheet, MORTGAGE_PRIMARY } from '@/components/mobile-v2/mortgage/MortgageSheet'
 import { patchMortgageWorkflowAsync, type MortgageWorkflowModal } from '@/lib/mortgageWorkflow'
+import { extractOfferLetterFromRecord } from '@/lib/offerLetter'
 import { pendingApprovedMortgageApi } from '@/lib/pendingApprovedMortgageApi'
 import { useUserWallet } from '@/hooks/useUserWallet'
 import { formatNaira } from '@/lib/mobileProductDetailDisplay'
@@ -73,6 +74,8 @@ export function MortgageWorkflowModals({
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [paymentSuccess, setPaymentSuccess] = useState(false)
+  const [offerPdfUrl, setOfferPdfUrl] = useState<string | null>(null)
+  const [offerPdfName, setOfferPdfName] = useState<string | null>(null)
 
   const slots = useMemo(() => buildInspectionSlots(), [])
   const downPaymentAmount = useMemo(() => {
@@ -80,9 +83,29 @@ export function MortgageWorkflowModals({
     return Math.round(propertyValue * (downPaymentPercent / 100))
   }, [downPaymentPercent, propertyValue])
 
-  const offerDocUrl = product?.documentsToDownload?.[0]?.fileUrl
-  const contractDocUrl = product?.documentsToDownload?.[1]?.fileUrl || offerDocUrl
+  const productOfferDocUrl = product?.documentsToDownload?.[0]?.fileUrl
+  const contractDocUrl = product?.documentsToDownload?.[1]?.fileUrl || productOfferDocUrl
   const allocationDocUrl = product?.documentsToDownload?.[2]?.fileUrl || contractDocUrl
+  const offerDocUrl = offerPdfUrl || productOfferDocUrl
+
+  useEffect(() => {
+    if (!userId || !applicationId) return
+    if (active !== 'offer_letter' && active !== 'accept_offer') return
+
+    let cancelled = false
+    void pendingApprovedMortgageApi.getDetail(applicationId, userId).then((res) => {
+      if (cancelled || !res.ok) return
+      const letter = extractOfferLetterFromRecord(res.data as unknown as Record<string, unknown>)
+      if (letter?.pdfUrl) {
+        setOfferPdfUrl(letter.pdfUrl)
+        setOfferPdfName(letter.pdfFileName || null)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [active, applicationId, userId])
 
   const patch = async (data: Parameters<typeof patchMortgageWorkflowAsync>[1]) => {
     await patchMortgageWorkflowAsync(applicationId, data)
@@ -90,7 +113,11 @@ export function MortgageWorkflowModals({
   }
 
   const handleDownloadOffer = async () => {
-    triggerDownload('mortgage-offer-letter.pdf', offerDocUrl)
+    if (!offerDocUrl) {
+      toast.error('Offer letter is not available yet. Please try again shortly.')
+      return
+    }
+    triggerDownload(offerPdfName || 'mortgage-offer-letter.pdf', offerDocUrl)
     await patch({ offerLetterDownloaded: true })
     toast.success('Offer letter downloaded')
     onClose()

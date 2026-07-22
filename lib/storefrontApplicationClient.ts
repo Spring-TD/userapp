@@ -229,6 +229,20 @@ function parseApiError(data: unknown, status: number): string {
   return `Upload failed (${status})`
 }
 
+function axiosApplicationError(error: unknown, fallback: string): string {
+  if (error && typeof error === "object" && "response" in error) {
+    const ax = error as { response?: { data?: unknown; status?: number }; message?: string }
+    if (ax.response) {
+      return parseApiError(ax.response.data, ax.response.status ?? 500)
+    }
+    if (ax.message) return humanizeApplicationError(ax.message)
+  }
+  if (error instanceof Error && error.message) {
+    return humanizeApplicationError(error.message)
+  }
+  return fallback
+}
+
 function humanizeApplicationError(message: string): string {
   const m = message.trim()
   if (!m || m === "fetch failed") {
@@ -246,7 +260,34 @@ function humanizeApplicationError(message: string): string {
   if (m.includes('"bvn" is required')) {
     return "Your BVN is required. Complete identity verification (KYC) before opening this account."
   }
+  const lower = m.toLowerCase()
+  if (
+    lower.includes("already submitted") ||
+    lower.includes("already been submitted") ||
+    lower.includes("application is already") ||
+    lower.includes("cannot submit") ||
+    lower.includes("not in draft") ||
+    lower.includes("invalid status")
+  ) {
+    return "This application has already been submitted. Open Pending applications to continue."
+  }
   return m
+}
+
+export function isApplicationAlreadySubmitted(status?: string | null): boolean {
+  const s = String(status || "").trim().toUpperCase()
+  return [
+    "PENDING",
+    "SUBMITTED",
+    "UNDER_REVIEW",
+    "UNDER REVIEW",
+    "APPROVED",
+    "ACTIVE",
+    "COMPLETED",
+    "DISBURSED",
+    "REJECTED",
+    "DECLINED",
+  ].includes(s)
 }
 
 export async function initializeProductApplication(
@@ -266,18 +307,25 @@ export async function initializeProductApplication(
     ...(options?.platformFields ? { ...options.platformFields } : {}),
   }
 
-  const res = await apiClient.post<ApiEnvelope<StorefrontApplication>, typeof payload>(
-    "/v1/applications/init",
-    payload,
-    { includeAuth: true, timeout: 60_000 },
-  )
+  try {
+    const res = await apiClient.post<ApiEnvelope<StorefrontApplication>, typeof payload>(
+      "/v1/applications/init",
+      payload,
+      { includeAuth: true, timeout: 60_000 },
+    )
 
-  if (res.data?.success === false || (res.status !== 200 && res.status !== 201) || !res.data?.data) {
-    return { ok: false as const, error: parseApiError(res.data, res.status) }
+    if (res.data?.success === false || (res.status !== 200 && res.status !== 201) || !res.data?.data) {
+      return { ok: false as const, error: parseApiError(res.data, res.status) }
+    }
+
+    saveInitializedApplication(res.data.data)
+    return { ok: true as const, application: res.data.data, applicationId: applicationIdFrom(res.data.data) }
+  } catch (error: unknown) {
+    return {
+      ok: false as const,
+      error: axiosApplicationError(error, "Could not initialize your application."),
+    }
   }
-
-  saveInitializedApplication(res.data.data)
-  return { ok: true as const, application: res.data.data, applicationId: applicationIdFrom(res.data.data) }
 }
 
 export async function applyProductOneShot(
@@ -395,17 +443,24 @@ export async function submitApplicationRequirements(
   userId: string,
   requirementSubmissions: RequirementSubmission[],
 ) {
-  const res = await apiClient.patch<ApiEnvelope<StorefrontApplication>>(
-    `/v1/applications/${encodeURIComponent(applicationId)}/requirements`,
-    { userId, requirementSubmissions },
-    { includeAuth: true, timeout: 60_000 },
-  )
+  try {
+    const res = await apiClient.patch<ApiEnvelope<StorefrontApplication>>(
+      `/v1/applications/${encodeURIComponent(applicationId)}/requirements`,
+      { userId, requirementSubmissions },
+      { includeAuth: true, timeout: 60_000 },
+    )
 
-  if (res.data?.success === false || res.status >= 400) {
-    return { ok: false as const, error: parseApiError(res.data, res.status) }
+    if (res.data?.success === false || res.status >= 400) {
+      return { ok: false as const, error: parseApiError(res.data, res.status) }
+    }
+
+    return { ok: true as const, application: res.data?.data }
+  } catch (error: unknown) {
+    return {
+      ok: false as const,
+      error: axiosApplicationError(error, "Could not save your application requirements."),
+    }
   }
-
-  return { ok: true as const, application: res.data?.data }
 }
 
 export async function saveApplicationProgress({
@@ -438,27 +493,34 @@ export async function saveApplicationProgress({
     Object.assign(progressPayload, platformFields)
   }
 
-  const res = await apiClient.patch<ApiEnvelope<StorefrontApplication>>(
-    `/v1/applications/${encodeURIComponent(applicationId)}/progress`,
-    progressPayload,
-    { includeAuth: true, timeout: 30_000 },
-  )
+  try {
+    const res = await apiClient.patch<ApiEnvelope<StorefrontApplication>>(
+      `/v1/applications/${encodeURIComponent(applicationId)}/progress`,
+      progressPayload,
+      { includeAuth: true, timeout: 30_000 },
+    )
 
-  if (res.data?.success === false || res.status >= 400) {
-    return { ok: false as const, error: parseApiError(res.data, res.status) }
+    if (res.data?.success === false || res.status >= 400) {
+      return { ok: false as const, error: parseApiError(res.data, res.status) }
+    }
+
+    const application = res.data?.data
+    if (application) {
+      const current = readInitializedApplication()
+      saveInitializedApplication({
+        ...(current || {}),
+        ...application,
+        applicationProgress: application.applicationProgress || current?.applicationProgress,
+      })
+    }
+
+    return { ok: true as const, application }
+  } catch (error: unknown) {
+    return {
+      ok: false as const,
+      error: axiosApplicationError(error, "Could not save application progress."),
+    }
   }
-
-  const application = res.data?.data
-  if (application) {
-    const current = readInitializedApplication()
-    saveInitializedApplication({
-      ...(current || {}),
-      ...application,
-      applicationProgress: application.applicationProgress || current?.applicationProgress,
-    })
-  }
-
-  return { ok: true as const, application }
 }
 
 export async function addApplicationGuarantor(
@@ -486,15 +548,22 @@ export async function submitInitializedApplication(
     mortgageSelection?: Record<string, unknown>
   } & PlatformFields,
 ) {
-  const res = await apiClient.post<ApiEnvelope<StorefrontApplication>>(
-    `/v1/applications/${encodeURIComponent(applicationId)}/submit`,
-    body,
-    { includeAuth: true, timeout: 60_000 },
-  )
+  try {
+    const res = await apiClient.post<ApiEnvelope<StorefrontApplication>>(
+      `/v1/applications/${encodeURIComponent(applicationId)}/submit`,
+      body,
+      { includeAuth: true, timeout: 60_000 },
+    )
 
-  if (res.data?.success === false || res.status >= 400) {
-    return { ok: false as const, error: parseApiError(res.data, res.status) }
+    if (res.data?.success === false || res.status >= 400) {
+      return { ok: false as const, error: parseApiError(res.data, res.status) }
+    }
+
+    return { ok: true as const, application: res.data?.data }
+  } catch (error: unknown) {
+    return {
+      ok: false as const,
+      error: axiosApplicationError(error, "Could not submit your application."),
+    }
   }
-
-  return { ok: true as const, application: res.data?.data }
 }

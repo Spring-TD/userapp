@@ -19,12 +19,25 @@ export type PostApprovalMortgageStatus =
 export type PostApprovalFulfillment = {
   status?: PostApprovalMortgageStatus
   updatedAt?: string
+  currentWorkflowStepId?: string
   bankDetails?: {
     merchantReference?: string
     accountNumber?: string
     bankName?: string
     amount?: number
     currency?: string
+  }
+  contract?: {
+    documentUrl?: string
+    documentSource?: string
+    documentFileName?: string
+    uploadedAt?: string
+    uploadedByMerchantId?: string
+    issuedAt?: string
+  }
+  offer?: {
+    sentAt?: string
+    acceptedAt?: string
   }
 }
 
@@ -41,6 +54,16 @@ export type PendingApprovedMortgageDetail = {
   bankDetails?: PostApprovalFulfillment["bankDetails"]
   equityAmount?: number
   propertyValue?: number
+  offerLetter?: {
+    html?: string
+    text?: string
+    reference?: string
+    offerValidUntil?: string
+    pdfUrl?: string
+    pdfFileName?: string
+    signedPdfUrl?: string
+    signedPdfFileName?: string
+  }
 }
 
 export function postApprovalStepToOfferFlowStep(

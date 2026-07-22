@@ -1,13 +1,14 @@
 'use client'
 
-import React, { Suspense, useState } from 'react'
+import React, { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Check, ChevronLeft } from 'lucide-react'
+import { Check, ChevronLeft, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { MortgageSheet, MORTGAGE_PRIMARY } from '@/components/mobile-v2/mortgage/MortgageSheet'
 import { mortgagePendingDetailHref } from '@/lib/mortgageApplyRoutes'
 import { patchMortgageWorkflowAsync } from '@/lib/mortgageWorkflow'
+import { extractOfferLetterFromRecord } from '@/lib/offerLetter'
 import { pendingApprovedMortgageApi } from '@/lib/pendingApprovedMortgageApi'
 import { useUserWallet } from '@/hooks/useUserWallet'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
@@ -24,6 +25,24 @@ function AcceptOfferContent() {
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [offerPdfUrl, setOfferPdfUrl] = useState<string | null>(null)
+  const [offerPdfName, setOfferPdfName] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!userId || !applicationId) return
+    let cancelled = false
+    void pendingApprovedMortgageApi.getDetail(applicationId, userId).then((res) => {
+      if (cancelled || !res.ok) return
+      const letter = extractOfferLetterFromRecord(res.data as unknown as Record<string, unknown>)
+      if (letter?.pdfUrl) {
+        setOfferPdfUrl(letter.pdfUrl)
+        setOfferPdfName(letter.pdfFileName || null)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [applicationId, userId])
 
   if (!productId || !applicationId) {
     return (
@@ -96,6 +115,27 @@ function AcceptOfferContent() {
             choose whether to accept or decline.
           </p>
 
+          {offerPdfUrl ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-5 h-11 w-full rounded-full border-gray-200 text-sm font-semibold"
+              onClick={() => {
+                const a = document.createElement('a')
+                a.href = offerPdfUrl
+                a.download = offerPdfName || 'mortgage-offer-letter.pdf'
+                a.target = '_blank'
+                a.rel = 'noopener noreferrer'
+                document.body.appendChild(a)
+                a.click()
+                document.body.removeChild(a)
+              }}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download offer letter
+            </Button>
+          ) : null}
+
           <div className="mt-5 rounded-2xl border sf-border-brand sf-accent-soft px-4 py-4 text-sm text-gray-700">
             <p className="font-semibold text-[var(--sf-ink,#1E293B)]">Offer summary</p>
             <p className="mt-2 text-xs leading-relaxed">
@@ -126,14 +166,14 @@ function AcceptOfferContent() {
             <Button
               className={cn('h-12 w-full rounded-full text-sm font-semibold', MORTGAGE_PRIMARY)}
               disabled={!termsAccepted || busy}
-              onClick={acceptOffer}
+              onClick={() => void acceptOffer()}
             >
               Accept offer
             </Button>
             <Button
               variant="outline"
               className="h-12 w-full rounded-full border-gray-200 text-sm font-semibold text-red-600"
-              onClick={declineOffer}
+              onClick={() => void declineOffer()}
             >
               Decline offer
             </Button>
