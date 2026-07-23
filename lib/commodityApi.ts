@@ -3,6 +3,7 @@ import { extractDetailRow, fetchMobileProductById } from "@/lib/fetchMobileProdu
 import { fetchWithAuth } from "@/lib/fetchWithAuth"
 import { TENANT_APP_ID_STORAGE_KEY } from "@/lib/mobileTenant/storageKeys"
 import { buildProductApplyBody } from "@/lib/productApplyPayload"
+import type { PlatformFields } from "@/lib/platformApplicationFields"
 import { resolveWalletUserId } from "@/lib/resolveWalletUserId"
 import { sanitizeProductId } from "@/lib/sanitizeProductId"
 import type { ProductApplication } from "@/types/productApplication"
@@ -284,7 +285,7 @@ export async function loadCommodityPurchaseContext(params: {
 export async function buildCommodityApplyBody(
   productId: string,
   quantity: number,
-  options?: { requirementSubmissions?: unknown[] },
+  options?: { requirementSubmissions?: unknown[]; platformFields?: PlatformFields },
 ) {
   const built = await buildProductApplyBody(productId, {
     productType: "COMMODITY",
@@ -322,6 +323,7 @@ export async function buildCommodityApplyBody(
       ...(options?.requirementSubmissions?.length
         ? { requirementSubmissions: options.requirementSubmissions }
         : {}),
+      ...(options?.platformFields ? { ...options.platformFields } : {}),
     },
   }
 }
@@ -329,7 +331,7 @@ export async function buildCommodityApplyBody(
 export async function purchaseCommodity(
   productId: string,
   quantity: number,
-  options?: { requirementSubmissions?: unknown[] },
+  options?: { requirementSubmissions?: unknown[]; platformFields?: PlatformFields },
 ): Promise<
   | { ok: true; data: CommodityApplyResult }
   | { ok: false; error: string; status?: number }

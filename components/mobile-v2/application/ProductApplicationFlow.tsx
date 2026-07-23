@@ -15,6 +15,7 @@ import {
   Loader2,
   Plus,
   Upload,
+  X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -25,7 +26,9 @@ import {
   isApplicationAlreadySubmitted,
   readInitializedApplication,
   saveApplicationProgress,
+  saveInitializedApplication,
   submitApplicationRequirements,
+  submitApplicationSpouseKyc,
   submitInitializedApplication,
   uploadApplicationFile,
   type ApplicationProgress,
@@ -74,6 +77,8 @@ type Guarantor = {
   phone: string
   email: string
   verificationUrl?: string
+  occupation?: string
+  country?: string
 }
 
 type ApplicationDraft = {
@@ -385,9 +390,26 @@ type CollateralRequirementItem = {
   contentType?: string
   description?: string
   templateFileUrl?: string
+  templateFileName?: string
   fileUrl?: string
+  fileName?: string
   uploadRequired?: boolean
   required?: boolean
+}
+
+function isLikelyFileName(value: string): boolean {
+  return /\.(pdf|png|jpe?g|gif|webp|docx?|xlsx?|csv|txt|zip)$/i.test(value.trim())
+}
+
+function collateralDisplayDescription(requirement: CollateralRequirementItem): string {
+  const raw = String(requirement.description || '').trim()
+  if (!raw) return ''
+  // Merchant template original names (e.g. css_tutorial.pdf) often land in description — hide those.
+  if (isLikelyFileName(raw)) return ''
+  const contentType = String(requirement.contentType || '').trim().toLowerCase()
+  if (raw.toLowerCase() === contentType) return ''
+  if (raw === requirement.templateFileName || raw === requirement.fileName) return ''
+  return raw
 }
 
 function collateralRequirementKey(requirement: CollateralRequirementItem): string {
@@ -413,22 +435,24 @@ function CollateralRequirementRow({
   requirement,
   userId,
   onUploaded,
+  onCleared,
   done,
   submission,
 }: {
   requirement: CollateralRequirementItem
   userId?: string
   onUploaded: (submission: RequirementSubmission) => void
+  onCleared?: (requirementKey: string) => void
   done?: boolean
   submission?: RequirementSubmission
 }) {
   const [uploading, setUploading] = useState(false)
-  const [uploaded, setUploaded] = useState(Boolean(done))
+  const [uploaded, setUploaded] = useState(Boolean(done && submission?.fileUrl))
   const [uploadedFile, setUploadedFile] = useState<{
     fileUrl: string
     fileName: string
     fileType?: string
-    fileSize?: number 
+    fileSize?: number
   } | null>(
     submission?.fileUrl
       ? {
@@ -441,10 +465,20 @@ function CollateralRequirementRow({
   )
   const [error, setError] = useState<string | null>(null)
 
+  const title = requirement.label || requirement.requirementType || 'Requirement'
+  const description = collateralDisplayDescription(requirement)
+  const templateUrl =
+    requirement.templateFileUrl ||
+    requirement.fileUrl ||
+    (String(requirement.description || '').startsWith('http') ? requirement.description : undefined)
+  const needsUpload = collateralNeedsUpload(requirement)
+  const requirementKey = collateralRequirementKey(requirement)
+
   useEffect(() => {
-    const isDone = Boolean(done || submission)
-    setUploaded(isDone)
-    if (submission?.fileUrl) {
+    // Only treat a real uploaded document as "done" — not acknowledge-only / template rows.
+    const hasUpload = Boolean(submission?.fileUrl && submission.fileUrl !== templateUrl)
+    setUploaded(hasUpload)
+    if (hasUpload && submission?.fileUrl) {
       setUploadedFile({
         fileUrl: submission.fileUrl,
         fileName: submission.fileName || 'Uploaded file',
@@ -453,18 +487,8 @@ function CollateralRequirementRow({
       })
       return
     }
-    if (!isDone) {
-      setUploadedFile(null)
-    }
-  }, [done, submission, submission?.fileUrl, submission?.fileName, submission?.fileType, submission?.fileSize])
-
-  const title = requirement.label || requirement.requirementType || 'Requirement'
-  const description = requirement.description || requirement.contentType || ''
-  const templateUrl =
-    requirement.templateFileUrl ||
-    requirement.fileUrl ||
-    (String(requirement.description || '').startsWith('http') ? requirement.description : undefined)
-  const needsUpload = collateralNeedsUpload(requirement)
+    setUploadedFile(null)
+  }, [submission, submission?.fileUrl, submission?.fileName, submission?.fileType, submission?.fileSize, templateUrl])
 
   const handleUpload = async (file?: File) => {
     if (!file) return
@@ -472,15 +496,16 @@ function CollateralRequirementRow({
     setError(null)
     try {
       const uploadedFile = await uploadApplicationFile(file, userId)
+      const displayName = file.name || uploadedFile.fileName
       onUploaded({
         requirementId: requirement.requirementId || requirement.id,
         requirementType: requirement.requirementType || title,
         label: title,
         type: 'document',
         fileUrl: uploadedFile.fileUrl,
-        fileName: uploadedFile.fileName,
-        fileType: uploadedFile.fileType,
-        fileSize: uploadedFile.fileSize,
+        fileName: displayName,
+        fileType: uploadedFile.fileType || file.type,
+        fileSize: uploadedFile.fileSize ?? file.size,
         metadata: {
           source: 'otherRequirements',
           contentType: requirement.contentType,
@@ -489,9 +514,9 @@ function CollateralRequirementRow({
       })
       setUploadedFile({
         fileUrl: uploadedFile.fileUrl,
-        fileName: uploadedFile.fileName,
-        fileType: uploadedFile.fileType,
-        fileSize: uploadedFile.fileSize,
+        fileName: displayName,
+        fileType: uploadedFile.fileType || file.type,
+        fileSize: uploadedFile.fileSize ?? file.size,
       })
       setUploaded(true)
     } catch (err) {
@@ -499,6 +524,13 @@ function CollateralRequirementRow({
     } finally {
       setUploading(false)
     }
+  }
+
+  const handleClearUpload = () => {
+    setUploadedFile(null)
+    setUploaded(false)
+    setError(null)
+    if (requirementKey) onCleared?.(requirementKey)
   }
 
   const handleAcknowledge = () => {
@@ -520,7 +552,7 @@ function CollateralRequirementRow({
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <p className="text-[11px] font-medium text-gray-500">{title}</p>
-        <StatusDot done={uploaded || done} />
+        <StatusDot done={uploaded || (done && Boolean(submission?.fileUrl || submission?.value))} />
       </div>
       {description ? <p className="text-[10px] leading-snug text-gray-500">{description}</p> : null}
       {needsUpload ? (
@@ -546,21 +578,31 @@ function CollateralRequirementRow({
                 accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
                 onChange={(event) => void handleUpload(event.target.files?.[0])}
               />
-              {uploading ? 'Uploading...' : uploaded || done ? 'Uploaded' : 'Upload Document'}
+              {uploading ? 'Uploading...' : uploaded || done ? 'Replace' : 'Upload Document'}
               {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
             </label>
           </div>
           {uploadedFile ? (
             <div className="flex items-center justify-between gap-3 rounded-xl bg-green-50 px-3 py-2 text-[10px] text-green-800">
               <span className="min-w-0 truncate font-medium">{uploadedFile.fileName}</span>
-              <a
-                href={uploadedFile.fileUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="shrink-0 font-bold underline"
-              >
-                Open
-              </a>
+              <div className="flex shrink-0 items-center gap-2">
+                <a
+                  href={uploadedFile.fileUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-bold underline"
+                >
+                  Open
+                </a>
+                <button
+                  type="button"
+                  onClick={handleClearUpload}
+                  className="rounded-full p-0.5 text-green-800/70 hover:bg-green-100 hover:text-green-900"
+                  aria-label="Remove uploaded file"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
             </div>
           ) : null}
         </>
@@ -1079,6 +1121,13 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     })
   }
 
+  const clearSubmission = (requirementKey: string) => {
+    if (!requirementKey) return
+    setRequirementSubmissions((current) =>
+      current.filter((item) => (item.requirementId || item.requirementType || item.label) !== requirementKey),
+    )
+  }
+
   const syncApplicationAmount = async (): Promise<boolean> => {
     if (!productId) {
       setError('No product selected.')
@@ -1341,6 +1390,32 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     setSheet(null)
   }
 
+  const copyVerificationUrl = async (url: string | undefined, successMessage: string) => {
+    const text = String(url || '').trim()
+    if (!text) {
+      toast.error('No verification link available to copy.')
+      return
+    }
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text)
+      } else {
+        const textarea = document.createElement('textarea')
+        textarea.value = text
+        textarea.setAttribute('readonly', '')
+        textarea.style.position = 'fixed'
+        textarea.style.left = '-9999px'
+        document.body.appendChild(textarea)
+        textarea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textarea)
+      }
+      toast.success(successMessage)
+    } catch {
+      toast.error('Could not copy the link. Please try again.')
+    }
+  }
+
   const handleGenerateGuarantorKyc = async () => {
     if (!applicationId || !userId) {
       setError('Application was not initialized. Please go back and create the account again.')
@@ -1417,6 +1492,10 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     const fullName = spouseDraft.name.trim()
     const email = spouseDraft.email.trim()
     const phone = spouseDraft.phone.trim()
+    const occupation =
+      spouseDraft.occupation?.trim() || platformFields.spouseOccupation.trim() || undefined
+    const countryRaw = spouseDraft.country?.trim() || platformFields.spouseCountry.trim() || 'NG'
+    const country = countryRaw.slice(0, 2).toUpperCase()
 
     if (!fullName || !email || !phone) {
       setSpouseSubmitError('Please enter your spouse full name, email, and phone.')
@@ -1428,14 +1507,14 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     const generatingStartedAt = Date.now()
 
     try {
-      const result = await addApplicationGuarantor(applicationId, {
+      const result = await submitApplicationSpouseKyc(applicationId, {
         userId,
         fullName,
         email,
         phone,
-        occupation: 'Not specified',
-        relationship: 'Spouse',
-        country: 'NG',
+        ...(occupation ? { occupation } : {}),
+        relationship: 'spouse',
+        country,
       })
 
       if (!result.ok) {
@@ -1445,19 +1524,28 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       }
 
       const addedSpouse: Guarantor = {
-        name: result.data?.guarantor?.fullName || fullName,
-        phone: result.data?.guarantor?.phone || phone,
-        email: result.data?.guarantor?.email || email,
-        verificationUrl: result.data?.guarantor?.kyc?.verificationUrl,
+        name: result.spouse?.fullName || fullName,
+        phone: result.spouse?.phone || phone,
+        email: result.spouse?.email || email,
+        occupation: result.spouse?.occupation || occupation,
+        country: result.spouse?.country || country,
+        verificationUrl: result.verificationUrl || result.spouse?.verificationUrl,
       }
 
       setSpouse(addedSpouse)
       setPlatformFields((current) => ({
         ...current,
+        repayingWithSpouse: true,
         spouseFullName: addedSpouse.name,
         spouseEmail: addedSpouse.email,
         spousePhone: addedSpouse.phone,
+        spouseOccupation: addedSpouse.occupation || current.spouseOccupation,
+        spouseCountry: addedSpouse.country || current.spouseCountry,
       }))
+
+      if (result.application) {
+        saveInitializedApplication(result.application)
+      }
 
       const minimumGeneratingMs = 1200
       const elapsed = Date.now() - generatingStartedAt
@@ -1589,7 +1677,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
                       </p>
                       <button
                         type="button"
-                        onClick={() => void navigator.clipboard?.writeText(spouse.verificationUrl || '')}
+                        onClick={() => void copyVerificationUrl(spouse.verificationUrl, 'Spouse KYC link copied.')}
                         className={`mt-3 inline-flex items-center gap-1 text-xs font-bold ${BRAND_INK}`}
                       >
                         <Copy className="h-3 w-3" />
@@ -1608,6 +1696,8 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
                           name: platformFields.spouseFullName,
                           email: platformFields.spouseEmail,
                           phone: platformFields.spousePhone,
+                          occupation: platformFields.spouseOccupation,
+                          country: platformFields.spouseCountry || 'NG',
                         })
                         setSheet('spouse_form')
                       }}
@@ -1656,7 +1746,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
                     {guarantors[0].verificationUrl ? (
                       <button
                         type="button"
-                        onClick={() => void navigator.clipboard?.writeText(guarantors[0].verificationUrl || '')}
+                        onClick={() => void copyVerificationUrl(guarantors[0].verificationUrl, 'Guarantor KYC link copied.')}
                         className={`mt-3 inline-flex items-center gap-1 text-xs font-bold ${BRAND_INK}`}
                       >
                         <Copy className="h-3 w-3" />
@@ -1690,13 +1780,16 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
                       (item) =>
                         (item.requirementId || item.requirementType || item.label) === requirementKey,
                     )
-                    const isDone = Boolean(submission)
+                    const isDone = collateralNeedsUpload(requirement)
+                      ? Boolean(submission?.fileUrl)
+                      : Boolean(submission)
                     return (
                       <CollateralRequirementRow
                         key={requirementKey || index}
                         requirement={requirement}
                         userId={userId}
                         onUploaded={upsertSubmission}
+                        onCleared={clearSubmission}
                         done={isDone}
                         submission={submission}
                       />
@@ -1773,7 +1866,15 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         className="absolute bottom-6 left-5 right-5 z-20 bg-white pt-2 items-center"
       >
         {stepErrors.length > 0 ? (
-          <div className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">
+          <div className="relative mb-3 rounded-xl bg-red-50 px-3 py-2 pr-9 text-xs text-red-600">
+            <button
+              type="button"
+              aria-label="Dismiss validation errors"
+              className="absolute right-2 top-2 rounded-full p-1 text-red-500 hover:bg-red-100 hover:text-red-700"
+              onClick={() => setStepErrors([])}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
             <p className="font-semibold">Please complete the following before continuing:</p>
             <ul className="mt-1 list-disc space-y-1 pl-4">
               {stepErrors.map((issue) => (
@@ -1783,20 +1884,36 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
           </div>
         ) : null}
         {error ? (
-          <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700">
+          <div className="relative mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 pr-9 text-xs text-red-700">
+            <button
+              type="button"
+              aria-label="Dismiss error"
+              className="absolute right-2 top-2 rounded-full p-1 text-red-500 hover:bg-red-100 hover:text-red-700"
+              onClick={() => setError(null)}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
             <p className="font-semibold">Submission failed</p>
             <p className="mt-1 leading-relaxed">{error}</p>
           </div>
         ) : null}
         {draftNotice ? (
-          <p
+          <div
             className={cn(
-              'mb-3 rounded-xl px-3 py-2 text-xs',
+              'relative mb-3 rounded-xl px-3 py-2 pr-9 text-xs',
               stepErrors.length > 0 ? 'bg-amber-50 text-amber-800' : 'bg-green-50 text-green-700',
             )}
           >
-            {draftNotice}
-          </p>
+            <button
+              type="button"
+              aria-label="Dismiss notice"
+              className="absolute right-2 top-2 rounded-full p-1 opacity-70 hover:bg-black/5 hover:opacity-100"
+              onClick={() => setDraftNotice(null)}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+            <p>{draftNotice}</p>
+          </div>
         ) : null}
         <div className="flex flex-row justify-between gap-3 w-full items-center align-middle">
         <Button
@@ -1990,7 +2107,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
             {lastAddedGuarantor?.verificationUrl ? (
               <button
                 type="button"
-                onClick={() => void navigator.clipboard?.writeText(lastAddedGuarantor.verificationUrl || '')}
+                onClick={() => void copyVerificationUrl(lastAddedGuarantor.verificationUrl, 'Guarantor KYC link copied.')}
                 className={`mt-5 inline-flex items-center gap-1 text-xs font-bold ${BRAND_INK}`}
               >
                 <Copy className="h-3 w-3" />
@@ -2026,7 +2143,12 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
             {(guarantors[0] ?? DEFAULT_GUARANTOR).verificationUrl ? (
               <button
                 type="button"
-                onClick={() => void navigator.clipboard?.writeText((guarantors[0] ?? DEFAULT_GUARANTOR).verificationUrl || '')}
+                onClick={() =>
+                  void copyVerificationUrl(
+                    (guarantors[0] ?? DEFAULT_GUARANTOR).verificationUrl,
+                    'Guarantor KYC link copied.',
+                  )
+                }
                 className={`mt-4 inline-flex items-center gap-1 text-xs font-bold ${BRAND_INK}`}
               >
                 <Copy className="h-3 w-3" />
@@ -2091,6 +2213,23 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
                 setPlatformFields((current) => ({ ...current, spousePhone: phone }))
               }}
             />
+            <InputPill
+              placeholder="Spouse occupation (optional)"
+              value={spouseDraft.occupation || ''}
+              onChange={(occupation) => {
+                setSpouseDraft((g) => ({ ...g, occupation }))
+                setPlatformFields((current) => ({ ...current, spouseOccupation: occupation }))
+              }}
+            />
+            <InputPill
+              placeholder="Country code (e.g. NG)"
+              value={spouseDraft.country || ''}
+              onChange={(country) => {
+                const next = country.slice(0, 2).toUpperCase()
+                setSpouseDraft((g) => ({ ...g, country: next }))
+                setPlatformFields((current) => ({ ...current, spouseCountry: next }))
+              }}
+            />
           </div>
           {spouseSubmitError ? (
             <p className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-center text-xs text-red-600">{spouseSubmitError}</p>
@@ -2135,7 +2274,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
             {spouse?.verificationUrl ? (
               <button
                 type="button"
-                onClick={() => void navigator.clipboard?.writeText(spouse.verificationUrl || '')}
+                onClick={() => void copyVerificationUrl(spouse.verificationUrl, 'Spouse KYC link copied.')}
                 className={`mt-5 inline-flex items-center gap-1 text-xs font-bold ${BRAND_INK}`}
               >
                 <Copy className="h-3 w-3" />

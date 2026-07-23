@@ -1,15 +1,6 @@
 import { applyProductOneShot } from '@/lib/storefrontApplicationClient'
-import { pepStatusSubmission } from '@/lib/applicantProfileFields'
-
-type InvestmentApplyResponse = {
-  success?: boolean
-  message?: string
-  error?: string
-  data?: {
-    accountCreated?: boolean
-    account?: { id?: string; accountNumber?: string; bankName?: string; currency?: string; status?: string }
-  }
-}
+import type { PlatformFields } from '@/lib/platformApplicationFields'
+import { isPoliticallyExposedFromPepAnswer } from '@/lib/platformApplicationFields'
 
 export type EnsureInvestmentAccountResult = {
   ok: boolean
@@ -20,20 +11,38 @@ export type EnsureInvestmentAccountResult = {
   error?: string
 }
 
+type EnsureInvestmentOptions = {
+  amount?: number
+  currency?: string
+  /** Preferred: platform PEP boolean. */
+  isPoliticallyExposedPerson?: boolean
+  /**
+   * @deprecated Prefer `isPoliticallyExposedPerson`. Mapped to the platform field when set.
+   */
+  politicallyExposed?: 'yes' | 'no'
+}
+
+function resolvePlatformFields(options?: EnsureInvestmentOptions): PlatformFields | undefined {
+  const pep =
+    options?.isPoliticallyExposedPerson !== undefined
+      ? options.isPoliticallyExposedPerson
+      : isPoliticallyExposedFromPepAnswer(options?.politicallyExposed)
+  if (pep === undefined) return undefined
+  return { isPoliticallyExposedPerson: pep }
+}
+
 /** POST /api/v1/investments/apply — provision investment account before funding. */
 export async function ensureInvestmentAccount(
   productId: string,
-  options?: { amount?: number; currency?: string; politicallyExposed?: 'yes' | 'no' },
+  options?: EnsureInvestmentOptions,
 ): Promise<EnsureInvestmentAccountResult> {
-  const requirementSubmissions = options?.politicallyExposed
-    ? [pepStatusSubmission(options.politicallyExposed)]
-    : undefined
+  const platformFields = resolvePlatformFields(options)
 
   const result = await applyProductOneShot(productId, {
     amount: options?.amount,
     currency: options?.currency,
     productType: 'INVESTMENT',
-    requirementSubmissions,
+    platformFields,
   })
   if (!result.ok) return { ok: false, accountCreated: false, error: result.error }
   return {
