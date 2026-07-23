@@ -82,6 +82,28 @@ export async function fetchUserProductApplications(
   }
 
   const applications = normalizeApplications(data).filter(shouldShowInAccounts)
+
+  // Debug: trace ACCOUNT REQUESTED / ACTIVE badges (backend provisionStatus vs frontend label).
+  console.log('[Accounts][fetchUserProductApplications] response', {
+    url,
+    status: res.status,
+    productType: params?.productType ?? null,
+    appId: params?.appId ?? null,
+    raw: data,
+    applications: applications.map((app) => ({
+      id: app.id,
+      productId: app.productId,
+      productName: app.productName,
+      productType: app.productType,
+      status: app.status,
+      loanWorkflowStatus: app.loanWorkflowStatus,
+      provisionStatus: app.productWallet?.upstreamAccount?.provisionStatus ?? null,
+      accountNumber: app.productWallet?.upstreamAccount?.accountNumber ?? null,
+      bankName: app.productWallet?.upstreamAccount?.bankName ?? null,
+      upstreamAccount: app.productWallet?.upstreamAccount ?? null,
+    })),
+  })
+
   return {
     applications,
     error: null,

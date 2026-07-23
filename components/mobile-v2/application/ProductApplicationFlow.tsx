@@ -63,7 +63,7 @@ import {
 } from '@/lib/platformApplicationFields'
 import { PlatformApplicationFieldsForm } from '@/components/mobile-v2/application/PlatformApplicationFieldsForm'
 import { usePlatformApplicationFieldCatalog } from '@/hooks/usePlatformApplicationFieldCatalog'
-import { isDuplicateAccountError } from '@/lib/resolveProductApplicationAccount'
+import { isActiveUpstreamAccount, isDuplicateAccountError, pendingAccountMessage } from '@/lib/resolveProductApplicationAccount'
 import { buildLoanApplicationDetails } from '@/lib/loanApplicationDetails'
 import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
 import { poweredBy } from '@/lib/mobileProductDetailDisplay'
@@ -1220,6 +1220,15 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       return
     }
 
+    if (!isActiveUpstreamAccount(initializedApplication)) {
+      const message = pendingAccountMessage(kind === 'loan' ? 'loan' : 'mortgage')
+      setError(message)
+      setStepErrors([message])
+      toast.error(message)
+      scrollToFeedback()
+      return
+    }
+
     const requirementIssues = collectRequirementStepIssues({
       applicationAmount,
       amountMin: catalogProduct?.amountMin,
@@ -1568,18 +1577,24 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
 
   const handleCreateAccount = async () => {
     if (!productId) {
-      setCreateAccountError(`No ${productName.toLowerCase()} product selected.`)
+      const msg = `No ${productName.toLowerCase()} product selected.`
+      setCreateAccountError(msg)
+      toast.error(msg)
       return
     }
 
     if (!createAccountTermsAccepted || !createAccountPrivacyAccepted) {
-      setCreateAccountError('Please accept the terms and privacy policy to continue.')
+      const msg = 'Please accept the terms and privacy policy to continue.'
+      setCreateAccountError(msg)
+      toast.error(msg)
       return
     }
 
     const parsed = parseApplicationAmount(applicationAmount)
     if (!parsed) {
-      setCreateAccountError('Enter the amount you want to apply for.')
+      const msg = 'Enter the amount you want to apply for.'
+      setCreateAccountError(msg)
+      toast.error(msg)
       return
     }
 
@@ -1590,6 +1605,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     )
     if (validationError) {
       setCreateAccountError(validationError)
+      toast.error(validationError)
       return
     }
 
@@ -1601,12 +1617,22 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         amount: parsed,
       })
       if (!result.ok) {
-        setCreateAccountError(result.error || `Could not create your ${productName.toLowerCase()} account.`)
+        const msg = result.error || `Could not create your ${productName.toLowerCase()} account.`
+        setCreateAccountError(msg)
+        toast.error(msg)
         return
       }
+      toast.success(`${productName} account created successfully.`)
       setApplicationRevision((value) => value + 1)
       setActiveStep('requirement')
       setSheet(null)
+    } catch (error: unknown) {
+      const msg =
+        error instanceof Error && error.message
+          ? error.message
+          : `Could not create your ${productName.toLowerCase()} account.`
+      setCreateAccountError(msg)
+      toast.error(msg)
     } finally {
       setCreatingAccount(false)
     }
@@ -2009,13 +2035,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
             ) : null}
             <Button
               type="button"
-              disabled={
-                creatingAccount ||
-                !createAccountTermsAccepted ||
-                !createAccountPrivacyAccepted ||
-                !parsedApplicationAmount ||
-                Boolean(amountValidationError)
-              }
+              disabled={creatingAccount}
               className={cn('mt-8 h-12 w-full rounded-full font-semibold disabled:opacity-50', PRIMARY)}
               onClick={() => void handleCreateAccount()}
             >

@@ -246,7 +246,7 @@ export function HotLoanProductCard({ product, compact }: { product: MobileProduc
                 style={{ backgroundImage: `url(${product.image || DEFAULT_IMAGE})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
             />
             <div className="min-w-0 space-y-1.5 px-0.5">
-                <h3 className={cn('font-bold text-[var(--sf-ink,#1E1B4B)]', compact ? 'line-clamp-2 text-xs' : 'text-sm')}>{product.name}</h3>
+                <h3 className={cn('break-words font-bold text-[var(--sf-ink,#1E1B4B)]', compact ? 'line-clamp-2 text-xs' : 'line-clamp-2 text-sm')}>{product.name}</h3>
                 {!compact && (
                     <p className="line-clamp-2 text-[10px] text-gray-500">{product.description}</p>
                 )}
@@ -344,7 +344,7 @@ export function MortgageProductCard({ product, compact }: { product: MobileProdu
                 style={{ backgroundImage: `url(${product.image || DEFAULT_IMAGE})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
             />
             <div className="min-w-0 space-y-1.5 px-0.5">
-                <h3 className={cn('font-bold text-[var(--sf-ink,#1E1B4B)]', compact ? 'line-clamp-2 text-xs' : 'text-sm')}>{product.name}</h3>
+                <h3 className={cn('break-words font-bold text-[var(--sf-ink,#1E1B4B)]', compact ? 'line-clamp-2 text-xs' : 'line-clamp-2 text-sm')}>{product.name}</h3>
                 {!compact && (
                     <p className="line-clamp-2 text-[10px] text-gray-500">{product.description}</p>
                 )}
@@ -380,9 +380,9 @@ export function SavingsProductCard({ product, index }: { product: MobileProduct;
     const detailHref = `/mobile-v2/products/savings/flex-naira?productId=${encodeURIComponent(product.id)}`;
 
     return (
-        <div className={`${color.bg} rounded-[24px] p-5 flex flex-col gap-3`}>
-            <h3 className={`text-sm font-bold ${color.title}`}>{product.name}</h3>
-            <p className="text-xs text-gray-500 leading-relaxed flex-1 line-clamp-3">{product.description}</p>
+        <div className={`${color.bg} flex min-w-0 flex-col gap-3 overflow-hidden rounded-[24px] p-5`}>
+            <h3 className={`line-clamp-2 break-words text-sm font-bold leading-tight ${color.title}`}>{product.name}</h3>
+            <p className="line-clamp-3 flex-1 break-words text-xs leading-relaxed text-gray-500">{product.description}</p>
             <span className="text-xs font-bold text-gray-800">{amountRange(product)}</span>
             <span className="text-[11px] font-semibold text-gray-600">
                 {rateLabel(product)}{product.duration ? ` · ${product.duration}` : ''}
@@ -402,13 +402,13 @@ export function InvestProductCard({ product }: { product: MobileProduct }) {
     const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?q=80&w=2070&auto=format&fit=crop';
 
     return (
-        <div className="bg-white rounded-[18px] p-2.5 shadow-sm border border-gray-100">
+        <div className="min-w-0 overflow-hidden rounded-[18px] border border-gray-100 bg-white p-2.5 shadow-sm">
             <div
                 className="relative mb-2 h-[76px] w-full overflow-hidden rounded-[14px] bg-gray-100"
                 style={{ backgroundImage: `url(${product.image || DEFAULT_IMAGE})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
             />
-            <div className="space-y-1.5 px-0.5">
-                <h3 className="line-clamp-2 text-[12px] font-bold leading-snug text-[var(--sf-ink,#1E1B4B)]">{product.name}</h3>
+            <div className="min-w-0 space-y-1.5 px-0.5">
+                <h3 className="line-clamp-2 break-words text-[12px] font-bold leading-snug text-[var(--sf-ink,#1E1B4B)]">{product.name}</h3>
                 {/* <p className="line-clamp-2 text-[9px] leading-snug text-gray-500">{product.description}</p> */}
                 {product.duration ? (
                     <p className="text-[9px] font-medium text-gray-600">{product.duration}</p>
@@ -436,8 +436,8 @@ export function CommodityProductCard({ product }: { product: MobileProduct }) {
                 className="relative mb-2 h-[76px] w-full overflow-hidden rounded-[14px] bg-gray-100"
                 style={{ backgroundImage: `url(${product.image || DEFAULT_IMAGE})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
             />
-            <div className="space-y-1.5 px-0.5">
-                <h3 className="line-clamp-2 text-[12px] font-bold leading-snug text-[var(--sf-ink,#1E1B4B)]">{product.name}</h3>
+            <div className="min-w-0 space-y-1.5 px-0.5">
+                <h3 className="line-clamp-2 break-words text-[12px] font-bold leading-snug text-[var(--sf-ink,#1E1B4B)]">{product.name}</h3>
                 <p className="line-clamp-1 text-[9px] leading-snug text-gray-500">{product.description}</p>
                 <div className="line-clamp-2 text-[10px] font-bold leading-tight text-[var(--sf-ink,#1E1B4B)]">
                     {amountRange(product)}

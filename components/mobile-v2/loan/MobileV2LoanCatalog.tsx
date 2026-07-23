@@ -154,7 +154,7 @@ function HotLoanCard({ item }: { item: LoanCatalogItem }) {
             {item.title}
           </div>
         )}
-        <h3 className="text-sm font-bold text-[var(--sf-ink,#1E1B4B)] leading-snug">{item.title}</h3>
+        <h3 className="line-clamp-2 break-words text-sm font-bold leading-snug text-[var(--sf-ink,#1E1B4B)]">{item.title}</h3>
         <p className="text-sm font-bold text-[var(--sf-ink,#1E1B4B)] mt-0.5">{item.amountDisplay}</p>
         {item.description ? (
           <p className="text-[10px] text-gray-500 leading-relaxed mt-2 line-clamp-3 flex-1">

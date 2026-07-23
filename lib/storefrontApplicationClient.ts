@@ -58,11 +58,13 @@ export type StorefrontApplication = {
   product?: Record<string, unknown>
   account?: {
     id?: string
+    accountId?: string
     accountNumber?: string
     bankName?: string
     balance?: number
     currency?: string
     status?: string
+    provisionStatus?: string
   }
   requirementsSnapshot?: {
     security?: Record<string, unknown>
@@ -80,11 +82,15 @@ export type StorefrontApplication = {
   }
   productWallet?: {
     upstreamAccount?: {
+      accountId?: string
       accountNumber?: string
       bankName?: string
+      bankCode?: string
       balance?: number
       currency?: string
       status?: string
+      providerReference?: string
+      provisionStatus?: string
     }
   }
 }

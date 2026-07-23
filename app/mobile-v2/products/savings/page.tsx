@@ -19,13 +19,13 @@ function SavingsCard({ plan, index, providerName }: { plan: MobileProduct; index
     const detailHref = `/mobile-v2/products/savings/flex-naira?productId=${encodeURIComponent(plan.id)}`;
 
     return (
-        <div className="rounded-[10px] bg-[#1F1F1F] p-3 text-white shadow-lg shadow-black/10">
+        <div className="min-w-0 overflow-hidden rounded-[10px] bg-[#1F1F1F] p-3 text-white shadow-lg shadow-black/10">
             <div className="mb-4 flex items-center justify-between gap-2">
-                <p className="text-[9px] font-medium text-white/60">
+                <p className="min-w-0 truncate text-[9px] font-medium text-white/60">
                     By {providerName}
                 </p>
                 {plan.isFeatured ? (
-                    <span className="rounded-full bg-white/10 px-2 py-1 text-[8px] font-bold uppercase text-white">
+                    <span className="shrink-0 rounded-full bg-white/10 px-2 py-1 text-[8px] font-bold uppercase text-white">
                         Featured
                     </span>
                 ) : null}
@@ -33,10 +33,10 @@ function SavingsCard({ plan, index, providerName }: { plan: MobileProduct; index
             <div className="mb-2">
                 <Icon className="h-5 w-5 text-[var(--sf-primary,#2563EB)]" />
             </div>
-            <h3 className="mb-2 text-xl font-bold text-[var(--sf-primary,#2563EB)]">
+            <h3 className="mb-2 line-clamp-2 break-words text-xl font-bold leading-tight text-[var(--sf-primary,#2563EB)]">
                 {plan.name}
             </h3>
-            <p className="mb-2 text-[12px] leading-relaxed text-white/85">
+            <p className="mb-2 line-clamp-2 break-words text-[12px] leading-relaxed text-white/85">
                 {plan.description || plan.subType || 'Savings product'}
             </p>
             {plan.interestRate ? (
