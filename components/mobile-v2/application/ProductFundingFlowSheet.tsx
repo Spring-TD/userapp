@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import Image from 'next/image';
 import { AlertCircle, Check, CheckCircle, ChevronDown, Copy, Loader2, X } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { ensureInvestmentAccount } from '@/lib/investmentApplyClient';
 import { ensureSavingsAccount } from '@/lib/savingsApplyClient';
@@ -138,12 +139,16 @@ export function ProductFundingFlowSheet({
 
     const handleCreateAccount = async () => {
         if (!termsAccepted || !privacyAccepted) {
-            setSetupError('Please accept the terms and privacy policy to continue.');
+            const msg = 'Please accept the terms and privacy policy to continue.';
+            setSetupError(msg);
+            toast.error(msg);
             return;
         }
 
         if (!productId.trim()) {
-            setSetupError('No product selected.');
+            const msg = 'No product selected.';
+            setSetupError(msg);
+            toast.error(msg);
             return;
         }
 
@@ -159,15 +164,25 @@ export function ProductFundingFlowSheet({
                 isPoliticallyExposedPerson,
             });
             if (!result.ok) {
-                setSetupError(result.error || 'Could not create your account. Please try again.');
+                const msg = result.error || 'Could not create your account. Please try again.';
+                setSetupError(msg);
+                toast.error(msg);
                 return;
             }
 
             setProvisionedAccount(result.account ?? null);
-            setAccountCreationMessage(
-                result.message || `Your ${productKindLabel} account was created successfully.`,
-            );
+            const successMsg =
+                result.message || `Your ${productKindLabel} account was created successfully.`;
+            setAccountCreationMessage(successMsg);
+            toast.success(successMsg);
             setStep('accountCreated');
+        } catch (error: unknown) {
+            const msg =
+                error instanceof Error && error.message
+                    ? error.message
+                    : 'Could not create your account. Please try again.';
+            setSetupError(msg);
+            toast.error(msg);
         } finally {
             setSettingUpAccount(false);
         }
@@ -275,7 +290,7 @@ export function ProductFundingFlowSheet({
                     ) : null}
 
                     <Button
-                        disabled={!termsAccepted || !privacyAccepted || settingUpAccount}
+                        disabled={settingUpAccount}
                         onClick={() => void handleCreateAccount()}
                         className={`mt-7 h-12 w-full rounded-full text-sm font-semibold disabled:opacity-50 ${BRAND_BUTTON}`}
                     >

@@ -107,8 +107,8 @@ export function HomeStorefrontProducts({
                 <span className="inline-block rounded-md bg-[var(--sf-tint,#E0E7FF)] px-2 py-0.5 text-[10px] font-bold uppercase text-[var(--sf-primary,#2563EB)]">
                   {product.isFeatured ? 'Featured' : product.subType || product.type}
                 </span>
-                <h5 className="mt-2 text-sm font-bold text-[#1E293B] line-clamp-2">{product.name}</h5>
-                <p className="mt-1 text-[11px] text-gray-500 line-clamp-2">{product.description}</p>
+                <h5 className="mt-2 line-clamp-2 break-words text-sm font-bold text-[#1E293B]">{product.name}</h5>
+                <p className="mt-1 line-clamp-2 break-words text-[11px] text-gray-500">{product.description}</p>
               </Link>
             ))}
           </div>

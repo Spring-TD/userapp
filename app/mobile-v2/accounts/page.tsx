@@ -215,6 +215,9 @@ function ProductAccountCard({
     const accountDetailsHref = `/mobile-v2/accounts/${application.id}`;
     const snapshot = activeFilter === 'Commodity' ? commoditySnapshot(application) : null;
     const holdingStatus = snapshot?.commodityHoldingStatus || application.status;
+    // Badge source (backend-driven):
+    // 1) productWallet.upstreamAccount.provisionStatus when wallet exists (e.g. "active")
+    // 2) else loanWorkflowStatus (e.g. "account_requested" when provisioning never finished)
     const provisionStatus = account?.provisionStatus || application.loanWorkflowStatus || holdingStatus || application.status;
     const statusLabel = String(provisionStatus || 'pending').replace(/_/g, ' ');
     const principal = snapshot?.commodityPrincipal ?? (application as { amount?: number }).amount;
@@ -404,6 +407,14 @@ export default function AccountsPage() {
 
         void fetchUserProductApplications(userId, params).then((result) => {
             if (cancelled) return;
+            console.log('[Accounts] page list result', {
+                filter: activeFilter,
+                productType: activeProductType,
+                error: result.error,
+                status: result.status,
+                count: result.applications.length,
+                applications: result.applications,
+            });
             setApplications(result.applications);
             setApplicationsError(result.error);
             setApplicationsLoading(false);

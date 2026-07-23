@@ -38,8 +38,8 @@ function FeaturedCommodityCard({ product, providerName }: { product: CommodityCa
 
           <div className="pt-4">
             <div className="mb-2 flex items-start justify-between gap-3">
-              <h3 className="line-clamp-1 text-sm font-medium text-[#1E293B]">
-                {product.name}.....
+              <h3 className="min-w-0 flex-1 break-words line-clamp-2 text-sm font-medium text-[#1E293B]">
+                {product.name}
               </h3>
               <span className="shrink-0 text-sm font-bold text-[var(--sf-ink,#1E1B4B)]">
                 {formatNgn(product.price)}
@@ -90,7 +90,7 @@ function CommodityGridCard({ product, providerName }: { product: CommodityCatalo
           style={{ backgroundImage: `url(${product.image})` }}
         />
       </Link>
-      <h3 className="line-clamp-1 text-sm font-medium text-[#1E293B]">{product.name}...</h3>
+      <h3 className="line-clamp-2 break-words text-sm font-medium text-[#1E293B]">{product.name}</h3>
       <p className="mt-1 text-xs font-bold text-[#1E293B]">{formatNgn(product.price)}</p>
       <p className="mt-2 line-clamp-3 text-[9px] leading-relaxed text-gray-400">
         {product.description}

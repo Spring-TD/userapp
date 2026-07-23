@@ -5,22 +5,18 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Check, ChevronLeft, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
 import { initializeProductApplication } from '@/lib/storefrontApplicationClient'
 import { mortgageAccountSuccessHref, mortgageApplyHref } from '@/lib/mortgageApplyRoutes'
 import {
   isDuplicateAccountError,
+  pendingAccountMessage,
   resolveProductApplicationAccount,
 } from '@/lib/resolveProductApplicationAccount'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 import { resolveWalletUserId } from '@/lib/resolveWalletUserId'
-import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
-import {
-  formatApplicationAmountHint,
-  parseApplicationAmount,
-  validateApplicationAmount,
-} from '@/lib/applicationAmount'
 
 function MortgageApplyStartInner() {
   const router = useRouter()
@@ -32,21 +28,11 @@ function MortgageApplyStartInner() {
   const [error, setError] = useState<string | null>(null)
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [privacyAccepted, setPrivacyAccepted] = useState(false)
-  const [applicationAmount, setApplicationAmount] = useState('')
   const [processing, setProcessing] = useState(false)
   const [checkingExisting, setCheckingExisting] = useState(true)
   const [hasInitializedAccount, setHasInitializedAccount] = useState(false)
-  const { product } = useMobileProductDetail({
-    productId,
-    enabled: Boolean(productId),
-  })
-  const parsedAmount = parseApplicationAmount(applicationAmount)
-  const amountValidationError =
-    parsedAmount != null
-      ? validateApplicationAmount(parsedAmount, product?.amountMin, product?.amountMax)
-      : applicationAmount.trim()
-        ? 'Enter a valid mortgage amount.'
-        : null
+  const [isActiveAccount, setIsActiveAccount] = useState(false)
+  const [provisionStatus, setProvisionStatus] = useState<string | null>(null)
 
   useEffect(() => {
     if (!rawProductId || rawProductId === productId) return
@@ -71,15 +57,42 @@ function MortgageApplyStartInner() {
       setCheckingExisting(true)
       try {
         const userId = await resolveWalletUserId()
-        if (!userId) return
+        if (!userId) {
+          if (!cancelled) {
+            setError('Could not resolve your user session. Please sign in again.')
+            toast.error('Could not resolve your user session. Please sign in again.')
+          }
+          return
+        }
 
         const resolved = await resolveProductApplicationAccount(userId, productId)
-        if (!cancelled && resolved.hasAccount) {
-          setHasInitializedAccount(true)
+        if (cancelled) return
+
+        console.log('[MortgageApplyStart] resolveProductApplicationAccount', resolved)
+
+        setHasInitializedAccount(resolved.hasAccount)
+        setIsActiveAccount(resolved.isActiveAccount)
+        setProvisionStatus(resolved.provisionStatus ?? null)
+
+        // Only continue into the application form when the product account is Active.
+        if (resolved.hasAccount && resolved.isActiveAccount) {
+          toast.success('Active mortgage account found. Continuing application…')
           router.replace(mortgageApplyHref(productId))
+          return
         }
-      } catch (error) {
-        console.warn('Could not check existing initialized mortgage application:', error)
+
+        if (resolved.hasAccount && !resolved.isActiveAccount) {
+          const msg = pendingAccountMessage('mortgage')
+          setError(msg)
+          toast.message(msg)
+        }
+      } catch (err) {
+        console.warn('Could not check existing initialized mortgage application:', err)
+        if (!cancelled) {
+          const msg = 'Could not verify your mortgage account status. Please try again.'
+          setError(msg)
+          toast.error(msg)
+        }
       } finally {
         if (!cancelled) setCheckingExisting(false)
       }
@@ -94,34 +107,99 @@ function MortgageApplyStartInner() {
 
   const handleAccept = async () => {
     if (!productId) {
-      setError('No mortgage product selected.')
+      const msg = 'No mortgage product selected.'
+      setError(msg)
+      toast.error(msg)
       return
     }
 
-    if (hasInitializedAccount) {
+    if (!termsAccepted || !privacyAccepted) {
+      const msg = 'Please accept Terms & Conditions and Data Privacy to continue.'
+      setError(msg)
+      toast.error(msg)
+      return
+    }
+
+    if (hasInitializedAccount && isActiveAccount) {
+      toast.success('Continuing to your mortgage application…')
       router.replace(mortgageApplyHref(productId))
       return
     }
 
-    if (amountValidationError) {
-      setError(amountValidationError)
+    if (hasInitializedAccount && !isActiveAccount) {
+      setProcessing(true)
+      setError(null)
+      try {
+        const userId = await resolveWalletUserId()
+        if (!userId) {
+          const msg = 'Could not resolve your user session. Please sign in again.'
+          setError(msg)
+          toast.error(msg)
+          return
+        }
+        const resolved = await resolveProductApplicationAccount(userId, productId)
+        console.log('[MortgageApplyStart] re-check account status', resolved)
+        setHasInitializedAccount(resolved.hasAccount)
+        setIsActiveAccount(resolved.isActiveAccount)
+        setProvisionStatus(resolved.provisionStatus ?? null)
+        if (resolved.isActiveAccount) {
+          toast.success('Your mortgage account is Active. Continuing application…')
+          router.replace(mortgageApplyHref(productId))
+          return
+        }
+        const msg = pendingAccountMessage('mortgage')
+        setError(msg)
+        toast.message(msg)
+      } catch (err) {
+        console.error('[MortgageApplyStart] status re-check failed', err)
+        const msg = 'Could not refresh account status. Please try again.'
+        setError(msg)
+        toast.error(msg)
+      } finally {
+        setProcessing(false)
+      }
       return
     }
 
     setProcessing(true)
     setError(null)
     try {
-      const result = await initializeProductApplication(productId, { productType: 'MORTGAGE'})
+      const result = await initializeProductApplication(productId, { productType: 'MORTGAGE' })
+      console.log('[MortgageApplyStart] initializeProductApplication result', result)
+
       if (!result.ok) {
         if (isDuplicateAccountError(result.error || '')) {
-          router.replace(mortgageApplyHref(productId))
+          const userId = await resolveWalletUserId()
+          const resolved = userId ? await resolveProductApplicationAccount(userId, productId) : null
+          if (resolved?.isActiveAccount) {
+            toast.success('You already have an active mortgage account. Continuing application…')
+            router.replace(mortgageApplyHref(productId))
+            return
+          }
+          const msg =
+            resolved?.hasAccount
+              ? pendingAccountMessage('mortgage')
+              : result.error || 'Account already exists but is not Active yet.'
+          setError(msg)
+          toast.error(msg)
+          setHasInitializedAccount(Boolean(resolved?.hasAccount))
+          setIsActiveAccount(Boolean(resolved?.isActiveAccount))
+          setProvisionStatus(resolved?.provisionStatus ?? null)
           return
         }
-        setError(result.error || 'Could not set up your mortgage account.')
+        const msg = result.error || 'Could not set up your mortgage account.'
+        setError(msg)
+        toast.error(msg)
         return
       }
 
+      toast.success('Mortgage account request submitted successfully.')
       router.replace(mortgageAccountSuccessHref(productId))
+    } catch (err) {
+      console.error('[MortgageApplyStart] create account failed', err)
+      const msg = err instanceof Error && err.message ? err.message : 'Could not set up your mortgage account.'
+      setError(msg)
+      toast.error(msg)
     } finally {
       setProcessing(false)
     }
@@ -138,8 +216,10 @@ function MortgageApplyStartInner() {
     )
   }
 
+  const pendingOnly = hasInitializedAccount && !isActiveAccount
+
   return (
-    <div className="relative flex h-full flex-col sf-page-bg overflow-hidden">
+    <div className="relative flex h-full flex-col overflow-hidden sf-page-bg">
       <div className="px-6 pt-12">
         <Link
           href="/mobile-v2/products/mortgage"
@@ -151,12 +231,18 @@ function MortgageApplyStartInner() {
 
       <div className="flex flex-1 flex-col items-center justify-center px-8 pb-24 text-center opacity-60">
         <h1 className="text-lg font-bold text-[var(--sf-ink,#1E1B4B)]">
-          {hasInitializedAccount ? 'Continue Mortgage Application' : 'Create a Mortgage Account'}
+          {pendingOnly
+            ? 'Account pending'
+            : hasInitializedAccount
+              ? 'Continue Mortgage Application'
+              : 'Create a Mortgage Account'}
         </h1>
         <p className="mt-2 text-sm text-gray-500">
-          {hasInitializedAccount
-            ? 'Your account has already been created. Continue to complete your application.'
-            : 'Accept the terms to create your account before continuing to the application.'}
+          {pendingOnly
+            ? 'Your account request is in progress. Apply once it becomes Active.'
+            : hasInitializedAccount
+              ? 'Your account has already been created. Continue to complete your application.'
+              : 'Accept the terms to create your account before continuing to the application.'}
         </p>
       </div>
 
@@ -166,12 +252,22 @@ function MortgageApplyStartInner() {
           <div className="mx-auto mb-5 h-1.5 w-16 rounded-full bg-gray-300" />
           <div className="text-center">
             <h2 className="text-xl font-bold text-[#1E293B]">
-              {hasInitializedAccount ? 'Continue Mortgage Application' : 'Create a Mortgage Account'}
+              {pendingOnly
+                ? 'Mortgage account not Active yet'
+                : hasInitializedAccount
+                  ? 'Continue Mortgage Application'
+                  : 'Create a Mortgage Account'}
             </h2>
             <p className="mx-auto mt-4 max-w-xs text-xs leading-relaxed text-gray-500">
-              {hasInitializedAccount ? (
+              {pendingOnly ? (
                 <>
-                  Your bank account with <strong>{providerName}</strong> is already active. Continue to complete your mortgage application.
+                  Status: <strong>{provisionStatus || 'ACCOUNT_REQUESTED'}</strong>. You cannot submit a
+                  mortgage application until this account is <strong>Active</strong>.
+                </>
+              ) : hasInitializedAccount ? (
+                <>
+                  Your bank account with <strong>{providerName}</strong> is already active. Continue to
+                  complete your mortgage application.
                 </>
               ) : (
                 <>
@@ -191,65 +287,63 @@ function MortgageApplyStartInner() {
               className="h-7 w-7 shrink-0 object-contain"
             />
             <span>
-              <strong>{providerName}</strong> is a licensed financial institution by the Central
-              Bank of Nigeria.
+              <strong>{providerName}</strong> is a licensed financial institution by the Central Bank of
+              Nigeria.
             </span>
           </div>
 
-          <div className="mt-5 space-y-3 text-left text-xs text-gray-700">
-            <button
-              type="button"
-              onClick={() => setTermsAccepted((v) => !v)}
-              className="flex items-center gap-2"
-            >
-              <span
-                className={`flex h-4 w-4 items-center justify-center rounded-full border ${
-                  termsAccepted
-                    ? 'border-[var(--sf-button,#1E40AF)] bg-[var(--sf-button,#1E40AF)] text-white'
-                    : 'border-gray-400 bg-white'
-                }`}
+          {!pendingOnly ? (
+            <div className="mt-5 space-y-3 text-left text-xs text-gray-700">
+              <button
+                type="button"
+                onClick={() => setTermsAccepted((v) => !v)}
+                className="flex items-center gap-2"
               >
-                {termsAccepted ? <Check className="h-3 w-3" /> : null}
-              </span>
-              Accept Terms & Condition, Data Sharing with {providerName}
-            </button>
-            <button
-              type="button"
-              onClick={() => setPrivacyAccepted((v) => !v)}
-              className="flex items-center gap-2"
-            >
-              <span
-                className={`flex h-4 w-4 items-center justify-center rounded-full border ${
-                  privacyAccepted
-                    ? 'border-[var(--sf-button,#1E40AF)] bg-[var(--sf-button,#1E40AF)] text-white'
-                    : 'border-gray-400 bg-white'
-                }`}
+                <span
+                  className={`flex h-4 w-4 items-center justify-center rounded-full border ${
+                    termsAccepted
+                      ? 'border-[var(--sf-button,#1E40AF)] bg-[var(--sf-button,#1E40AF)] text-white'
+                      : 'border-gray-400 bg-white'
+                  }`}
+                >
+                  {termsAccepted ? <Check className="h-3 w-3" /> : null}
+                </span>
+                Accept Terms & Condition, Data Sharing with {providerName}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPrivacyAccepted((v) => !v)}
+                className="flex items-center gap-2"
               >
-                {privacyAccepted ? <Check className="h-3 w-3" /> : null}
-              </span>
-              Accept Data Privacy & Use of Data
-            </button>
-          </div>
-
-          {error || amountValidationError ? (
-            <p className="mt-4 text-center text-xs text-red-600">{error || amountValidationError}</p>
+                <span
+                  className={`flex h-4 w-4 items-center justify-center rounded-full border ${
+                    privacyAccepted
+                      ? 'border-[var(--sf-button,#1E40AF)] bg-[var(--sf-button,#1E40AF)] text-white'
+                      : 'border-gray-400 bg-white'
+                  }`}
+                >
+                  {privacyAccepted ? <Check className="h-3 w-3" /> : null}
+                </span>
+                Accept Data Privacy & Use of Data
+              </button>
+            </div>
           ) : null}
+
+          {error ? <p className="mt-4 text-center text-xs text-red-600">{error}</p> : null}
 
           <Button
             type="button"
-            disabled={
-              (!hasInitializedAccount &&
-                (!termsAccepted || !privacyAccepted )) ||
-              processing
-            }
+            disabled={processing}
             className="mt-8 h-12 w-full rounded-full bg-[var(--sf-button,#1E40AF)] font-semibold text-white disabled:opacity-50"
-            onClick={handleAccept}
+            onClick={() => void handleAccept()}
           >
             {processing ? (
               <span className="inline-flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Creating account...
               </span>
+            ) : pendingOnly ? (
+              'Check status again'
             ) : hasInitializedAccount ? (
               'Continue to Mortgage Application'
             ) : (
@@ -259,9 +353,9 @@ function MortgageApplyStartInner() {
           <button
             type="button"
             className="mt-5 w-full text-center text-sm font-medium text-gray-700"
-            onClick={() => router.push('/mobile-v2/products/mortgage')}
+            onClick={() => router.push(pendingOnly ? '/mobile-v2/accounts' : '/mobile-v2/products/mortgage')}
           >
-            No. Go back
+            {pendingOnly ? 'View My Accounts' : 'No. Go back'}
           </button>
         </div>
       </div>
