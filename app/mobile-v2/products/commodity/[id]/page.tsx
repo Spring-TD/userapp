@@ -41,7 +41,7 @@ import { formatNgn, formatNaira, poweredBy } from '@/lib/mobileProductDetailDisp
 import { isVirtualNubanActive } from '@/lib/userWallet'
 import { walletSpendableBalance } from '@/lib/userWallet'
 import { YesNoField, PepSearchNotice } from '@/components/mobile-v2/application/ApplicantProfileFields'
-import { pepStatusSubmission, type PepAnswer } from '@/lib/applicantProfileFields'
+import type { PepAnswer } from '@/lib/applicantProfileFields'
 
 type PurchaseSheet = 'purchase' | 'insufficient_funds' | 'fund_bank' | null
 
@@ -260,7 +260,9 @@ export default function CommodityDetailPage() {
     setPurchaseError(null)
     try {
       const result = await purchaseCommodity(product.id, quantity, {
-        requirementSubmissions: [pepStatusSubmission(politicallyExposed)],
+        platformFields: {
+          isPoliticallyExposedPerson: politicallyExposed === 'yes',
+        },
       })
       if (!result.ok) {
         if (isInsufficientFundsError(result.error, result.status)) {

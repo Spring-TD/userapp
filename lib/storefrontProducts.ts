@@ -59,6 +59,9 @@ export interface ProductProperty {
   propertyType?: string
   value?: number
   location?: string
+  propertyDescription?: string
+  videoUrl?: string
+  imageUrls?: string[]
 }
 
 const TYPE_TO_UI: Record<string, StorefrontProductType> = {
@@ -202,13 +205,45 @@ function mapProperties(value: unknown): ProductProperty[] {
   if (!Array.isArray(value)) return []
   return value.map((item) => {
     const row = asRecord(item)
+    const imageUrls = collectPropertyImageUrls(row)
     return {
       name: asString(row.name),
-      propertyType: asString(row.propertyType),
+      propertyType: asString(row.propertyType ?? row.type),
       value: asNumber(row.value),
       location: asString(row.location),
+      propertyDescription: asString(row.propertyDescription ?? row.description),
+      videoUrl: asString(row.videoUrl),
+      ...(imageUrls.length ? { imageUrls } : {}),
     }
   })
+}
+
+function collectPropertyImageUrls(row: Record<string, unknown>): string[] {
+  const urls: string[] = []
+  const push = (value: unknown) => {
+    if (typeof value === "string" && value.trim()) urls.push(value.trim())
+  }
+
+  if (Array.isArray(row.imageUrls)) {
+    for (const entry of row.imageUrls) push(entry)
+  }
+
+  if (Array.isArray(row.previewImages)) {
+    for (const entry of row.previewImages) {
+      if (typeof entry === "string") {
+        push(entry)
+        continue
+      }
+      const media = asRecord(entry)
+      push(media.url ?? media.fileUrl ?? media.src)
+    }
+  }
+
+  const previewImage = asRecord(row.previewImage)
+  push(previewImage.url ?? previewImage.fileUrl ?? previewImage.src)
+  push(row.imageUrl ?? row.image)
+
+  return Array.from(new Set(urls))
 }
 
 function formatPercent(value: unknown): string | undefined {
@@ -346,7 +381,9 @@ export function mapApiProductToMobileProduct(row: Record<string, unknown>): Mobi
     fees: allFees,
     requirements: mapRequirements(requirementsPayload.otherRequirements),
     documentsToDownload: mapDocuments(requirementsPayload.documentsToDownload),
-    properties: mapProperties(row.properties),
+    properties: mapProperties(
+      row.properties ?? asRecord(row.calculatedConfig).properties ?? asRecord(row.config).properties,
+    ),
     createdAt: String(row.createdAt ?? ""),
     updatedAt: String(row.updatedAt ?? ""),
     ...(loanAmount.max != null ? { propertyValue: loanAmount.max } : {}),

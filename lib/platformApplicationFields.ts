@@ -203,6 +203,15 @@ export function shouldShowPlatformField(
   return true
 }
 
+/** Map Yes/No UI answer to platform PEP boolean (undefined if unanswered). */
+export function isPoliticallyExposedFromPepAnswer(
+  pep: 'yes' | 'no' | '' | undefined,
+): boolean | undefined {
+  if (pep === 'yes') return true
+  if (pep === 'no') return false
+  return undefined
+}
+
 export function platformFieldsFromDraft(draft: PlatformFieldsDraft): PlatformFields {
   const monthlyIncome = parsePositiveNumber(draft.monthlyIncome)
   const payload: PlatformFields = {}

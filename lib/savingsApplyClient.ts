@@ -1,5 +1,6 @@
 import { applyProductOneShot, createSavingsAccount } from '@/lib/storefrontApplicationClient'
-import { pepStatusSubmission } from '@/lib/applicantProfileFields'
+import type { PlatformFields } from '@/lib/platformApplicationFields'
+import { isPoliticallyExposedFromPepAnswer } from '@/lib/platformApplicationFields'
 
 type SavingsApplyResponse = {
   success?: boolean
@@ -20,21 +21,39 @@ export type EnsureSavingsAccountResult = {
   error?: string
 }
 
+type EnsureSavingsOptions = {
+  amount?: number
+  currency?: string
+  /** Preferred: platform PEP boolean. */
+  isPoliticallyExposedPerson?: boolean
+  /**
+   * @deprecated Prefer `isPoliticallyExposedPerson`. Mapped to the platform field when set.
+   */
+  politicallyExposed?: 'yes' | 'no'
+}
+
+function resolvePlatformFields(options?: EnsureSavingsOptions): PlatformFields | undefined {
+  const pep =
+    options?.isPoliticallyExposedPerson !== undefined
+      ? options.isPoliticallyExposedPerson
+      : isPoliticallyExposedFromPepAnswer(options?.politicallyExposed)
+  if (pep === undefined) return undefined
+  return { isPoliticallyExposedPerson: pep }
+}
+
 /** POST /api/v1/savings/apply — provision savings account before funding. */
 export async function ensureSavingsAccount(
   productId: string,
-  options?: { amount?: number; currency?: string; politicallyExposed?: 'yes' | 'no' },
+  options?: EnsureSavingsOptions,
 ): Promise<EnsureSavingsAccountResult> {
   const hasAmount = options?.amount != null && options.amount > 0
-  const requirementSubmissions = options?.politicallyExposed
-    ? [pepStatusSubmission(options.politicallyExposed)]
-    : undefined
+  const platformFields = resolvePlatformFields(options)
   const result = hasAmount
     ? await applyProductOneShot(productId, {
         amount: options!.amount,
         currency: options?.currency,
         productType: 'SAVINGS',
-        requirementSubmissions,
+        platformFields,
       })
     : await createSavingsAccount(productId, { currency: options?.currency })
 

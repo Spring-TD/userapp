@@ -48,8 +48,9 @@ const nextConfig = {
             value: 'nosniff'
           },
           {
+            // Required for YouTube embeds (Error 153 without a usable Referer).
             key: 'Referrer-Policy',
-            value: 'origin-when-cross-origin'
+            value: 'strict-origin-when-cross-origin'
           },
           {
             key: 'Permissions-Policy',
@@ -63,7 +64,11 @@ const nextConfig = {
               "style-src 'self' 'unsafe-inline'", // Required for inline styles
               "img-src 'self' data: https: blob:",
               "font-src 'self' data:",
-              "connect-src 'self' https://*.fly.dev https://*.vercel.app https://restcountries.com wss:",
+              "media-src 'self' https: blob:",
+              "connect-src 'self' https://*.fly.dev https://*.vercel.app https://restcountries.com https://nominatim.openstreetmap.org wss:",
+              // Virtual tour: OpenStreetMap embed + YouTube property video (+ Google Maps if used)
+              "frame-src 'self' https://www.openstreetmap.org https://openstreetmap.org https://www.youtube.com https://youtube.com https://www.youtube-nocookie.com https://youtube-nocookie.com https://www.google.com https://maps.google.com https://*.google.com",
+              "child-src 'self' https://www.openstreetmap.org https://openstreetmap.org https://www.youtube.com https://youtube.com https://www.youtube-nocookie.com https://youtube-nocookie.com https://www.google.com https://maps.google.com https://*.google.com",
               "frame-ancestors 'self'",
               "base-uri 'self'",
               "form-action 'self'",

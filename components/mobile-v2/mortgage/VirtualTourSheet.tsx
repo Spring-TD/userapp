@@ -1,15 +1,28 @@
 'use client'
 
-import React, { useState } from 'react'
-import { Play } from 'lucide-react'
+import React, { useEffect, useState } from 'react'
+import { MapPin, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { MortgageSheet, MORTGAGE_PRIMARY } from '@/components/mobile-v2/mortgage/MortgageSheet'
 import {
-  googleMapsEmbedUrl,
+  geocodeAddress,
   googleMapsUrl,
+  isDirectVideoMediaUrl,
+  openStreetMapEmbedUrl,
   type PropertyTourData,
 } from '@/lib/mortgagePropertyTour'
 import { cn } from '@/lib/utils'
+
+function withAutoplay(embedUrl: string): string {
+  try {
+    const url = new URL(embedUrl)
+    url.searchParams.set('autoplay', '1')
+    url.searchParams.set('playsinline', '1')
+    return url.toString()
+  } catch {
+    return `${embedUrl}${embedUrl.includes('?') ? '&' : '?'}autoplay=1&playsinline=1`
+  }
+}
 
 type VirtualTourPhase = 'location' | 'video' | 'property'
 
@@ -30,6 +43,35 @@ export function VirtualTourSheet({ open, onClose, tour, onComplete }: VirtualTou
   const [phase, setPhase] = useState<VirtualTourPhase>('location')
   const [imageIndex, setImageIndex] = useState(0)
   const [videoPlaying, setVideoPlaying] = useState(false)
+  const [mapEmbedUrl, setMapEmbedUrl] = useState<string | null>(null)
+  const [mapLoading, setMapLoading] = useState(false)
+  const [mapError, setMapError] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    const query = tour.hasConfiguredAddress ? tour.address : decodeURIComponent(tour.mapQuery || '')
+
+    setMapLoading(true)
+    setMapError(false)
+    setMapEmbedUrl(null)
+
+    void (async () => {
+      const geo = await geocodeAddress(query)
+      if (cancelled) return
+      if (!geo) {
+        setMapError(true)
+        setMapLoading(false)
+        return
+      }
+      setMapEmbedUrl(openStreetMapEmbedUrl(geo.lat, geo.lon))
+      setMapLoading(false)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [open, tour.address, tour.hasConfiguredAddress, tour.mapQuery])
 
   const handleClose = () => {
     setPhase('location')
@@ -91,13 +133,26 @@ export function VirtualTourSheet({ open, onClose, tour, onComplete }: VirtualTou
           <div className="mt-6">
             <p className="text-sm font-semibold text-[var(--sf-ink,#1E293B)]">Address Navigation</p>
             <div className="relative mt-3 overflow-hidden rounded-2xl border border-gray-100 bg-gray-50">
-              <iframe
-                title="Property location map"
-                src={googleMapsEmbedUrl(tour.mapQuery)}
-                className="h-44 w-full border-0"
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-              />
+              {mapEmbedUrl ? (
+                <iframe
+                  title="Property location map"
+                  src={mapEmbedUrl}
+                  className="h-44 w-full border-0"
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                />
+              ) : (
+                <div className="flex h-44 flex-col items-center justify-center gap-2 px-6 text-center">
+                  <MapPin className="h-8 w-8 text-[var(--sf-button,#1E40AF)]" />
+                  <p className="text-xs text-gray-500">
+                    {mapLoading
+                      ? 'Loading map…'
+                      : mapError
+                        ? 'Could not embed the map for this address.'
+                        : 'Map preview unavailable.'}
+                  </p>
+                </div>
+              )}
               <a
                 href={googleMapsUrl(tour.mapQuery)}
                 target="_blank"
@@ -108,21 +163,39 @@ export function VirtualTourSheet({ open, onClose, tour, onComplete }: VirtualTou
               </a>
             </div>
             <p className="mt-4 text-xs leading-relaxed text-gray-600">{tour.address}</p>
+            {!tour.hasConfiguredAddress ? (
+              <p className="mt-2 text-[11px] text-amber-700">
+                Map uses the best available location text from the product. Ask your provider to set a full
+                property address if this looks wrong.
+              </p>
+            ) : null}
           </div>
         ) : null}
 
         {phase === 'video' ? (
           <div className="mt-6">
             <div className="relative flex h-52 items-center justify-center overflow-hidden rounded-2xl bg-gray-200">
-              {tour.videoUrl && videoPlaying ? (
+              {tour.videoUrl && videoPlaying && isDirectVideoMediaUrl(tour.videoSourceUrl || tour.videoUrl) ? (
+                <video
+                  key={tour.videoUrl}
+                  className="h-full w-full object-contain bg-black"
+                  src={tour.videoUrl}
+                  controls
+                  playsInline
+                  autoPlay
+                  preload="metadata"
+                />
+              ) : tour.videoUrl && videoPlaying ? (
                 <iframe
                   title="Property video tour"
-                  src={tour.videoUrl}
+                  src={withAutoplay(tour.videoUrl)}
                   className="h-full w-full border-0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  // YouTube Error 153: embeds require a referrer; do not use no-referrer.
+                  referrerPolicy="strict-origin-when-cross-origin"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen; web-share"
                   allowFullScreen
                 />
-              ) : (
+              ) : tour.videoUrl ? (
                 <button
                   type="button"
                   onClick={() => setVideoPlaying(true)}
@@ -131,11 +204,29 @@ export function VirtualTourSheet({ open, onClose, tour, onComplete }: VirtualTou
                 >
                   <Play className="ml-1 h-6 w-6 fill-white" />
                 </button>
+              ) : (
+                <p className="px-6 text-center text-xs text-gray-500">
+                  No property video was configured for this mortgage product.
+                </p>
               )}
             </div>
             <p className="mt-3 text-center text-xs text-gray-500">
-              {videoPlaying ? 'Video tour in progress' : 'Tap play to watch the property video tour'}
+              {!tour.videoUrl
+                ? 'Ask your provider to add a property video URL in product configuration.'
+                : videoPlaying
+                  ? 'Video tour in progress'
+                  : 'Tap play to watch the property video tour'}
             </p>
+            {tour.videoSourceUrl && !isDirectVideoMediaUrl(tour.videoSourceUrl) ? (
+              <a
+                href={tour.videoSourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 block text-center text-[11px] font-medium text-[var(--sf-button,#1E40AF)] underline-offset-2 hover:underline"
+              >
+                Open video on YouTube
+              </a>
+            ) : null}
           </div>
         ) : null}
 
@@ -143,28 +234,36 @@ export function VirtualTourSheet({ open, onClose, tour, onComplete }: VirtualTou
           <div className="mt-6">
             <p className="text-sm font-semibold text-[var(--sf-ink,#1E293B)]">{tour.propertyName}</p>
             <p className="mt-1 text-xs text-gray-500">Main building</p>
-            <div className="relative mt-3 h-52 overflow-hidden rounded-2xl bg-gray-200">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={tour.images[imageIndex] ?? tour.images[0]}
-                alt={`${tour.propertyName} photo ${imageIndex + 1}`}
-                className="h-full w-full object-cover"
-              />
-            </div>
-            <div className="mt-4 flex justify-center gap-2">
-              {tour.images.map((_, index) => (
-                <button
-                  key={index}
-                  type="button"
-                  onClick={() => setImageIndex(index)}
-                  className={cn(
-                    'h-2 rounded-full transition-all',
-                    index === imageIndex ? 'w-6 bg-[var(--sf-ink,#1E293B)]' : 'w-2 bg-gray-300',
-                  )}
-                  aria-label={`View photo ${index + 1}`}
-                />
-              ))}
-            </div>
+            {tour.images.length > 0 ? (
+              <>
+                <div className="relative mt-3 h-52 overflow-hidden rounded-2xl bg-gray-200">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={tour.images[imageIndex] ?? tour.images[0]}
+                    alt={`${tour.propertyName} photo ${imageIndex + 1}`}
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+                <div className="mt-4 flex justify-center gap-2">
+                  {tour.images.map((_, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => setImageIndex(index)}
+                      className={cn(
+                        'h-2 rounded-full transition-all',
+                        index === imageIndex ? 'w-6 bg-[var(--sf-ink,#1E293B)]' : 'w-2 bg-gray-300',
+                      )}
+                      aria-label={`View photo ${index + 1}`}
+                    />
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="mt-3 flex h-52 items-center justify-center rounded-2xl bg-gray-100 px-6 text-center text-xs text-gray-500">
+                No property photos were configured for this mortgage product.
+              </div>
+            )}
           </div>
         ) : null}
 

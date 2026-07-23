@@ -52,12 +52,20 @@ export function V2OnboardingView({
   };
 
   const handleSkip = () => {
-    onSkip?.() || onComplete?.();
-  };
+    if (onSkip) {
+      onSkip()
+    } else {
+      onComplete?.()
+    }
+  }
 
   const handleSignIn = () => {
-    onSignIn?.() || onComplete?.();
-  };
+    if (onSignIn) {
+      onSignIn()
+    } else {
+      onComplete?.()
+    }
+  }
 
   const currentStepData = steps[currentStep];
 

@@ -14,6 +14,7 @@ import {
 } from '@/lib/applicationAmount';
 import { YesNoField, PepSearchNotice } from '@/components/mobile-v2/application/ApplicantProfileFields';
 import type { PepAnswer } from '@/lib/applicantProfileFields';
+import { isPoliticallyExposedFromPepAnswer } from '@/lib/platformApplicationFields';
 
 type FundingFlowStep = 'terms' | 'accountCreated' | 'application' | 'accountDetails' | 'success' | 'failure';
 
@@ -152,12 +153,10 @@ export function ProductFundingFlowSheet({
         try {
             const ensure =
                 accountKind === 'investment' ? ensureInvestmentAccount : ensureSavingsAccount;
+            const isPoliticallyExposedPerson = isPoliticallyExposedFromPepAnswer(form.politicallyExposed);
             const result = await ensure(productId.trim(), {
                 currency: 'NGN',
-                politicallyExposed:
-                    form.politicallyExposed === 'yes' || form.politicallyExposed === 'no'
-                        ? form.politicallyExposed
-                        : undefined,
+                isPoliticallyExposedPerson,
             });
             if (!result.ok) {
                 setSetupError(result.error || 'Could not create your account. Please try again.');
@@ -181,13 +180,11 @@ export function ProductFundingFlowSheet({
         try {
             const ensure =
                 accountKind === 'investment' ? ensureInvestmentAccount : ensureSavingsAccount;
+            const isPoliticallyExposedPerson = isPoliticallyExposedFromPepAnswer(form.politicallyExposed);
             const result = await ensure(productId.trim(), {
                 amount: enteredAmount,
                 currency: 'NGN',
-                politicallyExposed:
-                    form.politicallyExposed === 'yes' || form.politicallyExposed === 'no'
-                        ? form.politicallyExposed
-                        : undefined,
+                isPoliticallyExposedPerson,
             });
             if (!result.ok) {
                 setSetupError(result.error || 'Could not set up your account.');

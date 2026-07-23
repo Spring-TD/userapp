@@ -8,8 +8,10 @@ import { Button } from '@/components/ui/button'
 import { MortgageWorkflowModals } from '@/components/mobile-v2/mortgage/MortgageWorkflowModals'
 import { VirtualTourSheet } from '@/components/mobile-v2/mortgage/VirtualTourSheet'
 import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
+import { useSpringLocalProductForVirtualTour } from '@/hooks/useSpringLocalProductForVirtualTour'
 import type { StorefrontApplication } from '@/lib/storefrontApplicationClient'
 import { buildPropertyTourData } from '@/lib/mortgagePropertyTour'
+import { resolveSpringLocalProductLookup } from '@/lib/springLocalProduct'
 import {
   buildMortgageThread,
   mortgageStepCta,
@@ -105,15 +107,49 @@ export function MortgagePendingThreadScreen({
   const router = useRouter()
   const searchParams = useSearchParams()
   const applicationId = String(application.id ?? application._id ?? '')
-  const productId = String(application.productId ?? '')
+  const productLookup = resolveSpringLocalProductLookup(application)
+  const productId = productLookup.localProductId || String(application.productId ?? '')
   const [workflowVersion, setWorkflowVersion] = useState(0)
   const [activeModal, setActiveModal] = useState<WorkflowModalKind | null>(null)
   const [virtualTourOpen, setVirtualTourOpen] = useState(false)
 
-  const { product } = useMobileProductDetail({
+  // General product fields (amounts, equity, etc.)
+  const { product: catalogProduct } = useMobileProductDetail({
     productId,
     enabled: Boolean(productId),
   })
+
+  // Virtual inspection media must come from Spring local product detail / app catalog.
+  const {
+    product: springTourProduct,
+    loading: springTourLoading,
+    error: springTourError,
+    refetch: refetchSpringTourProduct,
+  } = useSpringLocalProductForVirtualTour({
+    application,
+    enabled: Boolean(productId || productLookup.appId),
+  })
+
+  useEffect(() => {
+    console.log('[VirtualTour][SpringProduct] pending screen product state', {
+      applicationId,
+      productId,
+      appId: productLookup.appId,
+      springTourLoading,
+      springTourError,
+      springTourProductId: springTourProduct?.id,
+      properties: springTourProduct?.properties,
+    })
+  }, [
+    applicationId,
+    productId,
+    productLookup.appId,
+    springTourError,
+    springTourLoading,
+    springTourProduct,
+  ])
+
+  const product = springTourProduct ?? catalogProduct
 
   const local = readMortgageWorkflow(applicationId)
   const currentStep = resolveMortgageWorkflowStep(application, local)
@@ -124,8 +160,8 @@ export function MortgagePendingThreadScreen({
       : null
 
   const tourData = useMemo(
-    () => buildPropertyTourData(product, application),
-    [application, product],
+    () => buildPropertyTourData(springTourProduct ?? product, application),
+    [application, product, springTourProduct],
   )
 
   const propertyValue = product?.properties?.[0]?.value ?? product?.propertyValue ?? product?.amountMax ?? application.amount
@@ -134,6 +170,8 @@ export function MortgagePendingThreadScreen({
   const openStepModal = useCallback(
     (step = currentStep) => {
       if (step === 'virtual_tour') {
+        console.log('[VirtualTour][SpringProduct] opening virtual tour — refetching Spring product')
+        void refetchSpringTourProduct()
         setVirtualTourOpen(true)
         return
       }
@@ -142,7 +180,7 @@ export function MortgagePendingThreadScreen({
         setActiveModal(modal)
       }
     },
-    [currentStep],
+    [currentStep, refetchSpringTourProduct],
   )
 
   const refreshWorkflow = useCallback(() => {

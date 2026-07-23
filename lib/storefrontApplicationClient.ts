@@ -35,7 +35,12 @@ export type StorefrontApplication = {
   id?: string
   _id?: string
   userId?: string
+  /** Spring local product id when available (preferred for storefront detail). */
   productId?: string
+  localProductId?: string
+  springProductId?: string
+  /** Plata catalog / upstream product id (clone source). */
+  upstreamProductId?: string
   productName?: string
   productType?: string
   amount?: number
@@ -48,6 +53,9 @@ export type StorefrontApplication = {
   updatedAt?: string
   applicationProgress?: ApplicationProgress
   platformFields?: PlatformFields
+  metadata?: Record<string, unknown>
+  mortgageSelection?: Record<string, unknown>
+  product?: Record<string, unknown>
   account?: {
     id?: string
     accountNumber?: string
@@ -335,6 +343,7 @@ export async function applyProductOneShot(
     currency?: string
     productType?: ProductApplyBody["productType"]
     requirementSubmissions?: unknown[]
+    platformFields?: PlatformFields
   },
 ) {
   const built = await buildProductApplyBody(productId, options)
@@ -345,6 +354,7 @@ export async function applyProductOneShot(
     ...(options?.requirementSubmissions?.length
       ? { requirementSubmissions: options.requirementSubmissions }
       : {}),
+    ...(options?.platformFields ? { ...options.platformFields } : {}),
   }
 
   const res = await apiClient.post<ApiEnvelope<StorefrontApplication>, typeof payload>(
@@ -378,22 +388,81 @@ export async function createSavingsAccount(productId: string, options?: { curren
   return { ok: true as const, data: res.data?.data }
 }
 
-export async function fetchUserApplications(userId?: string) {
+export async function fetchUserApplications(
+  userId?: string,
+  options?: {
+    productType?: "LOAN" | "MORTGAGE" | string
+    status?: string
+    limit?: number
+    /** When true, follows pagination until all matching rows are loaded (capped). */
+    fetchAllPages?: boolean
+  },
+) {
   const resolvedUserId = userId || (await resolveWalletUserId())
-  if (!resolvedUserId) return { ok: false as const, error: "Sign in to continue.", applications: [] as StorefrontApplication[] }
-
-  const res = await apiClient.get<ApiEnvelope<StorefrontApplication[]>>(
-    `/v1/applications/user/${encodeURIComponent(resolvedUserId)}`,
-    { includeAuth: true, timeout: 30_000 },
-  )
-
-  if (res.data?.success === false || res.status >= 400) {
-    return { ok: false as const, error: parseApiError(res.data, res.status), applications: [] as StorefrontApplication[] }
+  if (!resolvedUserId) {
+    return { ok: false as const, error: "Sign in to continue.", applications: [] as StorefrontApplication[] }
   }
 
-  return {
-    ok: true as const,
-    applications: Array.isArray(res.data?.data) ? res.data.data : [],
+  const pageLimit = Math.min(Math.max(options?.limit ?? 100, 1), 100)
+  const fetchAllPages = options?.fetchAllPages !== false
+  const maxPages = 10
+  const collected: StorefrontApplication[] = []
+
+  try {
+    for (let page = 1; page <= maxPages; page += 1) {
+      const res = await apiClient.get<
+        ApiEnvelope<StorefrontApplication[]> & {
+          pagination?: {
+            page?: number
+            limit?: number
+            total?: number
+            totalPages?: number
+            hasNextPage?: boolean
+          }
+        }
+      >(`/v1/applications/user/${encodeURIComponent(resolvedUserId)}`, {
+        includeAuth: true,
+        timeout: 30_000,
+        params: {
+          page,
+          limit: pageLimit,
+          ...(options?.productType ? { productType: String(options.productType).toUpperCase() } : {}),
+          ...(options?.status ? { status: options.status } : {}),
+        },
+      })
+
+      if (res.data?.success === false || res.status >= 400) {
+        return {
+          ok: false as const,
+          error: parseApiError(res.data, res.status),
+          applications: [] as StorefrontApplication[],
+        }
+      }
+
+      const pageRows = Array.isArray(res.data?.data) ? res.data.data : []
+      collected.push(...pageRows)
+
+      const pagination = res.data?.pagination
+      const hasNext =
+        Boolean(pagination?.hasNextPage) ||
+        (typeof pagination?.totalPages === "number" && page < pagination.totalPages)
+
+      if (!fetchAllPages || !hasNext || pageRows.length === 0) break
+    }
+
+    // Client-side safety net if upstream ignores productType
+    const wantedType = options?.productType ? String(options.productType).toUpperCase() : null
+    const applications = wantedType
+      ? collected.filter((app) => String(app.productType || "").toUpperCase() === wantedType)
+      : collected
+
+    return { ok: true as const, applications }
+  } catch (error: unknown) {
+    return {
+      ok: false as const,
+      error: axiosApplicationError(error, "Could not load your applications."),
+      applications: [] as StorefrontApplication[],
+    }
   }
 }
 
@@ -401,11 +470,12 @@ export async function buyCommodity(
   productId: string,
   quantity: number,
   _amount?: number,
-  options?: { currency?: string; requirementSubmissions?: unknown[] },
+  options?: { currency?: string; requirementSubmissions?: unknown[]; platformFields?: PlatformFields },
 ) {
   const { purchaseCommodity } = await import("@/lib/commodityApi")
   return purchaseCommodity(productId, quantity, {
     requirementSubmissions: options?.requirementSubmissions,
+    platformFields: options?.platformFields,
   })
 }
 
@@ -538,6 +608,70 @@ export async function addApplicationGuarantor(
   }
 
   return { ok: true as const, data: res.data?.data }
+}
+
+export type SpouseKycPerson = {
+  id?: string
+  fullName?: string
+  email?: string
+  phone?: string
+  occupation?: string
+  relationship?: string
+  country?: string
+  status?: string
+  provider?: string
+  providerReference?: string
+  verificationUrl?: string
+  requestedAt?: string
+}
+
+export type SpouseKycRequestBody = {
+  fullName: string
+  email: string
+  phone: string
+  occupation?: string
+  relationship?: string
+  country?: string
+  userId?: string
+}
+
+/**
+ * POST /api/v1/applications/:id/spouse-kyc
+ * Separate from guarantors — use when applicant opts into repaying with a spouse.
+ */
+export async function submitApplicationSpouseKyc(applicationId: string, body: SpouseKycRequestBody) {
+  try {
+    const res = await apiClient.post<
+      ApiEnvelope<{ spouse?: SpouseKycPerson; application?: StorefrontApplication }> & {
+        verificationUrl?: string
+      }
+    >(`/v1/applications/${encodeURIComponent(applicationId)}/spouse-kyc`, body, {
+      includeAuth: true,
+      timeout: 60_000,
+    })
+
+    if (res.data?.success === false || (res.status !== 200 && res.status !== 201) || res.status >= 400) {
+      return { ok: false as const, error: parseApiError(res.data, res.status) }
+    }
+
+    const spouse = res.data?.data?.spouse
+    const verificationUrl =
+      (typeof res.data?.verificationUrl === "string" && res.data.verificationUrl.trim()) ||
+      (typeof spouse?.verificationUrl === "string" && spouse.verificationUrl.trim()) ||
+      undefined
+
+    return {
+      ok: true as const,
+      verificationUrl,
+      spouse,
+      application: res.data?.data?.application,
+    }
+  } catch (error: unknown) {
+    return {
+      ok: false as const,
+      error: axiosApplicationError(error, "Could not generate the spouse KYC link."),
+    }
+  }
 }
 
 export async function submitInitializedApplication(

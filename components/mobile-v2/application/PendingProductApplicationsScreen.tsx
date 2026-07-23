@@ -23,7 +23,15 @@ import { loanPendingDetailHref } from '@/lib/loanApplyRoutes'
 type PendingKind = 'loan' | 'mortgage'
 type PendingScreenKind = PendingKind | 'all'
 
-const PENDING_WORKFLOW_STATUSES = new Set(['account_created', 'requested', 'under_review', 'pending'])
+const PENDING_WORKFLOW_STATUSES = new Set([
+  'account_created',
+  'account_requested',
+  'requested',
+  'under_review',
+  'pending',
+  'offer_sent',
+  'approved',
+])
 
 function applicationPendingKind(application: StorefrontApplication): PendingKind | null {
   const type = String(application.productType || '').toUpperCase()
@@ -108,7 +116,11 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreen
     async function loadApplications() {
       setLoading(true)
       setError(null)
-      const result = await fetchUserApplications()
+      const result = await fetchUserApplications(undefined, {
+        productType: kind === 'loan' ? 'LOAN' : kind === 'mortgage' ? 'MORTGAGE' : undefined,
+        fetchAllPages: true,
+        limit: 100,
+      })
       if (cancelled) return
 
       if (!result.ok) {
@@ -125,7 +137,7 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreen
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [kind])
 
   const pendingApplications = useMemo(
     () =>
