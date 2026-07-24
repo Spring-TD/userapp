@@ -9,11 +9,11 @@ export default function CommodityProductPage() {
         <div className="relative flex h-full min-h-0 flex-col sf-page-bg">
             <div className="min-h-0 flex-1 overflow-y-auto no-scrollbar pb-32">
                 {/* Header with Tabs */}
-                <div className="pt-12 px-6 pb-2 bg-white sticky top-0 z-30">
-                    <div className="flex items-center justify-between mb-6">
-                        <div className="w-10 h-10" />
+                <div className="sticky top-0 z-30 sf-page-bg px-6 pb-2 pt-4 md:pt-9">
+                    <div className="mb-4 flex items-center justify-between">
+                        <div className="h-10 w-10" />
                         <h1 className="text-lg font-bold text-[var(--sf-ink,#1E1B4B)]">Commodity</h1>
-                        <div className="w-10 h-10" />
+                        <div className="h-10 w-10" />
                     </div>
                     <MobileV2TabBar activeTab="Commodity" />
                 </div>

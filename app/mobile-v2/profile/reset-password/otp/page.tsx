@@ -1,70 +1,200 @@
-'use client';
+'use client'
 
-import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { ChevronLeft, MessageSquare } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import React, { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { ChevronLeft, Loader2, MessageSquare } from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
 import {
-    InputOTP,
-    InputOTPGroup,
-    InputOTPSlot,
-} from "@/components/ui/input-otp"
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from '@/components/ui/input-otp'
+import { fetchAuthUserProfile } from '@/lib/userProfileClient'
+import {
+  changePasswordWithOtp,
+  clearPasswordChangeDraft,
+  readPasswordChangeDraft,
+  requestPasswordChangeOtp,
+} from '@/lib/passwordChangeClient'
 
 export default function OTPPage() {
-    const [seconds, setSeconds] = useState(56);
+  const router = useRouter()
+  const [seconds, setSeconds] = useState(60)
+  const [code, setCode] = useState('')
+  const [email, setEmail] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [resending, setResending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-    useEffect(() => {
-        const timer = setInterval(() => {
-            setSeconds((prev) => (prev > 0 ? prev - 1 : 0));
-        }, 1000);
-        return () => clearInterval(timer);
-    }, []);
+  useEffect(() => {
+    const draft = readPasswordChangeDraft()
+    if (!draft) {
+      toast.error('Start again from Reset Password.')
+      router.replace('/mobile-v2/profile/reset-password')
+      return
+    }
 
-    return (
-        <div className="flex flex-col h-full sf-page-bg relative">
-            <div className="pt-12 px-6 flex items-center mb-8">
-                <Link href="/mobile-v2/profile" className="w-10 h-10 flex items-center justify-center -ml-2 text-gray-700">
-                    <ChevronLeft className="w-6 h-6" />
-                </Link>
-            </div>
+    void (async () => {
+      const { user } = await fetchAuthUserProfile()
+      setEmail(user?.email?.trim() || '')
+    })()
+  }, [router])
 
-            <div className="px-6 flex flex-col items-start text-left w-full">
-                <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center text-[var(--sf-primary,#2563EB)] mb-6 self-start">
-                    <MessageSquare className="w-7 h-7 fill-current" />
-                </div>
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSeconds((prev) => (prev > 0 ? prev - 1 : 0))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [])
 
-                <h1 className="text-2xl font-bold text-[#1E293B] mb-3 w-full text-left">Enter OTP</h1>
-                <p className="text-sm text-gray-500 w-full leading-relaxed mb-10 text-left">
-                    We are sent to one time verification code to your example@gmail.com
-                </p>
+  const handleResend = async () => {
+    if (seconds > 0 || resending) return
+    setResending(true)
+    setError(null)
+    try {
+      const result = await requestPasswordChangeOtp()
+      if (!result.ok) {
+        setError(result.error)
+        toast.error(result.error)
+        return
+      }
+      setSeconds(60)
+      toast.success('A new verification code was sent to your email.')
+    } catch (err) {
+      const msg = err instanceof Error && err.message ? err.message : 'Could not resend code.'
+      setError(msg)
+      toast.error(msg)
+    } finally {
+      setResending(false)
+    }
+  }
 
-                <div className="mb-10 w-full">
-                    <InputOTP maxLength={6} containerClassName="gap-3 sm:gap-4 justify-start w-full flex-nowrap">
-                        <InputOTPGroup className="gap-3 sm:gap-4 flex-nowrap">
-                            {[0, 1, 2, 3, 4, 5].map((idx) => (
-                                <div key={idx} className="relative">
-                                    <InputOTPSlot
-                                        index={idx}
-                                        className="h-9 w-9 rounded-full border-none bg-gray-300 p-0 text-transparent shadow-none ring-0 data-[active=true]:bg-[var(--sf-primary,#2563EB)] data-[active=true]:scale-110 data-[active=true]:ring-0 transition-all"
-                                    />
-                                </div>
-                            ))}
-                        </InputOTPGroup>
-                    </InputOTP>
-                </div>
+  const handleConfirm = async () => {
+    const draft = readPasswordChangeDraft()
+    if (!draft) {
+      toast.error('Start again from Reset Password.')
+      router.replace('/mobile-v2/profile/reset-password')
+      return
+    }
+    if (code.trim().length < 4) {
+      const msg = 'Enter the verification code from your email.'
+      setError(msg)
+      toast.error(msg)
+      return
+    }
 
-                <p className="text-sm text-gray-500 w-full text-left mb-8">
-                    You can get code again in <span className="text-[var(--sf-primary,#2563EB)] font-semibold">{seconds} seconds</span>
-                </p>
+    setSubmitting(true)
+    setError(null)
+    try {
+      const result = await changePasswordWithOtp({
+        currentPassword: draft.currentPassword,
+        newPassword: draft.newPassword,
+        code: code.trim(),
+      })
+      if (!result.ok) {
+        setError(result.error)
+        toast.error(result.error)
+        return
+      }
+      clearPasswordChangeDraft()
+      toast.success(result.message || 'Password updated successfully.')
+      router.replace('/mobile-v2/profile')
+    } catch (err) {
+      const msg = err instanceof Error && err.message ? err.message : 'Could not change password.'
+      setError(msg)
+      toast.error(msg)
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
-                <div className="flex-1 min-h-4" />
+  return (
+    <div className="relative flex h-full flex-col sf-page-bg">
+      <div className="mb-8 flex items-center px-6 pt-12">
+        <Link
+          href="/mobile-v2/profile/reset-password"
+          className="-ml-2 flex h-10 w-10 items-center justify-center text-gray-700"
+        >
+          <ChevronLeft className="h-6 w-6" />
+        </Link>
+      </div>
 
-                <Link href="/mobile-v2/profile/reset-password/new-pin" className="w-full mb-8">
-                    <Button className="w-full h-14 rounded-full bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white font-semibold text-base shadow-lg shadow-blue-900/20">
-                        Confirm
-                    </Button>
-                </Link>
-            </div>
+      <div className="flex w-full flex-col items-start px-6 text-left">
+        <div className="mb-6 flex h-14 w-14 items-center justify-center self-start rounded-2xl bg-blue-50 text-[var(--sf-primary,#2563EB)]">
+          <MessageSquare className="h-7 w-7 fill-current" />
         </div>
-    );
+
+        <h1 className="mb-3 w-full text-left text-2xl font-bold text-[#1E293B]">Enter OTP</h1>
+        <p className="mb-10 w-full text-left text-sm leading-relaxed text-gray-500">
+          {email
+            ? <>We sent a one-time verification code to <strong>{email}</strong>.</>
+            : 'We sent a one-time verification code to your email.'}
+        </p>
+
+        <div className="mb-10 w-full">
+          <InputOTP
+            maxLength={6}
+            value={code}
+            onChange={setCode}
+            autoFocus
+            inputMode="numeric"
+            pattern="[0-9]*"
+            containerClassName="flex w-full flex-nowrap justify-start gap-3 sm:gap-4"
+          >
+            <InputOTPGroup className="flex-nowrap gap-3 sm:gap-4">
+              {[0, 1, 2, 3, 4, 5].map((idx) => (
+                <InputOTPSlot
+                  key={idx}
+                  index={idx}
+                  className="h-10 w-10 rounded-full border-none bg-gray-200 p-0 text-base font-semibold text-[var(--sf-ink,#1E293B)] shadow-none ring-0 data-[active=true]:bg-[var(--sf-primary,#2563EB)] data-[active=true]:text-white data-[active=true]:ring-0"
+                />
+              ))}
+            </InputOTPGroup>
+          </InputOTP>
+        </div>
+
+        <p className="mb-4 w-full text-left text-sm text-gray-500">
+          {seconds > 0 ? (
+            <>
+              You can get a code again in{' '}
+              <span className="font-semibold text-[var(--sf-primary,#2563EB)]">{seconds} seconds</span>
+            </>
+          ) : (
+            <button
+              type="button"
+              disabled={resending}
+              onClick={() => void handleResend()}
+              className="font-semibold text-[var(--sf-primary,#2563EB)]"
+            >
+              {resending ? 'Sending…' : 'Resend code'}
+            </button>
+          )}
+        </p>
+
+        {error ? (
+          <p className="mb-4 w-full rounded-xl bg-red-50 px-3 py-2 text-center text-xs text-red-600">{error}</p>
+        ) : null}
+
+        <div className="min-h-4 flex-1" />
+
+        <Button
+          type="button"
+          disabled={submitting}
+          onClick={() => void handleConfirm()}
+          className="mb-8 h-14 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-base font-semibold text-white shadow-lg shadow-blue-900/20 hover:bg-[var(--sf-button-hover,#1e3a8a)]"
+        >
+          {submitting ? (
+            <span className="inline-flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Updating…
+            </span>
+          ) : (
+            'Confirm'
+          )}
+        </Button>
+      </div>
+    </div>
+  )
 }

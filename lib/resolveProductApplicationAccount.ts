@@ -65,7 +65,14 @@ function isReusableApplication(application: StorefrontApplication, productId: st
   if (applicationProductId !== normalizedProductId) return false
 
   const status = String(application.status || '').toUpperCase()
+  if (['CANCELLED', 'CANCELED', 'REJECTED', 'FAILED'].includes(status)) return false
+
+  const productType = String(application.productType || '').toUpperCase()
   const workflowStatus = String(application.loanWorkflowStatus || '').toLowerCase()
+
+  if (productType === 'SAVINGS' || productType === 'INVESTMENT' || productType === 'COMMODITY') {
+    return Boolean(application.id || application._id)
+  }
 
   return (
     status === 'PENDING' &&

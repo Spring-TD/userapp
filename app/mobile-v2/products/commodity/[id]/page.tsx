@@ -8,7 +8,6 @@ import {
   Building2,
   Calendar,
   Check,
-  ChevronDown,
   ChevronLeft,
   HelpCircle,
   Loader2,
@@ -29,6 +28,7 @@ import {
   type CommodityCatalogProduct,
 } from '@/lib/commodityCatalog'
 import {
+  computeCommodityTotals,
   fetchCommodityProductMeta,
   loadCommodityPurchaseContext,
   purchaseCommodity,
@@ -186,6 +186,7 @@ export default function CommodityDetailPage() {
     try {
       const meta = await fetchCommodityProductMeta(product.id)
       setProductMeta(meta)
+      // Quantity is applied locally — only fetch pricing rate + holdings here.
       const context = await loadCommodityPurchaseContext({
         userId,
         appId,
@@ -196,14 +197,14 @@ export default function CommodityDetailPage() {
           minimumQuantity: product.minimumQuantity,
           structure: meta.structure,
         },
-        quantity,
+        quantity: 1,
         walletBalance,
       })
       setPurchaseContext(context)
     } finally {
       setContextLoading(false)
     }
-  }, [appId, product, quantity, userId, walletBalance])
+  }, [appId, product, userId, walletBalance])
 
   useEffect(() => {
     if (!product?.id) return
@@ -220,18 +221,28 @@ export default function CommodityDetailPage() {
     }
   }, [sheet, loadPurchaseData])
 
-  const totals = purchaseContext ?? {
-    unitPrice,
+  const commissionRatePercent = purchaseContext?.commissionRatePercent ?? 1
+
+  const totals = useMemo(() => {
+    const qty = Math.max(minQuantity, quantity)
+    const computed = computeCommodityTotals(unitPrice, qty, commissionRatePercent)
+    return {
+      ...computed,
+      minQuantity,
+      walletBalance,
+      holdingBalance: purchaseContext?.holdingBalance ?? 0,
+      canPurchase: walletBalance >= computed.totalDebit,
+      pricing: purchaseContext?.pricing ?? null,
+    }
+  }, [
+    commissionRatePercent,
     minQuantity,
-    principal: unitPrice * quantity,
-    commission: 0,
-    totalDebit: unitPrice * quantity,
-    commissionRatePercent: 1,
+    purchaseContext?.holdingBalance,
+    purchaseContext?.pricing,
+    quantity,
+    unitPrice,
     walletBalance,
-    holdingBalance: 0,
-    canPurchase: walletBalance >= unitPrice * quantity,
-    pricing: null,
-  }
+  ])
 
   const shortfall = Math.max(0, totals.totalDebit - walletBalance)
   const hasEnoughFunds = totals.canPurchase
@@ -440,15 +451,7 @@ export default function CommodityDetailPage() {
           <div className="mt-10 space-y-8">
             <InfoRow label="Min purchase" value={`${minQuantity} unit${minQuantity === 1 ? '' : 's'}`} />
             <InfoRow label="Unit" value={product.unitOfMeasure || 'unit'} />
-            <InfoRow
-              label="Holding period"
-              value={
-                <span className="inline-flex items-center gap-1">
-                  {holdingPeriod}
-                  <ChevronDown className="h-4 w-4" />
-                </span>
-              }
-            />
+            <InfoRow label="Holding period" value={holdingPeriod} />
             <InfoRow label="Powered by:" value={providerName} />
             <InfoRow label="Cost per purchase" value={formatNaira(unitPrice)} />
           </div>

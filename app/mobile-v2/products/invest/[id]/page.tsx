@@ -7,7 +7,6 @@ import {
     ChevronLeft,
     CalendarDays,
     Percent,
-    ChevronDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeletons';
@@ -15,6 +14,8 @@ import { useMobileProductDetail } from '@/hooks/useMobileProductDetail';
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
 import { ProductFundingFlowSheet } from '@/components/mobile-v2/application/ProductFundingFlowSheet';
 import { amountRange, feeSummary, formatNgn, poweredBy, rateLabel } from '@/lib/mobileProductDetailDisplay';
+import { useUserWallet } from '@/hooks/useUserWallet';
+import { walletSpendableBalance } from '@/lib/userWallet';
 
 export default function InvestDetailPage() {
     const params = useParams();
@@ -27,6 +28,8 @@ export default function InvestDetailPage() {
     });
 
     const [isFundingFlowOpen, setIsFundingFlowOpen] = useState(false);
+    const { wallet } = useUserWallet();
+    const centralWalletBalance = walletSpendableBalance(wallet);
 
     const amountValue = product?.propertyValue ?? product?.price;
     const amountRows =
@@ -130,19 +133,14 @@ export default function InvestDetailPage() {
                     </div>
 
                     <div className="space-y-9">
-                        {investmentDetails.map(([label, value]) => {
-                            const showDropdown = ['Frequency', 'Duration'].includes(label);
-
-                            return (
-                                <div key={label} className="flex items-center justify-between gap-6">
-                                    <span className="text-base font-medium text-gray-500">{label}</span>
-                                    <span className="inline-flex items-center gap-2 text-right text-base font-bold text-[var(--sf-ink,#1E293B)]">
-                                        {value}
-                                        {showDropdown ? <ChevronDown className="h-4 w-4 text-[#4B4F58]" /> : null}
-                                    </span>
-                                </div>
-                            );
-                        })}
+                        {investmentDetails.map(([label, value]) => (
+                            <div key={label} className="flex items-center justify-between gap-6">
+                                <span className="text-base font-medium text-gray-500">{label}</span>
+                                <span className="text-right text-base font-bold text-[var(--sf-ink,#1E293B)]">
+                                    {value}
+                                </span>
+                            </div>
+                        ))}
                     </div>
 
                     <Button
@@ -177,6 +175,7 @@ export default function InvestDetailPage() {
                 successTitle="Investment Started"
                 successMessage="Your investment has been created successfully."
                 failureMessage="Your central wallet balance is not sufficient for this investment amount. Please fund your wallet and try again."
+                centralWalletBalance={centralWalletBalance}
                 amountMin={product.amountMin}
                 amountMax={product.amountMax}
             />

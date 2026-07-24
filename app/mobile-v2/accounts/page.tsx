@@ -175,27 +175,59 @@ function isPendingProvisionToken(normalized: string): boolean {
 }
 
 /**
- * Count "Active" from the same badge the card shows (provision status),
- * not application workflow status — e.g. provision ACTIVE + application PENDING is still Active.
+ * Count "Active" from the same badge the card shows.
  */
 function isActiveProductApplication(application: ProductApplication): boolean {
-    const provision = normalizeStatusToken(
-        application.productWallet?.upstreamAccount?.provisionStatus,
-    )
-    if (provision) {
-        if (isLiveStatusToken(provision)) return true
-        if (isPendingProvisionToken(provision)) return false
-    }
-
-    const status = normalizeStatusToken(application.status)
-    const workflow = normalizeStatusToken(application.loanWorkflowStatus)
-    if (isLiveStatusToken(status) || isLiveStatusToken(workflow)) return true
-    return false
+    const label = getProductAccountDisplayStatus(application).toLowerCase()
+    return label === 'active' || label === 'approved' || label === 'disbursed'
 }
 
 function isActiveSummaryAccount(status?: string | null): boolean {
     const normalized = normalizeStatusToken(status)
     return isLiveStatusToken(normalized)
+}
+
+/**
+ * Single user-facing status for Accounts cards.
+ * Avoids conflicting pairs like "Active" badge + "PENDING"/"APPROVED" application line.
+ */
+function getProductAccountDisplayStatus(application: ProductApplication): string {
+    const appStatus = normalizeStatusToken(application.status)
+    const account = application.productWallet?.upstreamAccount
+    const provision = normalizeStatusToken(account?.provisionStatus)
+    const workflow = normalizeStatusToken(application.loanWorkflowStatus)
+    const snapshot = commoditySnapshot(application)
+    const holding = normalizeStatusToken(snapshot?.commodityHoldingStatus)
+
+    if (appStatus.includes('reject') || appStatus.includes('declin')) return 'Rejected'
+    if (appStatus.includes('cancel')) return 'Cancelled'
+    if (appStatus.includes('disburs')) return 'Disbursed'
+    if (holding.includes('withdraw')) return 'Withdrawn'
+    if (appStatus.includes('approv')) return 'Approved'
+
+    const provisionLive =
+        Boolean(account?.accountNumber?.trim()) ||
+        isLiveStatusToken(provision) ||
+        isLiveStatusToken(workflow)
+
+    const provisionPending =
+        provision.includes('account requested') ||
+        provision === 'requested' ||
+        workflow.includes('account requested') ||
+        workflow === 'requested' ||
+        (isPendingProvisionToken(provision) && !provisionLive)
+
+    if (provisionPending || (!provisionLive && !account?.accountNumber)) {
+        return 'Account pending'
+    }
+
+    // Live product account — application still open/pending means account is ready, not "Pending".
+    if (!appStatus || appStatus === 'pending' || appStatus.includes('draft') || appStatus.includes('submitted')) {
+        return 'Active'
+    }
+
+    // Fallback: show application status cleaned up
+    return String(application.status || 'Active').replace(/_/g, ' ')
 }
 
 function ProductAccountCard({
@@ -214,12 +246,7 @@ function ProductAccountCard({
     const account = application.productWallet?.upstreamAccount;
     const accountDetailsHref = `/mobile-v2/accounts/${application.id}`;
     const snapshot = activeFilter === 'Commodity' ? commoditySnapshot(application) : null;
-    const holdingStatus = snapshot?.commodityHoldingStatus || application.status;
-    // Badge source (backend-driven):
-    // 1) productWallet.upstreamAccount.provisionStatus when wallet exists (e.g. "active")
-    // 2) else loanWorkflowStatus (e.g. "account_requested" when provisioning never finished)
-    const provisionStatus = account?.provisionStatus || application.loanWorkflowStatus || holdingStatus || application.status;
-    const statusLabel = String(provisionStatus || 'pending').replace(/_/g, ' ');
+    const statusLabel = getProductAccountDisplayStatus(application);
     const principal = snapshot?.commodityPrincipal ?? (application as { amount?: number }).amount;
     const withdrawable = Boolean(
         activeFilter === 'Commodity' &&
@@ -276,10 +303,6 @@ function ProductAccountCard({
                             : 'Locked holding'
                         : account?.bankName || application.productName || 'Product account'}
                 </p>
-                <div className="shrink-0 text-right text-xs">
-                    <p className="text-gray-400">Application</p>
-                    <p className="font-semibold text-[#1E293B]">{application.status || 'PENDING'}</p>
-                </div>
             </div>
             {principal != null ? (
                 <p className="mt-3 text-sm font-semibold text-[var(--sf-ink,#1E1B4B)]">

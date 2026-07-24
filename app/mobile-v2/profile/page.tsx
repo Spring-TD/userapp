@@ -215,7 +215,7 @@ export default function ProfilePage() {
                             <Link href="/mobile-v2/profile/faq">
                                 <SettingItem icon={<HelpCircle className="w-5 h-5" />} label="FAQ" />
                             </Link>
-                            <Link href="/mobile-v2/profile/reset-password/otp">
+                            <Link href="/mobile-v2/profile/reset-password">
                                 <SettingItem icon={<Shield className="w-5 h-5" />} label="Reset Password" />
                             </Link>
                             <Link href="/mobile-v2/profile/terms">

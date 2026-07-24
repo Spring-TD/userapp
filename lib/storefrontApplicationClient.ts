@@ -152,14 +152,26 @@ export function readInitializedApplication(): StorefrontApplication | null {
 function isInitializedPendingApplication(application: StorefrontApplication, productId: string) {
   const normalizedProductId = sanitizeProductId(productId)
   const applicationProductId = sanitizeProductId(application.productId)
+  if (applicationProductId !== normalizedProductId) return false
+
   const status = String(application.status || "").toUpperCase()
+  if (["CANCELLED", "CANCELED", "REJECTED", "FAILED"].includes(status)) return false
+
+  const productType = String(application.productType || "").toUpperCase()
   const workflowStatus = String(application.loanWorkflowStatus || "").toLowerCase()
 
-  return (
-    applicationProductId === normalizedProductId &&
-    status === "PENDING" &&
-    (workflowStatus === "account_created" || Boolean(application.productWallet?.upstreamAccount?.accountNumber))
-  )
+  // Loan / mortgage: prefer provisioned or account_created drafts.
+  if (productType === "LOAN" || productType === "MORTGAGE" || !productType) {
+    return (
+      status === "PENDING" &&
+      (workflowStatus === "account_created" ||
+        Boolean(application.productWallet?.upstreamAccount?.accountNumber) ||
+        Boolean(application.productWallet?.upstreamAccount?.provisionStatus))
+    )
+  }
+
+  // Savings / investment / commodity: any live application for this product counts.
+  return Boolean(application.id || application._id)
 }
 
 export async function getExistingInitializedApplication(userId: string, productId: string) {
@@ -174,8 +186,8 @@ export async function getExistingInitializedApplication(userId: string, productI
       includeAuth: true,
       timeout: 30_000,
       params: {
-        status: "PENDING",
         productId: normalizedProductId,
+        limit: 50,
       },
     },
   )
@@ -185,7 +197,8 @@ export async function getExistingInitializedApplication(userId: string, productI
   }
 
   const applications = Array.isArray(res.data?.data) ? res.data.data : []
-  const application = applications.find((app) => isInitializedPendingApplication(app, normalizedProductId)) ?? null
+  const application =
+    applications.find((app) => isInitializedPendingApplication(app, normalizedProductId)) ?? null
 
   if (application) saveInitializedApplication(application)
   return { ok: true as const, application }
@@ -376,22 +389,44 @@ export async function applyProductOneShot(
   return { ok: true as const, application: res.data?.data }
 }
 
-export async function createSavingsAccount(productId: string, options?: { currency?: string }) {
-  const built = await buildProductApplyBody(productId, { currency: options?.currency })
-  if (!built.ok) return { ok: false as const, error: built.error }
-  const { userId, currency, email } = built.body
-
-  const res = await apiClient.post<ApiEnvelope<unknown>>(
-    "/v1/savings-accounts",
-    { userId, productId: built.body.productId, currency, ...(email ? { email } : {}) },
-    { includeAuth: true, timeout: 60_000 },
-  )
-
-  if (res.data?.success === false || res.status >= 400) {
-    return { ok: false as const, error: parseApiError(res.data, res.status) }
+export async function createSavingsAccount(
+  productId: string,
+  options?: { currency?: string; platformFields?: PlatformFields },
+) {
+  const { createFundedProductAccount } = await import('@/lib/fundedProductAccountClient')
+  const result = await createFundedProductAccount('savings', productId, {
+    currency: options?.currency,
+    platformFields: options?.platformFields,
+  })
+  if (!result.ok) return { ok: false as const, error: result.error }
+  return {
+    ok: true as const,
+    data: {
+      applicationId: result.applicationId,
+      accountCreated: true,
+      account: result.account,
+    },
   }
+}
 
-  return { ok: true as const, data: res.data?.data }
+export async function createInvestmentAccount(
+  productId: string,
+  options?: { currency?: string; platformFields?: PlatformFields },
+) {
+  const { createFundedProductAccount } = await import('@/lib/fundedProductAccountClient')
+  const result = await createFundedProductAccount('investment', productId, {
+    currency: options?.currency,
+    platformFields: options?.platformFields,
+  })
+  if (!result.ok) return { ok: false as const, error: result.error }
+  return {
+    ok: true as const,
+    data: {
+      applicationId: result.applicationId,
+      accountCreated: true,
+      account: result.account,
+    },
+  }
 }
 
 export async function fetchUserApplications(
