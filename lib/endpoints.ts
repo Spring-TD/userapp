@@ -350,6 +350,22 @@ export const ENDPOINTS = {
   pricing: {
     product: (productId: string) => `/v1/pricing/product/${encodeURIComponent(productId)}`,
   },
+  /** Savings — provision then wallet deposit (never /applications/apply). */
+  savingsAccounts: {
+    create: "/v1/savings-accounts",
+    depositDetails: (applicationId: string) =>
+      `/v1/savings-accounts/${encodeURIComponent(applicationId)}/deposit-details`,
+    deposits: (applicationId: string) =>
+      `/v1/savings-accounts/${encodeURIComponent(applicationId)}/deposits`,
+  },
+  /** Investment — mirrors savings (never /applications/apply). */
+  investmentAccounts: {
+    create: "/v1/investment-accounts",
+    depositDetails: (applicationId: string) =>
+      `/v1/investment-accounts/${encodeURIComponent(applicationId)}/deposit-details`,
+    deposits: (applicationId: string) =>
+      `/v1/investment-accounts/${encodeURIComponent(applicationId)}/deposits`,
+  },
   commodityAccounts: {
     apply: "/v1/commodity-accounts/apply",
     byId: (applicationId: string) =>

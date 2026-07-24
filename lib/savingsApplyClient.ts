@@ -1,38 +1,35 @@
-import { applyProductOneShot, createSavingsAccount } from '@/lib/storefrontApplicationClient'
+import {
+  createFundedProductAccount,
+  depositFundedProductAccount,
+  type ProvisionedProductAccount,
+} from '@/lib/fundedProductAccountClient'
 import type { PlatformFields } from '@/lib/platformApplicationFields'
 import { isPoliticallyExposedFromPepAnswer } from '@/lib/platformApplicationFields'
-
-type SavingsApplyResponse = {
-  success?: boolean
-  message?: string
-  error?: string
-  data?: {
-    accountCreated?: boolean
-    account?: { id?: string; accountNumber?: string; bankName?: string; currency?: string; status?: string }
-  }
-}
 
 export type EnsureSavingsAccountResult = {
   ok: boolean
   accountCreated: boolean
+  applicationId?: string
   accountId?: string
-  account?: { id?: string; accountNumber?: string; bankName?: string; currency?: string; status?: string }
+  account?: ProvisionedProductAccount
   message?: string
   error?: string
+  duplicateDeposit?: boolean
 }
 
 type EnsureSavingsOptions = {
   amount?: number
   currency?: string
-  /** Preferred: platform PEP boolean. */
+  /** Existing application from prior provision / resume. */
+  applicationId?: string
   isPoliticallyExposedPerson?: boolean
-  /**
-   * @deprecated Prefer `isPoliticallyExposedPerson`. Mapped to the platform field when set.
-   */
+  /** @deprecated Prefer `isPoliticallyExposedPerson`. */
   politicallyExposed?: 'yes' | 'no'
+  platformFields?: PlatformFields
 }
 
 function resolvePlatformFields(options?: EnsureSavingsOptions): PlatformFields | undefined {
+  if (options?.platformFields) return options.platformFields
   const pep =
     options?.isPoliticallyExposedPerson !== undefined
       ? options.isPoliticallyExposedPerson
@@ -41,41 +38,69 @@ function resolvePlatformFields(options?: EnsureSavingsOptions): PlatformFields |
   return { isPoliticallyExposedPerson: pep }
 }
 
-/** POST /api/v1/savings/apply — provision savings account before funding. */
+/**
+ * Savings flow per storefront docs:
+ * 1) POST /api/v1/savings-accounts (provision)
+ * 2) POST /api/v1/savings-accounts/:id/deposits (fund)
+ * Never use /applications/apply for SAVINGS.
+ */
 export async function ensureSavingsAccount(
   productId: string,
   options?: EnsureSavingsOptions,
 ): Promise<EnsureSavingsAccountResult> {
   const hasAmount = options?.amount != null && options.amount > 0
   const platformFields = resolvePlatformFields(options)
-  const result = hasAmount
-    ? await applyProductOneShot(productId, {
-        amount: options!.amount,
-        currency: options?.currency,
-        productType: 'SAVINGS',
-        platformFields,
-      })
-    : await createSavingsAccount(productId, { currency: options?.currency })
+  const currency = options?.currency || 'NGN'
 
-  if (!result.ok) return { ok: false, accountCreated: false, error: result.error }
+  let applicationId = options?.applicationId?.trim() || ''
+  let account = undefined as ProvisionedProductAccount | undefined
+  let provisionMessage: string | undefined
 
-  if (hasAmount) {
-    const application = 'application' in result ? result.application : undefined
+  if (!applicationId) {
+    const created = await createFundedProductAccount('savings', productId, {
+      currency,
+      platformFields,
+    })
+    if (!created.ok) return { ok: false, accountCreated: false, error: created.error }
+    applicationId = created.applicationId
+    account = created.account
+    provisionMessage = created.message
+  }
+
+  if (!hasAmount) {
     return {
       ok: true,
       accountCreated: true,
-      accountId: application?.id || application?._id,
-      account: application?.productWallet?.upstreamAccount,
-      message: 'Savings application submitted.',
+      applicationId,
+      accountId: applicationId,
+      account,
+      message: provisionMessage || 'Savings account created.',
     }
   }
 
-  const data = (result as { data?: SavingsApplyResponse['data'] }).data
+  const deposit = await depositFundedProductAccount('savings', applicationId, options!.amount!, {
+    currency,
+  })
+  if (!deposit.ok) {
+    return {
+      ok: false,
+      accountCreated: Boolean(applicationId),
+      applicationId,
+      accountId: applicationId,
+      account,
+      error: deposit.error,
+    }
+  }
+
   return {
     ok: true,
-    accountCreated: data?.accountCreated === true || Boolean(data?.account?.id),
-    accountId: data?.account?.id,
-    account: data?.account,
-    message: 'Savings account created.',
+    accountCreated: true,
+    applicationId,
+    accountId: applicationId,
+    account,
+    duplicateDeposit: deposit.duplicate,
+    message: deposit.duplicate
+      ? 'Deposit already recorded.'
+      : deposit.message || 'Savings deposit successful.',
   }
 }

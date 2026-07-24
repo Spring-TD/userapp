@@ -30,10 +30,16 @@ export default function ForgotPasswordPage() {
       return;
     }
     setFieldError(null);
-    const res = await dispatch(forgotPasswordThunk({ email: email.trim().toLowerCase() }));
+    const normalized = email.trim().toLowerCase();
+    const res = await dispatch(forgotPasswordThunk({ email: normalized }));
     if (forgotPasswordThunk.rejected.match(res)) {
       toast.error(res.payload ?? 'Could not send reset instructions.');
       return;
+    }
+    try {
+      sessionStorage.setItem('mobile_v2_forgot_password_email', normalized);
+    } catch {
+      /* ignore */
     }
     toast.success('If an account exists for this email, you will receive reset instructions shortly.');
     router.push('/mobile-v2/auth/forgot-password/sent');

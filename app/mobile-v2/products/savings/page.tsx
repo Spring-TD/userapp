@@ -70,7 +70,7 @@ export default function SavingsProductPage() {
         <div className="relative flex h-full min-h-0 flex-col sf-page-bg">
             <div className="min-h-0 flex-1 overflow-y-auto no-scrollbar pb-32">
                 {/* Header with Tabs */}
-                <div className="pt-12 px-6 pb-4 bg-white sticky top-0 z-30">
+                <div className="sticky top-0 z-30 sf-page-bg px-6 pb-4 pt-4 md:pt-9">
                     <MobileV2TabBar activeTab="Savings" />
                 </div>
 

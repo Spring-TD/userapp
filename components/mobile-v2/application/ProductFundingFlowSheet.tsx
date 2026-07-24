@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import Image from 'next/image';
 import { AlertCircle, Check, CheckCircle, ChevronDown, Copy, Loader2, X } from 'lucide-react';
@@ -16,6 +16,8 @@ import {
 import { YesNoField, PepSearchNotice } from '@/components/mobile-v2/application/ApplicantProfileFields';
 import type { PepAnswer } from '@/lib/applicantProfileFields';
 import { isPoliticallyExposedFromPepAnswer } from '@/lib/platformApplicationFields';
+import { resolveProductApplicationAccount } from '@/lib/resolveProductApplicationAccount';
+import { resolveWalletUserId } from '@/lib/resolveWalletUserId';
 
 type FundingFlowStep = 'terms' | 'accountCreated' | 'application' | 'accountDetails' | 'success' | 'failure';
 
@@ -93,8 +95,10 @@ export function ProductFundingFlowSheet({
     const [useCentralWallet, setUseCentralWallet] = useState(false);
     const [setupError, setSetupError] = useState<string | null>(null);
     const [settingUpAccount, setSettingUpAccount] = useState(false);
+    const [resolvingExisting, setResolvingExisting] = useState(false);
     const [accountCreationMessage, setAccountCreationMessage] = useState('');
     const [provisionedAccount, setProvisionedAccount] = useState<ProvisionedAccount | null>(null);
+    const [provisionedApplicationId, setProvisionedApplicationId] = useState<string>('');
     const [form, setForm] = useState<FundingFlowForm>({
         name: '',
         purpose: '',
@@ -104,6 +108,91 @@ export function ProductFundingFlowSheet({
         acceptedTerms: false,
         politicallyExposed: '',
     });
+
+    const resetFlow = () => {
+        setStep('terms');
+        setTermsAccepted(false);
+        setPrivacyAccepted(false);
+        setUseCentralWallet(false);
+        setSetupError(null);
+        setSettingUpAccount(false);
+        setResolvingExisting(false);
+        setAccountCreationMessage('');
+        setProvisionedAccount(null);
+        setProvisionedApplicationId('');
+        setForm({
+            name: '',
+            purpose: '',
+            duration: '',
+            frequency: '',
+            amount: '',
+            acceptedTerms: false,
+            politicallyExposed: '',
+        });
+    };
+
+    useEffect(() => {
+        if (!open) {
+            resetFlow();
+            return;
+        }
+
+        let cancelled = false;
+        setResolvingExisting(true);
+        setSetupError(null);
+
+        async function resolveExistingAccount() {
+            const id = productId.trim();
+            if (!id) {
+                if (!cancelled) {
+                    setStep('terms');
+                    setResolvingExisting(false);
+                }
+                return;
+            }
+
+            try {
+                const userId = await resolveWalletUserId();
+                if (!userId || cancelled) return;
+
+                const resolved = await resolveProductApplicationAccount(userId, id);
+                if (cancelled) return;
+
+                if (resolved.hasAccount) {
+                    const upstream = resolved.application?.productWallet?.upstreamAccount;
+                    setProvisionedApplicationId(resolved.applicationId || '');
+                    setProvisionedAccount(
+                        upstream
+                            ? {
+                                  id: upstream.accountId || resolved.applicationId,
+                                  accountNumber: upstream.accountNumber,
+                                  bankName: upstream.bankName,
+                                  currency: upstream.currency,
+                                  status: upstream.provisionStatus,
+                              }
+                            : null,
+                    );
+                    // Skip account-creation T&Cs — go straight to funding application form.
+                    setStep('application');
+                    return;
+                }
+
+                setStep('terms');
+            } catch {
+                if (!cancelled) setStep('terms');
+            } finally {
+                if (!cancelled) setResolvingExisting(false);
+            }
+        }
+
+        void resolveExistingAccount();
+
+        return () => {
+            cancelled = true;
+        };
+        // Only re-resolve when the sheet opens for a product.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, productId]);
 
     if (!open) return null;
 
@@ -126,14 +215,7 @@ export function ProductFundingFlowSheet({
     );
 
     const close = () => {
-        setStep('terms');
-        setTermsAccepted(false);
-        setPrivacyAccepted(false);
-        setUseCentralWallet(false);
-        setSetupError(null);
-        setSettingUpAccount(false);
-        setAccountCreationMessage('');
-        setProvisionedAccount(null);
+        resetFlow();
         onClose();
     };
 
@@ -171,6 +253,7 @@ export function ProductFundingFlowSheet({
             }
 
             setProvisionedAccount(result.account ?? null);
+            if (result.applicationId) setProvisionedApplicationId(result.applicationId);
             const successMsg =
                 result.message || `Your ${productKindLabel} account was created successfully.`;
             setAccountCreationMessage(successMsg);
@@ -199,14 +282,26 @@ export function ProductFundingFlowSheet({
             const result = await ensure(productId.trim(), {
                 amount: enteredAmount,
                 currency: 'NGN',
+                applicationId: provisionedApplicationId || undefined,
                 isPoliticallyExposedPerson,
             });
             if (!result.ok) {
-                setSetupError(result.error || 'Could not set up your account.');
-                setStep('application');
+                const msg = result.error || 'Could not fund your account.';
+                setSetupError(msg);
+                toast.error(msg);
+                if (
+                    msg.toLowerCase().includes('insufficient') ||
+                    msg.toLowerCase().includes('balance')
+                ) {
+                    setStep('failure');
+                } else {
+                    setStep('application');
+                }
                 return;
             }
+            if (result.applicationId) setProvisionedApplicationId(result.applicationId);
             setProvisionedAccount(result.account ?? provisionedAccount);
+            toast.success(result.message || 'Deposit successful.');
             setStep('success');
         } finally {
             setSettingUpAccount(false);
@@ -231,7 +326,13 @@ export function ProductFundingFlowSheet({
                 onClick={close}
             />
 
-            {step === 'terms' ? (
+            {resolvingExisting ? (
+                <div className="relative z-10 flex w-full flex-col items-center rounded-t-[28px] bg-white px-6 py-12 shadow-2xl">
+                    <div className="mx-auto mb-6 h-1.5 w-16 rounded-full bg-gray-300" />
+                    <Loader2 className={`h-8 w-8 animate-spin text-[var(--sf-button,#2563EB)]`} />
+                    <p className={`mt-4 text-sm font-medium ${BRAND_INK}`}>Checking your account…</p>
+                </div>
+            ) : step === 'terms' ? (
                 <div className="relative z-10 w-full rounded-t-[28px] bg-white px-6 pb-8 pt-3 shadow-2xl">
                     <div className="mx-auto mb-6 h-1.5 w-16 rounded-full bg-gray-300" />
                     <div className="text-center">

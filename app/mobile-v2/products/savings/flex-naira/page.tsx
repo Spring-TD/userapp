@@ -14,7 +14,9 @@ import { ProductFundingFlowSheet } from '@/components/mobile-v2/application/Prod
 import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeletons';
 import { useMobileProductDetail } from '@/hooks/useMobileProductDetail';
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
+import { useUserWallet } from '@/hooks/useUserWallet';
 import { amountRange, feeSummary, formatNgn, poweredBy, rateLabel } from '@/lib/mobileProductDetailDisplay';
+import { walletSpendableBalance } from '@/lib/userWallet';
 
 export default function FlexNairaPage() {
     const searchParams = useSearchParams();
@@ -25,6 +27,8 @@ export default function FlexNairaPage() {
         enabled: tenantReady && Boolean(productId),
     });
     const [isFundingFlowOpen, setIsFundingFlowOpen] = useState(false);
+    const { wallet } = useUserWallet();
+    const centralWalletBalance = walletSpendableBalance(wallet);
     if (productId && (!tenantReady || loading)) {
         return (
             <div className="flex h-full flex-col bg-[#F4F7FF] px-6 pt-12">
@@ -166,6 +170,7 @@ export default function FlexNairaPage() {
                 successTitle="Savings Started"
                 successMessage="Your savings plan has been created successfully."
                 failureMessage="Your central wallet balance is not sufficient for this savings amount. Please fund your wallet and try again."
+                centralWalletBalance={centralWalletBalance}
                 amountMin={product.amountMin}
                 amountMax={product.amountMax}
             />

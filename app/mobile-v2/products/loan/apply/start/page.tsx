@@ -12,7 +12,6 @@ import { initializeProductApplication } from '@/lib/storefrontApplicationClient'
 import { loanAccountSuccessHref, loanApplyHref } from '@/lib/loanApplyRoutes'
 import {
   isDuplicateAccountError,
-  pendingAccountMessage,
   resolveProductApplicationAccount,
 } from '@/lib/resolveProductApplicationAccount'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
@@ -74,17 +73,15 @@ function LoanApplyStartInner() {
         setIsActiveAccount(resolved.isActiveAccount)
         setProvisionStatus(resolved.provisionStatus ?? null)
 
-        // Only continue into the application form when the product account is Active.
-        if (resolved.hasAccount && resolved.isActiveAccount) {
-          toast.success('Active loan account found. Continuing application…')
+        // Account already exists → skip account-creation T&Cs; go to application form.
+        if (resolved.hasAccount) {
+          toast.success(
+            resolved.isActiveAccount
+              ? 'Loan account found. Continuing application…'
+              : 'Loan account found. Continuing…',
+          )
           router.replace(loanApplyHref(productId))
           return
-        }
-
-        if (resolved.hasAccount && !resolved.isActiveAccount) {
-          const msg = pendingAccountMessage('loan')
-          setError(msg)
-          toast.message(msg)
         }
       } catch (err) {
         console.warn('Could not check existing initialized loan application:', err)
@@ -120,44 +117,9 @@ function LoanApplyStartInner() {
       return
     }
 
-    if (hasInitializedAccount && isActiveAccount) {
+    if (hasInitializedAccount) {
       toast.success('Continuing to your loan application…')
       router.replace(loanApplyHref(productId))
-      return
-    }
-
-    if (hasInitializedAccount && !isActiveAccount) {
-      setProcessing(true)
-      setError(null)
-      try {
-        const userId = await resolveWalletUserId()
-        if (!userId) {
-          const msg = 'Could not resolve your user session. Please sign in again.'
-          setError(msg)
-          toast.error(msg)
-          return
-        }
-        const resolved = await resolveProductApplicationAccount(userId, productId)
-        console.log('[LoanApplyStart] re-check account status', resolved)
-        setHasInitializedAccount(resolved.hasAccount)
-        setIsActiveAccount(resolved.isActiveAccount)
-        setProvisionStatus(resolved.provisionStatus ?? null)
-        if (resolved.isActiveAccount) {
-          toast.success('Your loan account is Active. Continuing application…')
-          router.replace(loanApplyHref(productId))
-          return
-        }
-        const msg = pendingAccountMessage('loan')
-        setError(msg)
-        toast.message(msg)
-      } catch (err) {
-        console.error('[LoanApplyStart] status re-check failed', err)
-        const msg = 'Could not refresh account status. Please try again.'
-        setError(msg)
-        toast.error(msg)
-      } finally {
-        setProcessing(false)
-      }
       return
     }
 
@@ -171,15 +133,12 @@ function LoanApplyStartInner() {
         if (isDuplicateAccountError(result.error || '')) {
           const userId = await resolveWalletUserId()
           const resolved = userId ? await resolveProductApplicationAccount(userId, productId) : null
-          if (resolved?.isActiveAccount) {
-            toast.success('You already have an active loan account. Continuing application…')
+          if (resolved?.hasAccount) {
+            toast.success('You already have a loan account. Continuing application…')
             router.replace(loanApplyHref(productId))
             return
           }
-          const msg =
-            resolved?.hasAccount
-              ? pendingAccountMessage('loan')
-              : result.error || 'Account already exists but is not Active yet.'
+          const msg = result.error || 'Account already exists but could not be loaded.'
           setError(msg)
           toast.error(msg)
           setHasInitializedAccount(Boolean(resolved?.hasAccount))
