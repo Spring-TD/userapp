@@ -63,7 +63,13 @@ import {
 } from '@/lib/platformApplicationFields'
 import { PlatformApplicationFieldsForm } from '@/components/mobile-v2/application/PlatformApplicationFieldsForm'
 import { usePlatformApplicationFieldCatalog } from '@/hooks/usePlatformApplicationFieldCatalog'
-import { isActiveUpstreamAccount, isDuplicateAccountError, pendingAccountMessage } from '@/lib/resolveProductApplicationAccount'
+import {
+  isActiveUpstreamAccount,
+  isDuplicateAccountError,
+  pendingAccountMessage,
+  resolveProductApplicationAccount,
+} from '@/lib/resolveProductApplicationAccount'
+import { resolveWalletUserId } from '@/lib/resolveWalletUserId'
 import { buildLoanApplicationDetails } from '@/lib/loanApplicationDetails'
 import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
 import { poweredBy } from '@/lib/mobileProductDetailDisplay'
@@ -220,6 +226,7 @@ function InputPill({
   onChange,
   type = 'text',
   inputMode,
+  autoComplete,
 }: {
   placeholder: string
   right?: React.ReactNode
@@ -227,12 +234,14 @@ function InputPill({
   onChange?: (value: string) => void
   type?: React.HTMLInputTypeAttribute
   inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode']
+  autoComplete?: string
 }) {
   return (
     <label className="flex h-12 items-center justify-between rounded-2xl bg-gray-100 px-4 ring-[var(--sf-button,#1E40AF)]/20 focus-within:ring-2">
       <input
         type={type}
         inputMode={inputMode}
+        autoComplete={autoComplete}
         value={value}
         onChange={(e) => onChange?.(e.target.value)}
         placeholder={placeholder}
@@ -855,6 +864,8 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
   })
   const { displayName: tenantDisplayName, tenantSubdomain } = useMobileV2Tenant()
   const [applicationAmount, setApplicationAmount] = useState('')
+  /** Once the user edits amount (or a draft restores it), never auto-repopulate. */
+  const amountTouchedRef = useRef(false)
   const [applicationRevision, setApplicationRevision] = useState(0)
   const productName = prettyKind(kind)
   const initializedApplication = useMemo(() => {
@@ -883,16 +894,6 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
   const triggersSpouseKyc = platformFieldCatalog.some(
     (field) => field.key === 'repayingWithSpouse' && field.triggersSpouseKyc,
   )
-  const amountValidationError =
-    parsedApplicationAmount != null
-      ? validateApplicationAmount(
-          parsedApplicationAmount,
-          catalogProduct?.amountMin,
-          catalogProduct?.amountMax,
-        )
-      : applicationAmount.trim()
-        ? 'Enter a valid application amount.'
-        : null
 
   const goBackHref = kind === 'loan' ? '/mobile-v2/products/loan' : '/mobile-v2/products/mortgage'
   const successContinueHref =
@@ -949,6 +950,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         setActiveStep(steps.includes(draft.activeStep) ? draft.activeStep : 'requirement')
         setAccepted(Boolean(draft.accepted))
         setApplicationAmount(draft.applicationAmount || '')
+        amountTouchedRef.current = true
         setRequirementSubmissions(Array.isArray(draft.requirementSubmissions) ? draft.requirementSubmissions : [])
         setGuarantors(Array.isArray(draft.guarantors) ? draft.guarantors : [])
         setEmploymentDraft({
@@ -982,26 +984,26 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         const savedPlatformFields = resolvePlatformFieldsFromApplication(initializedApplication)
         if (savedPlatformFields) {
           setPlatformFields(platformFieldsDraftFromApi(savedPlatformFields))
-        } else if (initializedApplication?.amount) {
-          setApplicationAmount(
-            defaultApplicationAmountValue(
-              initializedApplication.amount,
-              catalogProduct?.amountMin,
-            ),
-          )
         }
+        const seeded = defaultApplicationAmountValue(
+          initializedApplication?.amount,
+          catalogProduct?.amountMin,
+        )
+        if (seeded) setApplicationAmount(seeded)
       }
     }
     setDraftHydrated(true)
   }, [draftHydrated, currentDraftKey, steps, applicationProgressKey, initializedApplication?.amount, catalogProduct?.amountMin])
 
+  // Seed amount once when catalog/min arrives late — never while the user is editing / clearing.
   useEffect(() => {
-    if (!draftHydrated || applicationAmount.trim()) return
-    const amount = initializedApplication?.amount
-    if (amount != null && amount > 0) {
-      setApplicationAmount(defaultApplicationAmountValue(amount, catalogProduct?.amountMin))
-    }
-  }, [draftHydrated, applicationAmount, initializedApplication?.amount, catalogProduct?.amountMin])
+    if (!draftHydrated || amountTouchedRef.current || applicationAmount.trim()) return
+    const seeded = defaultApplicationAmountValue(
+      initializedApplication?.amount,
+      catalogProduct?.amountMin,
+    )
+    if (seeded) setApplicationAmount(seeded)
+  }, [draftHydrated, initializedApplication?.amount, catalogProduct?.amountMin, applicationAmount])
 
   const scrollToFeedback = () => {
     feedbackRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -1162,12 +1164,29 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       return true
     }
 
+    // Session may have lost applicationId — resolve before creating another account.
+    const userIdForResolve = await resolveWalletUserId()
+    if (userIdForResolve) {
+      const existing = await resolveProductApplicationAccount(userIdForResolve, productId)
+      if (existing.hasAccount && existing.application) {
+        saveInitializedApplication(existing.application)
+        setApplicationRevision((value) => value + 1)
+        return true
+      }
+    }
+
     const result = await initializeProductApplication(productId, {
       productType: kind === 'loan' ? 'LOAN' : 'MORTGAGE',
       amount: parsed,
     })
     if (!result.ok) {
       if (isDuplicateAccountError(result.error || '')) {
+        const userId = await resolveWalletUserId()
+        const existing = userId ? await resolveProductApplicationAccount(userId, productId) : null
+        if (existing?.application) {
+          saveInitializedApplication(existing.application)
+          setApplicationRevision((value) => value + 1)
+        }
         // Account already exists for this product — allow continuing with local draft
         return true
       }
@@ -1612,11 +1631,38 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     setCreatingAccount(true)
     setCreateAccountError(null)
     try {
+      // Skip create if this product already has an account/application.
+      const userIdForResolve = await resolveWalletUserId()
+      if (userIdForResolve) {
+        const existing = await resolveProductApplicationAccount(userIdForResolve, productId)
+        if (existing.hasAccount && existing.application) {
+          saveInitializedApplication(existing.application)
+          toast.success(`${productName} account already exists. Continue your application.`)
+          setApplicationRevision((value) => value + 1)
+          setActiveStep('requirement')
+          setSheet(null)
+          return
+        }
+      }
+
       const result = await initializeProductApplication(productId, {
         productType: kind === 'loan' ? 'LOAN' : 'MORTGAGE',
         amount: parsed,
       })
       if (!result.ok) {
+        if (isDuplicateAccountError(result.error || '')) {
+          const resolved = userIdForResolve
+            ? await resolveProductApplicationAccount(userIdForResolve, productId)
+            : null
+          if (resolved?.application) {
+            saveInitializedApplication(resolved.application)
+            toast.success(`${productName} account already exists. Continue your application.`)
+            setApplicationRevision((value) => value + 1)
+            setActiveStep('requirement')
+            setSheet(null)
+            return
+          }
+        }
         const msg = result.error || `Could not create your ${productName.toLowerCase()} account.`
         setCreateAccountError(msg)
         toast.error(msg)
@@ -1668,16 +1714,19 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
                 <InputPill
                   placeholder={kind === 'loan' ? 'Amount to borrow' : 'Amount to apply for'}
                   value={applicationAmount}
-                  onChange={(value) => setApplicationAmount(value)}
-                  type="number"
-                  inputMode="numeric"
+                  onChange={(value) => {
+                    amountTouchedRef.current = true
+                    setApplicationAmount(value)
+                    setError(null)
+                    setCreateAccountError(null)
+                  }}
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
                 />
                 <p className="text-[11px] text-gray-500">
                   {formatApplicationAmountHint(catalogProduct?.amountMin, catalogProduct?.amountMax)}
                 </p>
-                {amountValidationError ? (
-                  <p className="text-xs text-red-600">{amountValidationError}</p>
-                ) : null}
               </div>
 
               <PlatformApplicationFieldsForm

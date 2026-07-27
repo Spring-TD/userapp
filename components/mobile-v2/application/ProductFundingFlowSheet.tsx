@@ -200,15 +200,12 @@ export function ProductFundingFlowSheet({
     };
 
     const enteredAmount = parseApplicationAmount(form.amount) ?? 0;
-    const amountValidationError =
-        enteredAmount > 0 ? validateApplicationAmount(enteredAmount, amountMin, amountMax) : null;
     const canSubmit = Boolean(
         form.name.trim() &&
         form.purpose.trim() &&
         form.duration.trim() &&
         form.frequency &&
-        enteredAmount > 0 &&
-        !amountValidationError &&
+        form.amount.trim() &&
         form.acceptedTerms &&
         (form.politicallyExposed === 'yes' || form.politicallyExposed === 'no'),
     );
@@ -248,6 +245,30 @@ export function ProductFundingFlowSheet({
         setSetupError(null);
 
         try {
+            // Never create a second account for the same product.
+            const userId = await resolveWalletUserId();
+            if (userId) {
+                const existing = await resolveProductApplicationAccount(userId, productId.trim());
+                if (existing.hasAccount) {
+                    const upstream = existing.application?.productWallet?.upstreamAccount;
+                    setProvisionedApplicationId(existing.applicationId || '');
+                    setProvisionedAccount(
+                        upstream
+                            ? {
+                                  id: upstream.accountId || existing.applicationId,
+                                  accountNumber: upstream.accountNumber,
+                                  bankName: upstream.bankName,
+                                  currency: upstream.currency,
+                                  status: upstream.provisionStatus,
+                              }
+                            : null,
+                    );
+                    toast.success('Account already exists. Continue to fund.');
+                    setStep('application');
+                    return;
+                }
+            }
+
             const ensure =
                 accountKind === 'investment' ? ensureInvestmentAccount : ensureSavingsAccount;
             const isPoliticallyExposedPerson = form.politicallyExposed === 'yes';
@@ -324,7 +345,22 @@ export function ProductFundingFlowSheet({
     };
 
     const processPayment = async () => {
-        if (useCentralWallet && enteredAmount > centralWalletBalance) {
+        const parsed = parseApplicationAmount(form.amount);
+        if (!parsed) {
+            const msg = 'Enter a valid amount.';
+            setSetupError(msg);
+            toast.error(msg);
+            return;
+        }
+
+        const amountError = validateApplicationAmount(parsed, amountMin, amountMax);
+        if (amountError) {
+            setSetupError(amountError);
+            toast.error(amountError);
+            return;
+        }
+
+        if (useCentralWallet && parsed > centralWalletBalance) {
             setStep('failure');
             return;
         }
@@ -503,7 +539,10 @@ export function ProductFundingFlowSheet({
                         </div>
                         <input
                             value={form.amount}
-                            onChange={(event) => updateForm('amount', event.target.value)}
+                            onChange={(event) => {
+                                updateForm('amount', event.target.value);
+                                setSetupError(null);
+                            }}
                             placeholder={amountPlaceholder}
                             inputMode="numeric"
                             className="h-12 w-full rounded-full bg-gray-100 px-5 text-sm outline-none ring-[var(--sf-button,#2563EB)]/20 placeholder:text-gray-400 focus:ring-2"
@@ -511,9 +550,6 @@ export function ProductFundingFlowSheet({
                         <p className="px-1 text-[11px] text-gray-500">
                             {formatApplicationAmountHint(amountMin, amountMax)}
                         </p>
-                        {amountValidationError ? (
-                            <p className="px-1 text-xs text-red-600">{amountValidationError}</p>
-                        ) : null}
                         <button
                             type="button"
                             onClick={() => updateForm('acceptedTerms', !form.acceptedTerms)}
