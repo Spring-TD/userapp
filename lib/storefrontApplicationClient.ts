@@ -733,3 +733,49 @@ export async function submitInitializedApplication(
     }
   }
 }
+
+/** Applicant opts out — best-effort cancel on account-ms. */
+export async function cancelStorefrontApplication(
+  applicationId: string,
+  userId: string,
+  reason?: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!applicationId || !userId) {
+    return { ok: false, error: "Missing application or user." }
+  }
+  const trimmed = reason?.trim()
+  try {
+    const res = await apiClient.patch<ApiEnvelope<StorefrontApplication>>(
+      `/v1/applications/${encodeURIComponent(applicationId)}`,
+      {
+        userId,
+        status: "CANCELLED",
+        ...(trimmed
+          ? {
+              cancellationReason: trimmed,
+              metadata: {
+                cancellationReason: trimmed,
+                cancelledFrom: "virtual_tour",
+                cancelledAt: new Date().toISOString(),
+              },
+            }
+          : {
+              metadata: {
+                cancelledFrom: "virtual_tour",
+                cancelledAt: new Date().toISOString(),
+              },
+            }),
+      },
+      { includeAuth: true, timeout: 30_000 },
+    )
+    if (res.data?.success === false || res.status >= 400) {
+      return { ok: false, error: parseApiError(res.data, res.status) }
+    }
+    return { ok: true }
+  } catch (error: unknown) {
+    return {
+      ok: false,
+      error: axiosApplicationError(error, "Could not cancel this application."),
+    }
+  }
+}

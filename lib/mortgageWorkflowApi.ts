@@ -37,7 +37,7 @@ export function localPatchToApiProgress(
 
   if (patch.virtualTourCompleted === true) progress.virtualTourCompletedAt = now
   if (patch.offerAccepted === true || patch.signedOfferUploaded === true) progress.offerAcceptedAt = now
-  if (patch.offerDeclined === true) {
+  if (patch.offerDeclined === true || patch.cancelled === true) {
     progress.offerDeclinedAt = now
     if (stateAfterPatch?.inspectionScheduled) progress.inspectionDeclined = true
   }

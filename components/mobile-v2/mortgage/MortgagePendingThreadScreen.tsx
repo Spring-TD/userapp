@@ -4,12 +4,17 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Check, ChevronLeft } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { MortgageWorkflowModals } from '@/components/mobile-v2/mortgage/MortgageWorkflowModals'
 import { VirtualTourSheet } from '@/components/mobile-v2/mortgage/VirtualTourSheet'
 import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
 import { useSpringLocalProductForVirtualTour } from '@/hooks/useSpringLocalProductForVirtualTour'
-import type { StorefrontApplication } from '@/lib/storefrontApplicationClient'
+import { useUserWallet } from '@/hooks/useUserWallet'
+import {
+  cancelStorefrontApplication,
+  type StorefrontApplication,
+} from '@/lib/storefrontApplicationClient'
 import { buildPropertyTourData } from '@/lib/mortgagePropertyTour'
 import { resolveSpringLocalProductLookup } from '@/lib/springLocalProduct'
 import {
@@ -17,6 +22,7 @@ import {
   mortgageStepCta,
   mortgageStepToModal,
   patchMortgageWorkflow,
+  patchMortgageWorkflowAsync,
   readMortgageWorkflow,
   resolveMortgageWorkflowStep,
   type MortgageThreadItem,
@@ -106,6 +112,7 @@ export function MortgagePendingThreadScreen({
 }: MortgagePendingThreadScreenProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { wallet } = useUserWallet()
   const applicationId = String(application.id ?? application._id ?? '')
   const productLookup = resolveSpringLocalProductLookup(application)
   const productId = productLookup.localProductId || String(application.productId ?? '')
@@ -206,6 +213,31 @@ export function MortgagePendingThreadScreen({
     refreshWorkflow()
   }
 
+  const handleVirtualTourCancel = async (reason?: string) => {
+    const userId = wallet?.userId || String(application.userId || '').trim()
+    await patchMortgageWorkflowAsync(applicationId, {
+      cancelled: true,
+      offerDeclined: true,
+      ...(reason ? { cancelReason: reason } : {}),
+    })
+    if (userId) {
+      const res = await cancelStorefrontApplication(applicationId, userId, reason)
+      if (!res.ok) {
+        toast.message('Application cancelled locally', {
+          description: res.error || 'Server cancel may still be pending.',
+        })
+      } else {
+        toast.success('Application cancelled')
+      }
+    } else {
+      toast.success('Application cancelled')
+    }
+    refreshWorkflow()
+    if (!embedded) {
+      router.push('/mobile-v2/accounts')
+    }
+  }
+
   const workflowCard = (
     <div className="rounded-2xl border sf-border-subtle bg-white px-4 py-5 shadow-sm">
       <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Workflow</p>
@@ -237,6 +269,7 @@ export function MortgagePendingThreadScreen({
         onClose={() => setVirtualTourOpen(false)}
         tour={tourData}
         onComplete={handleVirtualTourComplete}
+        onCancelApplication={handleVirtualTourCancel}
       />
 
       <MortgageWorkflowModals
