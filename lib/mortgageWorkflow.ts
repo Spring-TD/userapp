@@ -28,6 +28,9 @@ export type MortgageWorkflowLocalState = {
   inspectionScheduled?: boolean
   offerAccepted?: boolean
   offerDeclined?: boolean
+  /** Applicant cancelled during virtual tour / opt-out. */
+  cancelled?: boolean
+  cancelReason?: string
   signedOfferUploaded?: boolean
   /** @deprecated Legacy workflow flag */
   inspectionCompleted?: boolean
@@ -172,12 +175,13 @@ export function resolveMortgageWorkflowStep(
   application: StorefrontApplication,
   local: MortgageWorkflowLocalState | null,
 ): MortgageWorkflowStep {
+  if (local?.cancelled || local?.offerDeclined) return 'declined'
+
   const paf = extractPostApprovalFulfillment(application as unknown as Record<string, unknown>)
   if (paf?.status) {
     return stepFromPostApproval(paf.status, local)
   }
 
-  if (local?.offerDeclined) return 'declined'
   if (local?.allocationDownloaded) return 'mortgage_allocation'
   if (local?.contractAccepted) return 'mortgage_allocation'
   if (local?.downPaymentConfirmed) return 'contract_signing'

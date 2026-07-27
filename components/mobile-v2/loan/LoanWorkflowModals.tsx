@@ -84,40 +84,52 @@ export function LoanWorkflowModals({
   }
 
   const acceptOffer = async () => {
+    if (!userId) {
+      toast.error('Sign in to accept this offer.')
+      return
+    }
     setBusy(true)
-    if (userId) {
+    try {
       const apiRes = await pendingApprovedLoanApi.respondToOffer(applicationId, userId, true)
       if (!apiRes.ok) {
-        toast.error(apiRes.error || 'Could not accept offer on server — saved locally.')
+        toast.error(apiRes.error || 'Could not accept offer. Please try again.')
+        return
       }
+      patchLoanWorkflow(applicationId, {
+        approvalAcknowledged: true,
+        offerAccepted: true,
+        offerDeclined: false,
+      })
+      onStepAdvanced()
+      toast.success('Loan offer accepted')
+      onClose()
+    } finally {
+      setBusy(false)
     }
-    patchLoanWorkflow(applicationId, {
-      approvalAcknowledged: true,
-      offerAccepted: true,
-      offerDeclined: false,
-    })
-    onStepAdvanced()
-    setBusy(false)
-    toast.success('Loan offer accepted')
-    onClose()
   }
 
   const declineOffer = async () => {
+    if (!userId) {
+      toast.error('Sign in to decline this offer.')
+      return
+    }
     setBusy(true)
-    if (userId) {
+    try {
       const apiRes = await pendingApprovedLoanApi.respondToOffer(applicationId, userId, false)
       if (!apiRes.ok) {
-        toast.error(apiRes.error || 'Could not decline offer on server — saved locally.')
+        toast.error(apiRes.error || 'Could not decline offer. Please try again.')
+        return
       }
+      patchLoanWorkflow(applicationId, {
+        offerAccepted: false,
+        offerDeclined: true,
+      })
+      onStepAdvanced()
+      toast.message('Loan offer declined')
+      onClose()
+    } finally {
+      setBusy(false)
     }
-    patchLoanWorkflow(applicationId, {
-      offerAccepted: false,
-      offerDeclined: true,
-    })
-    onStepAdvanced()
-    setBusy(false)
-    toast.message('Loan offer declined')
-    onClose()
   }
 
   return (
