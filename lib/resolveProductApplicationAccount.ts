@@ -32,12 +32,6 @@ function applicationHasUpstreamAccount(application: StorefrontApplication): bool
   return Boolean(account?.accountNumber || account?.accountId || account?.provisionStatus)
 }
 
-/**
- * Active = backend provisioned a usable product account (not just ACCOUNT_REQUESTED).
- * Prefer `productWallet.upstreamAccount` when present; otherwise treat as not active.
- * Note: many ACCOUNT REQUESTED rows have no productWallet at all — only
- * `loanWorkflowStatus: "account_requested"` + `upstreamSyncError`.
- */
 export function isActiveUpstreamAccount(application: StorefrontApplication | null | undefined): boolean {
   if (!application) return false
 
@@ -65,19 +59,11 @@ function isReusableApplication(application: StorefrontApplication, productId: st
   if (applicationProductId !== normalizedProductId) return false
 
   const status = String(application.status || '').toUpperCase()
+  // Only terminal failures can create a new account for the same product.
   if (['CANCELLED', 'CANCELED', 'REJECTED', 'FAILED'].includes(status)) return false
 
-  const productType = String(application.productType || '').toUpperCase()
-  const workflowStatus = String(application.loanWorkflowStatus || '').toLowerCase()
-
-  if (productType === 'SAVINGS' || productType === 'INVESTMENT' || productType === 'COMMODITY') {
-    return Boolean(application.id || application._id)
-  }
-
-  return (
-    status === 'PENDING' &&
-    (workflowStatus === 'account_created' || applicationHasUpstreamAccount(application))
-  )
+  // Any non-terminal application for this product means account creation already happened.
+  return Boolean(application.id || application._id)
 }
 
 function toResolved(application: StorefrontApplication): ResolvedProductAccount {
@@ -109,16 +95,11 @@ export async function resolveProductApplicationAccount(
   try {
     const statusRes = await getProductApplicationInitStatus(userId, normalizedProductId)
     if (statusRes.ok && statusRes.status) {
-      const hasAccount = Boolean(
-        statusRes.status.hasInitializedApplication || statusRes.status.hasUpstreamAccount,
-      )
-      if (hasAccount && statusRes.status.application) {
+      if (statusRes.status.application && isReusableApplication(statusRes.status.application, normalizedProductId)) {
         saveInitializedApplication(statusRes.status.application)
         return toResolved(statusRes.status.application)
       }
-      if (hasAccount) {
-        return { hasAccount: true, isActiveAccount: false }
-      }
+      // Flag says account exists but body missing — fall through to list lookup.
     }
   } catch {
     // init-status may be unavailable; fall through to list lookup
@@ -143,3 +124,4 @@ export function isDuplicateAccountError(message: string): boolean {
 export function pendingAccountMessage(productLabel = 'product'): string {
   return `Your ${productLabel} account is still being set up (not Active yet). You can apply once provisioning completes and the account shows as Active.`
 }
+true

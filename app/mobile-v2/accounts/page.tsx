@@ -187,6 +187,48 @@ function isActiveSummaryAccount(status?: string | null): boolean {
     return isLiveStatusToken(normalized)
 }
 
+function applicationUpdatedAt(application: ProductApplication): number {
+    const raw =
+        (application as { updatedAt?: string }).updatedAt ||
+        (application as { createdAt?: string }).createdAt ||
+        ''
+    const ts = Date.parse(String(raw))
+    return Number.isFinite(ts) ? ts : 0
+}
+
+/**
+ * Accounts tab: only live accounts, and at most one row per product.
+ */
+function selectDisplayableProductAccounts(applications: ProductApplication[]): ProductApplication[] {
+    const active = applications.filter(isActiveProductApplication)
+    const byProduct = new Map<string, ProductApplication>()
+
+    for (const application of active) {
+        const productKey = String(application.productId || application.id || '').trim()
+        if (!productKey) continue
+
+        const existing = byProduct.get(productKey)
+        if (!existing) {
+            byProduct.set(productKey, application)
+            continue
+        }
+
+        const existingHasNuban = Boolean(existing.productWallet?.upstreamAccount?.accountNumber?.trim())
+        const nextHasNuban = Boolean(application.productWallet?.upstreamAccount?.accountNumber?.trim())
+        if (nextHasNuban && !existingHasNuban) {
+            byProduct.set(productKey, application)
+            continue
+        }
+        if (applicationUpdatedAt(application) >= applicationUpdatedAt(existing)) {
+            byProduct.set(productKey, application)
+        }
+    }
+
+    return Array.from(byProduct.values()).sort(
+        (a, b) => applicationUpdatedAt(b) - applicationUpdatedAt(a),
+    )
+}
+
 /**
  * Single user-facing status for Accounts cards.
  * Avoids conflicting pairs like "Active" badge + "PENDING"/"APPROVED" application line.
@@ -473,15 +515,19 @@ export default function AccountsPage() {
     const activeApplications = applications.filter(
         (application) => String(application.productType || '').toUpperCase() === activeProductType,
     );
+    const displayedApplications = selectDisplayableProductAccounts(activeApplications);
     const commodityHoldingTotal =
         activeFilter === 'Commodity'
-            ? aggregateCommodityHoldingBalance(activeApplications)
+            ? aggregateCommodityHoldingBalance(displayedApplications)
             : 0;
-    const activeStatusApplications = activeApplications.filter(isActiveProductApplication);
     const activeStatusFromSummary = (activeSummary.accounts || []).filter((account) =>
         isActiveSummaryAccount(account.status),
     ).length;
-    const displayedAccountCount = Math.max(activeStatusApplications.length, activeStatusFromSummary);
+    // Prefer unique active product accounts from the list; fall back to summary only when list is empty.
+    const displayedAccountCount =
+        displayedApplications.length > 0
+            ? displayedApplications.length
+            : activeStatusFromSummary;
     const activeTotalAmount =
         activeFilter === 'Commodity' ? commodityHoldingTotal : activeSummary.totalAmount;
     const activeFormattedBalance = formatWalletBalance(
@@ -575,8 +621,8 @@ export default function AccountsPage() {
                 <div className="px-6 space-y-6">
                     {applicationsLoading || (isSummaryBusy && !productSummary && applications.length === 0) ? (
                         <WalletAccountRowSkeleton />
-                    ) : activeApplications.length > 0 ? (
-                        activeApplications.map((application) => (
+                    ) : displayedApplications.length > 0 ? (
+                        displayedApplications.map((application) => (
                             <ProductAccountCard
                                 key={application.id}
                                 application={application}

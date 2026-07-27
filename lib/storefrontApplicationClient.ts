@@ -155,22 +155,9 @@ function isInitializedPendingApplication(application: StorefrontApplication, pro
   if (applicationProductId !== normalizedProductId) return false
 
   const status = String(application.status || "").toUpperCase()
+  // Cancelled/rejected apps can open a new account; anything else means creation already ran.
   if (["CANCELLED", "CANCELED", "REJECTED", "FAILED"].includes(status)) return false
 
-  const productType = String(application.productType || "").toUpperCase()
-  const workflowStatus = String(application.loanWorkflowStatus || "").toLowerCase()
-
-  // Loan / mortgage: prefer provisioned or account_created drafts.
-  if (productType === "LOAN" || productType === "MORTGAGE" || !productType) {
-    return (
-      status === "PENDING" &&
-      (workflowStatus === "account_created" ||
-        Boolean(application.productWallet?.upstreamAccount?.accountNumber) ||
-        Boolean(application.productWallet?.upstreamAccount?.provisionStatus))
-    )
-  }
-
-  // Savings / investment / commodity: any live application for this product counts.
   return Boolean(application.id || application._id)
 }
 
@@ -197,8 +184,12 @@ export async function getExistingInitializedApplication(userId: string, productI
   }
 
   const applications = Array.isArray(res.data?.data) ? res.data.data : []
+  const matches = applications.filter((app) => isInitializedPendingApplication(app, normalizedProductId))
   const application =
-    applications.find((app) => isInitializedPendingApplication(app, normalizedProductId)) ?? null
+    matches.find((app) => Boolean(app.productWallet?.upstreamAccount?.accountNumber)) ||
+    matches.find((app) => Boolean(app.productWallet?.upstreamAccount)) ||
+    matches[0] ||
+    null
 
   if (application) saveInitializedApplication(application)
   return { ok: true as const, application }
