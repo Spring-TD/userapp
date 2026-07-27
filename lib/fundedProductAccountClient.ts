@@ -2,6 +2,7 @@ import { apiClient } from '@/lib/api'
 import { ENDPOINTS } from '@/lib/endpoints'
 import { buildProductApplyBody } from '@/lib/productApplyPayload'
 import type { PlatformFields } from '@/lib/platformApplicationFields'
+import { attachPlatformFieldsToApplyBody } from '@/lib/platformApplicationFields'
 import { resolveWalletUserId } from '@/lib/resolveWalletUserId'
 
 type ApiEnvelope<T> = {
@@ -152,10 +153,15 @@ export async function createFundedProductAccount(
     ...(merchantId ? { merchantId } : {}),
     ...(appId ? { appId } : {}),
     ...(country ? { country } : {}),
-    ...(options?.platformFields ? { ...options.platformFields } : {}),
   }
 
-  const res = await apiClient.post<ApiEnvelope<unknown>>(createPath(kind), payload, {
+  const platformFields = options?.platformFields
+  const finalPayload =
+    platformFields && typeof platformFields.isPoliticallyExposedPerson === 'boolean'
+      ? attachPlatformFieldsToApplyBody(payload, platformFields)
+      : payload
+
+  const res = await apiClient.post<ApiEnvelope<unknown>>(createPath(kind), finalPayload, {
     includeAuth: true,
     timeout: 60_000,
   })

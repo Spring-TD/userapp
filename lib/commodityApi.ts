@@ -4,6 +4,10 @@ import { fetchWithAuth } from "@/lib/fetchWithAuth"
 import { TENANT_APP_ID_STORAGE_KEY } from "@/lib/mobileTenant/storageKeys"
 import { buildProductApplyBody } from "@/lib/productApplyPayload"
 import type { PlatformFields } from "@/lib/platformApplicationFields"
+import {
+  attachPlatformFieldsToApplyBody,
+  baselinePlatformFieldsForEnrollment,
+} from "@/lib/platformApplicationFields"
 import { resolveWalletUserId } from "@/lib/resolveWalletUserId"
 import { sanitizeProductId } from "@/lib/sanitizeProductId"
 import type { ProductApplication } from "@/types/productApplication"
@@ -313,18 +317,49 @@ export async function buildCommodityApplyBody(
   }
 
   const qty = Math.max(minQty, Math.floor(quantity))
+  const pep = options?.platformFields?.isPoliticallyExposedPerson
+
+  // Match STOREFRONT_ALL_PRODUCTS commodity contract (no productType / amount).
+  const {
+    userId,
+    productId: pid,
+    currency,
+    email,
+    merchantId,
+    applicantName,
+    phone,
+    bvn,
+    country,
+    appId: bodyAppId,
+  } = built.body
+
+  const body: Record<string, unknown> = {
+    userId,
+    productId: pid,
+    currency: currency || "NGN",
+    quantity: qty,
+    ...(email ? { email } : {}),
+    ...(applicantName ? { applicantName } : {}),
+    ...(phone ? { phone } : {}),
+    ...(bvn ? { bvn } : {}),
+    ...(merchantId ? { merchantId } : {}),
+    ...(country ? { country } : {}),
+    ...(appId || bodyAppId ? { appId: appId || bodyAppId } : {}),
+    ...(options?.requirementSubmissions?.length
+      ? { requirementSubmissions: options.requirementSubmissions }
+      : {}),
+  }
+
+  if (typeof pep !== "boolean") {
+    return { ok: true as const, body }
+  }
 
   return {
     ok: true as const,
-    body: {
-      ...built.body,
-      quantity: qty,
-      ...(appId ? { appId } : {}),
-      ...(options?.requirementSubmissions?.length
-        ? { requirementSubmissions: options.requirementSubmissions }
-        : {}),
-      ...(options?.platformFields ? { ...options.platformFields } : {}),
-    },
+    body: attachPlatformFieldsToApplyBody(
+      body,
+      baselinePlatformFieldsForEnrollment(pep, options?.platformFields),
+    ),
   }
 }
 
@@ -336,6 +371,13 @@ export async function purchaseCommodity(
   | { ok: true; data: CommodityApplyResult }
   | { ok: false; error: string; status?: number }
 > {
+  if (options?.platformFields?.isPoliticallyExposedPerson === undefined) {
+    return {
+      ok: false,
+      error: 'Please indicate whether you are a politically exposed person.',
+    }
+  }
+
   const built = await buildCommodityApplyBody(productId, quantity, options)
   if (!built.ok) return { ok: false, error: built.error }
 
