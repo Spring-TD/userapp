@@ -14,7 +14,7 @@ import { loanApplyStartHref } from '@/lib/loanApplyRoutes'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
 import type { LoanCatalogItem } from '@/types/loanCatalog'
 import { ProductDetailsScreen } from '@/components/mobile-v2/application/ProductDetailsScreen'
-import { amountRange, feeSummary, formatNgn, requirementSummary } from '@/lib/mobileProductDetailDisplay'
+import { amountRange, feeSummary, formatNgn, humanizeLabel, requirementSummary } from '@/lib/mobileProductDetailDisplay'
 
 function LoanDetailInner() {
   const params = useParams()
@@ -97,7 +97,7 @@ function LoanDetailInner() {
               { label: 'Collateral', value: requirementSummary(product) },
               { label: 'Fees & charges', value: feeSummary(product) },
               { label: 'Interest Rate', value: loan.interestRate },
-              { label: 'Interest Method', value: product.interestMethod || 'Not specified' },
+              { label: 'Interest Method', value: humanizeLabel(product.interestMethod) || 'Not specified' },
               { label: 'Powered by:', value: loan.providerName },
             ]
           : undefined

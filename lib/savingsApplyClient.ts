@@ -4,7 +4,10 @@ import {
   type ProvisionedProductAccount,
 } from '@/lib/fundedProductAccountClient'
 import type { PlatformFields } from '@/lib/platformApplicationFields'
-import { isPoliticallyExposedFromPepAnswer } from '@/lib/platformApplicationFields'
+import {
+  baselinePlatformFieldsForEnrollment,
+  isPoliticallyExposedFromPepAnswer,
+} from '@/lib/platformApplicationFields'
 
 export type EnsureSavingsAccountResult = {
   ok: boolean
@@ -29,13 +32,18 @@ type EnsureSavingsOptions = {
 }
 
 function resolvePlatformFields(options?: EnsureSavingsOptions): PlatformFields | undefined {
-  if (options?.platformFields) return options.platformFields
+  if (options?.platformFields?.isPoliticallyExposedPerson !== undefined) {
+    return baselinePlatformFieldsForEnrollment(
+      options.platformFields.isPoliticallyExposedPerson,
+      options.platformFields,
+    )
+  }
   const pep =
     options?.isPoliticallyExposedPerson !== undefined
       ? options.isPoliticallyExposedPerson
       : isPoliticallyExposedFromPepAnswer(options?.politicallyExposed)
   if (pep === undefined) return undefined
-  return { isPoliticallyExposedPerson: pep }
+  return baselinePlatformFieldsForEnrollment(pep, options?.platformFields)
 }
 
 /**
@@ -57,6 +65,13 @@ export async function ensureSavingsAccount(
   let provisionMessage: string | undefined
 
   if (!applicationId) {
+    if (platformFields?.isPoliticallyExposedPerson === undefined) {
+      return {
+        ok: false,
+        accountCreated: false,
+        error: 'Please indicate whether you are a politically exposed person.',
+      }
+    }
     const created = await createFundedProductAccount('savings', productId, {
       currency,
       platformFields,

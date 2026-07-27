@@ -15,7 +15,6 @@ import {
 } from '@/lib/applicationAmount';
 import { YesNoField, PepSearchNotice } from '@/components/mobile-v2/application/ApplicantProfileFields';
 import type { PepAnswer } from '@/lib/applicantProfileFields';
-import { isPoliticallyExposedFromPepAnswer } from '@/lib/platformApplicationFields';
 import { resolveProductApplicationAccount } from '@/lib/resolveProductApplicationAccount';
 import { resolveWalletUserId } from '@/lib/resolveWalletUserId';
 
@@ -219,9 +218,20 @@ export function ProductFundingFlowSheet({
         onClose();
     };
 
+    const pepAnswered =
+        form.politicallyExposed === 'yes' || form.politicallyExposed === 'no';
+    const canCreateAccount = termsAccepted && privacyAccepted && pepAnswered && !settingUpAccount;
+
     const handleCreateAccount = async () => {
         if (!termsAccepted || !privacyAccepted) {
             const msg = 'Please accept the terms and privacy policy to continue.';
+            setSetupError(msg);
+            toast.error(msg);
+            return;
+        }
+
+        if (!pepAnswered) {
+            const msg = 'Please indicate whether you are a politically exposed person.';
             setSetupError(msg);
             toast.error(msg);
             return;
@@ -240,7 +250,7 @@ export function ProductFundingFlowSheet({
         try {
             const ensure =
                 accountKind === 'investment' ? ensureInvestmentAccount : ensureSavingsAccount;
-            const isPoliticallyExposedPerson = isPoliticallyExposedFromPepAnswer(form.politicallyExposed);
+            const isPoliticallyExposedPerson = form.politicallyExposed === 'yes';
             const result = await ensure(productId.trim(), {
                 currency: 'NGN',
                 isPoliticallyExposedPerson,
@@ -278,7 +288,12 @@ export function ProductFundingFlowSheet({
         try {
             const ensure =
                 accountKind === 'investment' ? ensureInvestmentAccount : ensureSavingsAccount;
-            const isPoliticallyExposedPerson = isPoliticallyExposedFromPepAnswer(form.politicallyExposed);
+            const isPoliticallyExposedPerson =
+                form.politicallyExposed === 'yes'
+                    ? true
+                    : form.politicallyExposed === 'no'
+                      ? false
+                      : undefined;
             const result = await ensure(productId.trim(), {
                 amount: enteredAmount,
                 currency: 'NGN',
@@ -386,12 +401,21 @@ export function ProductFundingFlowSheet({
                         ))}
                     </div>
 
+                    <div className="mt-5 space-y-3 text-left">
+                        <YesNoField
+                            label="Are you a politically exposed person?"
+                            value={form.politicallyExposed}
+                            onChange={(politicallyExposed) => updateForm('politicallyExposed', politicallyExposed)}
+                        />
+                        <PepSearchNotice isPep={form.politicallyExposed === 'yes'} />
+                    </div>
+
                     {setupError ? (
                         <p className="mt-4 text-center text-xs text-red-600">{setupError}</p>
                     ) : null}
 
                     <Button
-                        disabled={settingUpAccount}
+                        disabled={!canCreateAccount}
                         onClick={() => void handleCreateAccount()}
                         className={`mt-7 h-12 w-full rounded-full text-sm font-semibold disabled:opacity-50 ${BRAND_BUTTON}`}
                     >

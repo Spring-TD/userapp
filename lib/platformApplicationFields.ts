@@ -212,6 +212,63 @@ export function isPoliticallyExposedFromPepAnswer(
   return undefined
 }
 
+/**
+ * Plata requires these for all product types on enrollment/submit (lending-only
+ * fields like loanReason/spouse are omitted for savings/investment/commodity).
+ */
+export function baselinePlatformFieldsForEnrollment(
+  isPoliticallyExposedPerson: boolean,
+  overrides?: PlatformFields,
+): PlatformFields {
+  return {
+    monthlyIncome: 0,
+    repaymentSource: 'salary',
+    maritalStatus: 'single',
+    ...overrides,
+    isPoliticallyExposedPerson,
+  }
+}
+
+/**
+ * Docs: send platform fields at top level and/or under `metadata.platformFields`.
+ * Top-level wins when both are present — we set both for gateway/service quirks.
+ */
+export function attachPlatformFieldsToApplyBody(
+  body: Record<string, unknown>,
+  fields: PlatformFields,
+): Record<string, unknown> {
+  const existingMeta =
+    body.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata)
+      ? (body.metadata as Record<string, unknown>)
+      : {}
+  const existingNested =
+    existingMeta.platformFields &&
+    typeof existingMeta.platformFields === 'object' &&
+    !Array.isArray(existingMeta.platformFields)
+      ? (existingMeta.platformFields as Record<string, unknown>)
+      : {}
+  const existingPlatform =
+    body.platformFields && typeof body.platformFields === 'object' && !Array.isArray(body.platformFields)
+      ? (body.platformFields as Record<string, unknown>)
+      : {}
+
+  const merged: PlatformFields = {
+    ...existingNested,
+    ...existingPlatform,
+    ...fields,
+  }
+
+  return {
+    ...body,
+    ...merged,
+    platformFields: merged,
+    metadata: {
+      ...existingMeta,
+      platformFields: merged,
+    },
+  }
+}
+
 export function platformFieldsFromDraft(draft: PlatformFieldsDraft): PlatformFields {
   const monthlyIncome = parsePositiveNumber(draft.monthlyIncome)
   const payload: PlatformFields = {}

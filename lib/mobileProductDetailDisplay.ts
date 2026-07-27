@@ -42,12 +42,24 @@ export function feeSummary(product: MobileProduct): string {
     .join(', ');
 }
 
+/** Turn API tokens like `account_statement` / `reducing_balance` into display labels. */
+export function humanizeLabel(value?: string | null): string {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (!/[_-]/.test(raw) && !/^[a-z0-9]+$/i.test(raw)) return raw;
+  return raw
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 export function requirementSummary(product: MobileProduct): string {
   const requirements = product.requirements ?? [];
   if (requirements.length === 0) return 'None specified';
   return requirements
     .slice(0, 2)
-    .map((item) => item.requirementType || item.description)
+    .map((item) => humanizeLabel(item.requirementType || item.description))
     .filter(Boolean)
     .join(', ') || 'Required where applicable';
 }
