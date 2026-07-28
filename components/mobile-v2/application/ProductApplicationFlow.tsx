@@ -167,6 +167,39 @@ function stepForProgressTab(tab?: string): StepId {
   return 'requirement'
 }
 
+/** Mortgage submit body shape that Spring/Plata accept (matches successful storefront submit). */
+function buildMortgageSelectionPayload(
+  product: MobileProduct | null | undefined,
+  total: number,
+): Record<string, unknown> {
+  const property = product?.properties?.[0]
+  const unitPrice =
+    (typeof property?.value === 'number' && Number.isFinite(property.value) && property.value > 0
+      ? property.value
+      : null) ??
+    (typeof product?.propertyValue === 'number' && product.propertyValue > 0
+      ? product.propertyValue
+      : null) ??
+    total
+  const start = new Date()
+  const startDate = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`
+  const tenureRaw = String(product?.duration || '').trim()
+  const investmentPeriod = tenureRaw || '1 year'
+
+  return {
+    propertyName: property?.name?.trim() || product?.name?.trim() || 'Mortgage property',
+    propertyType: property?.propertyType?.trim() || 'Mortgage',
+    unitPrice,
+    quantity: 1,
+    startDate,
+    investmentPeriod,
+    total,
+    ...(property?.location?.trim()
+      ? { metadata: { location: property.location.trim() } }
+      : {}),
+  }
+}
+
 function isEmploymentSubmission(submission: RequirementSubmission) {
   return (submission.requirementType || submission.label || '').toLowerCase() === 'employment'
 }
@@ -1239,13 +1272,12 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       return
     }
 
+    // Do not block final submit on NUBAN/Active provisioning — Spring only syncs to Plata
+    // on guarantor add or POST /applications/:id/submit. Warn if still provisioning.
     if (!isActiveUpstreamAccount(initializedApplication)) {
-      const message = pendingAccountMessage(kind === 'loan' ? 'loan' : 'mortgage')
-      setError(message)
-      setStepErrors([message])
-      toast.error(message)
-      scrollToFeedback()
-      return
+      toast.message(pendingAccountMessage(kind === 'loan' ? 'loan' : 'mortgage'), {
+        description: 'Submitting now so your application can sync for review.',
+      })
     }
 
     const requirementIssues = collectRequirementStepIssues({
@@ -1309,16 +1341,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         userId,
         acceptedTerms: true,
         ...platformFieldsFromDraft(platformFields),
-        ...(kind === 'mortgage'
-          ? {
-              mortgageSelection: {
-                propertyName: 'Mortgage property',
-                propertyType: 'Mortgage',
-                quantity: 1,
-                total: parsed,
-              },
-            }
-          : {}),
+        ...(kind === 'mortgage' ? { mortgageSelection: buildMortgageSelectionPayload(catalogProduct, parsed) } : {}),
       })
 
       if (!submitResult.ok) {

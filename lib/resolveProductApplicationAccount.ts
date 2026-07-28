@@ -124,4 +124,3 @@ export function isDuplicateAccountError(message: string): boolean {
 export function pendingAccountMessage(productLabel = 'product'): string {
   return `Your ${productLabel} account is still being set up (not Active yet). You can apply once provisioning completes and the account shows as Active.`
 }
-true
