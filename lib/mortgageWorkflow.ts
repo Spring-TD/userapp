@@ -141,18 +141,25 @@ function stepFromPostApproval(
   status: PostApprovalMortgageStatus,
   local: MortgageWorkflowLocalState | null,
 ): MortgageWorkflowStep {
+  // Docs: offer_pending → accept → offer_accepted → book → appointment → inspect → down payment…
+  const offerAcceptedLocally = Boolean(local?.offerAccepted)
+
   switch (status) {
     case 'offer_pending':
       if (!local?.virtualTourCompleted) return 'virtual_tour'
-      return 'offer_letter'
+      if (!local?.offerLetterDownloaded) return 'offer_letter'
+      if (!offerAcceptedLocally) return 'accept_offer'
+      return 'accept_offer'
     case 'offer_accepted':
       if (!local?.offerLetterDownloaded) return 'offer_letter'
+      if (!offerAcceptedLocally) return 'accept_offer'
       if (!local?.inspectionScheduled) return 'book_inspection'
-      return 'accept_offer'
+      if (!local?.inspectionCompleted) return 'book_inspection'
+      return 'down_payment'
     case 'appointment_scheduled':
-      return local?.offerAccepted ? 'down_payment' : 'accept_offer'
     case 'inspection_in_progress':
-      return 'accept_offer'
+      if (!offerAcceptedLocally) return 'accept_offer'
+      return local?.inspectionCompleted ? 'down_payment' : 'book_inspection'
     case 'down_payment_pending':
     case 'down_payment_paid':
       return 'down_payment'
@@ -182,13 +189,14 @@ export function resolveMortgageWorkflowStep(
     return stepFromPostApproval(paf.status, local)
   }
 
+  // Local-only path (no postApprovalFulfillment yet) — same order as docs.
   if (local?.allocationDownloaded) return 'mortgage_allocation'
   if (local?.contractAccepted) return 'mortgage_allocation'
   if (local?.downPaymentConfirmed) return 'contract_signing'
-  if (local?.offerAccepted || local?.signedOfferUploaded) return 'down_payment'
   if (local?.inspectionCompleted) return 'down_payment'
-  if (local?.inspectionScheduled) return 'accept_offer'
-  if (local?.offerLetterDownloaded) return 'book_inspection'
+  if (local?.inspectionScheduled) return 'book_inspection'
+  if (local?.offerAccepted) return 'book_inspection'
+  if (local?.offerLetterDownloaded) return 'accept_offer'
   if (local?.virtualTourCompleted) return 'offer_letter'
   if (isMerchantApproved(application)) return 'virtual_tour'
   return 'application_submission'
@@ -207,8 +215,8 @@ const THREAD_ORDER: MortgageWorkflowStep[] = [
   'application_submission',
   'virtual_tour',
   'offer_letter',
-  'book_inspection',
   'accept_offer',
+  'book_inspection',
   'down_payment',
   'contract_signing',
   'mortgage_allocation',
@@ -229,18 +237,18 @@ const STEP_META: Record<
   },
   offer_letter: {
     title: 'Offer Letter',
-    description: 'Your mortgage offer letter is ready. Download and review it to continue.',
+    description: 'Your mortgage offer letter is ready. Download and review it before accepting.',
     actionLabel: 'Download offer letter',
-  },
-  book_inspection: {
-    title: 'Book Inspection',
-    description: 'Choose an available time slot to inspect the property in person.',
-    actionLabel: 'Book inspection',
   },
   accept_offer: {
     title: 'Accept Offer',
-    description: 'Accept the offer and upload your signed offer document.',
+    description: 'Review the offer letter, then accept or decline to continue.',
     actionLabel: 'Accept offer',
+  },
+  book_inspection: {
+    title: 'Book Inspection',
+    description: 'Choose an available time slot to inspect the property in person, then confirm the visit.',
+    actionLabel: 'Book inspection',
   },
   down_payment: {
     title: 'Down Payment',

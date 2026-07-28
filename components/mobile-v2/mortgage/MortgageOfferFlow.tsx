@@ -117,31 +117,52 @@ export function MortgageOfferFlow({
   }
 
   const handleScheduleConfirm = async () => {
-    if (userId && applicationId) {
-      const res = await pendingApprovedMortgageApi.scheduleInspection(applicationId, userId)
-      if (!res.ok) {
-        await patch({ inspectionScheduled: true })
-      }
-    } else {
-      await patch({ inspectionScheduled: true })
+    if (!userId || !applicationId) {
+      toast.error('Sign in to book an inspection.')
+      return
     }
+    const scheduledFor = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    scheduledFor.setHours(10, 0, 0, 0)
+    const res = await pendingApprovedMortgageApi.scheduleInspection(
+      applicationId,
+      userId,
+      scheduledFor.toISOString(),
+    )
+    if (!res.ok) {
+      toast.error(res.error || 'Could not book inspection. Please try again.')
+      return
+    }
+    const startRes = await pendingApprovedMortgageApi.startInspection(applicationId, userId)
+    if (!startRes.ok) {
+      console.warn('[mortgage] inspection/start failed:', startRes.error)
+    }
+    await patch({ inspectionScheduled: true })
     setStep('inspection')
     toast.success('Inspection appointment noted.')
   }
 
   const advanceFromInspection = async () => {
-    if (userId && applicationId && inspectionChoice) {
-      const res = await pendingApprovedMortgageApi.completeInspection(
-        applicationId,
-        userId,
-        inspectionChoice === 'completed' ? 'completed' : 'declined',
-      )
-      if (!res.ok) {
-        await patch({ inspectionCompleted: true })
-      }
-    } else {
-      await patch({ inspectionCompleted: true })
+    if (!inspectionChoice) {
+      toast.error('Choose an inspection outcome to continue.')
+      return
     }
+    if (!userId || !applicationId) {
+      toast.error('Sign in to complete inspection.')
+      return
+    }
+    const res = await pendingApprovedMortgageApi.completeInspection(
+      applicationId,
+      userId,
+      inspectionChoice === 'completed' ? 'completed' : 'declined',
+    )
+    if (!res.ok) {
+      toast.error(res.error || 'Could not update inspection. Please try again.')
+      return
+    }
+    await patch({
+      inspectionCompleted: true,
+      ...(inspectionChoice === 'declined' ? { offerDeclined: true, offerAccepted: false } : {}),
+    })
     if (inspectionChoice === 'declined') {
       toast.message('Inspection declined')
       finishToPending()
@@ -152,7 +173,11 @@ export function MortgageOfferFlow({
 
   const handleStartInspection = async () => {
     if (userId && applicationId) {
-      await pendingApprovedMortgageApi.startInspection(applicationId, userId)
+      const res = await pendingApprovedMortgageApi.startInspection(applicationId, userId)
+      if (!res.ok) {
+        toast.error(res.error || 'Could not start inspection. Please try again.')
+        return
+      }
     }
     setInspectionSheet('status')
   }
@@ -163,18 +188,24 @@ export function MortgageOfferFlow({
       return
     }
     setPaying(true)
-    const res = await pendingApprovedMortgageApi.payDownPayment(applicationId, userId, 'wallet')
-    if (!res.ok) {
-      const balance = wallet?.balance ?? 0
-      const canPay = downPaymentAmount != null && balance >= downPaymentAmount
+    try {
+      const res = await pendingApprovedMortgageApi.payDownPayment(applicationId, userId, 'wallet')
+      if (!res.ok) {
+        const balance = wallet?.balance ?? 0
+        const canPay = downPaymentAmount != null && balance >= downPaymentAmount
+        setPaymentSheet('pending')
+        toast.error(
+          !canPay
+            ? 'Insufficient wallet balance.'
+            : res.error || 'Could not submit down payment. Please try again.',
+        )
+        return
+      }
+      await patch({ downPaymentConfirmed: true })
+      setPaymentSheet('success')
+    } finally {
       setPaying(false)
-      setPaymentSheet(canPay ? 'success' : 'pending')
-      if (canPay) await patch({ downPaymentConfirmed: true })
-      return
     }
-    setPaying(false)
-    await patch({ downPaymentConfirmed: true })
-    setPaymentSheet('success')
   }
 
   const handleSignContract = async () => {
@@ -184,10 +215,10 @@ export function MortgageOfferFlow({
     }
     const res = await pendingApprovedMortgageApi.signContract(applicationId, userId)
     if (!res.ok) {
-      await patch({ contractAccepted: true })
-    } else {
-      await patch({ contractAccepted: true })
+      toast.error(res.error || 'Could not sign contract. Please try again.')
+      return
     }
+    await patch({ contractAccepted: true })
     toast.success('Contract signed')
     finishToPending()
   }
@@ -353,12 +384,6 @@ export function MortgageOfferFlow({
             disabled={!inspectionChoice}
             onClick={async () => {
               setInspectionSheet('none')
-              if (inspectionChoice === 'declined') {
-                await patch({ offerDeclined: true })
-                toast.message('Offer declined')
-                finishToPending()
-                return
-              }
               await advanceFromInspection()
             }}
           >

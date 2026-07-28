@@ -67,17 +67,22 @@ function AcceptOfferContent() {
       return
     }
     setBusy(true)
-    const apiRes = await pendingApprovedMortgageApi.respondToOffer(applicationId, userId, true)
-    if (!apiRes.ok) {
+    try {
+      const apiRes = await pendingApprovedMortgageApi.respondToOffer(applicationId, userId, true)
+      if (!apiRes.ok) {
+        toast.error(apiRes.error || 'Could not accept offer. Please try again.')
+        return
+      }
       await patchMortgageWorkflowAsync(applicationId, {
         offerAccepted: true,
         offerDeclined: false,
-        signedOfferUploaded: true,
       })
+      toast.success('Mortgage offer accepted')
+      setSheetOpen(false)
+      router.replace(pendingHref)
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
-    setSheetOpen(false)
-    router.replace(pendingHref)
   }
 
   const declineOffer = async () => {
@@ -86,14 +91,19 @@ function AcceptOfferContent() {
       return
     }
     setBusy(true)
-    const apiRes = await pendingApprovedMortgageApi.respondToOffer(applicationId, userId, false)
-    if (!apiRes.ok) {
+    try {
+      const apiRes = await pendingApprovedMortgageApi.respondToOffer(applicationId, userId, false)
+      if (!apiRes.ok) {
+        toast.error(apiRes.error || 'Could not decline offer. Please try again.')
+        return
+      }
       await patchMortgageWorkflowAsync(applicationId, { offerDeclined: true, offerAccepted: false })
+      toast.message('Offer declined')
+      setSheetOpen(false)
+      router.replace(pendingHref)
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
-    toast.message('Offer declined')
-    setSheetOpen(false)
-    router.replace(pendingHref)
   }
 
   return (

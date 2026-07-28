@@ -120,10 +120,14 @@ export function resolveLoanWorkflowStep(
 
   if (isDisbursed(application) || local?.disbursementSeen) return 'loan_disbursed'
 
+  // Only advance past accept after the user explicitly accepts locally.
   if (local?.offerAccepted) return 'awaiting_disbursement'
 
   const workflow = normalize(application.loanWorkflowStatus)
-  if (workflow === 'awaiting_disbursement' || workflow.includes('awaiting_disburs')) {
+  if (
+    (workflow === 'awaiting_disbursement' || workflow.includes('awaiting_disburs')) &&
+    local?.offerAccepted
+  ) {
     return 'awaiting_disbursement'
   }
 
