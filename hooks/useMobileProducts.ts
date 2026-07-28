@@ -130,7 +130,7 @@ export function useMobileProducts(options: UseMobileProductsOptions = {}): UseMo
       const hasToken = typeof window !== 'undefined' && Boolean(getAccessToken());
       const res = await apiClient.get<{ success?: boolean; data?: unknown; products?: unknown[]; error?: string; message?: string }>(
         ENDPOINTS.products.byAppId(springAppId.trim()),
-        { includeAuth: hasToken, timeout: 30_000 },
+        { includeAuth: hasToken, timeout: 60_000 },
       );
 
       if (!res.data?.success) {

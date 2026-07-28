@@ -5,8 +5,12 @@ import { Check, Download, Loader2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { MortgageSheet, MORTGAGE_PRIMARY } from '@/components/mobile-v2/mortgage/MortgageSheet'
-import { patchMortgageWorkflowAsync, type MortgageWorkflowModal } from '@/lib/mortgageWorkflow'
+import { patchMortgageWorkflowAsync, readMortgageWorkflow, type MortgageWorkflowModal } from '@/lib/mortgageWorkflow'
 import { extractOfferLetterFromRecord } from '@/lib/offerLetter'
+import {
+  extractAvailableInspectionDates,
+  type MortgageInspectionDateSlot,
+} from '@/lib/postApprovalMortgage'
 import { pendingApprovedMortgageApi } from '@/lib/pendingApprovedMortgageApi'
 import { useUserWallet } from '@/hooks/useUserWallet'
 import { formatNaira } from '@/lib/mobileProductDetailDisplay'
@@ -39,22 +43,22 @@ function triggerDownload(filename: string, url?: string) {
   document.body.removeChild(anchor)
 }
 
-function buildInspectionSlots() {
-  const slots: { id: string; label: string; iso: string }[] = []
-  const now = new Date()
-  for (let day = 1; day <= 5; day += 1) {
-    const date = new Date(now)
-    date.setDate(now.getDate() + day)
-    ;['10:00 AM', '2:00 PM', '4:30 PM'].forEach((time) => {
-      const label = `${date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · ${time}`
-      slots.push({
-        id: `${day}-${time}`,
-        label,
-        iso: date.toISOString(),
+function formatMerchantInspectionSlot(slot: MortgageInspectionDateSlot): string {
+  const when = new Date(slot.scheduledFor)
+  const whenLabel = Number.isNaN(when.getTime())
+    ? slot.scheduledFor
+    : when.toLocaleString('en-NG', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
       })
-    })
-  }
-  return slots
+  const parts = [slot.label || whenLabel]
+  if (slot.label) parts.push(whenLabel)
+  if (slot.location) parts.push(slot.location)
+  return parts.join(' · ')
 }
 
 export function MortgageWorkflowModals({
@@ -70,14 +74,16 @@ export function MortgageWorkflowModals({
   const { wallet, formattedBalance, loading: walletLoading } = useUserWallet()
   const userId = wallet?.userId
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [uploadPurpose, setUploadPurpose] = useState<'offer' | 'contract' | null>(null)
+  const [uploadPurpose, setUploadPurpose] = useState<'contract' | null>(null)
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [paymentSuccess, setPaymentSuccess] = useState(false)
   const [offerPdfUrl, setOfferPdfUrl] = useState<string | null>(null)
   const [offerPdfName, setOfferPdfName] = useState<string | null>(null)
+  const [merchantSlots, setMerchantSlots] = useState<MortgageInspectionDateSlot[]>([])
+  const [slotsLoading, setSlotsLoading] = useState(false)
+  const [slotsError, setSlotsError] = useState<string | null>(null)
 
-  const slots = useMemo(() => buildInspectionSlots(), [])
   const downPaymentAmount = useMemo(() => {
     if (!propertyValue || Number.isNaN(propertyValue)) return null
     return Math.round(propertyValue * (downPaymentPercent / 100))
@@ -90,15 +96,37 @@ export function MortgageWorkflowModals({
 
   useEffect(() => {
     if (!userId || !applicationId) return
-    if (active !== 'offer_letter' && active !== 'accept_offer') return
+    if (active !== 'offer_letter' && active !== 'accept_offer' && active !== 'book_inspection') return
 
     let cancelled = false
+    if (active === 'book_inspection') {
+      setSlotsLoading(true)
+      setSlotsError(null)
+    }
+
     void pendingApprovedMortgageApi.getDetail(applicationId, userId).then((res) => {
-      if (cancelled || !res.ok) return
+      if (cancelled) return
+      if (!res.ok) {
+        if (active === 'book_inspection') {
+          setSlotsError(res.error || 'Could not load inspection dates.')
+          setSlotsLoading(false)
+        }
+        return
+      }
       const letter = extractOfferLetterFromRecord(res.data as unknown as Record<string, unknown>)
       if (letter?.pdfUrl) {
         setOfferPdfUrl(letter.pdfUrl)
         setOfferPdfName(letter.pdfFileName || null)
+      }
+      if (active === 'book_inspection') {
+        const slots = extractAvailableInspectionDates(res.data)
+        setMerchantSlots(slots)
+        setSlotsError(
+          slots.length === 0
+            ? 'No booking dates set yet. The merchant needs to configure inspection slots on this product.'
+            : null,
+        )
+        setSlotsLoading(false)
       }
     })
 
@@ -106,6 +134,10 @@ export function MortgageWorkflowModals({
       cancelled = true
     }
   }, [active, applicationId, userId])
+
+  useEffect(() => {
+    setSelectedSlot(null)
+  }, [active])
 
   const patch = async (data: Parameters<typeof patchMortgageWorkflowAsync>[1]) => {
     await patchMortgageWorkflowAsync(applicationId, data)
@@ -123,50 +155,148 @@ export function MortgageWorkflowModals({
     onClose()
   }
 
+  const localWorkflow = readMortgageWorkflow(applicationId)
+  const inspectionAlreadyBooked = Boolean(localWorkflow?.inspectionScheduled)
+
   const handleBookInspection = async () => {
     if (!selectedSlot) {
       toast.error('Select a time slot to continue.')
       return
     }
-    setBusy(true)
-    const slot = slots.find((item) => item.id === selectedSlot)
-    if (userId) {
-      const res = await pendingApprovedMortgageApi.scheduleInspection(applicationId, userId, slot?.iso)
-      if (!res.ok) {
-        await patch({ inspectionScheduled: true })
-      } else {
-        await patch({ inspectionScheduled: true })
-      }
-    } else {
-      await patch({ inspectionScheduled: true })
+    if (!userId) {
+      toast.error('Sign in to book an inspection.')
+      return
     }
-    setBusy(false)
-    toast.success('Inspection booked')
-    onClose()
+    setBusy(true)
+    try {
+      const slot = merchantSlots.find((item) => item.scheduledFor === selectedSlot)
+      if (!slot?.scheduledFor) {
+        toast.error('Select a merchant-configured inspection slot.')
+        return
+      }
+      const res = await pendingApprovedMortgageApi.scheduleInspection(
+        applicationId,
+        userId,
+        slot.scheduledFor,
+        { location: slot.location, notes: slot.notes },
+      )
+      if (!res.ok) {
+        toast.error(res.error || 'Could not book inspection. Please try again.')
+        return
+      }
+      // Docs: appointment_scheduled → start inspection before complete / down payment.
+      const startRes = await pendingApprovedMortgageApi.startInspection(applicationId, userId)
+      if (!startRes.ok) {
+        // Booking succeeded; start can be retried when confirming the visit.
+        console.warn('[mortgage] inspection/start failed:', startRes.error)
+      }
+      await patch({ inspectionScheduled: true })
+      toast.success('Inspection booked')
+      onClose()
+    } finally {
+      setBusy(false)
+    }
   }
 
-  const handleUpload = async (purpose: 'offer' | 'contract', file: File | null) => {
-    if (!file) return
+  const handleCompleteInspection = async (outcome: 'completed' | 'declined') => {
+    if (!userId) {
+      toast.error('Sign in to update inspection.')
+      return
+    }
     setBusy(true)
-    if (purpose === 'offer') {
-      if (userId) {
-        await pendingApprovedMortgageApi.respondToOffer(applicationId, userId, true)
+    try {
+      // Ensure inspection is started when confirming a prior booking.
+      const startRes = await pendingApprovedMortgageApi.startInspection(applicationId, userId)
+      if (!startRes.ok) {
+        console.warn('[mortgage] inspection/start failed:', startRes.error)
+      }
+      const res = await pendingApprovedMortgageApi.completeInspection(applicationId, userId, outcome)
+      if (!res.ok) {
+        toast.error(res.error || 'Could not update inspection. Please try again.')
+        return
+      }
+      if (outcome === 'declined') {
+        await patch({
+          inspectionCompleted: true,
+          offerDeclined: true,
+          offerAccepted: false,
+        })
+        toast.message('Inspection declined')
+      } else {
+        await patch({ inspectionCompleted: true })
+        toast.success('Inspection confirmed')
+      }
+      onClose()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const acceptOffer = async () => {
+    if (!userId) {
+      toast.error('Sign in to accept this offer.')
+      return
+    }
+    setBusy(true)
+    try {
+      const apiRes = await pendingApprovedMortgageApi.respondToOffer(applicationId, userId, true)
+      if (!apiRes.ok) {
+        toast.error(apiRes.error || 'Could not accept offer. Please try again.')
+        return
       }
       await patch({
-        signedOfferUploaded: true,
         offerAccepted: true,
         offerDeclined: false,
       })
-      toast.success('Signed offer uploaded')
-    } else {
-      if (userId) {
-        await pendingApprovedMortgageApi.signContract(applicationId, userId)
+      toast.success('Mortgage offer accepted')
+      onClose()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const declineOffer = async () => {
+    if (!userId) {
+      toast.error('Sign in to decline this offer.')
+      return
+    }
+    setBusy(true)
+    try {
+      const apiRes = await pendingApprovedMortgageApi.respondToOffer(applicationId, userId, false)
+      if (!apiRes.ok) {
+        toast.error(apiRes.error || 'Could not decline offer. Please try again.')
+        return
+      }
+      await patch({
+        offerAccepted: false,
+        offerDeclined: true,
+      })
+      toast.message('Mortgage offer declined')
+      onClose()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleUpload = async (file: File | null) => {
+    if (!file) return
+    if (!userId) {
+      toast.error('Sign in to upload your signed contract.')
+      return
+    }
+    setBusy(true)
+    try {
+      const res = await pendingApprovedMortgageApi.signContract(applicationId, userId)
+      if (!res.ok) {
+        toast.error(res.error || 'Could not sign contract. Please try again.')
+        return
       }
       await patch({ contractAccepted: true })
       toast.success('Signed contract uploaded')
+      onClose()
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
-    onClose()
   }
 
   const handlePayDownPayment = async () => {
@@ -175,22 +305,24 @@ export function MortgageWorkflowModals({
       return
     }
     setBusy(true)
-    const res = await pendingApprovedMortgageApi.payDownPayment(applicationId, userId, 'wallet')
-    if (!res.ok) {
-      const balance = wallet?.balance ?? 0
-      const canPay = downPaymentAmount != null && balance >= downPaymentAmount
-      if (!canPay) {
-        setBusy(false)
-        toast.error('Insufficient wallet balance.')
+    try {
+      const res = await pendingApprovedMortgageApi.payDownPayment(applicationId, userId, 'wallet')
+      if (!res.ok) {
+        const balance = wallet?.balance ?? 0
+        const canPay = downPaymentAmount != null && balance >= downPaymentAmount
+        toast.error(
+          !canPay
+            ? 'Insufficient wallet balance.'
+            : res.error || 'Could not submit down payment. Please try again.',
+        )
         return
       }
       await patch({ downPaymentConfirmed: true })
-    } else {
-      await patch({ downPaymentConfirmed: true })
+      setPaymentSuccess(true)
+      toast.success('Down payment submitted')
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
-    setPaymentSuccess(true)
-    toast.success('Down payment submitted')
   }
 
   const handleDownloadContract = () => {
@@ -205,8 +337,8 @@ export function MortgageWorkflowModals({
     onClose()
   }
 
-  const openFilePicker = (purpose: 'offer' | 'contract') => {
-    setUploadPurpose(purpose)
+  const openFilePicker = () => {
+    setUploadPurpose('contract')
     fileInputRef.current?.click()
   }
 
@@ -219,8 +351,8 @@ export function MortgageWorkflowModals({
         className="hidden"
         onChange={(event) => {
           const file = event.target.files?.[0] ?? null
-          if (uploadPurpose && file) {
-            void handleUpload(uploadPurpose, file)
+          if (uploadPurpose === 'contract' && file) {
+            void handleUpload(file)
           }
           event.target.value = ''
           setUploadPurpose(null)
@@ -231,7 +363,7 @@ export function MortgageWorkflowModals({
         <div className="px-1 pb-2 pt-2">
           <h2 className="text-center text-lg font-bold text-[var(--sf-ink,#1E293B)]">Offer Letter</h2>
           <p className="mx-auto mt-3 max-w-xs text-center text-sm text-gray-500">
-            Download your mortgage offer letter, review the terms, then continue to book an inspection.
+            Download your mortgage offer letter and review the terms. Next you will accept or decline the offer.
           </p>
           <div className="mt-6 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-5 text-center">
             <Download className="mx-auto h-8 w-8 text-[var(--sf-button,#1E40AF)]" />
@@ -249,46 +381,99 @@ export function MortgageWorkflowModals({
 
       <MortgageSheet open={active === 'book_inspection'} onClose={onClose}>
         <div className="px-1 pb-2 pt-2">
-          <h2 className="text-center text-lg font-bold text-[var(--sf-ink,#1E293B)]">Book Inspection</h2>
-          <p className="mx-auto mt-3 max-w-xs text-center text-sm text-gray-500">
-            Select an available time slot for your property inspection.
-          </p>
-          <div className="mt-5 max-h-64 space-y-2 overflow-y-auto no-scrollbar">
-            {slots.map((slot) => (
-              <label
-                key={slot.id}
-                className={cn(
-                  'flex cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3',
-                  selectedSlot === slot.id
-                    ? 'border-[var(--sf-button,#1E40AF)] sf-accent-soft'
-                    : 'border-gray-100 bg-white',
-                )}
+          {inspectionAlreadyBooked ? (
+            <>
+              <h2 className="text-center text-lg font-bold text-[var(--sf-ink,#1E293B)]">Confirm Inspection</h2>
+              <p className="mx-auto mt-3 max-w-xs text-center text-sm text-gray-500">
+                Your inspection is booked. Confirm the visit outcome to continue to down payment.
+              </p>
+              <div className="mt-6 grid grid-cols-2 gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => void handleCompleteInspection('declined')}
+                  className="h-12 rounded-full border-gray-200 text-sm font-semibold text-red-600"
+                >
+                  Declined
+                </Button>
+                <Button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void handleCompleteInspection('completed')}
+                  className={cn('h-12 rounded-full text-sm font-semibold', MORTGAGE_PRIMARY)}
+                >
+                  {busy ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Saving…
+                    </span>
+                  ) : (
+                    'Completed'
+                  )}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <h2 className="text-center text-lg font-bold text-[var(--sf-ink,#1E293B)]">Book Inspection</h2>
+              <p className="mx-auto mt-3 max-w-xs text-center text-sm text-gray-500">
+                Choose one of the merchant&apos;s available inspection slots.
+              </p>
+              {slotsLoading ? (
+                <div className="mt-8 flex justify-center text-sm text-gray-500">
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Loading dates…
+                </div>
+              ) : slotsError ? (
+                <p className="mt-6 rounded-2xl bg-amber-50 px-4 py-3 text-center text-xs text-amber-800">
+                  {slotsError}
+                </p>
+              ) : (
+                <div className="mt-5 max-h-64 space-y-2 overflow-y-auto no-scrollbar">
+                  {merchantSlots.map((slot) => (
+                    <label
+                      key={slot.scheduledFor}
+                      className={cn(
+                        'flex cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3',
+                        selectedSlot === slot.scheduledFor
+                          ? 'border-[var(--sf-button,#1E40AF)] sf-accent-soft'
+                          : 'border-gray-100 bg-white',
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="inspectionSlot"
+                        checked={selectedSlot === slot.scheduledFor}
+                        onChange={() => setSelectedSlot(slot.scheduledFor)}
+                        className="h-4 w-4 accent-[var(--sf-button,#1E40AF)]"
+                      />
+                      <span className="text-left text-sm font-medium text-[var(--sf-ink,#1E293B)]">
+                        {formatMerchantInspectionSlot(slot)}
+                        {slot.notes ? (
+                          <span className="mt-1 block text-xs font-normal text-gray-500">{slot.notes}</span>
+                        ) : null}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              <Button
+                className={cn('mt-6 h-12 w-full rounded-full text-sm font-semibold', MORTGAGE_PRIMARY)}
+                disabled={!selectedSlot || busy || slotsLoading || merchantSlots.length === 0}
+                onClick={() => void handleBookInspection()}
               >
-                <input
-                  type="radio"
-                  name="inspectionSlot"
-                  checked={selectedSlot === slot.id}
-                  onChange={() => setSelectedSlot(slot.id)}
-                  className="h-4 w-4 accent-[var(--sf-button,#1E40AF)]"
-                />
-                <span className="text-sm font-medium text-[var(--sf-ink,#1E293B)]">{slot.label}</span>
-              </label>
-            ))}
-          </div>
-          <Button
-            className={cn('mt-6 h-12 w-full rounded-full text-sm font-semibold', MORTGAGE_PRIMARY)}
-            disabled={!selectedSlot || busy}
-            onClick={() => void handleBookInspection()}
-          >
-            {busy ? (
-              <span className="inline-flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Booking…
-              </span>
-            ) : (
-              'Confirm booking'
-            )}
-          </Button>
+                {busy ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Booking…
+                  </span>
+                ) : (
+                  'Confirm booking'
+                )}
+              </Button>
+            </>
+          )}
         </div>
       </MortgageSheet>
 
@@ -296,18 +481,49 @@ export function MortgageWorkflowModals({
         <div className="px-1 pb-2 pt-2">
           <h2 className="text-center text-lg font-bold text-[var(--sf-ink,#1E293B)]">Accept Offer</h2>
           <p className="mx-auto mt-3 max-w-xs text-center text-sm text-gray-500">
-            Upload your signed offer document to accept this mortgage offer.
+            Review the offer letter, then accept or decline to continue. This step stays open until you choose.
           </p>
-          <button
-            type="button"
-            onClick={() => openFilePicker('offer')}
-            disabled={busy}
-            className="mt-6 flex w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 px-4 py-10"
-          >
-            <Upload className="h-8 w-8 text-[var(--sf-button,#1E40AF)]" />
-            <p className="mt-3 text-sm font-semibold text-[var(--sf-ink,#1E293B)]">Upload signed offer</p>
-            <p className="mt-1 text-xs text-gray-500">PDF, JPG, or PNG</p>
-          </button>
+          {offerDocUrl ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-6 h-11 w-full rounded-full border-gray-200 text-sm font-semibold"
+              onClick={() => triggerDownload(offerPdfName || 'mortgage-offer-letter.pdf', offerDocUrl)}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download offer letter
+            </Button>
+          ) : (
+            <p className="mt-6 rounded-2xl bg-gray-50 px-4 py-3 text-center text-xs text-gray-500">
+              Offer letter PDF will appear here once the merchant has issued it.
+            </p>
+          )}
+          <div className="mt-6 grid grid-cols-2 gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => void declineOffer()}
+              className="h-12 rounded-full border-gray-200 text-sm font-semibold text-red-600"
+            >
+              Decline
+            </Button>
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={() => void acceptOffer()}
+              className={cn('h-12 rounded-full text-sm font-semibold', MORTGAGE_PRIMARY)}
+            >
+              {busy ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Saving…
+                </span>
+              ) : (
+                'Accept offer'
+              )}
+            </Button>
+          </div>
         </div>
       </MortgageSheet>
 
@@ -385,7 +601,7 @@ export function MortgageWorkflowModals({
           </Button>
           <button
             type="button"
-            onClick={() => openFilePicker('contract')}
+            onClick={() => openFilePicker()}
             disabled={busy}
             className="mt-4 flex w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 px-4 py-8"
           >

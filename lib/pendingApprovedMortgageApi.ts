@@ -57,6 +57,22 @@ async function getApplication<T>(path: string): Promise<{ ok: true; data: T } | 
   }
 }
 
+/**
+ * Offer body: live account-ms validates `action: accept|decline` (+ `acceptedTerms` on accept).
+ * Docs that mention `decision` are outdated for this gateway.
+ */
+async function postOfferAction<T>(
+  path: string,
+  userId: string,
+  accepted: boolean,
+): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
+  return postApplication<T>(path, {
+    userId,
+    action: accepted ? "accept" : "decline",
+    ...(accepted ? { acceptedTerms: true } : {}),
+  })
+}
+
 export async function listPendingApprovedMortgages(userId: string) {
   return getApplication<StorefrontApplication[]>(
     `/v1/applications/user/${encodeURIComponent(userId)}/pending-approved-mortgages`,
@@ -75,20 +91,28 @@ export async function respondToMortgageOffer(
   userId: string,
   accepted: boolean,
 ) {
-  return postApplication(`/v1/applications/${encodeURIComponent(applicationId)}/pending-approved-mortgage/offer`, {
+  return postOfferAction(
+    `/v1/applications/${encodeURIComponent(applicationId)}/pending-approved-mortgage/offer`,
     userId,
     accepted,
-  })
+  )
 }
 
+/** POST …/appointment — `scheduledFor` must match a merchant-configured slot. */
 export async function scheduleMortgageInspection(
   applicationId: string,
   userId: string,
-  appointmentAt?: string,
+  scheduledFor?: string,
+  extras?: { location?: string; notes?: string },
 ) {
   return postApplication(
     `/v1/applications/${encodeURIComponent(applicationId)}/pending-approved-mortgage/appointment`,
-    { userId, ...(appointmentAt ? { appointmentAt } : {}) },
+    {
+      userId,
+      ...(scheduledFor ? { scheduledFor } : {}),
+      ...(extras?.location ? { location: extras.location } : {}),
+      ...(extras?.notes ? { notes: extras.notes } : {}),
+    },
   )
 }
 
@@ -110,7 +134,11 @@ export async function completeMortgageInspection(
   )
 }
 
-export async function payMortgageDownPayment(applicationId: string, userId: string, method: "wallet" | "bank_transfer" = "wallet") {
+export async function payMortgageDownPayment(
+  applicationId: string,
+  userId: string,
+  method: "wallet" | "bank_transfer" = "wallet",
+) {
   return postApplication(
     `/v1/applications/${encodeURIComponent(applicationId)}/pending-approved-mortgage/down-payment`,
     { userId, method },

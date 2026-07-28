@@ -176,10 +176,16 @@ function isPendingProvisionToken(normalized: string): boolean {
 
 /**
  * Count "Active" from the same badge the card shows.
+ * Includes approved apps still waiting on NUBAN provisioning.
  */
 function isActiveProductApplication(application: ProductApplication): boolean {
     const label = getProductAccountDisplayStatus(application).toLowerCase()
-    return label === 'active' || label === 'approved' || label === 'disbursed'
+    return (
+        label === 'active' ||
+        label === 'approved' ||
+        label === 'disbursed' ||
+        label === 'account pending'
+    )
 }
 
 function isActiveSummaryAccount(status?: string | null): boolean {
@@ -231,7 +237,7 @@ function selectDisplayableProductAccounts(applications: ProductApplication[]): P
 
 /**
  * Single user-facing status for Accounts cards.
- * Avoids conflicting pairs like "Active" badge + "PENDING"/"APPROVED" application line.
+ * Never pair an "Approved" badge with a "Pending provisioning" subtitle.
  */
 function getProductAccountDisplayStatus(application: ProductApplication): string {
     const appStatus = normalizeStatusToken(application.status)
@@ -240,28 +246,33 @@ function getProductAccountDisplayStatus(application: ProductApplication): string
     const workflow = normalizeStatusToken(application.loanWorkflowStatus)
     const snapshot = commoditySnapshot(application)
     const holding = normalizeStatusToken(snapshot?.commodityHoldingStatus)
+    const hasAccountNumber = Boolean(account?.accountNumber?.trim())
 
     if (appStatus.includes('reject') || appStatus.includes('declin')) return 'Rejected'
     if (appStatus.includes('cancel')) return 'Cancelled'
     if (appStatus.includes('disburs')) return 'Disbursed'
     if (holding.includes('withdraw')) return 'Withdrawn'
-    if (appStatus.includes('approv')) return 'Approved'
 
     const provisionLive =
-        Boolean(account?.accountNumber?.trim()) ||
+        hasAccountNumber ||
         isLiveStatusToken(provision) ||
         isLiveStatusToken(workflow)
 
     const provisionPending =
-        provision.includes('account requested') ||
-        provision === 'requested' ||
-        workflow.includes('account requested') ||
-        workflow === 'requested' ||
-        (isPendingProvisionToken(provision) && !provisionLive)
+        !hasAccountNumber &&
+        (provision.includes('account requested') ||
+            provision === 'requested' ||
+            workflow.includes('account requested') ||
+            workflow === 'requested' ||
+            (isPendingProvisionToken(provision) && !provisionLive) ||
+            (!provisionLive && !account))
 
-    if (provisionPending || (!provisionLive && !account?.accountNumber)) {
+    // Application may already be APPROVED while the product wallet/NUBAN is still provisioning.
+    if (provisionPending) {
         return 'Account pending'
     }
+
+    if (appStatus.includes('approv')) return 'Approved'
 
     // Live product account — application still open/pending means account is ready, not "Pending".
     if (!appStatus || appStatus === 'pending' || appStatus.includes('draft') || appStatus.includes('submitted')) {
@@ -270,6 +281,34 @@ function getProductAccountDisplayStatus(application: ProductApplication): string
 
     // Fallback: show application status cleaned up
     return String(application.status || 'Active').replace(/_/g, ' ')
+}
+
+function getApplicationListedAmount(application: ProductApplication): number {
+    const raw = application as ProductApplication & Record<string, unknown>
+    const wallet = raw.productWallet as
+        | (ProductApplication['productWallet'] & Record<string, unknown>)
+        | undefined
+    const upstream = wallet?.upstreamAccount as Record<string, unknown> | undefined
+    const snapshot = commoditySnapshot(application)
+
+    const candidates: unknown[] = [
+        snapshot?.commodityPrincipal,
+        raw.amount,
+        raw.balance,
+        raw.currentBalance,
+        raw.principal,
+        raw.fundedAmount,
+        wallet?.balance,
+        wallet?.availableBalance,
+        upstream?.balance,
+        upstream?.availableBalance,
+    ]
+
+    for (const value of candidates) {
+        const n = typeof value === 'number' ? value : Number(value)
+        if (Number.isFinite(n) && n > 0) return n
+    }
+    return 0
 }
 
 function ProductAccountCard({
@@ -329,7 +368,11 @@ function ProductAccountCard({
                     <p className="mt-1 text-sm font-medium text-[var(--sf-ink,#1E1B4B)]">
                         {activeFilter === 'Commodity'
                             ? 'Commodity holding'
-                            : account?.accountNumber || 'Pending provisioning'}
+                            : account?.accountNumber?.trim()
+                              ? account.accountNumber
+                              : statusLabel.toLowerCase().includes('pending')
+                                ? 'Pending provisioning'
+                                : account?.bankName || application.productName || 'Product account'}
                     </p>
                 </div>
                 <span className={`shrink-0 rounded-full bg-white px-3 py-1 text-[11px] font-semibold uppercase ${provisionStatusTone(statusLabel)}`}>
@@ -520,6 +563,10 @@ export default function AccountsPage() {
         activeFilter === 'Commodity'
             ? aggregateCommodityHoldingBalance(displayedApplications)
             : 0;
+    const listedApplicationsTotal = displayedApplications.reduce(
+        (sum, application) => sum + getApplicationListedAmount(application),
+        0,
+    );
     const activeStatusFromSummary = (activeSummary.accounts || []).filter((account) =>
         isActiveSummaryAccount(account.status),
     ).length;
@@ -528,8 +575,12 @@ export default function AccountsPage() {
         displayedApplications.length > 0
             ? displayedApplications.length
             : activeStatusFromSummary;
+    // Summary API often returns 0 while funded apps still await NUBAN — fall back to listed amounts.
+    const summaryTotal = Number(activeSummary.totalAmount) || 0;
     const activeTotalAmount =
-        activeFilter === 'Commodity' ? commodityHoldingTotal : activeSummary.totalAmount;
+        activeFilter === 'Commodity'
+            ? commodityHoldingTotal
+            : Math.max(summaryTotal, listedApplicationsTotal);
     const activeFormattedBalance = formatWalletBalance(
         activeTotalAmount,
         activeSummary.currency || wallet?.currency || 'NGN',

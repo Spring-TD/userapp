@@ -62,7 +62,7 @@ export async function fetchMobileProductById(productId: string): Promise<MobileP
   const hasToken = typeof window !== 'undefined' && Boolean(getAccessToken())
   const res = await apiClient.get<ProductDetailResponse>(ENDPOINTS.products.byId(id), {
     includeAuth: hasToken,
-    timeout: 30_000,
+    timeout: 60_000,
   })
 
   if (!res.data?.success) {

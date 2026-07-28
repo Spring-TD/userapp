@@ -16,10 +16,18 @@ export type PostApprovalMortgageStatus =
   | "offer_declined"
   | "inspection_declined"
 
+export type MortgageInspectionDateSlot = {
+  scheduledFor: string
+  label?: string
+  location?: string
+  notes?: string
+}
+
 export type PostApprovalFulfillment = {
   status?: PostApprovalMortgageStatus
   updatedAt?: string
   currentWorkflowStepId?: string
+  completedWorkflowSteps?: string[]
   bankDetails?: {
     merchantReference?: string
     accountNumber?: string
@@ -39,12 +47,14 @@ export type PostApprovalFulfillment = {
     sentAt?: string
     acceptedAt?: string
   }
-}
-
-export function extractPostApprovalFulfillment(raw: Record<string, unknown>): PostApprovalFulfillment | null {
-  const paf = raw.postApprovalFulfillment
-  if (!paf || typeof paf !== "object") return null
-  return paf as PostApprovalFulfillment
+  appointment?: {
+    scheduledAt?: string
+    scheduledFor?: string
+    location?: string
+    notes?: string
+  }
+  /** Merchant-configured slots snapshotted / refreshed from the product. */
+  availableInspectionDates?: MortgageInspectionDateSlot[]
 }
 
 export type PendingApprovedMortgageDetail = {
@@ -54,6 +64,7 @@ export type PendingApprovedMortgageDetail = {
   bankDetails?: PostApprovalFulfillment["bankDetails"]
   equityAmount?: number
   propertyValue?: number
+  availableInspectionDates?: MortgageInspectionDateSlot[]
   offerLetter?: {
     html?: string
     text?: string
@@ -66,13 +77,49 @@ export type PendingApprovedMortgageDetail = {
   }
 }
 
+export function extractPostApprovalFulfillment(raw: Record<string, unknown>): PostApprovalFulfillment | null {
+  const paf = raw.postApprovalFulfillment
+  if (!paf || typeof paf !== "object") return null
+  return paf as PostApprovalFulfillment
+}
+
+export function extractAvailableInspectionDates(
+  detail: PendingApprovedMortgageDetail | Record<string, unknown> | null | undefined,
+): MortgageInspectionDateSlot[] {
+  if (!detail || typeof detail !== "object") return []
+  const record = detail as Record<string, unknown>
+  const paf = extractPostApprovalFulfillment(record)
+  const fromPaf = paf?.availableInspectionDates
+  const topLevel = record.availableInspectionDates
+  const raw = Array.isArray(fromPaf) ? fromPaf : Array.isArray(topLevel) ? topLevel : []
+  const now = Date.now()
+  const slots: MortgageInspectionDateSlot[] = []
+  for (const slot of raw) {
+    if (!slot || typeof slot !== "object") continue
+    const row = slot as Record<string, unknown>
+    const scheduledFor = String(row.scheduledFor ?? "").trim()
+    if (!scheduledFor) continue
+    const when = new Date(scheduledFor)
+    if (Number.isNaN(when.getTime()) || when.getTime() < now - 60_000) continue
+    slots.push({
+      scheduledFor,
+      label: String(row.label ?? "").trim() || undefined,
+      location: String(row.location ?? "").trim() || undefined,
+      notes: String(row.notes ?? "").trim() || undefined,
+    })
+  }
+  return slots.sort(
+    (a, b) => new Date(a.scheduledFor).getTime() - new Date(b.scheduledFor).getTime(),
+  )
+}
+
 export function postApprovalStepToOfferFlowStep(
   status?: PostApprovalMortgageStatus,
 ): "schedule_inspection" | "inspection" | "down_payment" | "contract" | null {
   switch (status) {
     case "offer_accepted":
-    case "appointment_scheduled":
       return "schedule_inspection"
+    case "appointment_scheduled":
     case "inspection_in_progress":
       return "inspection"
     case "down_payment_pending":

@@ -153,7 +153,7 @@ async function fetchProductDetailById(productId: string): Promise<{
 
   const res = await apiClient.get<ProductApiResponse>(path, {
     includeAuth: hasToken,
-    timeout: 30_000,
+    timeout: 60_000,
   })
 
   console.log(`${LOG_PREFIX} RESPONSE GET ${path}`, {
@@ -185,7 +185,7 @@ async function fetchFromAppCatalog(
 
   const res = await apiClient.get<ProductApiResponse>(path, {
     includeAuth: hasToken,
-    timeout: 30_000,
+    timeout: 60_000,
   })
 
   console.log(`${LOG_PREFIX} RESPONSE GET ${path}`, {

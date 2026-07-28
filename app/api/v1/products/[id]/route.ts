@@ -20,7 +20,7 @@ const agent = new https.Agent({
 })
 
 const http = axios.create({
-  timeout: 30000,
+  timeout: 60000,
   httpsAgent: agent,
   validateStatus: () => true,
   headers: { "Content-Type": "application/json" },

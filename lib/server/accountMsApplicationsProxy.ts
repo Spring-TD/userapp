@@ -49,6 +49,15 @@ function isRetryableNetworkError(e: unknown): boolean {
   )
 }
 
+function previewJsonBody(body: Buffer | undefined, isMultipart: boolean): unknown {
+  if (!body || isMultipart) return undefined
+  try {
+    return JSON.parse(body.toString("utf8"))
+  } catch {
+    return body.toString("utf8").slice(0, 500)
+  }
+}
+
 /**
  * Proxies `/api/v1/applications/*` to account-ms using axios + IPv4 (avoids flaky Node `fetch` ETIMEDOUT).
  */
@@ -61,15 +70,19 @@ export async function proxyAccountMsApplicationsRequest(
   const headers = forwardApplicationHeaders(request)
   const isMultipart = (headers["Content-Type"] || "").includes("multipart/form-data")
 
-  if (process.env.NODE_ENV === "development") {
-    console.log("[applications proxy] → upstream", { method, url })
-  }
-
   let body: Buffer | undefined
   if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
     const buf = await request.arrayBuffer()
     if (buf.byteLength > 0) body = Buffer.from(buf)
     else if (!isMultipart && method !== "GET") body = Buffer.from("{}")
+  }
+
+  if (process.env.NODE_ENV === "development") {
+    console.log("[applications proxy] → upstream", {
+      method,
+      url,
+      body: previewJsonBody(body, isMultipart),
+    })
   }
 
   let lastError: unknown

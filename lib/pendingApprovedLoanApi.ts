@@ -39,7 +39,9 @@ function parseError(data: unknown, status: number): string {
     if (d.error) return d.error
     if (d.message) return d.message
   }
-  return status >= 500 ? "Server error" : "Request failed"
+  return status >= 500
+    ? "Server error — offer could not be updated. Please try again shortly."
+    : "Request failed"
 }
 
 async function postApplication<T>(
@@ -81,6 +83,18 @@ async function getApplication<T>(path: string): Promise<{ ok: true; data: T } | 
   }
 }
 
+async function postOfferAction<T>(
+  path: string,
+  userId: string,
+  accepted: boolean,
+): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
+  return postApplication<T>(path, {
+    userId,
+    action: accepted ? "accept" : "decline",
+    ...(accepted ? { acceptedTerms: true } : {}),
+  })
+}
+
 /** GET /v1/applications/:applicationId/pending-approved-loan?userId=… */
 export async function getPendingApprovedLoan(applicationId: string, userId: string) {
   const qs = new URLSearchParams({ userId })
@@ -95,10 +109,11 @@ export async function respondToLoanOffer(
   userId: string,
   accepted: boolean,
 ) {
-  return postApplication(`/v1/applications/${encodeURIComponent(applicationId)}/pending-approved-loan/offer`, {
+  return postOfferAction(
+    `/v1/applications/${encodeURIComponent(applicationId)}/pending-approved-loan/offer`,
     userId,
     accepted,
-  })
+  )
 }
 
 export const pendingApprovedLoanApi = {
