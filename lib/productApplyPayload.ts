@@ -157,7 +157,7 @@ export async function buildProductApplyBody(
       applicantName,
       phone,
       bvn,
-      ...(user?.country ? { country: user.country } : {}),
+      ...(user?.country ? { country: user.country } : { country: 'NG' }),
       ...(sessionAppId ? { appId: sessionAppId } : {}),
     },
   }

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { PendingApplicationsListSkeleton } from '@/components/mobile-v2/data-skeletons'
-import { fetchUserApplications, type StorefrontApplication } from '@/lib/storefrontApplicationClient'
+import { fetchUserApplications, needsFinalApplicationSubmit, type StorefrontApplication } from '@/lib/storefrontApplicationClient'
 import {
   buildMortgageThread,
   mortgageStepCta,
@@ -17,8 +17,8 @@ import {
   readLoanWorkflow,
   resolveLoanWorkflowStep,
 } from '@/lib/loanWorkflow'
-import { mortgagePendingDetailHref } from '@/lib/mortgageApplyRoutes'
-import { loanPendingDetailHref } from '@/lib/loanApplyRoutes'
+import { mortgageApplyHref, mortgagePendingDetailHref } from '@/lib/mortgageApplyRoutes'
+import { loanApplyHref, loanPendingDetailHref } from '@/lib/loanApplyRoutes'
 
 type PendingKind = 'loan' | 'mortgage'
 type PendingScreenKind = PendingKind | 'all'
@@ -88,12 +88,23 @@ function titleFor(application: StorefrontApplication, kind: PendingKind) {
 }
 
 function mortgageNextStepLabel(application: StorefrontApplication) {
+  if (needsFinalApplicationSubmit(application)) return 'Complete application'
   const applicationId = String(application.id ?? application._id ?? '')
   const local = readMortgageWorkflow(applicationId)
   const step = resolveMortgageWorkflowStep(application, local)
   const thread = buildMortgageThread(step)
   const current = thread.find((item) => item.status === 'current')
   return current?.title ?? 'In progress'
+}
+
+function continueApplyHref(application: StorefrontApplication, kind: PendingKind) {
+  const productId = String(application.productId ?? '').trim()
+  const applicationId = String(application.id ?? application._id ?? '').trim()
+  if (!productId) return null
+  const base = kind === 'mortgage' ? mortgageApplyHref(productId) : loanApplyHref(productId)
+  return applicationId
+    ? `${base}&applicationId=${encodeURIComponent(applicationId)}`
+    : base
 }
 
 export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreenKind }) {
@@ -182,26 +193,38 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreen
                 const productId = String(application.productId ?? '')
                 const appKind = applicationPendingKind(application)
                 if (!appKind) return null
+                const awaitingSubmit = needsFinalApplicationSubmit(application)
+                const resumeApplyHref = awaitingSubmit ? continueApplyHref(application, appKind) : null
                 const mortgageLocal = readMortgageWorkflow(applicationId)
                 const loanLocal = readLoanWorkflow(applicationId)
                 const mortgageStep =
                   appKind === 'mortgage' ? resolveMortgageWorkflowStep(application, mortgageLocal) : null
                 const loanStep = appKind === 'loan' ? resolveLoanWorkflowStep(application, loanLocal) : null
                 const mortgageCta =
-                  appKind === 'mortgage' && productId && applicationId && mortgageStep
+                  !awaitingSubmit && appKind === 'mortgage' && productId && applicationId && mortgageStep
                     ? mortgageStepCta(mortgageStep, productId, applicationId)
                     : null
                 const loanCta =
-                  appKind === 'loan' && applicationId && loanStep ? loanStepCta(loanStep, applicationId) : null
-                const cta = appKind === 'mortgage' ? mortgageCta : loanCta
-                const detailHref =
-                  appKind === 'mortgage' && applicationId
+                  !awaitingSubmit && appKind === 'loan' && applicationId && loanStep
+                    ? loanStepCta(loanStep, applicationId)
+                    : null
+                const cta = awaitingSubmit
+                  ? resumeApplyHref
+                    ? { label: 'Continue application', href: resumeApplyHref }
+                    : null
+                  : appKind === 'mortgage'
+                    ? mortgageCta
+                    : loanCta
+                const detailHref = awaitingSubmit
+                  ? resumeApplyHref
+                  : appKind === 'mortgage' && applicationId
                     ? mortgagePendingDetailHref(applicationId)
                     : appKind === 'loan' && applicationId
                       ? loanPendingDetailHref(applicationId)
                       : null
-                const nextStepLabel =
-                  appKind === 'mortgage'
+                const nextStepLabel = awaitingSubmit
+                  ? 'Complete application'
+                  : appKind === 'mortgage'
                     ? mortgageNextStepLabel(application)
                     : loanNextStepLabel(application)
 
@@ -221,6 +244,11 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreen
                         <p className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--sf-button,#1E40AF)]">
                           Next: {nextStepLabel}
                         </p>
+                        {awaitingSubmit ? (
+                          <p className="mt-1 text-[10px] text-amber-700">
+                            Draft only — submit to send this application for review.
+                          </p>
+                        ) : null}
                       </div>
                       <div className="shrink-0 text-right">
                         <p className="text-sm font-semibold text-gray-950">{formatAmount(application)}</p>
@@ -228,15 +256,17 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreen
                       </div>
                     </div>
 
-                    {detailHref ? (
+                    {detailHref || cta ? (
                       <div className="mt-4 flex gap-2">
-                        <Link
-                          href={detailHref}
-                          className="flex flex-1 items-center justify-center gap-1 rounded-full border border-gray-200 py-2.5 text-xs font-semibold text-gray-700"
-                        >
-                          View details
-                          <ChevronRight className="h-3.5 w-3.5" />
-                        </Link>
+                        {detailHref && !awaitingSubmit ? (
+                          <Link
+                            href={detailHref}
+                            className="flex flex-1 items-center justify-center gap-1 rounded-full border border-gray-200 py-2.5 text-xs font-semibold text-gray-700"
+                          >
+                            View details
+                            <ChevronRight className="h-3.5 w-3.5" />
+                          </Link>
+                        ) : null}
                         {cta ? (
                           <Link
                             href={cta.href}

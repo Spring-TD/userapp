@@ -308,6 +308,37 @@ export function isApplicationAlreadySubmitted(status?: string | null): boolean {
   ].includes(s)
 }
 
+/**
+ * Local Spring draft that has not been final-submitted.
+ * Plata sync only runs on guarantor add or POST /applications/:id/submit — these apps never reached Plata.
+ */
+export function needsFinalApplicationSubmit(application: StorefrontApplication | null | undefined): boolean {
+  if (!application) return false
+  const status = String(application.status || "").trim().toUpperCase()
+  if (["CANCELLED", "CANCELED", "FAILED"].includes(status)) return false
+  if (isApplicationAlreadySubmitted(status)) return false
+  const workflow = String(application.loanWorkflowStatus || "")
+    .trim()
+    .toLowerCase()
+  // Already past borrower apply form (merchant review / offer / disbursement).
+  if (
+    [
+      "under_review",
+      "offer_sent",
+      "awaiting_acceptance",
+      "awaiting_disbursement",
+      "approved",
+      "disbursed",
+      "completed",
+      "active",
+    ].includes(workflow)
+  ) {
+    return false
+  }
+  return true
+}
+
+
 export async function initializeProductApplication(
   productId: string,
   options?: {

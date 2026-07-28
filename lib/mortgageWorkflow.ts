@@ -211,7 +211,7 @@ export type MortgageThreadItem = {
   actionLabel?: string
 }
 
-const THREAD_ORDER: MortgageWorkflowStep[] = [
+const THREAD_ORDER: Array<Exclude<MortgageWorkflowStep, 'declined'>> = [
   'application_submission',
   'virtual_tour',
   'offer_letter',
@@ -334,7 +334,10 @@ export function mortgageStepCta(
 
   switch (step) {
     case 'application_submission':
-      return null
+      return {
+        label: 'Continue application',
+        href: `${base}/apply?${q}`,
+      }
     case 'virtual_tour':
       return {
         label: STEP_META.virtual_tour.actionLabel ?? 'Start virtual tour',
