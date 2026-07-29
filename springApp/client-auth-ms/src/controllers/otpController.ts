@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { AuthService } from '../services/AuthService';
+import { resolveBrandingAppName, tenantAppIdFromRequest } from '../utils/tenantHostResolver';
 
 export class OTPController {
   static async generate(req: Request, res: Response): Promise<void> {
@@ -14,7 +15,9 @@ export class OTPController {
         return;
       }
 
-      const result = await AuthService.generateOTP({ identifier, channel, purpose });
+      const appId = tenantAppIdFromRequest(req);
+      const appName = await resolveBrandingAppName(req, appId);
+      const result = await AuthService.generateOTP({ identifier, channel, purpose, appId, appName });
       res.status(result.success ? 200 : 400).json(result);
     } catch (error) {
       console.error('Error in generateOTP:', error);
@@ -40,7 +43,12 @@ export class OTPController {
         return;
       }
 
-      const result = await AuthService.verifyOTP({ identifier: String(identifier).trim(), code: String(code).trim() });
+      const appId = tenantAppIdFromRequest(req);
+      const result = await AuthService.verifyOTP({
+        identifier: String(identifier).trim(),
+        code: String(code).trim(),
+        appId
+      });
       res.status(result.success ? 200 : 401).json(result);
     } catch (error) {
       console.error('Error in verifyOTP:', error);
@@ -72,14 +80,21 @@ export class OTPController {
         return;
       }
       if (!validPurposes.includes(purpose)) {
-        res.status(400).json({ success: false, error: 'Purpose must be "verification", "password-reset", "password-change", or "login".' });
+        res.status(400).json({
+          success: false,
+          error: 'Purpose must be "verification", "password-reset", "password-change", or "login".'
+        });
         return;
       }
 
+      const appId = tenantAppIdFromRequest(req);
+      const appName = await resolveBrandingAppName(req, appId);
       const result = await AuthService.resendOTP({
         identifier: String(identifier).trim(),
         channel: channel as 'email' | 'sms',
-        purpose: purpose as 'verification' | 'password-reset' | 'password-change' | 'login'
+        purpose: purpose as 'verification' | 'password-reset' | 'password-change' | 'login',
+        appId,
+        appName
       });
       res.status(result.success ? 200 : 400).json(result);
     } catch (error) {

@@ -17,10 +17,19 @@ import {
   listCustomerApplicationsForApp,
   summarizeCustomerApplicationsForApp
 } from '../services/customerApplicationsService';
+import { listAppCustomers } from '../services/customerListService';
 import { assertLikelyMongoObjectId } from '../utils/mongoObjectId';
 import { tryGetApiBaseUrl } from '../utils/requestBaseUrl';
 
 declare const console: any;
+
+function positiveIntegerQuery(value: unknown): number | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
 
 // Extend Request interface to include user data
 interface AuthenticatedRequest extends Request {
@@ -53,6 +62,24 @@ export class AppController {
   private isMerchantUser(req: Request): boolean {
     const userType = (req.user?.userType || '').toLowerCase();
     return userType === 'merchant';
+  }
+
+  private isAdminUser(req: Request): boolean {
+    const userType = (req.user?.userType || '').toLowerCase();
+    return userType === 'admin';
+  }
+
+  private resolveMerchantScopeIds(req: Request): string[] | undefined {
+    if (this.isAdminUser(req)) {
+      return undefined;
+    }
+
+    const merchantIds = [req.user?.userMerchantId, req.user?.userId].filter(
+      (value): value is string => Boolean(value)
+    );
+
+    // Merchant-only routes must never fall back to an unscoped list.
+    return merchantIds.length ? merchantIds : ['__no_merchant_scope__'];
   }
 
   private getRequestMerchantId(req: Request): string | undefined {
@@ -213,6 +240,8 @@ export class AppController {
         success: true,
         data: {
           id: app.id,
+          appName: app.name,
+          name: app.name,
           merchantId: app.merchantId,
           subdomain: app.subdomain,
           status: app.status,
@@ -247,11 +276,16 @@ export class AppController {
       }
       this.assertMerchantOwnsMerchantPath(req, merchantId);
 
-      const apps = await this.appService.getAppsByMerchantId(merchantId);
+      const result = await this.appService.listApps({
+        merchantIds: [merchantId],
+        page: positiveIntegerQuery(req.query.page),
+        limit: positiveIntegerQuery(req.query.limit)
+      });
 
       res.json({
         success: true,
-        data: apps
+        data: result.apps,
+        pagination: result.pagination
       });
     } catch (error) {
       if (error instanceof ApiError) {
@@ -679,17 +713,18 @@ export class AppController {
 
   getAllApps = async (req: Request, res: Response): Promise<void> => {
     try {
-      let apps = await this.appService.getAllApps();
-      if (this.isMerchantUser(req)) {
-        const merchantIds = [req.user?.userMerchantId, req.user?.userId].filter(
-          (value): value is string => Boolean(value)
-        );
-        apps = apps.filter((app) => merchantIds.includes(app.merchantId));
-      }
+      const merchantIds = this.resolveMerchantScopeIds(req);
+
+      const result = await this.appService.listApps({
+        ...(merchantIds?.length ? { merchantIds } : {}),
+        page: positiveIntegerQuery(req.query.page),
+        limit: positiveIntegerQuery(req.query.limit)
+      });
 
       res.json({
         success: true,
-        data: apps
+        data: result.apps,
+        pagination: result.pagination
       });
     } catch (error) {
       if (error instanceof ApiError) {
@@ -876,6 +911,61 @@ export class AppController {
   };
 
   /**
+   * Merchant dashboard: customers registered for one app.
+   */
+  getAppCustomers = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const { appId } = req.params;
+      if (!appId?.trim()) {
+        throw new ApiError(400, 'App ID is required');
+      }
+
+      assertLikelyMongoObjectId(appId.trim(), 'App ID');
+
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        throw new ApiError(401, 'Bearer token required');
+      }
+
+      const app = await this.appService.getAppById(appId.trim());
+      if (!app) {
+        throw new ApiError(404, 'App not found');
+      }
+      this.assertMerchantOwnsApp(req, app);
+
+      const search = typeof req.query.search === 'string' ? req.query.search : undefined;
+      const customers = await listAppCustomers({
+        appId: appId.trim(),
+        authorization: authHeader,
+        search
+      });
+
+      res.json({
+        success: true,
+        data: {
+          appId: appId.trim(),
+          customers,
+          users: customers
+        }
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+        return;
+      }
+
+      console.error('Error in getAppCustomers controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  };
+
+  /**
    * Merchant dashboard: all applications for one customer on one app.
    */
   getCustomerApplications = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -903,14 +993,18 @@ export class AppController {
       const productType =
         typeof req.query.productType === 'string' ? req.query.productType : undefined;
       const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+      const page = positiveIntegerQuery(req.query.page);
+      const limit = positiveIntegerQuery(req.query.limit);
 
-      const applications = await listCustomerApplicationsForApp({
+      const result = await listCustomerApplicationsForApp({
         appId: appId.trim(),
         userId: userId.trim(),
         authorization: authHeader,
         adminId: adminId?.trim() || undefined,
         productType,
-        status
+        status,
+        page,
+        limit
       });
 
       res.json({
@@ -918,8 +1012,9 @@ export class AppController {
         data: {
           appId: appId.trim(),
           userId: userId.trim(),
-          applications
-        }
+          applications: result.applications
+        },
+        ...(result.pagination ? { pagination: result.pagination } : {})
       });
     } catch (error) {
       if (error instanceof ApiError) {

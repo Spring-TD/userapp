@@ -82,6 +82,8 @@ export interface UpdateProfileRequest {
   first_name?: string;
   last_name?: string;
   phone?: string;
+  country?: string;
+  profile_picture_url?: string;
   address?: {
     street: string;
     city: string;

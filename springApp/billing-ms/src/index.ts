@@ -10,6 +10,8 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { billingRoutes } from './routes/billingRoutes';
 import { PricingScheduler } from './services/pricingScheduler';
 import { BillingScheduler } from './services/billingScheduler';
+import { MerchantMonthlyBillingScheduler } from './services/merchantMonthlyBillingScheduler';
+import { AccountMaintenanceSettlementScheduler } from './services/accountMaintenanceSettlementScheduler';
 
 const app = express();
 
@@ -101,6 +103,14 @@ const server = app.listen(config.port, () => {
   const pricingScheduler = PricingScheduler.getInstance();
   const pricingInterval = parseInt(process.env.PRICING_INTERVAL || '3600000'); // Default: 1 hour
   pricingScheduler.start(pricingInterval);
+
+  const merchantMonthlyBillingScheduler = MerchantMonthlyBillingScheduler.getInstance();
+  const merchantMonthlyInterval = parseInt(process.env.MERCHANT_MONTHLY_BILLING_INTERVAL || '3600000', 10);
+  merchantMonthlyBillingScheduler.start(merchantMonthlyInterval);
+
+  const accountMaintenanceScheduler = AccountMaintenanceSettlementScheduler.getInstance();
+  const accountMaintenanceInterval = parseInt(process.env.ACCOUNT_MAINTENANCE_INTERVAL || '3600000', 10);
+  accountMaintenanceScheduler.start(accountMaintenanceInterval);
 });
 
 process.on('SIGTERM', () => {
@@ -109,6 +119,10 @@ process.on('SIGTERM', () => {
   billingScheduler.stop();
   const pricingScheduler = PricingScheduler.getInstance();
   pricingScheduler.stop();
+  const merchantMonthlyBillingScheduler = MerchantMonthlyBillingScheduler.getInstance();
+  merchantMonthlyBillingScheduler.stop();
+  const accountMaintenanceScheduler = AccountMaintenanceSettlementScheduler.getInstance();
+  accountMaintenanceScheduler.stop();
   server.close(() => {
     mongoose.connection.close().then(() => {
       console.log('Process terminated');
@@ -123,6 +137,10 @@ process.on('SIGINT', () => {
   billingScheduler.stop();
   const pricingScheduler = PricingScheduler.getInstance();
   pricingScheduler.stop();
+  const merchantMonthlyBillingScheduler = MerchantMonthlyBillingScheduler.getInstance();
+  merchantMonthlyBillingScheduler.stop();
+  const accountMaintenanceScheduler = AccountMaintenanceSettlementScheduler.getInstance();
+  accountMaintenanceScheduler.stop();
   server.close(() => {
     mongoose.connection.close().then(() => {
       console.log('Process terminated');

@@ -68,9 +68,50 @@ export const payonusNubanConfig = {
    */
   merchantPath: process.env.PAYONUS_MERCHANT_NUBAN_PATH || '/api/v1/virtual-accounts/fixed-account',
   userPath: process.env.PAYONUS_USER_NUBAN_PATH || '/api/v1/virtual-accounts/fixed-account',
-  /** Bank payout / transfer endpoint. Override with the exact PayOnUs path for your account. */
-  payoutPath: process.env.PAYONUS_PAYOUT_PATH || '/api/v1/transfers/bank',
+  /**
+   * Bank transfer (payout) endpoint — PayOnUs "Initiate Bank Transfer".
+   * Docs: POST /api/v1/transfer-requests/bank-transfer
+   */
+  payoutPath: process.env.PAYONUS_PAYOUT_PATH || '/api/v1/transfer-requests/bank-transfer',
+  /**
+   * Name-enquiry endpoint — verifies the beneficiary account before transfer.
+   * Docs: POST /api/v1/transfer-requests/name-enquiry
+   */
+  payoutNameEnquiryPath: process.env.PAYONUS_NAME_ENQUIRY_PATH || '/api/v1/transfer-requests/name-enquiry',
+  /** PayOnUs requires name enquiry before a transfer; set false only to bypass for testing. */
+  payoutNameEnquiryEnabled: process.env.PAYONUS_NAME_ENQUIRY_ENABLED
+    ? truthyEnv(process.env.PAYONUS_NAME_ENQUIRY_ENABLED)
+    : true,
+  /** transferType for bank payouts. Default WALLET_TO_BANK_ACCOUNT. */
+  payoutTransferType: process.env.PAYONUS_PAYOUT_TRANSFER_TYPE || 'WALLET_TO_BANK_ACCOUNT',
+  /** countryCode for payouts. Default NG. */
+  payoutCountryCode: process.env.PAYONUS_PAYOUT_COUNTRY_CODE || 'NG',
+  /** PayOnUs bank-transfer body requires an email; used when the caller has none. */
+  payoutDefaultEmail: process.env.PAYONUS_PAYOUT_DEFAULT_EMAIL || '',
+  /** Optional notificationUrl included on the transfer request (defaults to the VA notification URL). */
+  payoutNotificationUrl: process.env.PAYONUS_PAYOUT_NOTIFICATION_URL || process.env.PAYONUS_VA_NOTIFICATION_URL || '',
+  /** HTTP method for the payout call (some providers use PUT). Default POST. */
+  payoutMethod: (process.env.PAYONUS_PAYOUT_METHOD || 'POST').toUpperCase(),
+  /**
+   * Optional request-body template for the payout call, as a JSON object. When set,
+   * it fully REPLACES the built-in body shape, letting operators match the exact
+   * schema PayOnUs documents for their account without a code change. Placeholders
+   * (in string values) are substituted at call time:
+   *   {{amount}} {{currency}} {{reference}} {{narration}}
+   *   {{sourceAccountNumber}} {{destinationAccountNumber}}
+   *   {{destinationBankCode}} {{destinationAccountName}} {{businessId}}
+   * A string that is EXACTLY one placeholder (e.g. "{{amount}}") is replaced with the
+   * typed value (number for amount); placeholders embedded in larger strings interpolate
+   * as text. Example:
+   *   PAYONUS_PAYOUT_BODY_JSON={"amount":"{{amount}}","currency":"{{currency}}",
+   *     "accountNumber":"{{destinationAccountNumber}}","bankCode":"{{destinationBankCode}}",
+   *     "accountName":"{{destinationAccountName}}","reference":"{{reference}}",
+   *     "narration":"{{narration}}","businessId":"{{businessId}}"}
+   */
+  payoutBodyTemplate: parseJsonObjectEnv('PAYONUS_PAYOUT_BODY_JSON'),
   timeoutMs: Math.max(1000, parseInt(process.env.PAYONUS_TIMEOUT_MS || '30000', 10)),
+  /** In-process cache TTL for the PayOnUs bank list (default 6 hours). */
+  bankListCacheTtlMs: Math.max(0, parseInt(process.env.PAYONUS_BANK_LIST_CACHE_TTL_MS || '21600000', 10)),
   /** Only wallets in these ISO currencies trigger provisioning (default NGN). */
   currencies: (process.env.PAYONUS_NUBAN_CURRENCIES || 'NGN')
     .split(',')
@@ -145,8 +186,12 @@ export const payonusNubanConfig = {
     'data.virtual_account_id'
   ]),
   payoutReferencePaths: parsePathList('PAYONUS_PAYOUT_RESPONSE_REFERENCE_PATHS', [
+    'data.onusReference',
+    'onusReference',
     'data.id',
     'data.reference',
+    'data.merchantReference',
+    'merchantReference',
     'data.transactionReference',
     'data.transaction_reference',
     'data.transferReference',

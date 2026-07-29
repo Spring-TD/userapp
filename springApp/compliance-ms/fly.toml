@@ -6,6 +6,9 @@
 app = 'compliance-ms'
 primary_region = 'fra'
 
+[env]
+  CREATE_APP_SERVICE_URL = 'https://create-app-ms.fly.dev'
+
 [build]
 
 [http_service]

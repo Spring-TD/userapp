@@ -267,7 +267,7 @@ function buildLoanTableRow(
   };
 }
 
-async function fetchMerchantUserBriefMap(authorization: string): Promise<{
+async function fetchMerchantUserBriefMap(appId: string, authorization: string): Promise<{
   map: Map<string, MerchantUserBrief>;
   listOk: boolean;
 }> {
@@ -276,6 +276,7 @@ async function fetchMerchantUserBriefMap(authorization: string): Promise<{
     const url = `${config.accountServiceUrl.replace(/\/+$/, '')}/api/v1/user/list`;
     const res = await axios.get(url, {
       headers: { Authorization: authorization },
+      params: { appId },
       timeout: 15000,
       validateStatus: () => true
     });
@@ -461,19 +462,40 @@ async function fetchProductConfig(appId: string, productId: string, authorizatio
 
 async function fetchApplicationsFromAccountMs(
   authorization: string,
-  adminId?: string
+  adminId: string | undefined,
+  appId: string
 ): Promise<LooseApplication[]> {
   const headers: Record<string, string> = { Authorization: authorization };
   if (adminId?.trim()) {
     headers['x-admin-id'] = adminId.trim();
   }
   const url = `${config.accountServiceUrl.replace(/\/+$/, '')}/api/v1/applications`;
-  const res = await axios.get(url, { headers, timeout: 20000, validateStatus: () => true });
-  if (res.status >= 400) {
-    throw new Error(`account-ms applications ${res.status}`);
+  const applications: LooseApplication[] = [];
+  let page = 1;
+  const limit = 20;
+
+  while (true) {
+    const res = await axios.get(url, {
+      headers,
+      params: { appId: appId.trim(), page, limit },
+      timeout: 20000,
+      validateStatus: () => true
+    });
+    if (res.status >= 400) {
+      throw new Error(`account-ms applications ${res.status}`);
+    }
+    const list = res.data?.data;
+    if (!Array.isArray(list)) {
+      return applications;
+    }
+    applications.push(...list);
+
+    const pagination = res.data?.pagination as { hasNextPage?: boolean; totalPages?: number } | undefined;
+    if (!pagination?.hasNextPage || page >= (pagination.totalPages ?? page)) {
+      return applications;
+    }
+    page += 1;
   }
-  const list = res.data?.data;
-  return Array.isArray(list) ? list : [];
 }
 
 export async function buildProductOverview(opts: {
@@ -504,7 +526,7 @@ export async function buildProductOverview(opts: {
   const warnings: string[] = [];
   let applications: LooseApplication[] = [];
   try {
-    applications = await fetchApplicationsFromAccountMs(opts.authorization, opts.adminId);
+    applications = await fetchApplicationsFromAccountMs(opts.authorization, opts.adminId, appId);
   } catch (e) {
     console.error('[product-overview] applications fetch failed:', e);
     warnings.push('applications_unavailable');
@@ -535,7 +557,7 @@ export async function buildProductOverview(opts: {
     }
   }
 
-  const { map: userBriefById, listOk: userListOk } = await fetchMerchantUserBriefMap(opts.authorization);
+  const { map: userBriefById, listOk: userListOk } = await fetchMerchantUserBriefMap(appId, opts.authorization);
   if (!userListOk && scoped.some((a) => a.userId)) {
     warnings.push('customer_names_unavailable');
   }

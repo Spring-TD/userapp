@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { SpecialService } from '../services/specialService';
+import { TransactionService } from '../services/transactionService';
 import { ApiError } from '../middleware/errorHandler';
 
 interface TypedRequest<T> extends Request {
@@ -7,7 +8,43 @@ interface TypedRequest<T> extends Request {
 }
 
 export class SpecialController {
-  
+  static createAppTransaction = async (req: TypedRequest<any>, res: Response): Promise<void> => {
+    try {
+      const transactionData = req.body;
+      if (!transactionData?.appId) {
+        throw new ApiError(400, 'App ID is required');
+      }
+      if (typeof transactionData.amount !== 'number') {
+        throw new ApiError(400, 'Transaction amount is required');
+      }
+
+      // #region agent log
+      try { console.log('DEBUG-AADE8C ' + JSON.stringify({ hypothesisId: 'H2', location: 'create-app-ms/controllers/specialController.ts:21', message: 'store-B mirror write received', data: { appId: transactionData.appId, provider: transactionData.provider, providerReference: transactionData.providerReference, amount: transactionData.amount, type: transactionData.type } })); } catch (_e) {}
+      // #endregion
+      const transaction = await TransactionService.createOrUpdateProviderTransaction(transactionData);
+
+      res.status(201).json({
+        success: true,
+        message: 'App transaction recorded successfully',
+        data: transaction
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+        return;
+      }
+
+      console.error('Error in createAppTransaction controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  };
+
   // 1. Get all App
   static getAllApps = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -18,6 +55,32 @@ export class SpecialController {
       });
     } catch (error) {
       console.error('Error in getAllApps controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  };
+
+  /** Apps eligible for platform monthly Billing-wallet charges (internal, JWT_SECRET). */
+  static getBillingTargets = async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const apps = await SpecialService.getAllApps();
+      const targets = apps
+        .filter((app) => app.status === 'active' && app.merchantId?.trim() && app.id?.trim())
+        .map((app) => ({
+          appId: app.id,
+          merchantId: app.merchantId,
+          appName: app.name,
+          status: app.status
+        }));
+
+      res.json({
+        success: true,
+        data: { apps: targets }
+      });
+    } catch (error) {
+      console.error('Error in getBillingTargets controller:', error);
       res.status(500).json({
         success: false,
         error: 'Internal server error'

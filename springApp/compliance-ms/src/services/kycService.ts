@@ -23,6 +23,7 @@ import { ShareholderModel } from '../models/ShareholderModel';
 import { KYCProfileModel } from '../models/KYCProfileModel';
 import { normalizeBvnTo11Digits } from '../utils/bvnNormalize';
 import { BusinessDocumentType, BUSINESS_DOCUMENT_DISPLAY_NAMES } from '../types/kycTypes';
+import { notifyRetailKycDecision } from './retailKycNotificationService';
 
 /** Map API shareholder shape to ShareholderModel document (document URLs stored in DO Spaces) */
 function shareholderToDoc(userId: string, s: any): Record<string, unknown> {
@@ -813,6 +814,114 @@ export class KYCService {
    * Retail user BVN from completed Fuspay modular KYC (webhook → fuspay.verification / personalInfo).
    * Used by wallet-ms for per-user Payonus fixed virtual accounts.
    */
+  /**
+   * Internal: product-ms applicant profile mirror for Plata pull at loan review.
+   * Returns a sanitized subset — no raw Fuspay webhook payloads.
+   */
+  async getApplicantProfileForInternal(userId: string): Promise<{
+    success: boolean;
+    data?: {
+      status: string;
+      completed: boolean;
+      completedAt?: string;
+      personalInfo?: Record<string, unknown>;
+      documents: Array<{
+        type: string;
+        fileName: string;
+        fileType?: string;
+        fileSize?: number;
+        status: string;
+      }>;
+      verification?: {
+        overallStatus?: string;
+        status?: string;
+        completedChecks?: number;
+        totalChecks?: number;
+        verificationType?: string;
+      };
+    };
+    error?: string;
+  }> {
+    const uid = (userId || '').trim();
+    if (!uid) {
+      return { success: false, error: 'userId is required' };
+    }
+
+    const completedStatuses = new Set(['approved', 'completed', 'admin_approved']);
+
+    try {
+      const profile: any = await KYCProfileModel.findOne({
+        $or: [{ userId: uid }, { 'fuspay.userRef': uid }, { 'fuspay.customerId': uid }]
+      }).lean();
+
+      if (!profile) {
+        return { success: false, error: 'No KYC profile found for this user' };
+      }
+
+      const status = String(profile.status || 'pending');
+      const personalInfoRaw = profile.personalInfo && typeof profile.personalInfo === 'object'
+        ? { ...profile.personalInfo }
+        : undefined;
+
+      if (personalInfoRaw) {
+        const bvnDigits = normalizeBvnTo11Digits(personalInfoRaw.bvn);
+        if (bvnDigits) {
+          personalInfoRaw.bvn = bvnDigits;
+        } else if (personalInfoRaw.bvn) {
+          delete personalInfoRaw.bvn;
+        }
+        if (personalInfoRaw.dateOfBirth instanceof Date) {
+          personalInfoRaw.dateOfBirth = personalInfoRaw.dateOfBirth.toISOString();
+        }
+      }
+
+      const documents = Array.isArray(profile.documents)
+        ? profile.documents.map((doc: any) => ({
+            type: String(doc.type || 'unknown'),
+            fileName: String(doc.fileName || ''),
+            ...(doc.fileType ? { fileType: String(doc.fileType) } : {}),
+            ...(typeof doc.fileSize === 'number' ? { fileSize: doc.fileSize } : {}),
+            status: String(doc.status || 'pending')
+          }))
+        : [];
+
+      const verification = profile.fuspay?.verification;
+      const verificationSummary = verification
+        ? {
+            overallStatus:
+              typeof verification.overallStatus === 'string' ? verification.overallStatus : undefined,
+            status: typeof verification.status === 'string' ? verification.status : undefined,
+            completedChecks:
+              typeof verification.completedChecks === 'number' ? verification.completedChecks : undefined,
+            totalChecks: typeof verification.totalChecks === 'number' ? verification.totalChecks : undefined,
+            verificationType:
+              typeof verification.verificationType === 'string' ? verification.verificationType : undefined
+          }
+        : undefined;
+
+      return {
+        success: true,
+        data: {
+          status,
+          completed: completedStatuses.has(status.toLowerCase()),
+          ...(profile.completedAt
+            ? {
+                completedAt:
+                  profile.completedAt instanceof Date
+                    ? profile.completedAt.toISOString()
+                    : String(profile.completedAt)
+              }
+            : {}),
+          ...(personalInfoRaw ? { personalInfo: personalInfoRaw } : {}),
+          documents,
+          ...(verificationSummary ? { verification: verificationSummary } : {})
+        }
+      };
+    } catch {
+      return { success: false, error: 'Applicant KYC profile lookup failed' };
+    }
+  }
+
   async getUserBvnForPayonusInternal(userId: string): Promise<{
     success: boolean;
     bvn?: string;
@@ -847,7 +956,7 @@ export class KYCService {
       return {
         success: false,
         error:
-          'No 11-digit BVN on profile. Complete Fuspay KYC (webhook must include full BVN in details).'
+          'No 11-digit BVN on profile. Complete Fuspay KYC first.'
       };
     } catch {
       return { success: false, error: 'User BVN lookup failed' };
@@ -1826,6 +1935,13 @@ export class KYCService {
         note
       });
 
+      void notifyRetailKycDecision({
+        userId,
+        status,
+        profile: updatedProfile as unknown as Record<string, unknown>,
+        reason: note
+      }).catch(() => undefined);
+
       return {
         success: true,
         message: `User profile ${status} successfully`,
@@ -2192,6 +2308,21 @@ export class KYCService {
         newStatus: status,
         rejectionReason
       });
+
+      if (status === KYCStatus.APPROVED || status === KYCStatus.COMPLETED) {
+        void notifyRetailKycDecision({
+          userId: String(updatedProfile.userId),
+          status: 'approved',
+          profile: updatedProfile as unknown as Record<string, unknown>
+        }).catch(() => undefined);
+      } else if (status === KYCStatus.REJECTED) {
+        void notifyRetailKycDecision({
+          userId: String(updatedProfile.userId),
+          status: 'rejected',
+          profile: updatedProfile as unknown as Record<string, unknown>,
+          reason: rejectionReason
+        }).catch(() => undefined);
+      }
       
       return {
         success: true,

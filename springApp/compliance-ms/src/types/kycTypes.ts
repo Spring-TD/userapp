@@ -121,6 +121,10 @@ export interface KYCProfile {
     dateOfBirth?: Date;
     /** From Fuspay BVN verification (11 digits). */
     bvn?: string;
+    /** From Fuspay NIN verification (11 digits). */
+    nin?: string;
+    phone?: string;
+    email?: string;
     nationality?: string;
     occupation?: string;
     sourceOfFunds?: string;

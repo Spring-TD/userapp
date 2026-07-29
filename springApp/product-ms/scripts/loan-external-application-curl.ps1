@@ -1,4 +1,4 @@
-# Loan application: POST upstream /api/v1/products/external-applications via account-ms (PLATA keys only).
+# Loan application account creation: POST upstream /api/v1/products/external-accounts via account-ms (PLATA keys only).
 # Optional: POST local product-ms /api/v1/applications/apply
 #
 # Usage (from product-ms folder):
@@ -152,61 +152,28 @@ try {
   $plataAppId = $product.appId
   if (-not $plataAppId) { throw 'Upstream product missing appId' }
 
-  $contractSnapshot = @{
-    globalProductId = $ProductId
-    globalProductReferenceNumber = $product.referenceNumber
-    productName = $product.name
-    productType = $product.type
-    principal = $Amount
-    amount = $Amount
-    currency = $Currency
-    structure = $product.structure
-    about = $product.about
-    requirements = $product.requirements
-    feesAndCharges = $product.feesAndCharges
-    calculatedConfig = $product.calculatedConfig
-    requirementSubmissions = @()
-  }
-
-  $creatorName = $null
-  if ($product.merchant) {
-    if ($product.merchant.companyName) { $creatorName = $product.merchant.companyName }
-    elseif ($product.merchant.name) { $creatorName = $product.merchant.name }
-  }
-
   $payload = @{
     appId = $plataAppId
     productId = $ProductId
-    merchantId = $IntegratorMerchantId
-    merchantName = $IntegratorMerchantName
-    offeringMerchantId = $OfferingMerchantId
-    offeringMerchantName = $OfferingMerchantName
-    productName = $product.name
     currency = $Currency
     country = $Country
-    externalUser = @{
+    user = @{
       id = $UserId
       name = $UserName
       email = $Email
       phone = $Phone
       bvn = $Bvn
     }
-    application = @{
-      contractSnapshot = $contractSnapshot
-      payoutSplit = @{}
-      status = 'submitted'
-    }
   }
-  if ($creatorName) { $payload.productCreatorMerchantName = $creatorName }
 
   $payload | ConvertTo-Json -Depth 12 | Set-Content $upstreamBody -Encoding UTF8
 
-  $r = Invoke-CurlJson -Label '2) POST /api/v1/products/external-applications' -Method 'POST' `
-    -Url "$UpstreamBaseUrl/api/v1/products/external-applications" -OutFile $upstreamResp `
+  $r = Invoke-CurlJson -Label '2) POST /api/v1/products/external-accounts' -Method 'POST' `
+    -Url "$UpstreamBaseUrl/api/v1/products/external-accounts" -OutFile $upstreamResp `
     -BodyFile $upstreamBody -ExtraHeaders $plataHeaders
 
   Write-Host ''
-  Write-Host 'Upstream external application response:'
+  Write-Host 'Upstream external account response:'
   Get-Content $upstreamResp -Raw | Write-Host
 
   if ($AlsoApplyLocal) {
@@ -242,13 +209,13 @@ try {
 
   if ($r.UpstreamDepsUnavailable) {
     Write-Host ''
-    Write-Host 'Note: Plata accepted the external-applications payload but returned 503 because a downstream service (often wallet-ms) is unreachable from their deployment.'
+    Write-Host 'Note: Plata accepted the external-accounts payload but returned 503 because a downstream service (often wallet-ms) is unreachable from their deployment.'
     Write-Host 'Your curl request shape and gateway headers are correct; fix upstream wallet URL or retry when Plata ops restores dependencies.'
     exit 0
   }
 
   Write-Host ''
-  Write-Host 'Done. Upstream loan application submitted via external-applications.'
+  Write-Host 'Done. Upstream bank account submitted via external-accounts.'
 }
 finally {
   Remove-Item -Recurse -Force $tmpdir -ErrorAction SilentlyContinue

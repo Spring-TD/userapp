@@ -2,6 +2,53 @@ import { Transaction, TransactionQueryParams } from '../types/app';
 import { ApiError } from '../middleware/errorHandler';
 import { TransactionMongoModel } from '../models/transaction.mongo';
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (value !== undefined && value !== null && String(value).trim() !== '') {
+      return String(value).trim();
+    }
+  }
+  return undefined;
+}
+
+function compactObject(input: Record<string, unknown>): Record<string, unknown> | undefined {
+  const compacted = Object.fromEntries(
+    Object.entries(input).filter(([, value]) => value !== undefined && value !== null && value !== '')
+  );
+  return Object.keys(compacted).length ? compacted : undefined;
+}
+
+function extractSenderDetails(metadata: unknown): Transaction['senderDetails'] | undefined {
+  const root = asRecord(metadata);
+  const parties = asRecord(root.parties);
+  const sender = asRecord(parties.sender);
+  const decodedRawPayload = asRecord(root.decodedRawPayload);
+  const decodedSender = asRecord(decodedRawPayload.senderDetails);
+  const payonus = asRecord(root.payonus);
+  const parsedPayload = asRecord(root.parsedPayload);
+
+  return compactObject({
+    name: firstString(sender.name, decodedSender.name, payonus.senderName, parsedPayload.senderName),
+    accountNumber: firstString(
+      sender.accountNumber,
+      decodedSender.accountNumber,
+      payonus.senderAccountNumber,
+      parsedPayload.senderAccountNumber
+    ),
+    bankName: firstString(sender.bankName, decodedSender.bankName, payonus.senderBankName, parsedPayload.senderBankName),
+    bankCode: firstString(sender.bankCode, decodedSender.bankCode, payonus.senderBankCode, parsedPayload.senderBankCode)
+  }) as Transaction['senderDetails'] | undefined;
+}
+
+function withSenderDetails(transaction: Transaction): Transaction {
+  const senderDetails = extractSenderDetails(transaction.metadata);
+  return senderDetails ? { ...transaction, senderDetails } : transaction;
+}
+
 export class TransactionService {
   /**
    * Get all transactions for an app with optional filtering and pagination
@@ -54,7 +101,10 @@ export class TransactionService {
     }
 
     const transactions = await query.exec();
-    return transactions.map(t => t.toJSON() as unknown as Transaction);
+    // #region agent log
+    try { console.log('DEBUG-AADE8C ' + JSON.stringify({ hypothesisId: 'H3', location: 'create-app-ms/services/transactionService.ts:103', message: 'dashboard read getTransactionsByAppId', data: { appId, filterKeys: Object.keys(filter), resultCount: transactions.length } })); } catch (_e) {}
+    // #endregion
+    return transactions.map(t => withSenderDetails(t.toJSON() as unknown as Transaction));
   }
 
   /**
@@ -68,7 +118,7 @@ export class TransactionService {
     }
 
     const transaction = await TransactionMongoModel.findById(transactionId);
-    return transaction ? (transaction.toJSON() as unknown as Transaction) : null;
+    return transaction ? withSenderDetails(transaction.toJSON() as unknown as Transaction) : null;
   }
 
   /**
@@ -83,7 +133,56 @@ export class TransactionService {
       updatedAt: new Date().toISOString()
     });
 
-    return newTransaction.toJSON() as unknown as Transaction;
+    return withSenderDetails(newTransaction.toJSON() as unknown as Transaction);
+  }
+
+  static async createOrUpdateProviderTransaction(
+    transactionData: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>
+  ): Promise<Transaction> {
+    if (!transactionData.appId) {
+      throw new ApiError(400, 'App ID is required');
+    }
+    if (!transactionData.provider || !transactionData.providerReference) {
+      return this.createTransaction(transactionData);
+    }
+
+    const now = new Date().toISOString();
+    const transaction = await TransactionMongoModel.findOneAndUpdate(
+      {
+        appId: transactionData.appId,
+        provider: transactionData.provider,
+        providerReference: transactionData.providerReference
+      },
+      {
+        $setOnInsert: {
+          appId: transactionData.appId,
+          userId: transactionData.userId,
+          walletId: transactionData.walletId,
+          productId: transactionData.productId,
+          reference: transactionData.reference,
+          metaRef: transactionData.metaRef,
+          provider: transactionData.provider,
+          providerReference: transactionData.providerReference,
+          currency: transactionData.currency,
+          createdAt: now
+        },
+        $set: {
+          amount: transactionData.amount,
+          type: transactionData.type,
+          status: transactionData.status,
+          description: transactionData.description,
+          metadata: transactionData.metadata,
+          updatedAt: now
+        }
+      },
+      {
+        new: true,
+        upsert: true,
+        setDefaultsOnInsert: true
+      }
+    );
+
+    return withSenderDetails(transaction.toJSON() as unknown as Transaction);
   }
 
   /**

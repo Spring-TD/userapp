@@ -4,7 +4,8 @@ import { config } from '../config/environment';
 interface CreateWalletRequest {
   name: string;
   currency: string;
-  merchantWalletType: 'BILLING' | 'KYC' | 'SETTLEMENT';
+  /** @deprecated legacy value 'SETTLEMENT' still accepted by wallet-ms; use 'REPAYMENT' */
+  merchantWalletType: 'BILLING' | 'KYC' | 'REPAYMENT' | 'SETTLEMENT';
 }
 
 interface CreateUserWalletRequest {
@@ -102,7 +103,7 @@ export class WalletService {
    */
   static async createMerchantWallet(
     merchantId: string,
-    walletType: 'BILLING' | 'KYC' | 'SETTLEMENT',
+    walletType: 'BILLING' | 'KYC' | 'REPAYMENT' | 'SETTLEMENT',
     name?: string
   ): Promise<CreateWalletResponse> {
     try {
@@ -141,7 +142,7 @@ export class WalletService {
   }
 
   /**
-   * Create all required merchant wallets (Billing, KYC, Settlement)
+   * Create all required merchant wallets (Billing, KYC, Repayment)
    * @param merchantId The merchant ID (used as the app ID)
    * @returns The created wallets or error information
    */

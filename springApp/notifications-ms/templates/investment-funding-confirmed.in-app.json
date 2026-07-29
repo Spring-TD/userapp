@@ -1,0 +1,4 @@
+{
+  "title": "Funding received",
+  "body": "{{amount}} received for {{productName}}."
+}

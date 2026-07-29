@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { AuthService } from '../services/AuthService';
+import { resolveBrandingAppName, tenantAppIdFromRequest } from '../utils/tenantHostResolver';
 
 export class PasswordController {
   static async forgot(req: Request, res: Response): Promise<void> {
@@ -14,7 +15,9 @@ export class PasswordController {
         return;
       }
 
-      const result = await AuthService.initiatePasswordReset(email);
+      const appId = tenantAppIdFromRequest(req);
+      const appName = await resolveBrandingAppName(req, appId);
+      const result = await AuthService.initiatePasswordReset(email, appId, appName);
       res.status(result.success ? 200 : 400).json(result);
     } catch (error) {
       console.error('Error in forgotPassword:', error);
@@ -43,7 +46,8 @@ export class PasswordController {
       const result = await AuthService.resetPassword(
         String(identifier).trim(),
         String(code).trim(),
-        String(newPassword)
+        String(newPassword),
+        tenantAppIdFromRequest(req)
       );
       res.status(result.success ? 200 : 400).json(result);
     } catch (error) {
@@ -99,7 +103,9 @@ export class PasswordController {
         return;
       }
 
-      const result = await AuthService.requestPasswordChangeOtp(req.user.userId);
+      const appId = tenantAppIdFromRequest(req);
+      const appName = await resolveBrandingAppName(req, appId);
+      const result = await AuthService.requestPasswordChangeOtp(req.user.userId, appName);
       res.status(result.success ? 200 : 400).json(result);
     } catch (error) {
       console.error('Error in requestChangeOtp:', error);

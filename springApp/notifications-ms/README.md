@@ -2,14 +2,15 @@
 
 ## Overview
 
-This microservice provides centralized notification functionality for the SpringTD platform, handling email, SMS, **in-app inbox** records, and combined **email + in-app** delivery across all services.
+This microservice provides centralized notification functionality for the SpringTD platform, handling email, SMS, **in-app inbox** records, **Web Push (VAPID)**, and combined **email + in-app + push** delivery across all services.
 
 ## Features
 
 - **Email Notifications**: Send emails via Mailtrap (development) or production SMTP
 - **SMS Notifications**: Send SMS via Twilio
 - **In-app notifications**: Persist rendered title/body per user id (`channel: in_app`); clients list via `GET /api/v1/notifications/user/:recipient?channel=in_app`
-- **Dual delivery**: Single request sends the same template to **email** and **in-app** (`POST /api/v1/notifications/send-dual`)
+- **Web Push (VAPID)**: Browser push alerts for PWAs via the [`web-push`](https://www.npmjs.com/package/web-push) library and standard Push API subscriptions
+- **Dual delivery**: Single request sends the same template to **in-app (+ Web Push when subscribed)** and optionally **email** (`POST /api/v1/notifications/send-dual`)
 - **Template Support**: Reusable email, SMS, and in-app templates with `{{variable}}` substitution
 - **Delivery Tracking**: Track notification status and delivery
 - **MongoDB Persistence**: Store all notification records for auditing
@@ -22,6 +23,7 @@ This microservice provides centralized notification functionality for the Spring
 - MongoDB (via Mongoose)
 - Nodemailer (email)
 - Twilio (SMS)
+- web-push (VAPID / Web Push)
 - Jest for testing
 
 ## Deployment
@@ -48,6 +50,25 @@ For emails to be sent (e.g. verification OTP, password reset OTP, password chang
    ```bash
    fly deploy -a notifications-ms
    ```
+
+### Fly.io: JWT_SECRET is REQUIRED (in-app inbox auth)
+
+The authenticated inbox endpoints (`/api/v1/notifications/inbox*` and legacy `/api/v1/notifications/user/:recipient`) verify the storefront access token using **`JWT_SECRET`**. This **must be set to the exact same value** as `client-auth-ms` (and the other services that share the secret, e.g. `account-ms`, `product-ms`).
+
+If `JWT_SECRET` is unset, the service silently falls back to the dev default (`fallback-secret-key-for-development-purposes-only`) and **rejects every real storefront token with `401 Invalid or expired access token`**. In-app notifications are still *saved* (and emails still send), but users can never *read* their inbox — so they appear to receive no in-app notifications.
+
+```bash
+fly secrets set JWT_SECRET="<same-value-as-client-auth-ms>" -a springtd-notifications-ms
+```
+
+Verify the digest matches the other apps (same value → same digest):
+
+```bash
+fly secrets list -a springtd-notifications-ms     # JWT_SECRET digest
+fly secrets list -a client-auth-ms                # must match
+```
+
+> Note: the Fly app for this service is `springtd-notifications-ms` (see `fly.toml`); the public hostname is `springtd-notifications-ms.fly.dev`.
 
 ## Getting Started
 
@@ -155,9 +176,9 @@ Send a notification via email, SMS, or in-app (persisted inbox record).
 - `sms` — `recipient` must be a valid E.164-style phone number.
 - `in_app` — `recipient` is the **end-user id** (same id the client uses to load the inbox). Renders `{template}.in-app.json` and stores `inAppTitle` / `inAppBody` on the record’s `data`.
 
-### Send email + in-app (dual)
+### Send email + in-app + Web Push (dual)
 
-Delivers the **same** `template` and `data` as both an email and an in-app notification in one synchronous call.
+Delivers the **same** `template` and `data` as an **in-app inbox record** and, when the user has registered a browser **PushSubscription**, a **Web Push** alert (VAPID). **Email is optional** — omit `email` to send in-app (+ push) only.
 
 **Endpoint:** `POST /api/v1/notifications/send-dual`
 
@@ -167,12 +188,22 @@ Delivers the **same** `template` and `data` as both an email and an in-app notif
 {
   "userId": "USER_DOCUMENT_ID",
   "email": "user@example.com",
-  "template": "app-created",
+  "template": "product-application-submitted",
   "data": {
-    "appName": "My App",
-    "merchantName": "merchant_123",
-    "detail": ""
-  }
+    "applicantName": "Jane Smith",
+    "productName": "Personal Loan"
+  },
+  "priority": "normal"
+}
+```
+
+**In-app only (no email):**
+
+```json
+{
+  "userId": "USER_DOCUMENT_ID",
+  "template": "product-application-submitted",
+  "data": { "productName": "Personal Loan" }
 }
 ```
 
@@ -189,7 +220,85 @@ Delivers the **same** `template` and `data` as both an email and an in-app notif
 }
 ```
 
-Either delivery can fail independently; check `data.inApp` and `data.email`.
+When email is omitted, `data.email.skipped` is `true`. Either delivery can fail independently; check `data.inApp` and `data.email`. Web Push is best-effort after the in-app record is saved (only users who subscribed receive alerts).
+
+### Storefront inbox (authenticated)
+
+Requires **`Authorization: Bearer <accessToken>`** verified with **`JWT_SECRET`**, which **must be set to the same value as client-auth-ms** (see [Fly.io: JWT_SECRET is REQUIRED](#flyio-jwt_secret-is-required-in-app-inbox-auth)). If it is unset/mismatched, every request here returns `401 Invalid or expired access token`. Users may only access their own inbox.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/notifications/inbox` | List in-app items (`limit`, `offset`, `unreadOnly`) |
+| `GET` | `/api/v1/notifications/inbox/unread-count` | Unread badge count |
+| `PATCH` | `/api/v1/notifications/inbox/:id/read` | Mark one as read |
+| `PATCH` | `/api/v1/notifications/inbox/read` | Mark read (`{ "ids": ["…"] }` or omit `ids` for all) |
+| `DELETE` | `/api/v1/notifications/inbox/:id` | Delete one |
+| `DELETE` | `/api/v1/notifications/inbox` | Bulk delete `{ "ids": ["…"] }` |
+
+Each inbox item includes `readAt`, `isRead`, `data.inAppTitle`, `data.inAppBody`.
+
+**Real-time:** WebSocket `GET /api/v1/notifications/inbox/ws?token=<accessJwt>` (proxied through account-ms). Events: `notification.new`, `notification.read`, `inbox.unread_count`, etc.
+
+Legacy `GET /api/v1/notifications/user/:recipient?channel=in_app` still works but requires Bearer and `:recipient` must equal the token `userId`. Prefer **`GET /inbox`**.
+
+### Web Push (VAPID) for storefront PWAs
+
+Uses the standard **Web Push API** and the open-source **`web-push`** npm package (RFC 8030). No Firebase required.
+
+#### Generate VAPID keys (once per environment)
+
+```bash
+cd notifications-ms
+npx web-push generate-vapid-keys
+```
+
+Set on **notifications-ms**:
+
+| Variable | Description |
+|----------|-------------|
+| `VAPID_PUBLIC_KEY` | Public key (safe to expose to the PWA) |
+| `VAPID_PRIVATE_KEY` | Private key (secret) |
+| `VAPID_SUBJECT` | `mailto:admin@yourdomain.com` or `https://yourdomain.com` |
+
+Check `/health` — `services.webPush` should be `"configured"`.
+
+#### Get public key (PWA subscribe)
+
+**Endpoint:** `GET /api/v1/notifications/push/vapid-public-key`
+
+**Response:**
+
+```json
+{ "success": true, "data": { "publicKey": "BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U" } }
+```
+
+#### Register browser subscription (after login)
+
+**Endpoint:** `POST /api/v1/notifications/push/subscribe`  
+**Auth:** Bearer required; body `userId` must match token.
+
+```json
+{
+  "userId": "user-uuid",
+  "appId": "674a1b2c3d4e5f6789012345",
+  "subscription": {
+    "endpoint": "https://fcm.googleapis.com/fcm/send/…",
+    "expirationTime": null,
+    "keys": {
+      "p256dh": "…",
+      "auth": "…"
+    }
+  }
+}
+```
+
+**Unregister:** `DELETE /api/v1/notifications/push/subscribe` with `{ "userId", "endpoint" }`.
+
+Stale subscriptions (HTTP 404/410 from push service) are removed automatically.
+
+The merchant **PWA service worker** (published via create-app-ms) includes `push` and `notificationclick` handlers. **Republish the PWA** after upgrading so existing installs receive the updated `sw.js`.
+
+See **`STOREFRONT_PWA_INTEGRATION.md`** for client-side subscribe example code.
 
 ### Get Notification Status
 
@@ -306,10 +415,12 @@ Hello {{userName}}! Please verify your email: {{verificationUrl}}
 
 **Auth / onboarding**
 
-- `email-verification` - Email verification
+- `email-verification` - Email verification (email + `.in-app.json` for dual)
 - `password-reset` - Password reset (link-style; SpringTD may also use OTP + `otp` for reset)
-- `password-change` - **Email only:** confirmation after password was changed or reset successfully (`data.userName`). OTP codes still use the `otp` template.
-- `otp` - One-time code (email/SMS)
+- `password-change` - **Dual for storefront users:** confirmation after password was changed or reset successfully (`data.userName`). OTP codes still use the `otp` template.
+- `otp` - One-time code (email/SMS only — never duplicated in in-app for security)
+- `otp-prompt` - **In-app only:** companion message after an OTP email (“check your inbox”; no code in the message)
+- `user-registered` - **In-app only:** welcome message after storefront signup (verification OTP sent separately)
 - `invitation` - Team invitation
 
 For the `otp` template, set `data.purpose` to describe the use case (for example: `Verification`, `Password Reset`, `Password Change`, or `Login`).
@@ -321,6 +432,10 @@ For the `otp` template, set `data.purpose` to describe the use case (for example
 - `app-reactivated` - App set back to **active** (`data.appName`, `merchantName`)
 - `product-configuration` - Product **activated/deactivated**, **config updated**, or legacy **configurations** CRUD (**product-ms** → `send-dual` when Bearer access JWT present; `data.productId`, `productType`, `appId`, `action`, optional `detail`)
 - `product-created` - Product created successfully
+- `product-application-submitted` - Storefront application submitted (**product-ms** → `send-dual`; email optional)
+- `product-application-workflow-updated` - Application workflow stage changed (applicant + merchant)
+- `guarantor-kyc-approved` - Guarantor KYC completed (applicant + merchant)
+- `guarantor-applicant-reported` - Guarantor flagged unknown applicant (merchant)
 - `merchant-registered` - New merchant registered
 - `compliance-incomplete` - Compliance needs attention (`failed` / `rejected` / `in_progress` flows from compliance-ms)
 - `withdrawal-alert` - Withdrawal processed (billing-ms)
@@ -391,7 +506,6 @@ The service uses graceful degradation:
 ## Future Enhancements
 
 - Background worker for retry logic
-- Push notifications support (FCM/APNs) in addition to in-app store
 - Webhook notifications
 - Rate limiting
 - Provider fallback mechanisms

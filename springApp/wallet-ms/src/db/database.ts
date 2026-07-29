@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
 import WalletModel from './WalletModel';
 import TransactionModel from './TransactionModel';
+import UserExternalBankAccountModel from './UserExternalBankAccountModel';
+import type { UserExternalBankAccount } from '../models/UserExternalBankAccount';
 import {
   Wallet,
   MerchantWallet,
@@ -14,6 +16,7 @@ import {
   VirtualNubanProvisionStatus
 } from '../models/Wallet';
 import { merchantWalletTypesForLookup } from '../utils/merchantWalletType';
+import { emitTransactionCreated } from '../events/transactionEvents';
 
 function buildVirtualNuban(raw: Record<string, unknown>): VirtualNubanDetails | undefined {
   const accountNumber = raw.payonusNubanAccountNumber as string | undefined;
@@ -33,6 +36,48 @@ function buildVirtualNuban(raw: Record<string, unknown>): VirtualNubanDetails | 
     provisionError: (raw.payonusNubanProvisionError as string) || undefined,
     provisionedAt: raw.payonusNubanProvisionedAt as Date | undefined
   };
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (value !== undefined && value !== null && String(value).trim() !== '') {
+      return String(value).trim();
+    }
+  }
+  return undefined;
+}
+
+function compactObject(input: Record<string, unknown>): Record<string, unknown> | undefined {
+  const compacted = Object.fromEntries(
+    Object.entries(input).filter(([, value]) => value !== undefined && value !== null && value !== '')
+  );
+  return Object.keys(compacted).length ? compacted : undefined;
+}
+
+function extractSenderDetails(metadata: unknown): Transaction['senderDetails'] | undefined {
+  const root = asRecord(metadata);
+  const parties = asRecord(root.parties);
+  const sender = asRecord(parties.sender);
+  const decodedRawPayload = asRecord(root.decodedRawPayload);
+  const decodedSender = asRecord(decodedRawPayload.senderDetails);
+  const payonus = asRecord(root.payonus);
+  const parsedPayload = asRecord(root.parsedPayload);
+
+  return compactObject({
+    name: firstString(sender.name, decodedSender.name, payonus.senderName, parsedPayload.senderName),
+    accountNumber: firstString(
+      sender.accountNumber,
+      decodedSender.accountNumber,
+      payonus.senderAccountNumber,
+      parsedPayload.senderAccountNumber
+    ),
+    bankName: firstString(sender.bankName, decodedSender.bankName, payonus.senderBankName, parsedPayload.senderBankName),
+    bankCode: firstString(sender.bankCode, decodedSender.bankCode, payonus.senderBankCode, parsedPayload.senderBankCode)
+  }) as Transaction['senderDetails'] | undefined;
 }
 
 function docToWallet(doc: mongoose.Document | null): Wallet | null {
@@ -110,9 +155,11 @@ function docToTransaction(doc: mongoose.Document | null): Transaction | null {
     updatedAt: Date;
   };
   const { _id, __v, createdAt, updatedAt, ...rest } = o;
+  const senderDetails = extractSenderDetails(rest.metadata);
   return {
     id: _id.toString(),
     ...rest,
+    ...(senderDetails ? { senderDetails } : {}),
     createdAt,
     updatedAt
   } as Transaction;
@@ -129,6 +176,42 @@ export type PayonusNubanPatchFields = {
   payonusNubanProvisionedAt?: Date | null;
 };
 
+function docToUserExternalBankAccount(doc: mongoose.Document | null): UserExternalBankAccount | null {
+  if (!doc) return null;
+  const o = doc.toObject() as IUserExternalBankAccountLean;
+  return {
+    id: o._id.toString(),
+    userId: o.userId,
+    accountNumber: o.accountNumber,
+    bankCode: o.bankCode,
+    bankName: o.bankName || undefined,
+    accountName: o.accountName,
+    label: o.label || undefined,
+    currency: o.currency,
+    isDefault: o.isDefault,
+    status: o.status,
+    verifiedAt: o.verifiedAt,
+    createdAt: o.createdAt,
+    updatedAt: o.updatedAt
+  };
+}
+
+interface IUserExternalBankAccountLean {
+  _id: mongoose.Types.ObjectId;
+  userId: string;
+  accountNumber: string;
+  bankCode: string;
+  bankName?: string;
+  accountName: string;
+  label?: string;
+  currency: string;
+  isDefault: boolean;
+  status: 'active' | 'deleted';
+  verifiedAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export async function ensureWalletIndexes(): Promise<void> {
   try {
     const indexes = await WalletModel.collection.indexes();
@@ -137,6 +220,7 @@ export async function ensureWalletIndexes(): Promise<void> {
       await WalletModel.collection.dropIndex('userId_1');
     }
     await WalletModel.createIndexes();
+    await UserExternalBankAccountModel.createIndexes();
   } catch (error) {
     console.warn('Wallet index migration skipped or failed:', error instanceof Error ? error.message : error);
   }
@@ -219,12 +303,44 @@ export const db = {
     merchantWalletType: MerchantWalletType,
     appId?: string
   ): Promise<MerchantWallet | null> {
-    const doc = await WalletModel.findOne({
+    const baseFilter = {
       walletType: 'MERCHANT',
       merchantId,
-      ...(appId ? { appId } : {}),
-      merchantWalletType: { $in: merchantWalletTypesForLookup(merchantWalletType) as string[] }
-    });
+      ...(appId ? { appId } : {})
+    } as const;
+
+    let doc: any = null;
+
+    if (merchantWalletType === MerchantWalletType.REPAYMENT) {
+      // Prefer true REPAYMENT / legacy SETTLEMENT docs first.
+      // Only fall back to legacy KYC-as-repayment when no real repayment wallet exists.
+      doc = await WalletModel.findOne({
+        ...baseFilter,
+        merchantWalletType: { $in: [MerchantWalletType.REPAYMENT, 'SETTLEMENT'] }
+      });
+      if (!doc) {
+        doc = await WalletModel.findOne({
+          ...baseFilter,
+          merchantWalletType: 'KYC'
+        });
+      }
+    } else {
+      doc = await WalletModel.findOne({
+        ...baseFilter,
+        merchantWalletType: { $in: merchantWalletTypesForLookup(merchantWalletType) as string[] }
+      });
+    }
+    // Lazy migrate legacy SETTLEMENT -> REPAYMENT on read. Do NOT rewrite legacy KYC-as-repayment
+    // wallets: Spring keeps a separate real KYC (link fee) wallet, so a stored `KYC` doc could be
+    // either the true KYC wallet or an old settlement wallet — only SETTLEMENT is unambiguous.
+    if (
+      doc &&
+      merchantWalletType === MerchantWalletType.REPAYMENT &&
+      (doc as unknown as { merchantWalletType?: string }).merchantWalletType === 'SETTLEMENT'
+    ) {
+      doc.set('merchantWalletType', MerchantWalletType.REPAYMENT);
+      await doc.save();
+    }
     return docToWallet(doc) as MerchantWallet | null;
   },
 
@@ -241,6 +357,16 @@ export const db = {
     const doc = await WalletModel.findOne({
       walletType: 'USER',
       userId,
+      $or: [{ walletPurpose: 'PRIMARY' }, { walletPurpose: { $exists: false } }]
+    });
+    return docToWallet(doc) as UserWallet | null;
+  },
+
+  async getUserWalletForMerchant(userId: string, merchantId: string): Promise<UserWallet | null> {
+    const doc = await WalletModel.findOne({
+      walletType: 'USER',
+      userId,
+      merchantId,
       $or: [{ walletPurpose: 'PRIMARY' }, { walletPurpose: { $exists: false } }]
     });
     return docToWallet(doc) as UserWallet | null;
@@ -270,6 +396,30 @@ export const db = {
   async getUserWalletsByMerchant(merchantId: string): Promise<UserWallet[]> {
     const docs = await WalletModel.find({ walletType: 'USER', merchantId });
     return docs.map((d) => docToWallet(d) as UserWallet).filter(Boolean);
+  },
+
+  async getUserWalletsByUserId(userId: string): Promise<UserWallet[]> {
+    const docs = await WalletModel.find({ walletType: 'USER', userId }).sort({ createdAt: 1 });
+    return docs.map((d) => docToWallet(d) as UserWallet).filter(Boolean);
+  },
+
+  /**
+   * Resolve the storefront appId for a retail user from their existing wallets.
+   * Legacy PRIMARY wallets created before app scoping (and PayOnUs funding
+   * callbacks) often omit `appId`, but the same user's PRODUCT wallets carry it.
+   * A retail user belongs to exactly one storefront app, so any wallet with an
+   * appId is authoritative for that user.
+   */
+  async getAppIdForUser(userId: string, merchantId?: string): Promise<string | null> {
+    if (!userId) return null;
+    const doc = await WalletModel.findOne({
+      walletType: 'USER',
+      userId,
+      ...(merchantId ? { merchantId } : {}),
+      appId: { $exists: true, $nin: [null, ''] }
+    }).sort({ createdAt: 1 });
+    const appId = (doc?.appId || '').trim();
+    return appId ? appId : null;
   },
 
   async updateWalletBalance(
@@ -331,9 +481,17 @@ export const db = {
     metadata?: Record<string, unknown>;
     tags?: string[];
     externalReference?: string;
+    ipAddress?: string;
+    userAgent?: string;
   }): Promise<Transaction> {
     const doc = await TransactionModel.create(data);
-    return docToTransaction(doc)!;
+    // #region agent log
+    try { console.log('DEBUG-AADE8C ' + JSON.stringify({ hypothesisId: 'H1', location: 'wallet-ms/db/database.ts:396', message: 'store-A transaction written (wallet-ms ledger)', data: { walletId: data.walletId, type: data.type, amount: data.amount, category: data.category, source: data.source } })); } catch (_e) {}
+    // #endregion
+    const transaction = docToTransaction(doc)!;
+    // Fire-and-forget: mirror to merchant Transactions tab + issue receipt/notification.
+    emitTransactionCreated(transaction);
+    return transaction;
   },
 
   async getTransactionById(transactionId: string): Promise<Transaction | null> {
@@ -356,6 +514,42 @@ export const db = {
     return docToTransaction(doc);
   },
 
+  async findTransactionByExternalReferenceAndSource(
+    externalReference: string,
+    source: string
+  ): Promise<Transaction | null> {
+    const ref = externalReference.trim();
+    const src = source.trim();
+    if (!ref || !src) return null;
+    const doc = await TransactionModel.findOne({ externalReference: ref, source: src });
+    return docToTransaction(doc);
+  },
+
+  async findTransactionByReferenceAndSource(
+    referenceId: string,
+    source: string
+  ): Promise<Transaction | null> {
+    const ref = referenceId.trim();
+    const src = source.trim();
+    if (!ref || !src) return null;
+    const doc = await TransactionModel.findOne({ referenceId: ref, source: src });
+    return docToTransaction(doc);
+  },
+
+  async updateTransaction(
+    transactionId: string,
+    updates: { status?: TransactionStatus; metadata?: Record<string, unknown>; externalReference?: string }
+  ): Promise<Transaction | null> {
+    if (!mongoose.Types.ObjectId.isValid(transactionId)) return null;
+    const $set: Record<string, unknown> = {};
+    if (updates.status) $set.status = updates.status;
+    if (updates.metadata) $set.metadata = updates.metadata;
+    if (updates.externalReference) $set.externalReference = updates.externalReference;
+    if (!Object.keys($set).length) return this.getTransactionById(transactionId);
+    const doc = await TransactionModel.findByIdAndUpdate(transactionId, { $set }, { new: true });
+    return docToTransaction(doc);
+  },
+
   async getTransactionsByWalletId(
     walletId: string,
     filter?: { startDate?: Date; endDate?: Date; type?: TransactionType }
@@ -369,5 +563,95 @@ export const db = {
     if (filter?.type) query.type = filter.type;
     const docs = await TransactionModel.find(query).sort({ createdAt: -1 });
     return docs.map((d) => docToTransaction(d)!).filter(Boolean);
+  },
+
+  async countActiveUserExternalBankAccounts(userId: string): Promise<number> {
+    return UserExternalBankAccountModel.countDocuments({ userId, status: 'active' });
+  },
+
+  async listActiveUserExternalBankAccounts(userId: string): Promise<UserExternalBankAccount[]> {
+    const docs = await UserExternalBankAccountModel.find({ userId, status: 'active' }).sort({
+      isDefault: -1,
+      createdAt: 1
+    });
+    return docs.map((d) => docToUserExternalBankAccount(d)!).filter(Boolean);
+  },
+
+  async getActiveUserExternalBankAccount(
+    userId: string,
+    accountId: string
+  ): Promise<UserExternalBankAccount | null> {
+    if (!mongoose.Types.ObjectId.isValid(accountId)) return null;
+    const doc = await UserExternalBankAccountModel.findOne({
+      _id: accountId,
+      userId,
+      status: 'active'
+    });
+    return docToUserExternalBankAccount(doc);
+  },
+
+  async createUserExternalBankAccount(data: {
+    userId: string;
+    accountNumber: string;
+    bankCode: string;
+    bankName?: string;
+    accountName: string;
+    label?: string;
+    currency: string;
+    isDefault: boolean;
+    verifiedAt: Date;
+  }): Promise<UserExternalBankAccount> {
+    const doc = await UserExternalBankAccountModel.create({
+      userId: data.userId,
+      accountNumber: data.accountNumber,
+      bankCode: data.bankCode,
+      bankName: data.bankName,
+      accountName: data.accountName,
+      label: data.label,
+      currency: data.currency,
+      isDefault: data.isDefault,
+      status: 'active',
+      verifiedAt: data.verifiedAt
+    });
+    return docToUserExternalBankAccount(doc)!;
+  },
+
+  async clearDefaultUserExternalBankAccounts(userId: string): Promise<void> {
+    await UserExternalBankAccountModel.updateMany(
+      { userId, status: 'active', isDefault: true },
+      { $set: { isDefault: false } }
+    );
+  },
+
+  async setDefaultUserExternalBankAccount(userId: string, accountId: string): Promise<UserExternalBankAccount | null> {
+    if (!mongoose.Types.ObjectId.isValid(accountId)) return null;
+    await this.clearDefaultUserExternalBankAccounts(userId);
+    const doc = await UserExternalBankAccountModel.findOneAndUpdate(
+      { _id: accountId, userId, status: 'active' },
+      { $set: { isDefault: true } },
+      { new: true }
+    );
+    return docToUserExternalBankAccount(doc);
+  },
+
+  async softDeleteUserExternalBankAccount(userId: string, accountId: string): Promise<UserExternalBankAccount | null> {
+    if (!mongoose.Types.ObjectId.isValid(accountId)) return null;
+    const doc = await UserExternalBankAccountModel.findOneAndUpdate(
+      { _id: accountId, userId, status: 'active' },
+      { $set: { status: 'deleted', isDefault: false } },
+      { new: true }
+    );
+    return docToUserExternalBankAccount(doc);
+  },
+
+  async promoteFirstActiveUserExternalBankAccountAsDefault(userId: string): Promise<void> {
+    const first = await UserExternalBankAccountModel.findOne({ userId, status: 'active' }).sort({ createdAt: 1 });
+    if (!first) return;
+    await UserExternalBankAccountModel.updateMany(
+      { userId, status: 'active', isDefault: true },
+      { $set: { isDefault: false } }
+    );
+    first.isDefault = true;
+    await first.save();
   }
 };

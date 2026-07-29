@@ -48,6 +48,7 @@ export interface User extends BaseUser {
   user_type: UserType.USER | UserType.ADMIN;
   user_merchant_id: string;
   country: string;
+  profile_picture_url?: string;
   role_id?: string; // ID of the role assigned to this user
   user_ref?: string; // External user reference (required when password is not set)
   /** create-app-ms app id when registered via tenant subdomain (account-ms forwards x-tenant-app-id). */

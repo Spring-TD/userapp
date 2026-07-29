@@ -87,6 +87,18 @@ Deployment URL: https://billing-ms.fly.dev/
 - `POST /api/v1/billing/triggers/wallet-funded` - Handle wallet funding event
 - `POST /api/v1/billing/triggers/merchant-users-count` - Handle merchant users count event
 
+### Merchant monthly Billing wallet (per customer)
+Spring debits each merchant app’s **Billing wallet** once per month based on registered retail customer count.
+
+- `GET /api/v1/billing/merchant-monthly/status` — scheduler config and last run
+- `POST /api/v1/billing/merchant-monthly/trigger` — manual run (`{ "force": true, "billingPeriod": "2026-06" }` optional)
+
+**Formula:** `customerCount × BILLING_PRICE_PER_CUSTOMER` (default **100** per customer per month).  
+**Schedule:** UTC day `MERCHANT_MONTHLY_BILLING_DAY` (default **1**), checked hourly via `MERCHANT_MONTHLY_BILLING_INTERVAL`.  
+**Idempotency:** wallet reference `BILLING_MONTHLY:{YYYY-MM}:{appId}` — no double charge for the same month.
+
+Requires shared **`JWT_SECRET`** on billing-ms, wallet-ms, create-app-ms, and client-auth-ms.
+
 ## Pricing Schedule Structure
 
 When creating or updating pricing schedules, admins can configure the following fields:

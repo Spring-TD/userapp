@@ -1,8 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import { livenessService } from '../services/livenessService';
 import { logger } from '../utils/logger';
-import { MockKYCProfileModel } from '../utils/mockDb';
-import { Shareholder } from '../types/kycTypes';
+import {
+  notifyProductMsGuarantorKycCompleted,
+  parseGuarantorUserRef
+} from '../services/productMsGuarantorNotifyService';
 
 export class LivenessController {
   /**
@@ -11,37 +13,36 @@ export class LivenessController {
    */
   static async handleLivenessResult(req: Request, res: Response, next: NextFunction) {
     try {
-      const { providerReference, status, result } = req.body;
-      
-      if (!providerReference) {
-        logger.warn('Liveness result webhook called without provider reference');
+      const body = (req.body || {}) as Record<string, unknown>;
+      const providerReference = String(body.providerReference || body.verificationId || body.verification_id || '').trim();
+      const status = String(body.status || body.event || '').trim();
+      const result = body.result as Record<string, unknown> | undefined;
+      const userId = String(body.userId || body.user_id || body.userRef || body.user_ref || '').trim();
+
+      if (!providerReference && !userId) {
+        logger.warn('Liveness result webhook called without provider reference or user id');
         return res.status(400).json({
           success: false,
-          error: 'Provider reference is required'
+          error: 'Provider reference or user id is required'
         });
       }
-      
+
       logger.info('Received liveness result webhook', {
-        providerReference,
+        providerReference: providerReference || undefined,
+        userId: userId || undefined,
         status,
-        hasResult: !!result
+        hasResult: Boolean(result)
       });
-      
-      // In a real implementation, you would:
-      // 1. Find the shareholder associated with this providerReference
-      // 2. Update the shareholder with the liveness result
-      // 3. Update the KYC profile status if needed
-      
-      // For this mock implementation, we'll just acknowledge the webhook
-      // A real implementation would update the database
-      
-      // Simulate finding and updating the shareholder
-      // This is a simplified example - in reality, you'd query your database
-      logger.info('Processing liveness result for provider reference', {
-        providerReference
-      });
-      
-      // Send acknowledgment to the provider
+
+      const guarantorRef = parseGuarantorUserRef(userId);
+      const completed =
+        ['completed', 'verified', 'success', 'approved'].some((hint) => status.toLowerCase().includes(hint)) ||
+        result?.success === true;
+
+      if (guarantorRef && completed) {
+        void notifyProductMsGuarantorKycCompleted(guarantorRef.applicationId, guarantorRef.guarantorId);
+      }
+
       return res.status(200).json({
         success: true,
         message: 'Liveness result received and processed'

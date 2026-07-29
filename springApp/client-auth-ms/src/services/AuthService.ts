@@ -6,11 +6,19 @@ import { RoleService } from './RoleService';
 import axios from 'axios';
 import { config } from '../config/environment';
 import notificationService, { SendNotificationResponse } from './NotificationService';
+import { sendStorefrontInAppPrompt, sendStorefrontNotification } from './storefrontNotificationHelper';
 import { SessionService } from './SessionService';
 import { fuspayModularService } from './FuspayModularService';
+import { resolveFuspayBrandingForApp } from '../utils/fuspayBranding';
 import { complianceService } from './ComplianceService';
 import { provisionUserWalletAfterSignup, type ProvisionedUserWallet } from './WalletMsService';
 import { normalizeCountryToAlpha2 } from '../utils/countryCode';
+import type { ResolvedTenantContext } from '../utils/tenantHostResolver';
+import { resolveAppDisplayName } from '../utils/tenantHostResolver';
+import {
+  uploadProfilePictureToSpaces,
+  type ProfilePictureUpload
+} from './spacesService';
 
 // Type for user response without password
 export type UserResponse = Omit<UserAccount, 'password'>;
@@ -24,6 +32,10 @@ export interface LoginResponse {
   sessionId?: string;
   error?: string;
   emailVerified?: boolean;
+  /** Retail storefront users only: current Fuspay/compliance KYC status (e.g. pending, approved). */
+  kycStatus?: string;
+  /** Retail storefront users only: true when KYC is approved/completed. */
+  kycCompleted?: boolean;
 }
 
 export interface UserRegistrationData {
@@ -37,6 +49,8 @@ export interface UserRegistrationData {
   user_ref?: string;
   /** Set from `x-tenant-app-id` by registration controller when present; not accepted from public body alone. */
   app_id?: string;
+  /** Tenant app display name used for branded signup notifications. */
+  appName?: string;
 }
 
 export interface MerchantRegistrationData {
@@ -72,7 +86,99 @@ export interface AdminRegistrationData {
   country: string;
 }
 
+type LoginMeta = {
+  userAgent?: string;
+  ip?: string;
+  tenant?: ResolvedTenantContext;
+};
+
 export class AuthService {
+  private static canLoginFromTenant(user: UserAccount, tenant?: ResolvedTenantContext): boolean {
+    if (user.user_type !== UserType.USER) {
+      return true;
+    }
+
+    if (!tenant) {
+      return false;
+    }
+
+    const appId = 'app_id' in user ? user.app_id?.trim() : '';
+    const merchantId = 'user_merchant_id' in user ? user.user_merchant_id?.trim() : '';
+
+    if (appId) {
+      return appId === tenant.appId;
+    }
+
+    return !!merchantId && merchantId === tenant.merchantId;
+  }
+
+  /** Compliance KYC statuses that count as "completed" for storefront access. */
+  private static kycCompletedStatuses: Set<string> = new Set(['approved', 'completed']);
+
+  /**
+   * Resolve a retail user's KYC summary from compliance-ms for storefront UX.
+   * Returns null for non-retail accounts (merchants/admins). Never throws — a
+   * compliance outage yields `{ kycStatus: 'unknown', kycCompleted: false }`.
+   */
+  static async resolveKycSummary(
+    user: { id: string; user_type: UserType }
+  ): Promise<{ kycStatus: string; kycCompleted: boolean } | null> {
+    if (user.user_type !== UserType.USER) {
+      return null;
+    }
+    const kyc = await complianceService.getKycStatus(user.id);
+    if (kyc.success && kyc.status) {
+      return {
+        kycStatus: kyc.status,
+        kycCompleted: AuthService.kycCompletedStatuses.has(kyc.status.toLowerCase())
+      };
+    }
+    // No profile yet (notFound) or compliance unavailable: treat as not completed.
+    return { kycStatus: kyc.notFound ? 'none' : 'unknown', kycCompleted: false };
+  }
+
+  private static otpPurposeLabel: Record<string, string> = {
+    verification: 'Verification',
+    'password-reset': 'Password Reset',
+    'password-change': 'Password Change',
+    login: 'Login'
+  };
+
+  private static async notifyStorefrontOtpPrompt(
+    user: Pick<UserAccount, 'id' | 'user_type'>,
+    purpose: 'verification' | 'password-reset' | 'password-change' | 'login',
+    appName?: string
+  ): Promise<void> {
+    if (user.user_type !== UserType.USER) {
+      return;
+    }
+    await sendStorefrontInAppPrompt({
+      userId: user.id,
+      template: 'otp-prompt',
+      data: {
+        purpose: AuthService.otpPurposeLabel[purpose] ?? purpose,
+        appName: appName?.trim() || 'SpringTD'
+      }
+    });
+  }
+
+  private static async notifyStorefrontDual(
+    user: Pick<UserAccount, 'id' | 'email' | 'user_type'>,
+    template: string,
+    data: Record<string, unknown>,
+    emailOverride?: string
+  ): Promise<void> {
+    if (user.user_type !== UserType.USER) {
+      return;
+    }
+    await sendStorefrontNotification({
+      userId: user.id,
+      email: emailOverride ?? user.email,
+      template,
+      data
+    });
+  }
+
   private static async bootstrapMerchantApiKey(merchantId: string): Promise<BootstrapApiKeyResult> {
     try {
       const response = await axios.post(
@@ -138,8 +244,10 @@ export class AuthService {
         };
       }
 
-      // Check if email already exists
-      const existingUser = await mockDb.findUserByEmail(userData.email);
+      // Check if email already exists on this storefront app. The same email is
+      // allowed to register on other apps as a separate account.
+      const signupAppId = userData.app_id?.trim() || undefined;
+      const existingUser = await mockDb.findUserByEmailAndApp(userData.email, signupAppId);
       if (existingUser) {
         return {
           success: false,
@@ -191,11 +299,15 @@ export class AuthService {
       let fuspayUserId: string | undefined;
       let fuspayUserRef: string | undefined;
       if (fuspayModularService.isEnabled()) {
+        const signupBranding = userData.app_id?.trim()
+          ? await resolveFuspayBrandingForApp(config.createAppServiceUrl, userData.app_id.trim())
+          : undefined;
         const fuspayResult = await fuspayModularService.createUser({
           email: user.email,
           phone: user.phone || '',
           country: user.country || 'NG',
-          userRef: user.id
+          userRef: user.id,
+          ...(signupBranding ? { branding: signupBranding } : {})
         });
         if (!fuspayResult.success) {
           await mockDb.deleteUser(user.id);
@@ -257,9 +369,19 @@ export class AuthService {
       try {
         await AuthService.sendVerificationOtpEmail(
           user.email,
-          `${user.first_name} ${user.last_name}`.trim() || 'User'
+          `${user.first_name} ${user.last_name}`.trim() || 'User',
+          userData.appName,
+          signupAppId
         );
         verificationEmailSent = true;
+        void sendStorefrontInAppPrompt({
+          userId: user.id,
+          template: 'user-registered',
+          data: {
+            userName: `${user.first_name} ${user.last_name}`.trim() || 'User',
+            appName: userData.appName?.trim() || 'SpringTD'
+          }
+        });
       } catch (notifError) {
         console.error('Failed to send verification OTP to new user:', notifError);
         verificationEmailError =
@@ -300,8 +422,9 @@ export class AuthService {
     error?: string;
   }> {
     try {
-      // Check if email already exists
-      const existingUser = await mockDb.findUserByEmail(merchantData.email);
+      // Merchants are global accounts (no app scope); ensure the email is free
+      // among other merchants/admins.
+      const existingUser = await mockDb.findUserByEmailAndApp(merchantData.email, undefined);
       if (existingUser) {
         return {
           success: false,
@@ -402,8 +525,9 @@ export class AuthService {
    */
   static async registerAdmin(adminData: AdminRegistrationData): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
     try {
-      // Check if email already exists
-      const existingUser = await mockDb.findUserByEmail(adminData.email);
+      // Admins are global accounts (no app scope); ensure the email is free
+      // among other merchants/admins.
+      const existingUser = await mockDb.findUserByEmailAndApp(adminData.email, undefined);
       if (existingUser) {
         return {
           success: false,
@@ -462,15 +586,54 @@ export class AuthService {
   }
 
   /**
-   * Get user by email
+   * Get user by email. When `appId` is provided the lookup is scoped to that
+   * storefront app so the same email on other apps is not returned.
    */
-  static async getUserByEmail(email: string): Promise<UserResponse | null> {
-    const user = await mockDb.findUserByEmail(email);
+  static async getUserByEmail(email: string, appId?: string): Promise<UserResponse | null> {
+    const user = appId !== undefined
+      ? await mockDb.findUserByEmailAndApp(email, appId)
+      : await mockDb.findUserByEmail(email);
     if (!user) return null;
 
     // Return user without password
     const { password, ...userWithoutPassword } = user;
     return userWithoutPassword;
+  }
+
+  /**
+   * Pick the account to authenticate when an email maps to several per-app
+   * identities. Storefront logins resolve to the matching app account; dashboard
+   * logins resolve to the global merchant/admin account.
+   */
+  private static selectLoginUser(
+    candidates: UserAccount[],
+    tenant?: ResolvedTenantContext
+  ): UserAccount | null {
+    if (candidates.length === 0) return null;
+    if (candidates.length === 1) return candidates[0];
+
+    if (tenant?.appId) {
+      const byApp = candidates.find(
+        (c) => 'app_id' in c && c.app_id?.trim() === tenant.appId
+      );
+      if (byApp) return byApp;
+
+      const byMerchant = candidates.find(
+        (c) =>
+          c.user_type === UserType.USER &&
+          !('app_id' in c && c.app_id?.trim()) &&
+          'user_merchant_id' in c &&
+          c.user_merchant_id?.trim() === tenant.merchantId
+      );
+      if (byMerchant) return byMerchant;
+    }
+
+    // Dashboard / non-tenant login: prefer the global merchant/admin account.
+    const nonApp = candidates.find((c) => c.user_type !== UserType.USER);
+    if (nonApp) return nonApp;
+
+    // Fall back to the first match; canLoginFromTenant enforces storefront rules.
+    return candidates[0];
   }
 
   /**
@@ -488,13 +651,13 @@ export class AuthService {
   /**
    * Sub-users (customers) for a merchant, excluding deactivated accounts.
    */
-  static async getMerchantUsers(merchantId: string): Promise<{
+  static async getMerchantUsers(merchantId: string, appId?: string): Promise<{
     success: boolean;
     users?: (UserResponse & { roleName?: string })[];
     error?: string;
   }> {
     try {
-      const users = await mockDb.findUsersByMerchantId(merchantId);
+      const users = await mockDb.findUsersByMerchantId(merchantId, appId);
       const activeUsers = users.filter((u) => u.status !== AccountStatus.DEACTIVATED);
 
       const userResponses = await Promise.all(
@@ -520,16 +683,274 @@ export class AuthService {
   }
 
   /**
+   * Platform operators (ADMIN + tenant id `admin`) or same-tenant merchant owners / staff (MERCHANT / USER).
+   */
+  private static canActorManageStaffUser(actor: UserAccount, target: UserAccount): boolean {
+    if (target.user_type !== UserType.USER) {
+      return false;
+    }
+    const isPlatformAdmin =
+      actor.user_type === UserType.ADMIN &&
+      'user_merchant_id' in actor &&
+      actor.user_merchant_id === 'admin';
+    if (isPlatformAdmin) {
+      return true;
+    }
+    const sameTenant =
+      'user_merchant_id' in actor &&
+      'user_merchant_id' in target &&
+      actor.user_merchant_id === target.user_merchant_id;
+    const merchantSide = actor.user_type === UserType.MERCHANT || actor.user_type === UserType.USER;
+    return sameTenant && merchantSide;
+  }
+
+  /**
+   * Suspend a merchant staff account (`user_type` user). Revokes all sessions.
+   */
+  static async suspendStaffUser(
+    actorUserId: string,
+    targetUserId: string
+  ): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
+    try {
+      if (actorUserId === targetUserId) {
+        return { success: false, error: 'You cannot suspend your own account' };
+      }
+
+      const [actor, target] = await Promise.all([
+        mockDb.findUserById(actorUserId),
+        mockDb.findUserById(targetUserId)
+      ]);
+
+      if (!actor) {
+        return { success: false, error: 'Actor user not found' };
+      }
+      if (!target) {
+        return { success: false, error: 'User not found' };
+      }
+
+      if (!AuthService.canActorManageStaffUser(actor, target)) {
+        return { success: false, error: 'Insufficient permissions to suspend this user' };
+      }
+
+      if (target.status === AccountStatus.DEACTIVATED) {
+        return { success: false, error: 'Cannot suspend a deactivated account' };
+      }
+
+      if (target.status === AccountStatus.SUSPENDED) {
+        const { password: _p, ...userResponse } = target;
+        return { success: true, user: userResponse };
+      }
+
+      const updated = await mockDb.updateUser(targetUserId, {
+        status: AccountStatus.SUSPENDED
+      });
+      if (!updated) {
+        return { success: false, error: 'Failed to update user' };
+      }
+
+      await SessionService.revokeAllForUser(targetUserId);
+
+      try {
+        await notificationService.sendEmailAndInApp({
+          userId: targetUserId,
+          email: updated.email,
+          template: 'merchant-account-status',
+          data: {
+            merchantName: `${updated.first_name} ${updated.last_name}`.trim() || updated.email,
+            action: 'suspended',
+            detail: 'Your staff account has been suspended.'
+          }
+        });
+      } catch (notifyErr) {
+        console.error('Failed to send suspension notification:', notifyErr);
+      }
+
+      const { password: _pwd, ...userResponse } = updated;
+      return { success: true, user: userResponse };
+    } catch (error) {
+      console.error('Error suspending staff user:', error);
+      return { success: false, error: 'Internal server error while suspending user' };
+    }
+  }
+
+  /**
+   * Reactivate a suspended staff account (`user_type` user).
+   */
+  static async activateStaffUser(
+    actorUserId: string,
+    targetUserId: string
+  ): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
+    try {
+      if (actorUserId === targetUserId) {
+        return {
+          success: false,
+          error: 'You cannot change your own account status through this endpoint'
+        };
+      }
+
+      const [actor, target] = await Promise.all([
+        mockDb.findUserById(actorUserId),
+        mockDb.findUserById(targetUserId)
+      ]);
+
+      if (!actor) {
+        return { success: false, error: 'Actor user not found' };
+      }
+      if (!target) {
+        return { success: false, error: 'User not found' };
+      }
+
+      if (!AuthService.canActorManageStaffUser(actor, target)) {
+        return { success: false, error: 'Insufficient permissions to activate this user' };
+      }
+
+      if (target.status !== AccountStatus.SUSPENDED) {
+        return {
+          success: false,
+          error: 'Only suspended accounts can be reactivated'
+        };
+      }
+
+      const updated = await mockDb.updateUser(targetUserId, {
+        status: AccountStatus.ACTIVE
+      });
+      if (!updated) {
+        return { success: false, error: 'Failed to update user' };
+      }
+
+      try {
+        await notificationService.sendEmailAndInApp({
+          userId: targetUserId,
+          email: updated.email,
+          template: 'merchant-account-status',
+          data: {
+            merchantName: `${updated.first_name} ${updated.last_name}`.trim() || updated.email,
+            action: 'reactivated',
+            detail: 'Your staff account has been reactivated.'
+          }
+        });
+      } catch (notifyErr) {
+        console.error('Failed to send reactivation notification:', notifyErr);
+      }
+
+      const { password: _pwd, ...userResponse } = updated;
+      return { success: true, user: userResponse };
+    } catch (error) {
+      console.error('Error activating staff user:', error);
+      return { success: false, error: 'Internal server error while activating user' };
+    }
+  }
+
+  /**
+   * Invited staff under a merchant (user_type user with role_id). Excludes retail/external users.
+   */
+  static async getTeamMembers(merchantId: string): Promise<{
+    success: boolean;
+    members?: (UserResponse & { roleName?: string })[];
+    error?: string;
+  }> {
+    try {
+      // No appId — staff invited via Teams typically have role_id and no storefront app_id.
+      const users = await mockDb.findUsersByMerchantId(merchantId);
+      const staff = users.filter(
+        (u) =>
+          u.user_type === UserType.USER &&
+          'role_id' in u &&
+          Boolean(u.role_id) &&
+          u.status !== AccountStatus.DEACTIVATED
+      );
+
+      const members = await Promise.all(
+        staff.map(async (user) => {
+          const { password: _p, ...userResponse } = user;
+          let roleName: string | undefined;
+          if ('role_id' in user && user.role_id) {
+            const role = await mockDb.findRoleById(user.role_id);
+            if (role) roleName = role.name;
+          }
+          return { ...userResponse, roleName } as UserResponse & { roleName?: string };
+        })
+      );
+
+      return { success: true, members };
+    } catch (error) {
+      console.error('Error getting team members:', error);
+      return { success: false, error: 'Internal server error while retrieving team members' };
+    }
+  }
+
+  /**
+   * Change the role assigned to an invited staff member.
+   */
+  static async updateStaffUserRole(
+    actorUserId: string,
+    targetUserId: string,
+    roleId: string
+  ): Promise<{ success: boolean; member?: UserResponse & { roleName?: string }; error?: string }> {
+    try {
+      if (actorUserId === targetUserId) {
+        return { success: false, error: 'You cannot change your own team role through this endpoint' };
+      }
+
+      const [actor, target, role] = await Promise.all([
+        mockDb.findUserById(actorUserId),
+        mockDb.findUserById(targetUserId),
+        mockDb.findRoleById(roleId)
+      ]);
+
+      if (!actor) {
+        return { success: false, error: 'Actor user not found' };
+      }
+      if (!target) {
+        return { success: false, error: 'User not found' };
+      }
+      if (!role) {
+        return { success: false, error: 'Role not found' };
+      }
+
+      if (!AuthService.canActorManageStaffUser(actor, target)) {
+        return { success: false, error: 'Insufficient permissions to update this team member' };
+      }
+
+      if (!('role_id' in target) || !target.role_id) {
+        return { success: false, error: 'Target user is not an invited team member' };
+      }
+
+      const merchantId =
+        'user_merchant_id' in target ? target.user_merchant_id : undefined;
+      if (!merchantId || role.merchant_id !== merchantId) {
+        return { success: false, error: 'Role does not belong to this merchant' };
+      }
+
+      const updated = await mockDb.updateUser(targetUserId, { role_id: roleId } as Partial<UserAccount>);
+      if (!updated) {
+        return { success: false, error: 'Failed to update team member role' };
+      }
+
+      const { password: _p, ...userResponse } = updated;
+      return {
+        success: true,
+        member: { ...userResponse, roleName: role.name }
+      };
+    } catch (error) {
+      console.error('Error updating staff user role:', error);
+      return { success: false, error: 'Internal server error while updating team member role' };
+    }
+  }
+
+  /**
    * Login user
    */
   static async login(
     email: string,
     password: string,
-    meta?: { userAgent?: string; ip?: string }
+    meta?: LoginMeta
   ): Promise<LoginResponse> {
     try {
-      // Find user by email
-      const user = await mockDb.findUserByEmail(email);
+      // Find the account for this email within the current storefront/tenant.
+      // The same email can exist on multiple apps, so disambiguate via tenant.
+      const candidates = await mockDb.findUsersByEmail(email);
+      const user = AuthService.selectLoginUser(candidates, meta?.tenant);
       if (!user) {
         return {
           success: false,
@@ -576,6 +997,13 @@ export class AuthService {
         };
       }
 
+      if (!AuthService.canLoginFromTenant(user, meta?.tenant)) {
+        return {
+          success: false,
+          error: 'User accounts can only sign in from their storefront'
+        };
+      }
+
       // Reset failed login attempts on successful login
       await mockDb.updateUser(user.id, {
         failed_login_attempts: 0,
@@ -601,8 +1029,45 @@ export class AuthService {
         { userAgent: meta?.userAgent, ip: meta?.ip }
       );
 
+      // Security alert: new device/browser relative to other active sessions (UA match).
+      try {
+        const priorSessions = await SessionService.listActiveSessions(user.id);
+        const otherSessions = priorSessions.filter((s) => s.id !== sessionId);
+        const incomingUa = (meta?.userAgent || '').trim();
+        const knownDevice =
+          incomingUa.length > 0 &&
+          otherSessions.some((s) => (s.userAgent || '').trim() === incomingUa);
+        if (otherSessions.length > 0 && !knownDevice) {
+          const userName =
+            [user.first_name, user.last_name].filter(Boolean).join(' ').trim() ||
+            user.email.split('@')[0];
+          const device =
+            incomingUa.length > 0
+              ? incomingUa.length > 80
+                ? `${incomingUa.slice(0, 77)}...`
+                : incomingUa
+              : 'an unrecognized device';
+          void AuthService.notifyStorefrontDual(
+            user,
+            'new-device-login',
+            {
+              userName,
+              device,
+              ip: (meta?.ip || '').trim() || 'unknown'
+            },
+            user.email
+          ).catch(() => undefined);
+        }
+      } catch (e) {
+        console.error('Failed to send new-device-login notification:', e);
+      }
+
       // Return user without password and include emailVerified flag for frontend UX
       const { password: pwd, ...userWithoutPassword } = user;
+
+      // Surface KYC status so the storefront can route the user (e.g. to KYC vs
+      // homepage). Retail users only; never block or fail login on this lookup.
+      const kycSummary = await AuthService.resolveKycSummary(user);
 
       return {
         success: true,
@@ -610,7 +1075,8 @@ export class AuthService {
         accessToken,
         refreshToken,
         sessionId,
-        emailVerified: user.email_verified
+        emailVerified: user.email_verified,
+        ...(kycSummary ?? {})
       };
     } catch (error) {
       console.error('Error during login:', error);
@@ -637,10 +1103,16 @@ export class AuthService {
   /**
    * Initiate password reset
    */
-  static async initiatePasswordReset(email: string): Promise<{ success: boolean; error?: string }> {
+  static async initiatePasswordReset(
+    email: string,
+    appId?: string,
+    appName?: string
+  ): Promise<{ success: boolean; error?: string }> {
     try {
-      // Find user by email
-      const user = await mockDb.findUserByEmail(email.toLowerCase());
+      // Find the account for this email within the storefront app (or global).
+      const user = appId !== undefined
+        ? await mockDb.findUserByEmailAndApp(email.toLowerCase(), appId)
+        : await mockDb.findUserByEmail(email.toLowerCase());
       if (!user) {
         // Don't reveal if email exists for security
         return {
@@ -660,7 +1132,9 @@ export class AuthService {
       const notificationResult = await AuthService.generateOTP({
         identifier: user.email,
         channel: 'email',
-        purpose: 'password-reset'
+        purpose: 'password-reset',
+        appId,
+        appName
       });
 
       if (!notificationResult.success) {
@@ -684,10 +1158,10 @@ export class AuthService {
   /**
    * Reset password with email + OTP
    */
-  static async resetPassword(email: string, code: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+  static async resetPassword(email: string, code: string, newPassword: string, appId?: string): Promise<{ success: boolean; error?: string }> {
     try {
       const identifier = email.toLowerCase();
-      const otp = await mockDb.findActiveOtp(identifier, 'password-reset');
+      const otp = await mockDb.findActiveOtp(identifier, 'password-reset', appId);
       if (!otp) {
         return {
           success: false,
@@ -705,8 +1179,10 @@ export class AuthService {
       }
       await mockDb.markOtpVerified((otp as any)._id.toString());
 
-      // Find user by email
-      const user = await mockDb.findUserByEmail(identifier);
+      // Find the account for this email within the storefront app (or global).
+      const user = appId !== undefined
+        ? await mockDb.findUserByEmailAndApp(identifier, appId)
+        : await mockDb.findUserByEmail(identifier);
       if (!user) {
         return {
           success: false,
@@ -746,9 +1222,13 @@ export class AuthService {
 
       try {
         const userName = `${user.first_name} ${user.last_name}`.trim() || 'User';
-        const n = await notificationService.sendPasswordChangedConfirmation(user.email, userName);
-        if (!n.success) {
-          console.error('Failed to send password-changed confirmation email:', n.error);
+        if (user.user_type === UserType.USER) {
+          await AuthService.notifyStorefrontDual(user, 'password-change', { userName });
+        } else {
+          const n = await notificationService.sendPasswordChangedConfirmation(user.email, userName);
+          if (!n.success) {
+            console.error('Failed to send password-changed confirmation email:', n.error);
+          }
         }
       } catch (e) {
         console.error('Failed to send password-changed confirmation email:', e);
@@ -796,7 +1276,8 @@ export class AuthService {
         };
       }
 
-      const otp = await mockDb.findActiveOtp(user.email.toLowerCase(), 'password-change');
+      const changeAppId = 'app_id' in user ? user.app_id?.trim() : undefined;
+      const otp = await mockDb.findActiveOtp(user.email.toLowerCase(), 'password-change', changeAppId);
       if (!otp) {
         return {
           success: false,
@@ -838,9 +1319,13 @@ export class AuthService {
 
       try {
         const userName = `${user.first_name} ${user.last_name}`.trim() || 'User';
-        const n = await notificationService.sendPasswordChangedConfirmation(user.email, userName);
-        if (!n.success) {
-          console.error('Failed to send password-changed confirmation email:', n.error);
+        if (user.user_type === UserType.USER) {
+          await AuthService.notifyStorefrontDual(user, 'password-change', { userName });
+        } else {
+          const n = await notificationService.sendPasswordChangedConfirmation(user.email, userName);
+          if (!n.success) {
+            console.error('Failed to send password-changed confirmation email:', n.error);
+          }
         }
       } catch (e) {
         console.error('Failed to send password-changed confirmation email:', e);
@@ -860,7 +1345,7 @@ export class AuthService {
   /**
    * Send OTP for authenticated password change confirmation.
    */
-  static async requestPasswordChangeOtp(userId: string): Promise<{ success: boolean; error?: string }> {
+  static async requestPasswordChangeOtp(userId: string, appName?: string): Promise<{ success: boolean; error?: string }> {
     try {
       const user = await mockDb.findUserById(userId);
       if (!user) {
@@ -870,10 +1355,16 @@ export class AuthService {
         return { success: false, error: 'Account is not active' };
       }
 
+      const userAppId = 'app_id' in user ? user.app_id?.trim() : undefined;
+      const brandName =
+        appName?.trim() || (userAppId ? await resolveAppDisplayName(userAppId) : undefined);
+
       const notificationResult = await AuthService.generateOTP({
         identifier: user.email,
         channel: 'email',
-        purpose: 'password-change'
+        purpose: 'password-change',
+        appId: userAppId,
+        appName: brandName
       });
 
       if (!notificationResult.success) {
@@ -911,7 +1402,8 @@ export class AuthService {
         return { success: false, error: 'New email is the same as your current email' };
       }
 
-      const existingUser = await mockDb.findUserByEmail(newEmail);
+      const emailAppId = 'app_id' in user ? user.app_id?.trim() : undefined;
+      const existingUser = await mockDb.findUserByEmailAndApp(newEmail, emailAppId);
       if (existingUser) {
         return { success: false, error: 'Email address is already in use' };
       }
@@ -927,11 +1419,17 @@ export class AuthService {
       // Send verification email to new address (optional; don't fail the request if it fails)
       try {
         const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?email=${encodeURIComponent(updatedUser.email)}`;
-        await notificationService.sendEmailVerificationEmail(
-          updatedUser.email,
-          verificationUrl,
-          `${updatedUser.first_name} ${updatedUser.last_name}`.trim() || 'User'
-        );
+        const userName = `${updatedUser.first_name} ${updatedUser.last_name}`.trim() || 'User';
+        if (updatedUser.user_type === UserType.USER) {
+          await AuthService.notifyStorefrontDual(
+            updatedUser,
+            'email-verification',
+            { userName, verificationUrl },
+            updatedUser.email
+          );
+        } else {
+          await notificationService.sendEmailVerificationEmail(updatedUser.email, verificationUrl, userName);
+        }
       } catch (notifError) {
         console.error('Failed to send email verification to new address:', notifError);
       }
@@ -945,7 +1443,7 @@ export class AuthService {
   }
 
   /**
-   * Update current user's profile (first_name, last_name, phone, country).
+   * Update current user's profile (first_name, last_name, phone, country, profile picture).
    * All fields are optional; account must be ACTIVE.
    */
   static async updateUserProfile(
@@ -955,6 +1453,7 @@ export class AuthService {
       last_name?: string;
       phone?: string;
       country?: string;
+      profilePictureFile?: ProfilePictureUpload;
     }
   ): Promise<{ success: boolean; user?: UserResponse; error?: string }> {
     try {
@@ -967,7 +1466,7 @@ export class AuthService {
         return { success: false, error: 'Account is not active' };
       }
 
-      const updateData: Partial<UserAccount> = {
+      const updateData: Partial<UserAccount> & { profile_picture_url?: string } = {
         ...(profileData.first_name !== undefined ? { first_name: profileData.first_name } : {}),
         ...(profileData.last_name !== undefined ? { last_name: profileData.last_name } : {}),
         ...(profileData.phone !== undefined ? { phone: profileData.phone } : {}),
@@ -983,6 +1482,20 @@ export class AuthService {
           };
         }
         updateData.country = resolvedCountry;
+      }
+
+      if (profileData.profilePictureFile) {
+        if (user.user_type !== UserType.USER) {
+          return { success: false, error: 'Only users can upload a profile picture' };
+        }
+
+        try {
+          const uploadResult = await uploadProfilePictureToSpaces(userId, profileData.profilePictureFile);
+          updateData.profile_picture_url = uploadResult.url;
+        } catch (uploadError) {
+          const message = uploadError instanceof Error ? uploadError.message : 'Failed to upload profile picture';
+          return { success: false, error: message };
+        }
       }
 
       await mockDb.updateUser(userId, updateData);
@@ -1044,22 +1557,23 @@ export class AuthService {
    * Send a one-time verification code email (used after signup).
    * Generates OTP, stores it in DB, and sends via notifications-ms.
    */
-  static async sendVerificationOtpEmail(email: string, userName: string): Promise<void> {
+  static async sendVerificationOtpEmail(email: string, userName: string, appName?: string, appId?: string): Promise<void> {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const hashedCode = await hashPassword(code);
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
     const identifier = email.toLowerCase();
 
-    await mockDb.deleteOtpsByIdentifier(identifier, 'verification');
+    await mockDb.deleteOtpsByIdentifier(identifier, 'verification', appId);
     await mockDb.createOtp({
       identifier,
       code: hashedCode,
       channel: 'email',
       purpose: 'verification',
-      expiresAt
+      expiresAt,
+      appId
     });
 
-    const result = await notificationService.sendOTP(email, code, 'verification', 'email');
+    const result = await notificationService.sendOTP(email, code, 'verification', 'email', appName);
     if (!result.success) {
       throw new Error(result.error || 'Failed to send OTP');
     }
@@ -1068,31 +1582,55 @@ export class AuthService {
   /**
    * Generate OTP: store in DB and send via notifications-ms.
    */
-  static async generateOTP(request: { identifier: string; channel: 'email' | 'sms'; purpose: 'verification' | 'password-reset' | 'password-change' | 'login' }): Promise<{ success: boolean; reference?: string; expiresIn?: number; error?: string }> {
+  static async generateOTP(request: {
+    identifier: string;
+    channel: 'email' | 'sms';
+    purpose: 'verification' | 'password-reset' | 'password-change' | 'login';
+    appId?: string;
+    appName?: string;
+  }): Promise<{ success: boolean; reference?: string; expiresIn?: number; error?: string }> {
     try {
-      const { identifier, channel, purpose } = request;
+      const { identifier, channel, purpose, appId, appName } = request;
+      const brandName = appName?.trim() || 'SpringTD';
       const code = Math.floor(100000 + Math.random() * 900000).toString();
       const hashedCode = await hashPassword(code);
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
       const idLower = identifier.toLowerCase();
 
-      await mockDb.deleteOtpsByIdentifier(idLower, purpose);
+      await mockDb.deleteOtpsByIdentifier(idLower, purpose, appId);
       await mockDb.createOtp({
         identifier: idLower,
         code: hashedCode,
         channel,
         purpose,
-        expiresAt
+        expiresAt,
+        appId
       });
 
       if (channel === 'email') {
-        const notificationResult = await notificationService.sendOTP(identifier, code, purpose, 'email');
+        const notificationResult = await notificationService.sendOTP(
+          identifier,
+          code,
+          purpose,
+          'email',
+          brandName
+        );
         if (!notificationResult.success) {
           console.error('Failed to send OTP email:', notificationResult.error);
           return { success: false, error: 'Failed to send OTP' };
         }
+        const user = await mockDb.findUserByEmailAndApp(idLower, appId);
+        if (user) {
+          void AuthService.notifyStorefrontOtpPrompt(user, purpose, brandName);
+        }
       } else {
-        const notificationResult = await notificationService.sendOTP(identifier, code, purpose, 'sms');
+        const notificationResult = await notificationService.sendOTP(
+          identifier,
+          code,
+          purpose,
+          'sms',
+          brandName
+        );
         if (!notificationResult.success) {
           console.error('Failed to send OTP SMS:', notificationResult.error);
           return { success: false, error: 'Failed to send OTP' };
@@ -1116,14 +1654,14 @@ export class AuthService {
   /**
    * Verify OTP: check stored OTP; if purpose is 'verification', mark user email_verified and ACTIVE.
    */
-  static async verifyOTP(request: { identifier: string; code: string }): Promise<{ success: boolean; valid: boolean; error?: string }> {
+  static async verifyOTP(request: { identifier: string; code: string; appId?: string }): Promise<{ success: boolean; valid: boolean; error?: string }> {
     try {
-      const { identifier, code } = request;
+      const { identifier, code, appId } = request;
       const idLower = identifier.toLowerCase();
       const purposes: Array<'verification' | 'password-reset' | 'password-change' | 'login'> = ['verification', 'password-reset', 'password-change', 'login'];
 
       for (const purpose of purposes) {
-        const otp = await mockDb.findActiveOtp(idLower, purpose);
+        const otp = await mockDb.findActiveOtp(idLower, purpose, appId);
         if (!otp) continue;
 
         const valid = await comparePassword(code, otp.code);
@@ -1135,7 +1673,7 @@ export class AuthService {
         await mockDb.markOtpVerified((otp as any)._id.toString());
 
         if (purpose === 'verification') {
-          const user = await mockDb.findUserByEmail(idLower);
+          const user = await mockDb.findUserByEmailAndApp(idLower, appId);
           if (user) {
             await mockDb.updateUser(user.id, { email_verified: true, status: AccountStatus.ACTIVE });
           }
@@ -1159,9 +1697,15 @@ export class AuthService {
    * Resend OTP: generate a new OTP, store it, and send via email/SMS.
    * For email verification, uses the same path as signup (sendVerificationOtpEmail) so behaviour matches exactly.
    */
-  static async resendOTP(request: { identifier: string; channel: 'email' | 'sms'; purpose: 'verification' | 'password-reset' | 'password-change' | 'login' }): Promise<{ success: boolean; reference?: string; expiresIn?: number; error?: string }> {
+  static async resendOTP(request: {
+    identifier: string;
+    channel: 'email' | 'sms';
+    purpose: 'verification' | 'password-reset' | 'password-change' | 'login';
+    appId?: string;
+    appName?: string;
+  }): Promise<{ success: boolean; reference?: string; expiresIn?: number; error?: string }> {
     try {
-      const { identifier, channel, purpose } = request;
+      const { identifier, channel, purpose, appId, appName } = request;
       if (!identifier || !channel || !purpose) {
         return { success: false, error: 'Identifier, channel, and purpose are required' };
       }
@@ -1169,7 +1713,11 @@ export class AuthService {
       // Email verification resend: use the exact same flow as signup so OTP is stored and sent identically
       if (channel === 'email' && purpose === 'verification') {
         try {
-          await AuthService.sendVerificationOtpEmail(identifier, 'User');
+          await AuthService.sendVerificationOtpEmail(identifier, 'User', appName, appId);
+          const user = await mockDb.findUserByEmailAndApp(identifier.toLowerCase(), appId);
+          if (user) {
+            void AuthService.notifyStorefrontOtpPrompt(user, 'verification', appName);
+          }
           return {
             success: true,
             reference: `otp_${Date.now()}`,
@@ -1181,7 +1729,7 @@ export class AuthService {
         }
       }
 
-      return await AuthService.generateOTP({ identifier, channel, purpose });
+      return await AuthService.generateOTP({ identifier, channel, purpose, appId, appName });
     } catch (error) {
       return {
         success: false,
@@ -1212,8 +1760,9 @@ export class AuthService {
         };
       }
 
-      // Check if user already exists
-      const existingUser = await mockDb.findUserByEmail(request.email);
+      // Check if user already exists. Invited sub-users are dashboard accounts
+      // (no storefront app scope).
+      const existingUser = await mockDb.findUserByEmailAndApp(request.email, undefined);
       if (existingUser) {
         return {
           success: false,

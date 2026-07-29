@@ -14,7 +14,7 @@ async function testWalletFunctionality() {
       merchantId: 'merchant_123',
       name: 'ACME Business Wallet',
       currency: 'USD',
-      merchantWalletType: MerchantWalletType.SETTLEMENT
+      merchantWalletType: MerchantWalletType.REPAYMENT
     });
 
     if (merchantResult.success) {
@@ -62,7 +62,7 @@ async function testWalletFunctionality() {
     // Test 4: Retrieve merchant wallet by type
     console.log('\n4. Retrieving merchant wallet by type...');
     if (merchantResult.success && merchantResult.wallet) {
-      const getResult = await WalletService.getMerchantWalletByType('merchant_123', MerchantWalletType.SETTLEMENT);
+      const getResult = await WalletService.getMerchantWalletByType('merchant_123', MerchantWalletType.REPAYMENT);
       
       if (getResult.success) {
         console.log('✓ Merchant wallet retrieved successfully');

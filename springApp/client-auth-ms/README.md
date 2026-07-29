@@ -1,7 +1,9 @@
 # Client Authentication Microservice
 
 ## Overview
-The Client Authentication Microservice (client-auth-ms) is a comprehensive API gateway that handles all client-facing authentication operations. It acts as the single entry point for frontend applications, providing form validation, request forwarding, and seamless integration with the backend authentication service (service-auth-ms). This service now supports the complete authentication workflow including registration, login, password management, OTP verification, and user profile management.
+The Client Authentication Microservice (client-auth-ms) handles the client-facing authentication surface for SpringTD applications. Frontends usually reach it through **account-ms** (`/api/v1/auth/*`, `/api/v1/registration/*`, `/api/v1/user/*`, etc.), while client-auth-ms owns the Mongo-backed user records, password checks, login sessions, JWT issuing, refresh-token rotation, OTPs, password flows, and user profile management.
+
+Merchant, admin, and retail user login all use the same endpoint, **`POST /api/v1/auth/login`**. The account type is determined by the persisted `user_type` (`merchant`, `admin`, or `user`) and is returned in both the response user object and the JWT payload. **service-auth-ms** is still used for merchant API-key bootstrap and may verify client-auth tokens in some downstream flows, but gateway login is not a transparent proxy to service-auth-ms.
 
 Deployment URL: https://client-auth-ms.fly.dev/
 
@@ -13,7 +15,7 @@ Deployment URL: https://client-auth-ms.fly.dev/
 - [Architecture](#architecture)
 - [Data Structure & Models](#data-structure--models)
 - [Validation Rules](#validation-rules)
-- [Complete API Gateway Coverage](#complete-api-gateway-coverage)
+- [Complete Auth Surface Coverage](#complete-auth-surface-coverage)
 
 ## Features
 - **✅ Registration Forms**: Merchant, user, and admin signup with validation
@@ -29,7 +31,7 @@ Deployment URL: https://client-auth-ms.fly.dev/
 - **✅ Contact Support Management**: Support contact CRUD with publish controls
 - **✅ Legal Documents Management**: Terms of Service and Privacy Policy CRUD
 - **✅ Administrative Operations**: User suspension and activation
-- **✅ API Gateway**: Centralized routing and validation
+- **✅ Auth Surface**: Centralized client-auth routes and validation
 - **✅ CORS Support**: Configured for frontend integration
 - **✅ Health Check**: Service monitoring endpoint
 - **✅ Retail user wallets**: After successful `POST /api/v1/registration/user`, optionally creates a **wallet-ms** user wallet (**without** PayOnUs NUBAN at signup). **PayOnUs fixed virtual account** is provisioned later when the user completes **Fuspay modular KYC** and compliance-ms receives the webhook. Requires **`WALLET_SERVICE_URL`**, **`WALLET_INTERNAL_TOKEN`** (same value as wallet-ms), and **`USER_WALLET_DEFAULT_CURRENCY`** (default `NGN`). See [Environment Variables](#environment-variables).
@@ -147,7 +149,7 @@ Content-Type: application/json
 }
 ```
 
-#### User Login
+#### Login (merchant, admin, and retail user)
 ```
 POST /api/v1/auth/login
 Content-Type: application/json
@@ -157,6 +159,8 @@ Content-Type: application/json
   "password": "SecurePass123!"
 }
 ```
+
+`client-auth-ms` looks up the account by email, verifies the bcrypt password, applies failed-attempt lockout rules, allows `active` and `pending` accounts, creates a session row, and returns `accessToken`, `refreshToken`, `sessionId`, `emailVerified`, and the user object. There is no separate merchant login route; merchants are identified by `user.user_type === "merchant"` and the JWT `userType` claim.
 
 #### User Logout
 ```
@@ -273,7 +277,12 @@ Authorization: Bearer <jwt-token>
 }
 ```
 
-After a successful **reset** or **change** password, the service sends a **confirmation email** via notifications-ms (`template: password-change`, `data.userName`). OTP emails use the separate **`otp`** template. Notification failures are logged only and do not fail the API response.
+After a successful **reset** or **change** password, the service sends a notification via notifications-ms:
+
+- **Storefront users** (`user_type: user`): **email + in-app + Web Push** when subscribed (`template: password-change`, `send-dual`).
+- **Merchants/admins**: email only (`template: password-change`).
+
+OTP emails use the separate **`otp`** template (email/SMS only). Storefront users also receive an **`otp-prompt`** in-app companion (no OTP code in the message). After signup, storefront users receive **`user-registered`** in-app. Notification failures are logged only and do not fail the API response.
 
 ### User Management Endpoints ✅
 
@@ -304,6 +313,22 @@ Authorization: Bearer <jwt-token>
 ```
 
 All profile fields are optional; send only the fields you want to update.
+
+Retail users (`user_type: "user"`) can also upload a profile picture while updating their profile:
+
+```
+PUT /api/v1/user/profile
+Content-Type: multipart/form-data
+Authorization: Bearer <jwt-token>
+
+profile_picture=@avatar.png
+first_name=UpdatedName
+last_name=UpdatedLastName
+phone=+1234567890
+country=NG
+```
+
+The file field must be named `profile_picture`. Supported image types are JPEG, PNG, and WebP. The image is uploaded to DigitalOcean Spaces and the returned profile includes `profile_picture_url`.
 
 #### Update Email (Account Settings)
 
@@ -989,9 +1014,17 @@ Authorization: Bearer <merchant-or-admin-jwt-token>
 ### Service Communication
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `SERVICE_AUTH_URL` | string | `http://localhost:3000` | Base URL for service-auth-ms communication |
-| `NOTIFICATIONS_SERVICE_URL` | string | `http://localhost:4009` (non-prod) / `https://notifications-ms.fly.dev` (prod default in code) | Base URL for **notifications-ms** (`/api/v1/notifications/send`). Set to your deployed app (e.g. `https://springtd-notifications-ms.fly.dev`) in production. |
+| `SERVICE_AUTH_URL` | string | `http://localhost:3000` | Base URL for service-auth-ms communication. Used for merchant API-key bootstrap and service-auth integrations, not as the primary login backend for `POST /api/v1/auth/login`. |
+| `NOTIFICATIONS_SERVICE_URL` | string | `http://localhost:4009` (non-prod) / `https://springtd-notifications-ms.fly.dev` (prod default) | Base URL for Spring **notifications-ms** (`/api/v1/notifications/send`). Do not point at Plata `notifications-ms.fly.dev` or OTP emails stay Plata-branded. |
 | `COMPLIANCE_SERVICE_URL` | string | `http://localhost:3003` | Base URL for **compliance-ms** (KYC profile bootstrap on user signup). |
+| `DO_SPACES_REGION` | string | _(none)_ | DigitalOcean Spaces region for profile picture uploads, e.g. `nyc3`. |
+| `DO_SPACES_ENDPOINT` | string | _(none)_ | DigitalOcean Spaces S3 endpoint, e.g. `https://nyc3.digitaloceanspaces.com`. |
+| `DO_SPACES_BUCKET` | string | _(none)_ | Space/bucket name used for profile pictures. |
+| `DO_SPACES_ACCESS_KEY_ID` | string | _(none)_ | Spaces access key. |
+| `DO_SPACES_SECRET_ACCESS_KEY` | string | _(none)_ | Spaces secret key. |
+| `DO_SPACES_CDN_URL` | string | _(none)_ | Optional CDN/custom-domain base URL used when returning uploaded profile picture URLs. |
+| `CLIENT_AUTH_PROFILE_PICTURE_PREFIX` | string | `profile-pictures` | Object key prefix for profile picture uploads. |
+| `CLIENT_AUTH_PROFILE_PICTURE_MAX_SIZE` | number | `5` | Maximum profile picture size in MB. |
 
 ### Wallet microservice (retail signup provisioning)
 
@@ -1016,17 +1049,24 @@ Authorization: Bearer <merchant-or-admin-jwt-token>
 ## Architecture
 
 ### Microservice Communication
-The client-auth-ms acts as a comprehensive API gateway that handles all client-facing authentication operations:
+Client-facing apps usually call account-ms, which proxies authentication paths to client-auth-ms. client-auth-ms processes registration, login, sessions, refresh, OTP, password, role, invitation, and profile operations against its own MongoDB models.
 
 ```
-Frontend → client-auth-ms (port 3001) → service-auth-ms (port 3000) → Database/Redis
+Frontend → account-ms gateway → client-auth-ms (port 3001) → MongoDB
+```
+
+During merchant registration, client-auth-ms also calls service-auth-ms to bootstrap the merchant's default API key:
+
+```
+client-auth-ms → service-auth-ms /internal/api/v1/keys/bootstrap
 ```
 
 ### Communication Protocol
 - **Protocol**: HTTP/HTTPS
 - **Data Format**: JSON
 - **Client Port**: 3001 (configurable via PORT env var)
-- **Service Port**: 3000 (configurable via SERVICE_AUTH_URL env var)
+- **Gateway Port**: account-ms exposes `/api/v1/auth/*`, `/api/v1/registration/*`, `/api/v1/user/*`, and related paths to clients
+- **Service-auth integration**: `SERVICE_AUTH_URL` points at service-auth-ms for merchant API-key bootstrap and other service-auth integrations
 - **Complete API Coverage**: 
   - Registration: `POST /api/v1/registration/*`
   - Authentication: `POST /api/v1/auth/*`
@@ -1035,18 +1075,17 @@ Frontend → client-auth-ms (port 3001) → service-auth-ms (port 3000) → Data
   - User Management: `GET|PUT|POST /api/v1/user/*`
 
 ### Data Flow
-1. Frontend submits requests to client-auth-ms endpoints
-2. client-auth-ms validates request data and extracts authentication tokens
-3. Validated requests are forwarded to appropriate service-auth-ms endpoints
-4. service-auth-ms processes the request (registration, authentication, etc.)
-5. client-auth-ms forwards the response back to frontend
-6. All authentication state is managed by service-auth-ms
-7. client-auth-ms acts as a transparent proxy with validation
+1. Frontend submits auth requests either directly to client-auth-ms or, in normal deployments, to account-ms on the same origin.
+2. account-ms proxies `/api/v1/auth/*`, `/api/v1/registration/*`, `/api/v1/otp/*`, `/api/v1/password/*`, and `/api/v1/user/*` to client-auth-ms. On tenant storefront hosts it also forwards `x-tenant-app-id`, `x-tenant-merchant-id`, and `x-tenant-subdomain`.
+3. client-auth-ms validates request data and reads/writes its MongoDB user, session, OTP, role, invitation, FAQ, support contact, and legal document models.
+4. Login is handled inside client-auth-ms: it verifies the password, applies failed-login lockout rules, creates a session, and issues client-auth JWT access and refresh tokens.
+5. Merchant registration additionally calls service-auth-ms to bootstrap API keys. That bootstrap is separate from user and merchant login.
+6. Downstream services can authorize with client-auth JWT claims such as `userId`, `email`, `userType`, `userMerchantId`, and `sessionId`.
 
 ## Data Structure & Models
 
 ### Form Data Structure
-The client-auth-ms collects form data and maps it to the service-auth-ms data models:
+client-auth-ms collects form data and maps it to its local user models:
 
 #### Merchant Registration Data Model
 ``typescript
@@ -1087,15 +1126,15 @@ interface AdminRegistrationForm {
 }
 ```
 
-### Service-Auth-MS Data Model Relationship
-The collected form data maps to the service-auth-ms data models:
+### Client-Auth Data Model Relationship
+The collected form data maps to the client-auth-ms MongoDB user models:
 
 ``typescript
 // BaseUser interface (inherited by User, Merchant, and Admin)
 interface BaseUser {
   id: string;
   email: string;
-  password: string;        // Hashed by service-auth-ms
+  password: string;        // Hashed by client-auth-ms
   first_name: string;
   last_name: string;
   phone?: string;
@@ -1138,7 +1177,7 @@ interface Admin extends BaseUser {
 | `last_name` | `BaseUser.last_name` | Direct mapping |
 | `email` | `BaseUser.email` | Validated and lowercased |
 | `phone` | `BaseUser.phone` | Optional, validated format |
-| `password` | `BaseUser.password` | Hashed by service-auth-ms |
+| `password` | `BaseUser.password` | Hashed by client-auth-ms |
 | `country` | `User/Merchant/Admin.country` | Direct mapping |
 | `user_merchant_id` | `User.user_merchant_id` | For users: provided by form<br/>For merchants: auto-generated<br/>For admins: fixed as 'admin' |
 | `x-tenant-merchant-id` (header) | `User.user_merchant_id` | When the body omits `user_merchant_id`, registration uses this header (e.g. account-ms tenant proxy). |
@@ -1154,7 +1193,7 @@ interface Admin extends BaseUser {
 - OTP codes must be 6 digits
 - Password reset and password change OTP codes must be valid and not expired
 
-## Complete API Gateway Coverage ✅
+## Complete Auth Surface Coverage ✅
 
 The client-auth-ms now provides complete coverage of all authentication operations:
 
@@ -1178,7 +1217,7 @@ The client-auth-ms now provides complete coverage of all authentication operatio
 ### Frontend Integration Benefits
 - **Single Entry Point**: All authentication operations through one service
 - **Consistent API**: Uniform request/response patterns across all endpoints
-- **Built-in Validation**: Request validation at the gateway level
+- **Built-in Validation**: Request validation at the client-auth boundary
 - **Error Handling**: Standardized error responses
 - **Token Management**: Centralized JWT token handling
 - **CORS Support**: Pre-configured for frontend integration

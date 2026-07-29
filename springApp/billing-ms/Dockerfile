@@ -32,6 +32,9 @@ RUN npm ci --omit=dev && npm cache clean --force
 # Copy built application from builder
 COPY --from=builder /app/dist ./dist
 
+# OpenAPI spec (read at runtime by dist/config/swagger.js)
+COPY openapi.json ./openapi.json
+
 # Change ownership to non-root user
 RUN chown -R appuser:appgroup /app
 

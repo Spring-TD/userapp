@@ -2,6 +2,40 @@ import { Request, Response } from 'express';
 import { AuthService } from '../services/AuthService';
 import { SessionService } from '../services/SessionService';
 import { verifyToken } from '../utils/crypto';
+import {
+  extractTenantSubdomainFromHost,
+  resolveTenantBySubdomain,
+  tenantAppIdFromRequest,
+  type ResolvedTenantContext
+} from '../utils/tenantHostResolver';
+
+function headerValue(value: string | string[] | undefined): string {
+  return (Array.isArray(value) ? value[0] : value)?.trim() || '';
+}
+
+function loginHost(req: Request): string {
+  const raw =
+    headerValue(req.headers['x-forwarded-host']) ||
+    headerValue(req.headers['x-original-host']) ||
+    headerValue(req.headers.host);
+  const host = raw.split(',')[0].trim().toLowerCase();
+  return host.split(':')[0];
+}
+
+async function resolveLoginTenantContext(req: Request): Promise<ResolvedTenantContext | undefined> {
+  const appId = headerValue(req.headers['x-tenant-app-id']);
+  const merchantId = headerValue(req.headers['x-tenant-merchant-id']);
+  const subdomain = headerValue(req.headers['x-tenant-subdomain']);
+
+  if (appId && merchantId) {
+    return { appId, merchantId, subdomain };
+  }
+
+  const host = loginHost(req);
+  const hostSubdomain = host ? extractTenantSubdomainFromHost(host) : null;
+  const resolved = await resolveTenantBySubdomain(hostSubdomain || '');
+  return resolved || undefined;
+}
 
 export class AuthController {
   // ===== ACCOUNT VERIFICATION =====
@@ -46,9 +80,11 @@ export class AuthController {
         return;
       }
 
+      const tenant = await resolveLoginTenantContext(req);
       const result = await AuthService.login(email, password, {
         userAgent: req.get('User-Agent') || undefined,
         ip: req.ip || req.socket.remoteAddress || undefined,
+        tenant,
       });
       res.status(result.success ? 200 : 401).json(result);
     } catch (error) {
@@ -196,6 +232,28 @@ export class AuthController {
         return;
       }
 
+      // Extend / enforce idle timeout for callers that verify via this endpoint
+      // (wallet-ms, account-ms gateway heartbeat, etc.).
+      const activity = await SessionService.touchActivity(
+        verification.payload.sessionId as string | undefined,
+        verification.payload.userId
+      );
+      if (activity.status === 'inactive') {
+        res.status(401).json({
+          success: false,
+          error: 'Session expired due to inactivity',
+          code: 'SESSION_IDLE_TIMEOUT'
+        });
+        return;
+      }
+      if (activity.status === 'invalid') {
+        res.status(401).json({
+          success: false,
+          error: 'Session is no longer valid'
+        });
+        return;
+      }
+
       const user = {
         userId: verification.payload.userId,
         email: verification.payload.email,
@@ -234,8 +292,8 @@ export class AuthController {
         return;
       }
 
-      // Check if email exists in our database
-      const user = await AuthService.getUserByEmail(email);
+      // Check if email exists on this storefront app (or globally for dashboard).
+      const user = await AuthService.getUserByEmail(email, tenantAppIdFromRequest(req));
       if (user) {
         res.status(200).json({
           success: true,

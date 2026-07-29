@@ -71,8 +71,6 @@ npm start
 These routes are gateway routes only. `account-ms` proxies `/api/v1/applications/*` to `product-ms`, where submitted loan/mortgage applications are stored.
 
 - `POST /api/v1/applications/apply` - Apply for a product
-- `POST /api/v1/applications/:id/approve` - Approve application (Admin)
-- `POST /api/v1/applications/:id/reject` - Reject application (Admin)
 - `GET /api/v1/applications/` - Get all applications (Admin or merchant JWT). Query: `userId`, `appId`, `status`, `productType`.
 - `GET /api/v1/applications/summary` - Application status counts for the same filters (proxied to product-ms).
 - `GET /api/v1/applications/pending` - Get pending applications (Admin)
@@ -80,6 +78,8 @@ These routes are gateway routes only. `account-ms` proxies `/api/v1/applications
 - `GET /api/v1/applications/:id` - Get application by ID
 - `GET /api/v1/apps/{appId}/customers/{userId}/applications` - Customer applications on one app (proxied to create-app-ms)
 - `GET /api/v1/apps/{appId}/customers/{userId}/applications/summary` - Status summary for that customer on the app (proxied to create-app-ms)
+
+Loan and mortgage approval/rejection is handled by the upstream Plata loan workflow, not by SpringApp gateway routes.
 
 #### Customer Applications Page (View Applications)
 
@@ -158,7 +158,7 @@ Optional query: `productType=LOAN`, `status=PENDING`.
 - `GET /api/v1/pricing/product/:productId` - Get product pricing
 
 ### Loan Services
-- `POST /api/v1/loans/apply` - Apply for a loan (gateway alias; submitted applications are stored in `product-ms`)
+- Loan applications must use `POST /api/v1/applications/apply` or `POST /api/v1/applications/init`; `POST /api/v1/loans/apply` is disabled.
 - `GET /api/v1/loans/:id` - Get loan details (application)
 - `GET /api/v1/loans/user/:userId` - Get all user's loans
 
@@ -170,18 +170,20 @@ Optional query: `productType=LOAN`, `status=PENDING`.
 - `GET /api/v1/mortgages/user/:userId` - Get all user's mortgages
 
 ### Commodity Services
-- `POST /api/v1/commodities/buy` - Buy a commodity
+- `POST /api/v1/commodities/buy` - Legacy gateway alias for commodity account enrollment and immediate funding
 - `GET /api/v1/commodities/:productId` - Get commodity details
 
+Commodity funding debits the applicant's PRIMARY wallet immediately. The principal moves to the product creator merchant app's SETTLEMENT wallet, while any storefront commission moves to the offering merchant's SETTLEMENT wallet.
+
 ### Savings Services
-- `POST /api/v1/savings-accounts` - Create a savings account
+- `POST /api/v1/savings-accounts` - Create a savings account (proxied to product-ms)
 
 ## API Gateway
 
 This service acts as the API Gateway for the SpringTD platform. It proxies requests to the following microservices:
 
 - `/api/v1/products/*` -> Product Service
-- `/api/v1/configurations/*` -> Product Service
+- `/api/v1/configurations/*` -> Product Service (includes legacy `/options/*` aliases)
 - `/api/v1/applications/*` -> Product Service
 - `/api/v1/compliance/*` -> Compliance Service
 - `/api/v1/wallets/*` -> Wallet Service
@@ -224,6 +226,10 @@ npm test
 | ------------------------- | ------ | ---------------------------------------------------------- |
 | Fetch all FI products     | GET    | `https://account-ms.fly.dev/api/v1/products`               |
 | Get product details by ID | GET    | `https://account-ms.fly.dev/api/v1/products/:id`           |
+| Platform apply field defs | GET    | `https://account-ms.fly.dev/api/v1/products/options/platform-application-fields` |
+| Repayment source options  | GET    | `https://account-ms.fly.dev/api/v1/products/options/repayment-source` |
+| Marital status options    | GET    | `https://account-ms.fly.dev/api/v1/products/options/marital-status` |
+| Loan reason options       | GET    | `https://account-ms.fly.dev/api/v1/products/options/loan-reason` |
 | Get commodity details     | GET    | `https://account-ms.fly.dev/api/v1/commodities/:productId` |
 
 ### Merchant API Key Requirement for Full Product List
@@ -242,13 +248,14 @@ Without valid headers (or when IP is not whitelisted), the gateway returns `401`
 
 | Function               | Method | API Endpoint                                          | Body Parameters (Example)                     |
 | ---------------------- | ------ | ----------------------------------------------------- | --------------------------------------------- |
-| Apply for loan         | POST   | `https://account-ms.fly.dev/api/v1/loans/apply`       | `{ userId, productId, amount, currency, requirementSubmissions }` |
 | Apply for mortgage     | POST   | `https://account-ms.fly.dev/api/v1/mortgages/apply`   | `{ userId, productId, amount, currency, requirementSubmissions }` |
-| Apply directly         | POST   | `https://account-ms.fly.dev/api/v1/applications/apply` | Same body; proxied to `product-ms` |
+| Apply for loan         | POST   | `https://account-ms.fly.dev/api/v1/applications/apply` | Same body; proxied to `product-ms` |
 | Create savings account | POST   | `https://account-ms.fly.dev/api/v1/savings-accounts/` | `{ product_id, user_id, initial_deposit... }` |
-| Buy commodity          | POST   | `https://account-ms.fly.dev/api/v1/commodities/buy`   | `{ product_id, user_id, amount }`             |
+| Enroll/fund commodity  | POST   | `https://account-ms.fly.dev/api/v1/commodities/buy`   | `{ product_id, user_id, amount }`             |
 
-Submitted loan/mortgage applications are persisted by `product-ms` in its `product_applications` collection. `account-ms` only proxies `/api/v1/applications/*` as the gateway.
+Submitted loan/mortgage applications are persisted by `product-ms` in its `product_applications` collection. `account-ms` proxies `/api/v1/applications/*` as the gateway; the legacy loan alias `POST /api/v1/loans/apply` is disabled.
+
+For new commodity account flows, call `POST https://account-ms.fly.dev/api/v1/commodity-accounts/apply` when routed through the gateway. The legacy `/commodities/buy` endpoint remains available for older clients and maps to the same immediate funding semantics.
 
 For requirement files, upload first to `POST https://account-ms.fly.dev/api/v1/applications/upload` as multipart form-data with the file in the `file` field. The gateway proxies the upload to `product-ms`, which stores the object in its DigitalOcean Spaces bucket and returns `{ url, key, fileName, fileType, fileSize }`.
 
@@ -318,6 +325,7 @@ All endpoints require `Authorization: Bearer <jwt-token>` unless noted. Replace 
 | Fetch Merchant wallet details | GET    | `https://account-ms.fly.dev/api/v1/wallets/merchant/:merchantId/all`          | Returns Treasury, Operation, & KYC wallets     |
 | Fetch Merchant wallet history | GET    | `https://account-ms.fly.dev/api/v1/wallets/treasury/:merchantId/transactions` | Replace **treasury** with `operation` or `kyc` |
 | Fetch user wallet details     | GET    | `https://account-ms.fly.dev/api/v1/wallets/user/:userId`                      | Poll after Fuspay KYC for `virtualNuban`       |
+| Product-type wallet totals    | GET    | `https://account-ms.fly.dev/api/v1/wallets/user/:userId/product-type-summary` | Totals per product type; missing types => `0`  |
 | Fetch user wallet history     | GET    | `https://account-ms.fly.dev/api/v1/wallets/user/:userId/transactions`         | —                                              |
 
 Wallet routes proxy to **wallet-ms**. **Retail user PayOnUs (fixed) NUBAN** is **not** created at `POST /api/v1/registration/user`; it is provisioned after Fuspay modular KYC completes (`POST /api/v1/kyc/modular/webhook` → compliance-ms → wallet-ms). See `springApp/wallet-ms/README.md` and `springApp/compliance-ms/README.md`.

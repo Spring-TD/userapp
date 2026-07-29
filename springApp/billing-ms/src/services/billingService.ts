@@ -4,10 +4,9 @@ import { InvoiceModel, PaymentModel, SubscriptionModel, TransactionModel } from 
 import { PricingService } from './pricingService';
 import axios from 'axios';
 
-function toPlainId(doc: { _id: mongoose.Types.ObjectId; [key: string]: unknown } | null): unknown {
+function toPlainId(doc: mongoose.Document | null): unknown {
   if (!doc) return null;
-  const obj = doc.toObject ? doc.toObject() : { ...doc };
-  const { _id, ...rest } = obj as { _id: mongoose.Types.ObjectId; [key: string]: unknown };
+  const { _id, ...rest } = doc.toObject();
   return { id: _id?.toString(), ...rest };
 }
 

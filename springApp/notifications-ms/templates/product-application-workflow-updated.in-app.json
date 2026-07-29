@@ -1,0 +1,4 @@
+{
+  "title": "{{workflowStageLabel}}",
+  "body": "{{productName}} is now {{workflowStageLabel}}."
+}

@@ -1,4 +1,5 @@
 import express from 'express';
+import http from 'http';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import mongoose from 'mongoose';
@@ -9,9 +10,10 @@ import { errorHandler, notFoundHandler } from './middleware';
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './config/swagger';
 import notificationRoutes from './routes/notificationRoutes';
+import { attachInboxWebSocket, WS_PATH } from './realtime/inboxWebSocket';
 
 const app = express();
-let server: ReturnType<express.Express['listen']> | null = null;
+let httpServer: http.Server | null = null;
 
 // Security and CORS middleware
 app.use(helmet());
@@ -33,6 +35,10 @@ app.get('/', (_req, res) => {
       health: '/health',
       send: '/api/v1/notifications/send',
       sendDual: '/api/v1/notifications/send-dual',
+      inbox: '/api/v1/notifications/inbox',
+      inboxWebSocket: WS_PATH,
+      webPushVapidPublicKey: '/api/v1/notifications/push/vapid-public-key',
+      webPushSubscribe: '/api/v1/notifications/push/subscribe',
       status: '/api/v1/notifications/:id/status',
       userNotifications: '/api/v1/notifications/user/:recipient',
       allNotifications: '/api/v1/notifications'
@@ -53,6 +59,8 @@ app.get('/health', (_req, res) => {
     services: {
       email: (config.mailtrap.apiToken || config.mailtrap.user) ? 'configured' : 'not configured',
       sms: config.twilio.accountSid ? 'configured' : 'not configured',
+      webPush: config.vapid.publicKey && config.vapid.privateKey ? 'configured' : 'not configured',
+      inboxWebSocket: true,
       database,
       mongodbConnected: dbState === 1
     }
@@ -77,8 +85,8 @@ const shutdown = async () => {
   } catch (error) {
     console.error('Error disconnecting from MongoDB on shutdown', error);
   }
-  if (server) {
-    server.close(() => {
+  if (httpServer) {
+    httpServer.close(() => {
       console.log('Process terminated');
       process.exit(0);
     });
@@ -101,11 +109,17 @@ process.on('SIGINT', () => {
 if (process.env.NODE_ENV !== 'test') {
   connectToDatabase()
     .then(() => {
-      server = app.listen(config.port, '0.0.0.0', () => {
+      httpServer = http.createServer(app);
+      attachInboxWebSocket(httpServer);
+      httpServer.listen(config.port, '0.0.0.0', () => {
         console.log(`🚀 Notifications Microservice running on port ${config.port}`);
         console.log(`📱 Environment: ${config.nodeEnv}`);
         console.log(`📧 Email service: ${config.mailtrap.user ? 'Enabled (Mailtrap)' : 'Disabled'}`);
         console.log(`📱 SMS service: ${config.twilio.accountSid ? 'Enabled (Twilio)' : 'Disabled'}`);
+        console.log(
+          `🔔 Web Push: ${config.vapid.publicKey && config.vapid.privateKey ? 'Enabled (VAPID)' : 'Disabled'}`
+        );
+        console.log(`🔌 Inbox WebSocket: ${WS_PATH}`);
         console.log(`💾 Database: MongoDB connected`);
       });
     })
@@ -116,4 +130,3 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 export default app;
-

@@ -1,0 +1,4 @@
+{
+  "title": "Order settled",
+  "body": "Your {{commodityName}} order has been settled."
+}

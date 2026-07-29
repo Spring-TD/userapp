@@ -143,11 +143,43 @@
 
 import { Router } from 'express';
 import notificationController from '../controllers/notificationController';
-import { validate, sendNotificationSchema, sendEmailAndInAppSchema } from '../middleware/validation';
+import webPushController from '../controllers/webPushController';
+import inboxRoutes from '../routes/inboxRoutes';
+import {
+  validate,
+  sendNotificationSchema,
+  sendEmailAndInAppSchema,
+  webPushSubscribeSchema,
+  webPushUnsubscribeSchema
+} from '../middleware/validation';
+import { requireAccessToken, requireSelfRecipient, requireSelfUserIdBody } from '../middleware/requireAccessToken';
 
 const router = Router();
 
-// Email + in-app (same template)
+// Authenticated inbox (list, read, delete, WebSocket companion)
+router.use('/inbox', inboxRoutes);
+
+// Web Push (VAPID) — must be registered before /:id/status
+router.get(
+  '/push/vapid-public-key',
+  webPushController.getVapidPublicKey.bind(webPushController)
+);
+router.post(
+  '/push/subscribe',
+  requireAccessToken,
+  requireSelfUserIdBody,
+  validate(webPushSubscribeSchema),
+  webPushController.subscribe.bind(webPushController)
+);
+router.delete(
+  '/push/subscribe',
+  requireAccessToken,
+  requireSelfUserIdBody,
+  validate(webPushUnsubscribeSchema),
+  webPushController.unsubscribe.bind(webPushController)
+);
+
+// Email + in-app (+ Web Push when subscribed)
 router.post(
   '/send-dual',
   validate(sendEmailAndInAppSchema),
@@ -160,8 +192,13 @@ router.post('/send', validate(sendNotificationSchema), notificationController.se
 // Get notification status
 router.get('/:id/status', notificationController.getStatus.bind(notificationController));
 
-// Get user notifications
-router.get('/user/:recipient', notificationController.getUserNotifications.bind(notificationController));
+// Get user notifications (legacy — requires auth + self only)
+router.get(
+  '/user/:recipient',
+  requireAccessToken,
+  requireSelfRecipient,
+  notificationController.getUserNotifications.bind(notificationController)
+);
 
 // Get all notifications (admin)
 router.get('/', notificationController.getAllNotifications.bind(notificationController));

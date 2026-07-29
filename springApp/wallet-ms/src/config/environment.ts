@@ -13,10 +13,20 @@ export interface Config {
   jwtExpiresIn: string;
   /** Max request body size for JSON (e.g. '10mb') */
   requestBodyLimit: string;
-  /** Shared secret for POST /api/v1/internal/wallets/* (e.g. client-auth-ms signup). Header: X-Internal-Token */
+  /** Legacy shared secret; prefer JWT_SECRET. Still accepted when set. */
   walletInternalToken: string;
   /** Shared secret wallet-ms sends to payment-ms internal ledger endpoint. */
   paymentInternalToken: string;
+  /** create-app-ms base URL for app-scoped transaction mirroring. */
+  createAppServiceUrl: string;
+  /** product-ms base URL for loan charge on product-wallet → primary transfer. */
+  productServiceUrl: string;
+  /** notifications-ms base URL for payout alerts. */
+  notificationsServiceUrl: string;
+  /** Internal token for client-auth-ms service routes (falls back to JWT_SECRET). */
+  clientAuthInternalToken: string;
+  /** Public base URL of this wallet-ms (for receipt PDF download links in notifications). */
+  walletPublicBaseUrl: string;
 }
 
 export const config: Config = {
@@ -33,5 +43,19 @@ export const config: Config = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1h',
   requestBodyLimit: process.env.REQUEST_BODY_LIMIT || '10mb',
   walletInternalToken: (process.env.WALLET_INTERNAL_TOKEN || '').trim(),
-  paymentInternalToken: (process.env.PAYMENT_INTERNAL_TOKEN || '').trim()
+  paymentInternalToken: (process.env.PAYMENT_INTERNAL_TOKEN || '').trim(),
+  createAppServiceUrl: (process.env.CREATE_APP_SERVICE_URL || '').replace(/\/$/, ''),
+  productServiceUrl: (
+    process.env.PRODUCT_SERVICE_URL ||
+    process.env.SERVER_PRODUCT_SERVICE_URL ||
+    'http://localhost:4002'
+  ).replace(/\/$/, ''),
+  notificationsServiceUrl:
+    process.env.NOTIFICATIONS_SERVICE_URL ||
+    (process.env.NODE_ENV === 'production' ? 'https://springtd-notifications-ms.fly.dev' : 'http://localhost:4009'),
+  clientAuthInternalToken: (process.env.CLIENT_AUTH_INTERNAL_TOKEN || '').trim(),
+  walletPublicBaseUrl: (
+    process.env.WALLET_PUBLIC_BASE_URL ||
+    (process.env.NODE_ENV === 'production' ? 'https://wallet-ms.fly.dev' : 'http://localhost:4004')
+  ).replace(/\/$/, '')
 };

@@ -13,7 +13,7 @@ describe('WalletService', () => {
         merchantId: 'merchant_123',
         name: 'Test Merchant Wallet',
         currency: 'USD',
-        merchantWalletType: MerchantWalletType.SETTLEMENT
+        merchantWalletType: MerchantWalletType.REPAYMENT
       });
 
       expect(result.success).toBe(true);
@@ -21,7 +21,7 @@ describe('WalletService', () => {
       expect(result.wallet?.merchantId).toBe('merchant_123');
       expect(result.wallet?.name).toBe('Test Merchant Wallet');
       expect(result.wallet?.currency).toBe('USD');
-      expect(result.wallet?.merchantWalletType).toBe(MerchantWalletType.SETTLEMENT);
+      expect(result.wallet?.merchantWalletType).toBe(MerchantWalletType.REPAYMENT);
       expect(result.wallet?.balance).toBe(0);
       expect(result.wallet?.status).toBe(WalletStatus.ACTIVE);
     });

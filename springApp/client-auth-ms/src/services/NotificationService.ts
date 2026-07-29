@@ -9,10 +9,18 @@ const purposeLabel: Record<string, string> = {
 };
 
 export interface SendNotificationRequest {
-  channel: 'email' | 'sms';
+  channel: 'email' | 'sms' | 'in_app';
   recipient: string;
   template: string;
   data: Record<string, any>;
+}
+
+export interface SendEmailAndInAppPayload {
+  userId: string;
+  email?: string;
+  template: string;
+  data: Record<string, unknown>;
+  priority?: 'high' | 'normal' | 'low';
 }
 
 export interface SendNotificationResponse {
@@ -22,11 +30,67 @@ export interface SendNotificationResponse {
   message?: string;
 }
 
+export interface SendNotificationResponse {
+  success: boolean;
+  id?: string;
+  error?: string;
+  message?: string;
+}
+
+export interface SendEmailAndInAppResponse {
+  success: boolean;
+  data?: {
+    inApp?: { success?: boolean; id?: string; error?: string };
+    email?: { success?: boolean; id?: string; error?: string; skipped?: boolean };
+  };
+  error?: string;
+}
+
 export class NotificationService {
   private baseUrl: string;
 
   constructor() {
     this.baseUrl = config.notificationsServiceUrl;
+  }
+
+  async sendEmailAndInApp(payload: SendEmailAndInAppPayload): Promise<SendEmailAndInAppResponse> {
+    try {
+      const response = await axios.post<SendEmailAndInAppResponse>(
+        `${this.baseUrl}/api/v1/notifications/send-dual`,
+        payload,
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 12000
+        }
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error('Failed to send email+in-app notification:', error.message);
+      if (error.response) {
+        return {
+          success: false,
+          error: error.response.data?.error || `Server error: ${error.response.status}`
+        };
+      }
+      return {
+        success: false,
+        error: error.message || 'Failed to connect to notifications service'
+      };
+    }
+  }
+
+  async sendInAppOnly(args: {
+    userId: string;
+    template: string;
+    data: Record<string, unknown>;
+    priority?: 'high' | 'normal' | 'low';
+  }): Promise<SendNotificationResponse> {
+    return this.sendNotification({
+      channel: 'in_app',
+      recipient: args.userId,
+      template: args.template,
+      data: args.data
+    });
   }
 
   async sendNotification(request: SendNotificationRequest): Promise<SendNotificationResponse> {
@@ -111,7 +175,13 @@ export class NotificationService {
     return this.sendNotification(request);
   }
 
-  async sendOTP(recipient: string, otpCode: string, purpose: string, channel: 'email' | 'sms' = 'email'): Promise<SendNotificationResponse> {
+  async sendOTP(
+    recipient: string,
+    otpCode: string,
+    purpose: string,
+    channel: 'email' | 'sms' = 'email',
+    appName?: string
+  ): Promise<SendNotificationResponse> {
     const request: SendNotificationRequest = {
       channel,
       recipient,
@@ -119,6 +189,7 @@ export class NotificationService {
       data: {
         otpCode,
         purpose: purposeLabel[purpose] ?? purpose,
+        appName: appName?.trim() || 'SpringTD',
       },
     };
 

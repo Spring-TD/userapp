@@ -8,6 +8,7 @@ type AuthTokenPayload = {
   userId: string;
   userType: UserType;
   email?: string;
+  userMerchantId?: string;
   type?: string;
   iat: number;
   exp: number;
@@ -37,6 +38,7 @@ declare global {
         userId: string;
         userType: UserType;
         email?: string;
+        userMerchantId?: string;
         token?: string;
       };
     }
@@ -73,6 +75,7 @@ export const authenticate = (req: Request, res: Response, next: NextFunction): a
       userId: decoded.userId,
       userType: decoded.userType,
       email: decoded.email,
+      userMerchantId: decoded.userMerchantId,
       token
     };
     

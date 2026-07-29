@@ -7,6 +7,8 @@ type ResolvedAppResponse = {
   success: boolean;
   data?: {
     id: string;
+    appName?: string;
+    name?: string;
     merchantId: string;
     subdomain: string;
     status: string;
@@ -106,8 +108,10 @@ export const tenantResolverMiddleware = async (
     }
 
     const app = response.data.data;
+    const appName = (app.appName || app.name || '').trim() || undefined;
     const tenant: TenantContext = {
       appId: app.id,
+      ...(appName ? { appName } : {}),
       merchantId: app.merchantId,
       subdomain: app.subdomain
     };

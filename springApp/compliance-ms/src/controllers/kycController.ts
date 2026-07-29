@@ -18,9 +18,21 @@ import { livenessService } from '../services/livenessService';
 import { amlVerificationService, AMLVerificationResult } from '../services/amlVerificationService';
 import { sanctionsService, SanctionsCheckRequest } from '../services/sanctionsService';
 import * as spacesService from '../services/spacesService';
-import { fuspayModularKycService } from '../services/fuspayModularKycService';
+import { fuspayModularKycService, GUARANTOR_FUSPAY_VERIFICATION_CHECKS } from '../services/fuspayModularKycService';
 import { applyFuspayModularWebhook } from '../services/fuspayWebhookService';
 import { provisionUserNubanAfterKyc } from '../services/walletMsService';
+import {
+  chargeKycLinkFee,
+  isKycLinkBillingEnabled,
+  kycLinkFeeAmount,
+  refundKycLinkFee
+} from '../services/kycWalletBillingService';
+import { hasActivePendingFuspayVerification } from '../utils/fuspayVerificationStatus';
+import { resolveTenantContext } from '../utils/tenantContext';
+import {
+  notifyProductMsGuarantorKycCompleted,
+  parseGuarantorUserRef
+} from '../services/productMsGuarantorNotifyService';
 import { KYCProfileModel } from '../models/KYCProfileModel';
 import { v4 as uuidv4 } from 'uuid';
 import { businessSurveyUpdateSchema, businessInfoUpdateSchema } from '../utils/validation';
@@ -98,21 +110,21 @@ export class KYCController {
     try {
       const body = req.body || {};
       const country = body.country as string | undefined;
-      const tenantAppIdHeader = req.headers['x-tenant-app-id'];
-      const tenantAppId = Array.isArray(tenantAppIdHeader) ? tenantAppIdHeader[0] : tenantAppIdHeader;
-      const resolvedBranding =
-        body.branding ||
-        (await fuspayModularKycService.getBrandingForApp(
-          typeof tenantAppId === 'string' && tenantAppId.trim().length > 0 ? tenantAppId.trim() : undefined
-        ));
+      const tenant = resolveTenantContext(req);
+      const tenantAppId = tenant?.appId;
+      const resolvedBranding = await fuspayModularKycService.getBrandingForApp(
+        typeof tenantAppId === 'string' && tenantAppId.trim().length > 0 ? tenantAppId.trim() : undefined,
+        body.branding
+      );
 
       const jwtUserId = req.user?.userId;
+      let profile: Record<string, unknown> | null = null;
       let fuspayUserId: string | undefined;
 
       if (jwtUserId) {
         // Never trust user_id/customer_id from the body for browser clients: UIs often replay full
         // Fuspay status payloads and would accidentally start KYC for the wrong Fuspay customer.
-        const profile = await KYCProfileModel.findOne({ userId: jwtUserId }).lean();
+        profile = (await KYCProfileModel.findOne({ userId: jwtUserId }).lean()) as Record<string, unknown> | null;
         fuspayUserId = (profile as any)?.fuspay?.customerId;
       } else {
         fuspayUserId =
@@ -131,6 +143,73 @@ export class KYCController {
         });
       }
 
+      const billingEnabled = isKycLinkBillingEnabled();
+      const billingUserId = jwtUserId || fuspayUserId;
+
+      if (billingEnabled) {
+        if (!tenant) {
+          return res.status(400).json({
+            success: false,
+            error:
+              'Tenant context required for KYC billing (x-tenant-app-id and x-tenant-merchant-id headers)'
+          });
+        }
+
+        const existingVerification = (profile as any)?.fuspay?.verification;
+        if (hasActivePendingFuspayVerification(existingVerification)) {
+          return res.status(200).json({
+            success: true,
+            message: 'Existing active KYC verification link returned without additional charge',
+            reusedExistingVerification: true,
+            data: {
+              verification_id: existingVerification.verificationId,
+              verification_url: existingVerification.verificationUrl,
+              status: existingVerification.status,
+              reference: existingVerification.reference
+            },
+            verification_url: existingVerification.verificationUrl,
+            verification_id: existingVerification.verificationId
+          });
+        }
+      }
+
+      let chargedAmount = 0;
+      let chargeReferenceId: string | undefined;
+      let feeCharged = false;
+
+      if (billingEnabled && tenant) {
+        const chargeResult = await chargeKycLinkFee({
+          tenant,
+          userId: billingUserId
+        });
+
+        if (!chargeResult.success) {
+          if (chargeResult.code === 'INSUFFICIENT_KYC_WALLET_BALANCE') {
+            return res.status(402).json({
+              success: false,
+              error: chargeResult.error,
+              code: chargeResult.code,
+              data: {
+                kycLinkFee: chargeResult.amount,
+                referenceId: chargeResult.referenceId,
+                wallet: chargeResult.wallet,
+                fundingInstructions: chargeResult.fundingInstructions
+              }
+            });
+          }
+
+          return res.status(chargeResult.code === 'NOT_CONFIGURED' ? 503 : 502).json({
+            success: false,
+            error: chargeResult.error,
+            code: chargeResult.code
+          });
+        }
+
+        chargedAmount = chargeResult.amount;
+        chargeReferenceId = chargeResult.referenceId;
+        feeCharged = !chargeResult.duplicate;
+      }
+
       const kyc_type = (body.kyc_type as string | undefined) || 'individual';
 
       let result;
@@ -140,29 +219,58 @@ export class KYCController {
         Boolean(body.redirect) ||
         Boolean(country);
 
-      if (usesCustomerPayload) {
-        result = await fuspayModularKycService.createVerification({
-          customer_id: fuspayUserId,
-          ...(country ? { country } : {}),
-          callback: body.callback,
-          redirect: body.redirect,
-          ...(resolvedBranding ? { branding: resolvedBranding } : {}),
-          individual_checks: body.individual_checks,
-          business_checks: body.business_checks,
-          aml_checks: body.aml_checks,
-          additional_fields: body.additional_fields
-        });
-      } else {
-        result = await fuspayModularKycService.createVerification({
-          user_id: fuspayUserId,
-          kyc_type,
-          callback: body.callback as string | undefined,
-          redirect: body.redirect as string | undefined,
-          ...(resolvedBranding ? { branding: resolvedBranding } : {})
-        });
+      try {
+        if (usesCustomerPayload) {
+          result = await fuspayModularKycService.createVerification({
+            customer_id: fuspayUserId,
+            kyc_type,
+            ...(country ? { country } : {}),
+            callback: body.callback,
+            redirect: body.redirect,
+            branding: resolvedBranding,
+            additional_fields: body.additional_fields
+          });
+        } else {
+          result = await fuspayModularKycService.createVerification({
+            user_id: fuspayUserId,
+            kyc_type,
+            callback: body.callback as string | undefined,
+            redirect: body.redirect as string | undefined,
+            branding: resolvedBranding
+          });
+        }
+      } catch (fuspayError) {
+        if (feeCharged && tenant && chargeReferenceId && chargedAmount > 0) {
+          await refundKycLinkFee({
+            tenant,
+            userId: billingUserId,
+            amount: chargedAmount,
+            originalReferenceId: chargeReferenceId,
+            reason: 'Refund: Fuspay KYC link creation failed'
+          });
+        }
+        throw fuspayError;
       }
 
       if (!result.success) {
+        if (feeCharged && tenant && chargeReferenceId && chargedAmount > 0) {
+          const refundResult = await refundKycLinkFee({
+            tenant,
+            userId: billingUserId,
+            amount: chargedAmount,
+            originalReferenceId: chargeReferenceId,
+            reason: 'Refund: Fuspay KYC link creation failed'
+          });
+          if (!refundResult.success) {
+            logger.error('Failed to auto-refund KYC link fee after Fuspay error', {
+              userId: billingUserId,
+              appId: tenant.appId,
+              merchantId: tenant.merchantId,
+              chargeReferenceId,
+              refundError: refundResult.error
+            });
+          }
+        }
         return res.status(400).json(result);
       }
 
@@ -189,6 +297,15 @@ export class KYCController {
 
       return res.status(201).json({
         ...result,
+        ...(billingEnabled
+          ? {
+              billing: {
+                kycLinkFee: chargedAmount || kycLinkFeeAmount(),
+                referenceId: chargeReferenceId,
+                charged: feeCharged
+              }
+            }
+          : {}),
         verification_url: verificationUrl,
         verification_id: verificationId
       });
@@ -203,24 +320,37 @@ export class KYCController {
       const fullName = typeof body.fullName === 'string' ? body.fullName.trim() : '';
       const email = typeof body.email === 'string' ? body.email.trim() : '';
       const phone = typeof body.phone === 'string' ? body.phone.trim() : '';
+      const applicationId = typeof body.applicationId === 'string' ? body.applicationId.trim() : '';
+      const guarantorId =
+        typeof body.guarantorId === 'string' && body.guarantorId.trim()
+          ? body.guarantorId.trim()
+          : uuidv4();
       const country = typeof body.country === 'string' && body.country.trim() ? body.country.trim().toUpperCase() : 'NG';
-      const userRef =
-        typeof body.userRef === 'string' && body.userRef.trim()
-          ? body.userRef.trim()
-          : `guarantor_${uuidv4()}`;
+      const callbackUrl =
+        (typeof body.callbackUrl === 'string' ? body.callbackUrl.trim() : '') ||
+        (typeof body.callback === 'string' ? body.callback.trim() : '') ||
+        (typeof body.redirect === 'string' ? body.redirect.trim() : '');
 
-      if (!fullName || !email || !phone) {
+      if (!fullName || !email || !phone || !applicationId) {
         return res.status(400).json({
           success: false,
-          error: 'fullName, email, and phone are required'
+          error: 'fullName, email, phone, and applicationId are required'
         });
       }
+
+      const userRef = `guarantor_${applicationId}_${guarantorId}`;
+      const appId = typeof body.appId === 'string' ? body.appId.trim() : '';
+      const resolvedBranding = await fuspayModularKycService.getBrandingForApp(
+        appId || undefined,
+        body.branding
+      );
 
       const userResult = await fuspayModularKycService.createUser({
         email,
         phone,
         country,
-        userRef
+        userRef,
+        branding: resolvedBranding
       });
       if (!userResult.success) {
         return res.status(400).json({
@@ -247,20 +377,10 @@ export class KYCController {
         customer_id: customerId,
         kyc_type: 'individual',
         country,
-        callback: body.callback,
-        redirect: body.redirect,
-        individual_checks: body.individual_checks,
-        business_checks: body.business_checks,
-        aml_checks: body.aml_checks,
-        additional_fields: [
-          { key: 'fullName', value: fullName },
-          { key: 'email', value: email },
-          { key: 'phone', value: phone },
-          ...(typeof body.occupation === 'string' ? [{ key: 'occupation', value: body.occupation }] : []),
-          ...(typeof body.relationship === 'string' ? [{ key: 'relationship', value: body.relationship }] : []),
-          ...(typeof body.applicationId === 'string' ? [{ key: 'applicationId', value: body.applicationId }] : []),
-          ...(typeof body.productId === 'string' ? [{ key: 'productId', value: body.productId }] : [])
-        ]
+        redirect: callbackUrl || undefined,
+        callback: callbackUrl || undefined,
+        branding: resolvedBranding,
+        individual_checks: { ...GUARANTOR_FUSPAY_VERIFICATION_CHECKS }
       });
 
       if (!verificationResult.success) {
@@ -275,21 +395,35 @@ export class KYCController {
         success: true,
         message: 'Guarantor KYC verification created successfully',
         data: {
+          provider: 'fuspay',
+          providerReference: verificationId || userRef,
+          verificationUrl,
+          status: verificationData?.status || 'pending',
           customerId,
           userRef,
           verificationId,
-          verificationUrl,
           reference: verificationData?.reference,
-          status: verificationData?.status,
           totalChecks: verificationData?.total_checks,
           raw: verificationData
         },
+        verificationUrl,
         verification_url: verificationUrl,
         verification_id: verificationId
       });
     } catch (error) {
       next(error);
     }
+  }
+
+  /** Browser/health probe for the Fuspay webhook URL (Fuspay must POST the actual webhook payload). */
+  static async getFuspayModularWebhookInfo(_req: Request, res: Response) {
+    return res.status(200).json({
+      success: true,
+      active: true,
+      message: 'Fuspay modular KYC webhook endpoint is active. Fuspay must send POST requests with a JSON body.',
+      method: 'POST',
+      path: '/api/v1/kyc/modular/webhook'
+    });
   }
 
   /** Fuspay/Payonus webhook — no JWT; optional `FUSPAY_MODULAR_WEBHOOK_SECRET` via header `x-fuspay-webhook-secret`. */
@@ -356,6 +490,13 @@ export class KYCController {
             userId: result.profileUserId,
             skipped: nubanProvision.skipped
           });
+        }
+      }
+
+      if (result.kycCompleted) {
+        const guarantorRef = parseGuarantorUserRef(result.userRef);
+        if (guarantorRef) {
+          void notifyProductMsGuarantorKycCompleted(guarantorRef.applicationId, guarantorRef.guarantorId);
         }
       }
 
@@ -2276,6 +2417,25 @@ export class KYCController {
   }
 
   /** Internal: wallet-ms Payonus — retail user BVN from Fuspay KYC webhook. */
+  /** Internal: product-ms catalog enrichment — merchant company name by owner user id. */
+  static async internalBusinessInfoForMerchant(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { merchantId } = req.params;
+      if (!merchantId?.trim()) {
+        return res.status(400).json({ success: false, error: 'merchantId is required' });
+      }
+
+      const result = await kycService.getBusinessInfo(merchantId.trim());
+      if (!result.success) {
+        return res.status(404).json({ success: false, error: result.error });
+      }
+
+      return res.status(200).json({ success: true, data: result.data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async getUserBvnForPayonusInternal(req: Request, res: Response, next: NextFunction) {
     try {
       const { userId } = req.params;
@@ -2286,6 +2446,23 @@ export class KYCController {
       return res.status(404).json({
         success: false,
         error: result.error || 'BVN not found'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** Internal: product-ms — sanitized retail KYC profile for Plata applicant pull. */
+  static async getApplicantProfileForInternal(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { userId } = req.params;
+      const result = await kycService.getApplicantProfileForInternal(userId || '');
+      if (result.success && result.data) {
+        return res.status(200).json({ success: true, data: result.data });
+      }
+      return res.status(404).json({
+        success: false,
+        error: result.error || 'KYC profile not found'
       });
     } catch (error) {
       next(error);

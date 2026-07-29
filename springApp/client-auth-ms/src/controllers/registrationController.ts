@@ -49,8 +49,9 @@ export class RegistrationController {
     try {
       let tenantMerchantId = (req.headers['x-tenant-merchant-id'] as string | undefined)?.trim() || '';
       let tenantAppId = (req.headers['x-tenant-app-id'] as string | undefined)?.trim() || '';
+      let tenantAppName = (req.headers['x-tenant-app-name'] as string | undefined)?.trim() || '';
 
-      if (!tenantMerchantId || !tenantAppId) {
+      if (!tenantMerchantId || !tenantAppId || !tenantAppName) {
         const resolved = await resolveTenantFromRequest(req);
         if (resolved) {
           if (!tenantMerchantId) {
@@ -58,6 +59,9 @@ export class RegistrationController {
           }
           if (!tenantAppId) {
             tenantAppId = resolved.appId;
+          }
+          if (!tenantAppName && resolved.appName) {
+            tenantAppName = resolved.appName;
           }
         }
       }
@@ -90,10 +94,11 @@ export class RegistrationController {
         (typeof bodyRecord.appId === 'string' && bodyRecord.appId.trim()) ||
         '';
       const resolvedAppId = tenantAppId || bodyAppId;
-      const registrationPayload: UserRegistrationData =
-        resolvedAppId.length > 0
-          ? { ...(value as UserRegistrationData), app_id: resolvedAppId }
-          : (value as UserRegistrationData);
+      const registrationPayload: UserRegistrationData = {
+        ...(value as UserRegistrationData),
+        ...(resolvedAppId.length > 0 ? { app_id: resolvedAppId } : {}),
+        ...(tenantAppName ? { appName: tenantAppName } : {})
+      };
 
       const result = await AuthService.registerUser(registrationPayload);
 

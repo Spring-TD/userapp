@@ -1,0 +1,1 @@
+{{direction}} receipt — {{amount}} ({{status}})

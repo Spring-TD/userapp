@@ -6,11 +6,12 @@ Deployment URL: https://walletms-2026.fly.dev/
 
 ## Features
 
-- Merchant Wallets (Billing, KYC, Settlement)
+- Merchant Wallets (Billing, KYC, Repayment — formerly "Settlement")
 - User Wallets (associated with merchants)
 - Wallet transactions
 - Balance management with Main Balance and Ledger Balance
 - Transaction history
+- **Transaction PIN** — a 4-digit PIN, set after Fuspay KYC, required to move money out of a user wallet (transfer / bank payout)
 - 3rd Party API Integration
 - External Funding Callbacks
 - Optional **Payonus** virtual **NUBAN** provisioning for wallets whose currency matches `PAYONUS_NUBAN_CURRENCIES` (default **NGN**): **dynamic** virtual accounts when **merchant** wallets are created; **reserved (fixed)** virtual accounts for **retail user** wallets **after Fuspay modular KYC completes** (not at signup)
@@ -31,7 +32,7 @@ db.wallets.dropIndex("merchantId_1_appId_1_merchantWalletType_1")
 
 ### Merchant Wallets
 - `POST /api/v1/wallets/merchant` - Create merchant wallet (optional body: `appId`, `appName`, `payonusSubaccountCode`, `complianceShareholderUserId`, plus `name`, `currency`, `merchantWalletType`)
-- `POST /api/v1/wallets/merchant/all` - Create all merchant wallets (Billing, KYC, Settlement). Body may include `currency`, `appId`, `appName`, `payonusSubaccountCode`, `complianceShareholderUserId` (defaults shareholder id from JWT when omitted)
+- `POST /api/v1/wallets/merchant/all` - Create all merchant wallets (Billing, KYC, Repayment). Body may include `currency`, `appId`, `appName`, `payonusSubaccountCode`, `complianceShareholderUserId` (defaults shareholder id from JWT when omitted)
 - `GET /api/v1/wallets/merchant/:merchantId/type/:walletType` - Get specific merchant wallet by type
 - `GET /api/v1/wallets/merchant/:merchantId/all` - Get all merchant wallets
 - `PUT /api/v1/wallets/merchant/balance` - Update merchant wallet balance
@@ -47,21 +48,59 @@ db.wallets.dropIndex("merchantId_1_appId_1_merchantWalletType_1")
 - `POST /api/v1/wallets/kyc/debit` - Debit the merchant's own KYC Wallet
 - `POST /api/v1/wallets/kyc/fee` - Process KYC fee by debiting the merchant's KYC Wallet
 
-### Settlement Wallet Operations
-- `GET /api/v1/wallets/settlement/:merchantId/transactions` - Get Settlement wallet transactions (legacy: `/treasury/...`)
-- `POST /api/v1/wallets/settlement/transfer` - Transfer money from Settlement Wallet to another wallet (legacy: `/treasury/transfer`)
+### Repayment Wallet Operations (formerly "Settlement")
+- `GET /api/v1/wallets/repayment/:merchantId/transactions` - Get Repayment wallet transactions (legacy: `/settlement/...`, `/treasury/...`)
+- `POST /api/v1/wallets/repayment/transfer` - Transfer money from Repayment Wallet to another wallet (legacy: `/settlement/transfer`, `/treasury/transfer`)
 - `POST /api/v1/wallets/treasury/debit` - Debit a user wallet
-- `POST /api/v1/wallets/settlement/debit-merchant` - Debit the merchant's own Settlement Wallet (legacy: `/treasury/debit-merchant`)
+- `POST /api/v1/wallets/repayment/debit-merchant` - Debit the merchant's own Repayment Wallet (legacy: `/settlement/debit-merchant`, `/treasury/debit-merchant`)
+- `POST /api/v1/wallets/repayment/payout` - Payout from Repayment wallet to external bank account (PayOnUs; requires active Repayment NUBAN) (legacy: `/settlement/payout`)
+
+See [docs/repayment-wallet.md](docs/repayment-wallet.md) for collection categories and internal collect API.
 
 ### User Wallets
 - `POST /api/v1/wallets/user` - Create user wallet (requires **Bearer** JWT; user must be `userType` user with `merchantId`)
 - `GET /api/v1/wallets/user/:userId` - Get user wallet
+- `GET /api/v1/wallets/user/:userId/product-type-summary` - Per product-type totals from PRODUCT wallets (`MORTGAGE`, `LOAN`, `SAVINGS`, `INVESTMENT`, `COMMODITY`); PRIMARY wallet excluded; missing types return `0`
 - `PUT /api/v1/wallets/user/:userId/balance` - Update user wallet balance
 - `GET /api/v1/wallets/user/:userId/transactions` - Get user wallet transactions with filtering options (by date range and type)
-- `POST /api/v1/wallets/user/:userId/transfer` - Transfer money out from user wallet to another wallet
-- `POST /api/v1/wallets/user/:userId/payout` - Send money from the user's active PayOnUs virtual account wallet to an external bank account
+- `POST /api/v1/wallets/user/:userId/transfer` - Transfer money out from user wallet to another wallet (**requires `pin`** in body — see [Transaction PIN](#transaction-pin))
+- `POST /api/v1/wallets/user/:userId/payout` - Send money from the user's active PayOnUs virtual account wallet to an external bank account (**requires `pin`** in body)
 - `POST /api/v1/wallets/user/:userId/api-call` - Make a 3rd party API call from user wallet
 - `GET /api/v1/wallets/merchant/:merchantId/users` - Get all user wallets for a merchant
+
+#### Bank payout helpers (authenticated)
+
+Helpers for building a bank-transfer UI. Both require a Bearer token and call PayOnUs with the configured credentials/IP.
+
+- `GET /api/v1/wallets/banks` — list banks for a picker. Proxies PayOnUs `GET /api/v1/banks` and returns a sorted `{ code, name }[]`. **Cached in-process** (`PAYONUS_BANK_LIST_CACHE_TTL_MS`, default 6h). Optional query: `?key=ZAR` (EFT bank list), `?refresh=true` (bypass cache). Response: `{ success, cached, count, data: [{ code, name }] }`.
+- `POST /api/v1/wallets/banks/name-enquiry` — verify a beneficiary before payout. Body `{ accountNumber, bankCode, currency? }`; returns `{ success, data: { accountName, accountNumber, bankCode, bankName } }`. Same name enquiry the payout runs server-side, exposed so the UI can confirm the recipient before submitting.
+
+Typical flow: `GET /banks` → user picks bank + enters account number → `POST /banks/name-enquiry` to confirm the name → `POST /user/:userId/payout` with `bankCode`, `accountNumber`, confirmed `accountName`, `amount`, `pin`.
+
+#### Transaction PIN
+
+Retail users protect money-out operations with a **4-digit transaction PIN** (one PIN per user, hashed with scrypt; stored in the `transactionpins` collection keyed by `userId`). All endpoints require a Bearer token for the same user.
+
+- `GET /api/v1/wallets/user/:userId/transaction-pin/status` — `{ hasTransactionPin, locked, lockedUntil }`. The storefront calls this after Fuspay KYC completes and prompts the user to create a PIN when `hasTransactionPin === false`.
+- `POST /api/v1/wallets/user/:userId/transaction-pin` — create a PIN. Body `{ "pin": "1234" }`. Fails with `409 TRANSACTION_PIN_EXISTS` if one already exists.
+- `PUT /api/v1/wallets/user/:userId/transaction-pin` — change a PIN. Body `{ "currentPin": "1234", "newPin": "5678" }`.
+
+**Enforcement on transfer / payout.** Include the PIN in the request body of `…/transfer` and `…/payout`:
+
+```json
+{ "toWalletId": "wallet_xyz", "amount": 50, "description": "...", "pin": "1234" }
+```
+
+The PIN is verified before any funds move. Failure responses carry a machine-readable `code`:
+
+| HTTP | `code` | Meaning / storefront action |
+|------|--------|------------------------------|
+| `409` | `TRANSACTION_PIN_REQUIRED` | User has no PIN yet → prompt to create one, then retry (covers existing users on first transfer-out) |
+| `400` | `TRANSACTION_PIN_MISSING` | PIN exists but none supplied in the request |
+| `401` | `INVALID_TRANSACTION_PIN` | Wrong PIN (includes `attemptsRemaining`) |
+| `423` | `TRANSACTION_PIN_LOCKED` | Locked after 5 wrong attempts for 15 minutes (includes `lockedUntil`) |
+
+Implementation: `src/utils/transactionPin.ts` (scrypt hash + 4-digit format), `src/db/TransactionPinModel.ts`, `src/services/transactionPinService.ts`, `src/controllers/transactionPinController.ts`.
 
 #### User bank payout
 
@@ -80,18 +119,64 @@ db.wallets.dropIndex("merchantId_1_appId_1_merchantWalletType_1")
 }
 ```
 
-PayOnUs payout configuration uses the existing PayOnUs auth/base URL settings plus `PAYONUS_PAYOUT_PATH` (default `/api/v1/transfers/bank`), optional `PAYONUS_PAYOUT_EXTRA_JSON`, and optional response path overrides via `PAYONUS_PAYOUT_RESPONSE_REFERENCE_PATHS` / `PAYONUS_PAYOUT_RESPONSE_STATUS_PATHS`.
+Payouts follow the PayOnUs **Bank Transfer** flow ([docs](https://documentation.payonus.com/payouts/transfers/)):
+
+1. **Name enquiry** — `POST /api/v1/transfer-requests/name-enquiry` verifies the beneficiary (`institutionCode`, `accountNumber`, `businessId`, `currency`) and returns the bank-confirmed `accountName`. wallet-ms runs this first and uses the confirmed name on the transfer.
+2. **Initiate bank transfer** — `POST /api/v1/transfer-requests/bank-transfer` with `amount`, `beneficiaryAccountNumber`, `beneficiaryAccountName`, `beneficiaryBankCode`, `reference`, `transferType` (`WALLET_TO_BANK_ACCOUNT`), `countryCode`, `currency`, `email`, `businessId`, optional `narration` / `notificationUrl`. The response carries `paymentStatus` (`PENDING`/`PROCESSING`/`SUCCESSFUL`/`FAILED`/`REJECTED`), `onusReference`, `merchantReference`, and `fee`. A `2xx` with a `FAILED`/`REJECTED` status is treated as a failure (the wallet is not debited).
+
+The beneficiary bank code is the PayOnUs institution code from `GET /api/v1/banks` (e.g. OPay = `100004`).
+
+> **Prerequisites (configure on the PayOnUs Merchant Dashboard):**
+> 1. **IP whitelisting** — wallet-ms's outbound IP(s) must be whitelisted (Settings → IP Whitelist), or transfers are rejected. On Fly, allocate/declare a dedicated egress IP and whitelist it.
+> 2. **Sufficient wallet balance** — the PayOnUs business wallet must hold enough funds for the transfer + fee.
+
+**Configuration:**
+
+| Variable | Description |
+|----------|-------------|
+| `PAYONUS_PAYOUT_PATH` | Bank transfer endpoint (default `/api/v1/transfer-requests/bank-transfer`) |
+| `PAYONUS_NAME_ENQUIRY_PATH` | Name-enquiry endpoint (default `/api/v1/transfer-requests/name-enquiry`) |
+| `PAYONUS_NAME_ENQUIRY_ENABLED` | Run name enquiry before transfer (default `true`) |
+| `PAYONUS_PAYOUT_TRANSFER_TYPE` | `transferType` (default `WALLET_TO_BANK_ACCOUNT`) |
+| `PAYONUS_PAYOUT_COUNTRY_CODE` | `countryCode` (default `NG`) |
+| `PAYONUS_PAYOUT_DEFAULT_EMAIL` | Email used on the transfer body when the caller has none |
+| `PAYONUS_BANK_LIST_CACHE_TTL_MS` | In-process cache TTL for `GET /api/v1/wallets/banks` (default `21600000` = 6h) |
+| `PAYONUS_PAYOUT_NOTIFICATION_URL` | `notificationUrl` PayOnUs calls back with the final payout status. Point it at the payout webhook (e.g. `https://account-ms.fly.dev/api/v1/wallets/payout/callback`). Defaults to `PAYONUS_VA_NOTIFICATION_URL` — the funding handler still detects and routes payout callbacks if they arrive there. |
+| `PAYONUS_VA_BUSINESS_ID` | `businessId` for name enquiry + transfer (already used for VAs) |
+| `PAYONUS_PAYOUT_EXTRA_JSON` | Extra static fields merged into the transfer body |
+| `PAYONUS_PAYOUT_RESPONSE_REFERENCE_PATHS` / `PAYONUS_PAYOUT_RESPONSE_STATUS_PATHS` | Response field path overrides for provider reference / status |
+
+For non-standard schemas you can also override `PAYONUS_PAYOUT_METHOD` and supply `PAYONUS_PAYOUT_BODY_JSON` (a JSON body template that **replaces** the built-in body; string placeholders `{{amount}}`, `{{currency}}`, `{{reference}}`, `{{narration}}`, `{{destinationAccountNumber}}`, `{{destinationBankCode}}`, `{{destinationAccountName}}`, `{{businessId}}` are substituted — a value that is exactly one placeholder is typed).
+
+**Sandbox test accounts:** `9999991112` → SUCCESSFUL, `9999991111` → PROCESSING, `9999991114` → FAILED.
 
 If `PAYMENT_SERVICE_URL` and `PAYMENT_INTERNAL_TOKEN` are configured, wallet-ms also posts a best-effort **DEBIT** ledger entry to payment-ms after PayOnUs confirms the payout. The wallet payout still succeeds if the payment-ms ledger hook is unavailable; wallet-ms logs the ledger failure for retry/support.
 
+#### Payout status webhook (`POST /api/v1/wallets/payout/callback`)
+
+A payout debit is recorded as `COMPLETED` with `metadata.providerStatus` set from the synchronous PayOnUs response (usually `PENDING` / `PROCESSING`). PayOnUs then sends the **final** status asynchronously to the `notificationUrl`. This public webhook matches the callback to the original payout transaction and updates it automatically:
+
+- **Matching** — by `onusReference` (transaction `externalReference`) first, then `merchantReference` (transaction `referenceId`), both scoped to `source = PAYONUS` and category `PAYOUT` / `SETTLEMENT_PAYOUT`.
+- **`SUCCESSFUL`** — stamps `metadata.providerStatus` / `payoutStatus` and appends to `metadata.statusHistory`. No balance change.
+- **`FAILED` / `REJECTED` / `REVERSED`** — **reverses the debit automatically, exactly once**: credits the source wallet back the payout amount, writes a compensating `PAYOUT_REVERSAL` / `SETTLEMENT_PAYOUT_REVERSAL` credit transaction (reference `<payoutReference>::reversal`), marks the original transaction `FAILED` with `metadata.reversed = true`, and mirrors the credit to create-app-ms.
+- **Idempotent** — repeated callbacks for an already-applied terminal state are acknowledged with `200` and no further side effects (the reversal reference guards against double refunds).
+- **Resilient routing** — PayOnUs sometimes posts payout callbacks to the funding URL. The funding handler (`/funding/callback`) detects when a reference matches a known outbound payout and delegates to the same logic, so payouts are reconciled even if `PAYONUS_PAYOUT_NOTIFICATION_URL` isn't set separately.
+- **Signature** — verified the same way as funding callbacks when `PAYONUS_WEBHOOK_ENFORCE_SIGNATURE=true`.
+
+Implementation: `WalletService.applyPayoutStatusUpdate` / `WalletService.findPayonusPayoutTransaction` (`src/services/walletService.ts`) and `FundingController.handlePayoutStatusCallback` (`src/controllers/fundingController.ts`).
+
 ### Internal (service-to-service)
 
-Used by **client-auth-ms** (signup) and **compliance-ms** (post–KYC). **Header:** `X-Internal-Token: <WALLET_INTERNAL_TOKEN>` (must match **client-auth-ms** / **compliance-ms** `WALLET_INTERNAL_TOKEN`).
+Used by **client-auth-ms** (signup) and **compliance-ms** (post–KYC, KYC link billing). **Header:** `X-Internal-Token: <JWT_SECRET>` (must match **compliance-ms** / **wallet-ms** `JWT_SECRET`). Legacy **`WALLET_INTERNAL_TOKEN`** is still accepted on wallet-ms if set.
 
 | Endpoint | When | PayOnUs |
 |----------|------|---------|
 | `POST /api/v1/internal/wallets/user` | Retail **registration** (client-auth-ms) | **No** — creates wallet row only |
 | `POST /api/v1/internal/wallets/user/:userId/provision-nuban` | **Fuspay KYC webhook** `verification.completed` (compliance-ms) | **Yes** — fixed reserved VA |
+| `POST /api/v1/internal/wallets/kyc-link/charge` | **Customer KYC link create** (compliance-ms) | **No** — debits app-scoped merchant KYC wallet |
+| `POST /api/v1/internal/wallets/kyc-link/refund` | Fuspay link create failed after charge (compliance-ms) | **No** — credits KYC wallet refund |
+| `POST /api/v1/internal/wallets/billing/monthly-charge` | **Monthly customer billing** (billing-ms) | **No** — debits app-scoped merchant Billing wallet |
+| `POST /api/v1/internal/wallets/repayment/collect` (legacy alias: `/settlement/collect`) | **Repayment collection** (product-ms, billing-ms, payment-ms) | **No** — credits app-scoped Repayment; optional user-wallet debit |
 
 **Create user wallet body:** `userId`, `merchantId`, optional `name`, `currency`, `complianceShareholderUserId` (merchant owner id for legacy shareholder BVN fallback).
 
@@ -99,7 +184,7 @@ Used by **client-auth-ms** (signup) and **compliance-ms** (post–KYC). **Header
 
 ### Funding Callbacks
 - `POST /api/v1/wallets/funding/callback` - Webhook endpoint for funding notifications from payment providers
-  - **Supports merchant wallet funding**: Use `merchantId` + `merchantWalletType` (`BILLING`, `KYC`, or `SETTLEMENT`; legacy `TREASURY` / `OPERATION` accepted). For **app-scoped** merchant wallets, include **`appId`** so the correct wallet row is resolved.
+  - **Supports merchant wallet funding**: Use `merchantId` + `merchantWalletType` (`BILLING`, `KYC`, or `REPAYMENT`; legacy `SETTLEMENT` / `TREASURY` / `OPERATION` accepted). For **app-scoped** merchant wallets, include **`appId`** so the correct wallet row is resolved.
   - **Supports user wallet funding (by walletId)**: Use `walletId`
   - **Supports user wallet funding (by user)**: Use `userId` + `merchantId`
   - **PayOnUs / virtual account**: If the body includes **`accountNumber`** or **`virtual_account_number`** and no wallet identifiers yet, the service looks up the wallet by stored Payonus NUBAN and fills `walletId`, `merchantId`, `appId` (merchant), and `merchantWalletType` as appropriate. Normalizes common PayOnUs fields (`onusReference`, `paymentStatus`, `transactionAmount`, `businessId`, etc.). Verifies the **`hash`** header (or body `hash`) when `PAYONUS_WEBHOOK_*` is configured.
@@ -261,7 +346,7 @@ When `PAYONUS_NUBAN_ENABLED` is truthy and `PAYONUS_BASE_URL` plus credentials a
 
 | Wallet | When PayOnUs is called | API | `virtualNuban.accountType` |
 |--------|------------------------|-----|----------------------------|
-| **Merchant** (Billing, KYC, Settlement) | Immediately on **merchant wallet create** | Dynamic VA (`POST /api/v1/virtual-accounts/dynamic`) | `dynamic` |
+| **Merchant** (Billing, KYC, Repayment) | Immediately on **merchant wallet create** | Dynamic VA (`POST /api/v1/virtual-accounts/dynamic`) | `dynamic` |
 | **Retail user** | After **Fuspay modular KYC** completes (`verification.completed` webhook → compliance-ms → `POST .../provision-nuban`) | Fixed / reserved VA (`POST /api/v1/virtual-accounts/fixed-account`) | `reserved` |
 
 Retail users **do not** get a PayOnUs call at registration. Signup only creates the wallet row via `POST /api/v1/internal/wallets/user`. The mobile app should show “complete KYC” before expecting a bank account number, then refresh `GET /api/v1/wallets/user/:userId` after KYC.
@@ -292,7 +377,8 @@ See **`.env.example`** for a full template. Commonly used:
 
 | Variable | Description |
 |----------|-------------|
-| `WALLET_INTERNAL_TOKEN` | Shared secret for internal wallet routes; callers send `X-Internal-Token`. **Same value** as **client-auth-ms** and **compliance-ms** `WALLET_INTERNAL_TOKEN`. If unset, internal routes return **503**. |
+| `JWT_SECRET` | Shared secret for internal wallet routes; **compliance-ms** sends `X-Internal-Token: <JWT_SECRET>`. Must match across services that call internal wallet APIs. |
+| `WALLET_INTERNAL_TOKEN` | Legacy optional alias; still accepted if set (e.g. **client-auth-ms** signup until migrated). |
 | `COMPLIANCE_SERVICE_URL` | compliance-ms base URL (no trailing slash) for retail + shareholder BVN lookup |
 | `COMPLIANCE_WALLET_INTERNAL_TOKEN` | Same as compliance-ms `COMPLIANCE_WALLET_INTERNAL_TOKEN`; sent as `X-Internal-Token` |
 | `PAYONUS_NUBAN_ENABLED` | Turn integration on or off |
@@ -334,7 +420,7 @@ interface MerchantWallet extends BaseWallet {
   appName?: string;
   payonusSubaccountCode?: string;
   walletType: 'MERCHANT';
-  merchantWalletType: MerchantWalletType; // BILLING, KYC, or SETTLEMENT
+  merchantWalletType: MerchantWalletType; // BILLING, KYC, or REPAYMENT
   name: string;
 }
 ```

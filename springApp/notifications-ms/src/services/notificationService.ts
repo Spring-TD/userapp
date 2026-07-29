@@ -3,6 +3,7 @@ import { notificationDbMongo as mockDb } from '../utils/notificationDbMongo';
 import emailService from './emailService';
 import smsService from './smsService';
 import templateService from './templateService';
+import webPushService from './webPushService';
 import {
   SendNotificationRequest,
   NotificationResponse,
@@ -11,12 +12,22 @@ import {
   NotificationChannel
 } from '../types/notification';
 import { ApiError } from '../middleware/errorHandler';
+import { inboxRealtimeHub } from '../realtime/inboxRealtimeHub';
+import { serializeInboxItem } from '../utils/inboxSerializer';
 
 export class NotificationService {
+  private getSenderName(data: Record<string, any>): string | undefined {
+    const appName = data?.appName;
+    return typeof appName === 'string' && appName.trim() ? appName.trim() : undefined;
+  }
+
   /**
-   * Send in-app notification: persists rendered title/body; no external provider.
+   * Send in-app notification: persists rendered title/body; optionally sends Web Push (VAPID).
    */
-  private async sendInApp(request: SendNotificationRequest): Promise<NotificationResponse> {
+  private async sendInApp(
+    request: SendNotificationRequest,
+    options?: { skipWebPush?: boolean }
+  ): Promise<NotificationResponse> {
     const notification = await mockDb.createNotification({
       channel: 'in_app',
       recipient: request.recipient,
@@ -38,6 +49,40 @@ export class NotificationService {
         status: 'sent',
         sentAt: new Date()
       });
+
+      const saved = await mockDb.findNotificationById(notification.id);
+      if (saved) {
+        inboxRealtimeHub.publish(request.recipient, {
+          type: 'notification.new',
+          notification: serializeInboxItem(saved)
+        });
+        const unreadCount = await mockDb.countUnreadInApp(request.recipient);
+        inboxRealtimeHub.publish(request.recipient, {
+          type: 'inbox.unread_count',
+          unreadCount
+        });
+      }
+
+      if (!options?.skipWebPush) {
+        const pushResult = await webPushService.sendToUser({
+          userId: request.recipient,
+          title: payload.title,
+          body: payload.body,
+          template: request.template,
+          url: '/notifications',
+          data: {
+            userId: request.recipient,
+            template: request.template
+          }
+        });
+        if (!pushResult.success && pushResult.sentCount === 0 && pushResult.error) {
+          console.warn(
+            `[notificationService] Web Push skipped/failed for ${request.recipient}:`,
+            pushResult.error
+          );
+        }
+      }
+
       return {
         success: true,
         id: notification.id,
@@ -106,7 +151,8 @@ export class NotificationService {
             to: request.recipient,
             subject: subject!,
             html: renderedContent.html!,
-            text: renderedContent.text
+            text: renderedContent.text,
+            fromName: this.getSenderName(request.data)
           });
         } else {
           if (!smsService.isSMSEnabled()) {
@@ -161,7 +207,7 @@ export class NotificationService {
   }
 
   /**
-   * Send the same template + data as email and in-app (recipient user id for inbox).
+   * Send the same template + data as in-app and optionally email.
    */
   async sendEmailAndInApp(request: SendEmailAndInAppRequest): Promise<SendEmailAndInAppResponse> {
     const base = {
@@ -170,19 +216,27 @@ export class NotificationService {
       priority: request.priority
     };
 
-    const inAppResult = await this.send({
-      channel: 'in_app',
-      recipient: request.userId,
-      ...base
-    });
+    const inAppResult = await this.sendInApp(
+      {
+        channel: 'in_app',
+        recipient: request.userId,
+        ...base
+      },
+      { skipWebPush: request.skipWebPush }
+    );
 
-    const emailResult = await this.send({
-      channel: 'email',
-      recipient: request.email,
-      ...base
-    });
+    const emailAddress = request.email?.trim();
+    let emailResult: NotificationResponse | undefined;
+    if (emailAddress) {
+      emailResult = await this.send({
+        channel: 'email',
+        recipient: emailAddress,
+        ...base
+      });
+    }
 
-    const success = !!(inAppResult.success && emailResult.success);
+    const emailSucceeded = !emailAddress || !!emailResult?.success;
+    const success = !!(inAppResult.success && emailSucceeded);
     return {
       success,
       inApp: {
@@ -190,13 +244,85 @@ export class NotificationService {
         id: inAppResult.id,
         error: inAppResult.error
       },
-      email: {
-        success: !!emailResult.success,
-        id: emailResult.id,
-        error: emailResult.error
-      },
-      error: success ? undefined : 'One or both deliveries failed; see inApp and email details'
+      email: emailAddress
+        ? {
+            success: !!emailResult?.success,
+            id: emailResult?.id,
+            error: emailResult?.error
+          }
+        : {
+            success: true,
+            skipped: true
+          },
+      error: success ? undefined : 'One or more deliveries failed; see inApp and email details'
     };
+  }
+
+  async getInAppUnreadCount(userId: string): Promise<number> {
+    return mockDb.countUnreadInApp(userId);
+  }
+
+  async getInbox(
+    userId: string,
+    limit: number = 50,
+    offset: number = 0,
+    unreadOnly?: boolean
+  ): Promise<{ notifications: INotification[]; total: number }> {
+    try {
+      return await mockDb.findInAppInboxPaginated(userId, limit, offset, unreadOnly);
+    } catch (error: any) {
+      throw new ApiError(500, `Failed to get inbox: ${error.message}`);
+    }
+  }
+
+  async markInboxRead(userId: string, id: string): Promise<INotification | null> {
+    const readAt = new Date();
+    const updated = await mockDb.markInAppRead(id, userId, readAt);
+    if (updated) {
+      inboxRealtimeHub.publish(userId, {
+        type: 'notification.read',
+        id,
+        readAt: readAt.toISOString()
+      });
+      const unreadCount = await mockDb.countUnreadInApp(userId);
+      inboxRealtimeHub.publish(userId, { type: 'inbox.unread_count', unreadCount });
+    }
+    return updated;
+  }
+
+  async markInboxReadBulk(userId: string, ids?: string[]): Promise<{ modifiedCount: number; readAt: string }> {
+    const readAt = new Date();
+    const modifiedCount = await mockDb.markInAppReadMany(userId, ids, readAt);
+    if (modifiedCount > 0) {
+      inboxRealtimeHub.publish(userId, {
+        type: 'notification.read_bulk',
+        ids: ids ?? [],
+        readAt: readAt.toISOString()
+      });
+      const unreadCount = await mockDb.countUnreadInApp(userId);
+      inboxRealtimeHub.publish(userId, { type: 'inbox.unread_count', unreadCount });
+    }
+    return { modifiedCount, readAt: readAt.toISOString() };
+  }
+
+  async deleteInboxItem(userId: string, id: string): Promise<boolean> {
+    const removed = await mockDb.deleteInApp(id, userId);
+    if (removed) {
+      inboxRealtimeHub.publish(userId, { type: 'notification.deleted', id });
+      const unreadCount = await mockDb.countUnreadInApp(userId);
+      inboxRealtimeHub.publish(userId, { type: 'inbox.unread_count', unreadCount });
+    }
+    return removed;
+  }
+
+  async deleteInboxItemsBulk(userId: string, ids: string[]): Promise<number> {
+    const deletedCount = await mockDb.deleteInAppMany(userId, ids);
+    if (deletedCount > 0) {
+      inboxRealtimeHub.publish(userId, { type: 'notification.deleted_bulk', ids });
+      const unreadCount = await mockDb.countUnreadInApp(userId);
+      inboxRealtimeHub.publish(userId, { type: 'inbox.unread_count', unreadCount });
+    }
+    return deletedCount;
   }
 
   async getNotificationStatus(id: string): Promise<INotification | null> {

@@ -1,13 +1,26 @@
 import mongoose, { Document, Schema } from 'mongoose';
-import type { ProductApplication, ProductRequirementSubmission } from '../types/productApplication';
+import type {
+  ProductApplication,
+  ProductApplicationProgress,
+  ProductRequirementSubmission,
+  PostApprovalFulfillment
+} from '../types/productApplication';
 import type { LoanRequirements } from '../types/product';
+import type { ValidatedPlatformApplicationFields } from '../types/platformApplicationFields';
+import { platformFieldsFromApplication } from '../utils/platformApplicationFieldInput';
 
 export interface IProductApplicationDocument
-  extends Omit<ProductApplication, 'id' | 'createdAt' | 'updatedAt'>,
+  extends Omit<
+      ProductApplication,
+      'id' | 'createdAt' | 'updatedAt' | 'loanWorkflowLastEventAt' | 'applicationProgress' | 'platformFields'
+    >,
+    ValidatedPlatformApplicationFields,
     Document {
   _id: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
+  loanWorkflowLastEventAt?: Date;
+  applicationProgress?: Omit<ProductApplicationProgress, 'lastSavedAt'> & { lastSavedAt?: Date };
 }
 
 const requirementSubmissionSchema = new Schema(
@@ -43,6 +56,19 @@ const productApplicationWalletSchema = new Schema(
   { _id: false }
 );
 
+const applicationProgressSchema = new Schema(
+  {
+    currentStep: { type: String },
+    currentTab: { type: String },
+    requirementDrafts: { type: [requirementSubmissionSchema], default: undefined },
+    uploadedDrafts: { type: [requirementSubmissionSchema], default: undefined },
+    guarantorDrafts: { type: [Schema.Types.Mixed], default: undefined },
+    metadata: { type: Schema.Types.Mixed },
+    lastSavedAt: { type: Date }
+  },
+  { _id: false }
+);
+
 const productApplicationSchema = new Schema<IProductApplicationDocument>(
   {
     userId: { type: String, required: true, index: true },
@@ -65,10 +91,34 @@ const productApplicationSchema = new Schema<IProductApplicationDocument>(
     requirementsSnapshot: { type: Schema.Types.Mixed },
     contractSnapshot: { type: Schema.Types.Mixed },
     loanWorkflowStatus: { type: String, index: true },
+    applicationProgress: { type: applicationProgressSchema },
     requirementSubmissions: { type: [requirementSubmissionSchema], default: [] },
     productWallet: { type: productApplicationWalletSchema },
     upstreamApplicationId: { type: String },
-    upstreamSyncError: { type: String }
+    upstreamSyncError: { type: String },
+    loanWorkflowLastEventId: { type: String },
+    loanWorkflowLastEventAt: { type: Date },
+    postApprovalFulfillment: { type: Schema.Types.Mixed },
+    disbursementDeferred: { type: Boolean },
+    applicantGuarantorReport: {
+      guarantorId: { type: String },
+      guarantorName: { type: String },
+      reportedAt: { type: String }
+    },
+    isPoliticallyExposedPerson: { type: Boolean },
+    monthlyIncome: { type: Number },
+    repaymentSource: { type: String },
+    repaymentSourceOther: { type: String },
+    maritalStatus: { type: String },
+    maritalStatusOther: { type: String },
+    loanReason: { type: String },
+    loanReasonOther: { type: String },
+    repayingWithSpouse: { type: Boolean },
+    spouseFullName: { type: String },
+    spouseEmail: { type: String },
+    spousePhone: { type: String },
+    spouseOccupation: { type: String },
+    spouseCountry: { type: String }
   },
   {
     collection: 'product_applications',
@@ -78,13 +128,41 @@ const productApplicationSchema = new Schema<IProductApplicationDocument>(
 
 productApplicationSchema.index({ merchantId: 1, status: 1 });
 productApplicationSchema.index({ userId: 1, productType: 1 });
+productApplicationSchema.index({ userId: 1, productId: 1, merchantId: 1, status: 1 });
+productApplicationSchema.index({ upstreamApplicationId: 1 });
+productApplicationSchema.index({ userId: 1, productType: 1, 'postApprovalFulfillment.status': 1 });
 
 export const ProductApplicationModel = mongoose.model<IProductApplicationDocument>(
   'ProductApplication',
   productApplicationSchema
 );
 
+function stringFrom(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function recordFrom(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function applicantNameFrom(doc: IProductApplicationDocument): string {
+  const snapshot = recordFrom(doc.contractSnapshot);
+  const applicant = recordFrom(snapshot?.applicant);
+  return (
+    stringFrom(applicant?.name) ||
+    stringFrom(snapshot?.customerName) ||
+    stringFrom(snapshot?.applicantName) ||
+    (stringFrom(doc.email)?.split('@')[0].replace(/[._+-]+/g, ' ').trim()) ||
+    doc.userId
+  );
+}
+
 export function toProductApplication(doc: IProductApplicationDocument): ProductApplication {
+  const applicantName = applicantNameFrom(doc);
+  const platformFields = platformFieldsFromApplication(doc);
+
   return {
     id: doc._id.toString(),
     userId: doc.userId,
@@ -94,6 +172,8 @@ export function toProductApplication(doc: IProductApplicationDocument): ProductA
     amount: doc.amount,
     currency: doc.currency,
     email: doc.email,
+    customerName: applicantName,
+    applicantName,
     status: doc.status,
     rejectionReason: doc.rejectionReason,
     blacklistReason: doc.blacklistReason,
@@ -102,11 +182,51 @@ export function toProductApplication(doc: IProductApplicationDocument): ProductA
     requirementsSnapshot: doc.requirementsSnapshot as LoanRequirements | undefined,
     contractSnapshot: doc.contractSnapshot as Record<string, unknown> | undefined,
     loanWorkflowStatus: doc.loanWorkflowStatus,
+    applicationProgress: progressFrom(doc.applicationProgress),
     requirementSubmissions: doc.requirementSubmissions as ProductRequirementSubmission[],
     productWallet: doc.productWallet,
     upstreamApplicationId: doc.upstreamApplicationId,
     upstreamSyncError: doc.upstreamSyncError,
+    loanWorkflowLastEventId: doc.loanWorkflowLastEventId,
+    loanWorkflowLastEventAt: doc.loanWorkflowLastEventAt?.toISOString(),
+    postApprovalFulfillment: doc.postApprovalFulfillment as PostApprovalFulfillment | undefined,
+    disbursementDeferred: doc.disbursementDeferred,
+    applicantGuarantorReport: doc.applicantGuarantorReport
+      ? {
+          guarantorId: doc.applicantGuarantorReport.guarantorId,
+          guarantorName: doc.applicantGuarantorReport.guarantorName,
+          reportedAt: doc.applicantGuarantorReport.reportedAt
+        }
+      : undefined,
+    ...(Object.keys(platformFields).length > 0 ? { platformFields } : {}),
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString()
+  };
+}
+
+function progressFrom(value: unknown): ProductApplicationProgress | undefined {
+  const progress = recordFrom(value);
+  if (!progress) {
+    return undefined;
+  }
+
+  return {
+    ...(typeof progress.currentStep === 'string' ? { currentStep: progress.currentStep } : {}),
+    ...(typeof progress.currentTab === 'string' ? { currentTab: progress.currentTab } : {}),
+    ...(Array.isArray(progress.requirementDrafts)
+      ? { requirementDrafts: progress.requirementDrafts as ProductRequirementSubmission[] }
+      : {}),
+    ...(Array.isArray(progress.uploadedDrafts)
+      ? { uploadedDrafts: progress.uploadedDrafts as ProductRequirementSubmission[] }
+      : {}),
+    ...(Array.isArray(progress.guarantorDrafts)
+      ? { guarantorDrafts: progress.guarantorDrafts as Record<string, unknown>[] }
+      : {}),
+    ...(recordFrom(progress.metadata) ? { metadata: progress.metadata as Record<string, unknown> } : {}),
+    ...(progress.lastSavedAt instanceof Date
+      ? { lastSavedAt: progress.lastSavedAt.toISOString() }
+      : typeof progress.lastSavedAt === 'string'
+        ? { lastSavedAt: progress.lastSavedAt }
+        : {})
   };
 }

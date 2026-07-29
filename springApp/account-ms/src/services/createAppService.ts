@@ -30,18 +30,28 @@ class CreateAppService {
      */
     async getAppInfo(appId: string): Promise<AppInfo | null> {
         try {
-            const response = await axios.get(`${this.baseUrl}/api/v1/apps/${appId}`, {
+            const response = await axios.get(`${this.baseUrl}/api/v1/special/internal/apps/${appId}`, {
                 headers: {
-                    'Authorization': 'Bearer sams_account_service_token'
-                }
+                    'X-Internal-Token': config.jwtSecret
+                },
+                timeout: config.tenantResolverTimeoutMs,
+                validateStatus: () => true
             });
 
-            if (response.data.success && response.data.data) {
-                return response.data.data;
+            if (response.status >= 200 && response.status < 300 && response.data.success && response.data.data) {
+                const app = response.data.data;
+                return {
+                    id: app.id || app._id || appId,
+                    name: app.name,
+                    merchantId: app.merchantId || app.merchant_id,
+                    status: app.status,
+                    createdAt: app.createdAt || app.created_at
+                };
             }
             return null;
-        } catch (error: any) {
-            console.error('Error getting app info:', error.message);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'unknown error';
+            console.error('Error getting app info:', message);
             return null;
         }
     }
@@ -52,16 +62,32 @@ class CreateAppService {
      */
     async getAppsByMerchantId(merchantId: string): Promise<AppInfo[]> {
         try {
-            const response = await axios.get(`${this.baseUrl}/api/v1/apps/merchant/${merchantId}`, {
-                headers: {
-                    'Authorization': 'Bearer sams_account_service_token'
-                }
-            });
+            const apps: AppInfo[] = [];
+            let page = 1;
+            const limit = 20;
 
-            if (response.data.success && response.data.data) {
-                return response.data.data;
+            while (true) {
+                const response = await axios.get(`${this.baseUrl}/api/v1/apps/merchant/${merchantId}`, {
+                    headers: {
+                        'Authorization': 'Bearer sams_account_service_token'
+                    },
+                    params: { page, limit }
+                });
+
+                if (!response.data.success || !Array.isArray(response.data.data)) {
+                    return apps;
+                }
+
+                apps.push(...response.data.data);
+
+                const pagination = response.data.pagination as
+                    | { hasNextPage?: boolean; totalPages?: number }
+                    | undefined;
+                if (!pagination?.hasNextPage || page >= (pagination.totalPages ?? page)) {
+                    return apps;
+                }
+                page += 1;
             }
-            return [];
         } catch (error: any) {
             console.error('Error getting apps by merchant:', error.message);
             return [];

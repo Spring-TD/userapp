@@ -1,0 +1,4 @@
+{
+  "title": "Guarantor KYC approved",
+  "body": "{{guarantorName}} completed KYC for your {{productName}} application."
+}

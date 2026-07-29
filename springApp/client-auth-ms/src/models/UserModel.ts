@@ -13,6 +13,7 @@ export interface UserDocument extends Document {
     phone_verified: boolean;
     user_merchant_id: string;
     country: string;
+    profile_picture_url?: string;
     app_id?: string;
     role_id?: string;
     user_ref?: string;
@@ -28,7 +29,7 @@ export interface UserDocument extends Document {
 
 const userSchema = new Schema<UserDocument>(
     {
-        email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+        email: { type: String, required: true, lowercase: true, trim: true },
         password: { type: String, required: true },
         first_name: { type: String, required: true },
         last_name: { type: String, required: true },
@@ -47,6 +48,7 @@ const userSchema = new Schema<UserDocument>(
         phone_verified: { type: Boolean, required: true, default: false },
         user_merchant_id: { type: String },
         country: { type: String },
+        profile_picture_url: { type: String },
         app_id: { type: String },
         role_id: { type: String },
         user_ref: { type: String },
@@ -62,7 +64,14 @@ const userSchema = new Schema<UserDocument>(
     }
 );
 
+// Email identity is scoped per storefront app: the same email can register on
+// multiple apps and is treated as a separate account on each. Merchants/admins
+// have no app_id, so their missing value collapses to a single (null) key and
+// keeps them globally unique by email.
+userSchema.index({ email: 1, app_id: 1 }, { unique: true, name: 'unique_email_per_app' });
+
 // Useful index for merchant-scoped queries
 userSchema.index({ user_merchant_id: 1, user_type: 1 });
+userSchema.index({ user_merchant_id: 1, user_type: 1, app_id: 1 });
 
 export const UserModel = mongoose.model<UserDocument>('User', userSchema);

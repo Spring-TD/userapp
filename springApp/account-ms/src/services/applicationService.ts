@@ -1,6 +1,7 @@
 import productService, { ProductRequirementSubmission } from './productService';
 import accountService from './accountService';
 import createAppService from './createAppService';
+import { executeCommodityPurchase } from './commodityPurchaseService';
 
 export interface ApplyForProductInput {
     userId: string;
@@ -94,13 +95,58 @@ class ApplicationService {
                     }
                 };
             } else {
-                // Create Account directly for other products (Savings, Commodity, etc.)
+                const isCommodity = normalizedType === 'COMMODITY';
+
+                if (isCommodity) {
+                    const purchase = await executeCommodityPurchase({
+                        userId: input.userId,
+                        productId: input.productId,
+                        appId,
+                        amount: input.amount,
+                        currency: input.currency
+                    });
+
+                    const account = await accountService.createAccount({
+                        userId: input.userId,
+                        accountType: product.type.toLowerCase(),
+                        currency: input.currency,
+                        productId: input.productId,
+                        email: input.email,
+                        appId
+                    });
+
+                    await accountService.updateAccountBalance(account.id, purchase.basePrice);
+
+                    return {
+                        success: true,
+                        message: 'Commodity purchased successfully.',
+                        data: {
+                            type: 'account',
+                            account: {
+                                ...account,
+                                balance: purchase.basePrice
+                            },
+                            purchase: {
+                                referenceId: purchase.referenceId,
+                                basePrice: purchase.basePrice,
+                                commissionAmount: purchase.commissionAmount,
+                                totalAmount: purchase.totalAmount,
+                                commissionRatePercent: purchase.commissionRatePercent,
+                                offeringMerchantId: purchase.offeringMerchantId,
+                                creatorMerchantId: purchase.creatorMerchantId
+                            }
+                        }
+                    };
+                }
+
+                // Create Account directly for other products (Savings, Investment, etc.)
                 const account = await accountService.createAccount({
                     userId: input.userId,
                     accountType: product.type.toLowerCase(),
                     currency: input.currency,
                     productId: input.productId,
-                    email: input.email
+                    email: input.email,
+                    appId
                 });
 
                 return {
@@ -114,71 +160,6 @@ class ApplicationService {
             }
         } catch (error: any) {
             console.error('Error applying for product:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Approve an application
-     */
-    async approveApplication(applicationId: string, adminId: string) {
-        try {
-            const app = await productService.getProductApplicationById(applicationId);
-            if (!app) {
-                throw new Error('Application not found');
-            }
-
-            if (app.status !== 'PENDING') {
-                throw new Error(`Application is already ${app.status}`);
-            }
-
-            const updatedApplication = await productService.updateProductApplicationStatus(applicationId, 'APPROVED');
-
-            // Create the actual account
-            const account = await accountService.createAccount({
-                userId: app.userId,
-                accountType: app.productType.toLowerCase(),
-                currency: app.currency,
-                productId: app.productId
-            });
-
-            return {
-                success: true,
-                message: 'Application approved and account created.',
-                data: {
-                    application: updatedApplication,
-                    account
-                }
-            };
-        } catch (error: any) {
-            console.error('Error approving application:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Reject an application
-     */
-    async rejectApplication(applicationId: string, reason: string, adminId: string) {
-        try {
-            const app = await productService.getProductApplicationById(applicationId);
-            if (!app) {
-                throw new Error('Application not found');
-            }
-
-            if (app.status !== 'PENDING') {
-                throw new Error(`Application is already ${app.status}`);
-            }
-
-            const updatedApp = await productService.updateProductApplicationStatus(applicationId, 'REJECTED', reason);
-
-            return {
-                success: true,
-                message: 'Application rejected.',
-                data: updatedApp
-            };
-        } catch (error: any) {
-            console.error('Error rejecting application:', error);
             throw error;
         }
     }

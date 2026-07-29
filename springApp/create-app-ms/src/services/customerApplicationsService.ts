@@ -18,6 +18,15 @@ type LooseApplication = {
   rejectionReason?: string;
 };
 
+export type PaginationMeta = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+};
+
 function applicationsBaseUrl(): string {
   return `${config.accountServiceUrl.replace(/\/+$/, '')}/api/v1/applications`;
 }
@@ -37,7 +46,9 @@ export async function listCustomerApplicationsForApp(opts: {
   adminId?: string;
   productType?: string;
   status?: string;
-}): Promise<LooseApplication[]> {
+  page?: number;
+  limit?: number;
+}): Promise<{ applications: LooseApplication[]; pagination?: PaginationMeta }> {
   const params: Record<string, string> = {
     userId: opts.userId.trim(),
     appId: opts.appId.trim()
@@ -47,6 +58,12 @@ export async function listCustomerApplicationsForApp(opts: {
   }
   if (opts.status?.trim()) {
     params.status = opts.status.trim();
+  }
+  if (opts.page && opts.page > 0) {
+    params.page = String(Math.floor(opts.page));
+  }
+  if (opts.limit && opts.limit > 0) {
+    params.limit = String(Math.floor(opts.limit));
   }
 
   try {
@@ -69,7 +86,11 @@ export async function listCustomerApplicationsForApp(opts: {
     }
 
     const data = (res.data as { data?: LooseApplication[] })?.data;
-    return Array.isArray(data) ? data : [];
+    const pagination = (res.data as { pagination?: PaginationMeta })?.pagination;
+    return {
+      applications: Array.isArray(data) ? data : [],
+      ...(pagination ? { pagination } : {})
+    };
   } catch (e) {
     if (e instanceof ApiError) {
       throw e;

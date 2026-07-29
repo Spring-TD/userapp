@@ -46,10 +46,11 @@ const descriptionSchema = Joi.string().min(1).max(500).optional().messages({
 });
 
 const merchantWalletTypeSchema = Joi.string()
-  .valid('BILLING', 'KYC', 'SETTLEMENT', 'TREASURY', 'OPERATION')
+  .valid('BILLING', 'KYC', 'REPAYMENT', 'SETTLEMENT', 'TREASURY', 'OPERATION')
   .optional()
   .messages({
-    'any.only': 'Merchant wallet type must be one of BILLING, KYC, SETTLEMENT (legacy: TREASURY, OPERATION)'
+    'any.only':
+      'Merchant wallet type must be one of BILLING, KYC, REPAYMENT (legacy: SETTLEMENT, TREASURY, OPERATION)'
   });
 
 const dateSchema = Joi.date().iso().optional().messages({
@@ -166,6 +167,11 @@ export const transferOutSchema = Joi.object({
   description: descriptionSchema
 });
 
+export const productApplicationTransferSchema = Joi.object({
+  amount: amountSchema,
+  description: descriptionSchema
+});
+
 export const debitWalletSchema = Joi.object({
   userId: userIdSchema,
   amount: amountSchema,
@@ -209,18 +215,59 @@ export const userApiCallSchema = Joi.object({
 });
 
 export const userBankPayoutSchema = Joi.object({
-  accountNumber: bankAccountNumberSchema,
-  bankCode: bankCodeSchema,
-  accountName: Joi.string().min(1).max(120).required().messages({
-    'string.min': 'Account name must not be empty',
-    'string.max': 'Account name must not exceed 120 characters',
-    'any.required': 'Account name is required'
+  savedBankAccountId: Joi.string().trim().min(1).max(100).required().messages({
+    'string.min': 'Saved bank account ID must not be empty',
+    'any.required': 'savedBankAccountId is required — payouts must use a saved bank account'
   }),
-  bankName: Joi.string().min(1).max(120).optional(),
   amount: amountSchema,
   currency: currencySchema.optional(),
   narration: descriptionSchema,
   reference: payoutReferenceSchema
+});
+
+export const addUserExternalBankAccountSchema = Joi.object({
+  accountNumber: bankAccountNumberSchema,
+  bankName: Joi.string().trim().min(1).max(120).optional().messages({
+    'string.min': 'Bank name must not be empty',
+    'string.max': 'Bank name must not exceed 120 characters'
+  }),
+  bankCode: bankCodeSchema.optional(),
+  accountName: Joi.string().trim().min(1).max(120).optional().messages({
+    'string.min': 'Account name must not be empty',
+    'string.max': 'Account name must not exceed 120 characters'
+  }),
+  label: Joi.string().trim().min(1).max(80).optional(),
+  currency: currencySchema.optional()
+})
+  .or('bankName', 'bankCode')
+  .messages({
+    'object.missing': 'Either bankName or bankCode is required'
+  });
+
+export const savedBankAccountIdParamSchema = Joi.object({
+  accountId: Joi.string().trim().min(1).max(100).required()
+});
+
+export const repaymentBankPayoutSchema = Joi.object({
+  appId: Joi.string().trim().min(1).max(100).optional(),
+  accountNumber: bankAccountNumberSchema,
+  bankCode: bankCodeSchema,
+  accountName: Joi.string().trim().min(1).max(120).required(),
+  bankName: Joi.string().trim().min(1).max(120).optional(),
+  amount: amountSchema,
+  currency: currencySchema.optional(),
+  narration: descriptionSchema,
+  reference: payoutReferenceSchema
+});
+
+/** @deprecated use repaymentBankPayoutSchema */
+export const settlementBankPayoutSchema = repaymentBankPayoutSchema;
+
+// Bank account name-enquiry (verify beneficiary before payout)
+export const bankNameEnquirySchema = Joi.object({
+  accountNumber: bankAccountNumberSchema,
+  bankCode: bankCodeSchema,
+  currency: currencySchema.optional()
 });
 
 // Funding callback validation schema
@@ -250,6 +297,18 @@ export const fundingCallbackSchema = Joi.object({
   merchantReference: Joi.string().optional(),
   accountNumber: Joi.string().optional(),
   virtual_account_number: Joi.string().optional(),
+  transactionFee: Joi.number().optional(),
+  sessionId: Joi.string().optional(),
+  businessName: Joi.string().optional(),
+  merchantName: Joi.string().optional(),
+  customerName: Joi.string().optional(),
+  customerEmail: Joi.string().optional(),
+  beneficiaryAccountName: Joi.string().optional(),
+  beneficiaryBankName: Joi.string().optional(),
+  senderName: Joi.string().optional(),
+  senderAccountNumber: Joi.string().optional(),
+  senderBankName: Joi.string().optional(),
+  transactionDateTime: Joi.string().optional(),
   appId: appIdSchema,
   merchantWalletType: merchantWalletTypeSchema
 });

@@ -1,7 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { WalletService } from '../services';
+import { TransactionPinService } from '../services/transactionPinService';
 import { logger } from '../utils/logger';
-import { validateInput, createMerchantWalletSchema, createUserWalletSchema, updateWalletBalanceSchema, filterTransactionSchema, transferOutSchema, debitWalletSchema, debitTreasurySchema, billingToKycTransferSchema, kycToBillingTransferSchema, userApiCallSchema, userBankPayoutSchema } from '../utils/validation';
+import { validateInput, createMerchantWalletSchema, createUserWalletSchema, updateWalletBalanceSchema, filterTransactionSchema, transferOutSchema, productApplicationTransferSchema, debitWalletSchema, debitTreasurySchema, billingToKycTransferSchema, kycToBillingTransferSchema, userApiCallSchema, userBankPayoutSchema, settlementBankPayoutSchema, bankNameEnquirySchema, addUserExternalBankAccountSchema } from '../utils/validation';
+import { UserExternalBankAccountService } from '../services/userExternalBankAccountService';
 import { normalizeMerchantWalletType } from '../utils/merchantWalletType';
 import { MerchantWalletType, TransactionType } from '../models/Wallet';
 
@@ -82,6 +84,11 @@ interface UserTransferOutData {
   description: string;
 }
 
+interface ProductApplicationTransferData {
+  amount: number;
+  description: string;
+}
+
 interface UserFilterTransactionData {
   startDate?: string;
   endDate?: string;
@@ -99,6 +106,24 @@ interface UserApiCallData {
 }
 
 interface UserBankPayoutData {
+  savedBankAccountId: string;
+  amount: number;
+  currency?: string;
+  narration?: string;
+  reference?: string;
+}
+
+interface AddUserExternalBankAccountData {
+  accountNumber: string;
+  bankName?: string;
+  bankCode?: string;
+  accountName?: string;
+  label?: string;
+  currency?: string;
+}
+
+interface SettlementBankPayoutData {
+  appId?: string;
   accountNumber: string;
   bankCode: string;
   accountName: string;
@@ -107,6 +132,23 @@ interface UserBankPayoutData {
   currency?: string;
   narration?: string;
   reference?: string;
+}
+
+function canAccessUserResource(
+  req: Request,
+  userId: string,
+  wallets: { merchantId: string }[]
+): boolean {
+  if (!req.user) return false;
+  if (req.user.userId === userId) return true;
+  if ((req.user.userType || '').toUpperCase() === 'ADMIN') return true;
+
+  const merchantIds = [req.user.merchantId, req.user.userId].filter(
+    (value): value is string => Boolean(value)
+  );
+  if (merchantIds.length === 0) return false;
+
+  return wallets.some((wallet) => merchantIds.includes(wallet.merchantId));
 }
 
 export class WalletController {
@@ -185,7 +227,7 @@ export class WalletController {
 
   /**
    * POST /api/v1/wallets/merchant/all
-   * Create all required merchant wallets (Billing, KYC, Settlement)
+   * Create all required merchant wallets (Billing, KYC, Repayment)
    */
   static async createAllMerchantWallets(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -244,6 +286,7 @@ export class WalletController {
   static async getMerchantWalletByType(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { merchantId, walletType } = req.params;
+      const appId = typeof req.query.appId === 'string' ? req.query.appId : undefined;
 
       if (!req.user) {
         res.status(401).json({
@@ -271,7 +314,7 @@ export class WalletController {
         return;
       }
 
-      const result = await WalletService.getMerchantWalletByType(merchantId, normalizedType);
+      const result = await WalletService.getMerchantWalletByType(merchantId, normalizedType, appId);
 
       if (!result.success) {
         res.status(404).json({
@@ -549,6 +592,59 @@ export class WalletController {
   }
 
   /**
+   * GET /api/v1/wallets/user/:userId/product-type-summary
+   * Per product-type totals from PRODUCT wallets (PRIMARY excluded; missing types => 0).
+   */
+  static async getUserProductTypeSummary(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { userId } = req.params;
+
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      const listResult = await WalletService.listUserWallets(userId);
+      if (!listResult.success) {
+        res.status(400).json({
+          success: false,
+          error: listResult.error || 'Failed to load user wallets'
+        });
+        return;
+      }
+
+      if (!canAccessUserResource(req, userId, listResult.wallets ?? [])) {
+        res.status(403).json({
+          success: false,
+          error: 'Access denied'
+        });
+        return;
+      }
+
+      const result = await WalletService.getUserProductTypeSummary(userId, listResult.wallets);
+
+      if (!result.success || !result.summary) {
+        res.status(400).json({
+          success: false,
+          error: result.error || 'Failed to build product type summary'
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: result.summary
+      });
+    } catch (error) {
+      logger.error('Error retrieving user product type summary', { error });
+      next(error);
+    }
+  }
+
+  /**
    * PUT /api/v1/wallets/user/:userId/balance
    * Update user wallet balance
    */
@@ -586,7 +682,16 @@ export class WalletController {
         return;
       }
 
-      const result = await WalletService.updateWalletBalance(userId, amount, description);
+      const userWalletResult = await WalletService.getUserWallet(userId);
+      if (!userWalletResult.success || !userWalletResult.wallet) {
+        res.status(404).json({
+          success: false,
+          error: 'User wallet not found'
+        });
+        return;
+      }
+
+      const result = await WalletService.updateWalletBalance(userWalletResult.wallet.id, amount, description);
 
       if (!result.success) {
         res.status(400).json({
@@ -771,6 +876,19 @@ export class WalletController {
 
       const { toWalletId, amount, description } = value!;
 
+      // Require a valid transaction PIN before moving money out.
+      const pinCheck = await TransactionPinService.verifyForTransfer(userId, req.body?.pin);
+      if (!pinCheck.ok) {
+        res.status(pinCheck.status).json({
+          success: false,
+          error: pinCheck.message,
+          code: pinCheck.code,
+          ...(pinCheck.attemptsRemaining !== undefined ? { attemptsRemaining: pinCheck.attemptsRemaining } : {}),
+          ...(pinCheck.lockedUntil ? { lockedUntil: pinCheck.lockedUntil } : {})
+        });
+        return;
+      }
+
       // Perform the transfer
       const result = await WalletService.transferOutFromUser({
         userId,
@@ -809,6 +927,82 @@ export class WalletController {
   }
 
   /**
+   * POST /api/v1/wallets/user/:userId/product-applications/:applicationId/transfer-to-primary
+   * Transfer approved loan/product wallet funds into the user's primary wallet.
+   */
+  static async transferProductApplicationToPrimary(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { userId, applicationId } = req.params;
+
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: 'Authentication required'
+        });
+        return;
+      }
+
+      if (req.user.userId !== userId) {
+        res.status(403).json({
+          success: false,
+          error: 'Access denied. Only wallet owner can transfer product application funds.'
+        });
+        return;
+      }
+
+      const { error, value } = validateInput<ProductApplicationTransferData>(
+        productApplicationTransferSchema,
+        req.body
+      );
+      if (error) {
+        res.status(400).json({
+          success: false,
+          error: 'Validation failed',
+          details: error
+        });
+        return;
+      }
+
+      const { amount, description } = value!;
+      const result = await WalletService.transferProductApplicationToPrimary({
+        userId,
+        applicationId,
+        amount,
+        description
+      });
+
+      if (!result.success) {
+        res.status(400).json({
+          success: false,
+          error: result.error
+        });
+        return;
+      }
+
+      logger.info('Product application funds transferred to primary wallet', {
+        userId,
+        applicationId,
+        amount,
+        loanChargeCollection: result.loanChargeCollection
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Product application funds transferred to primary wallet',
+        data: {
+          fromWallet: result.fromWallet,
+          toWallet: result.toWallet,
+          transaction: result.transaction,
+          loanChargeCollection: result.loanChargeCollection
+        }
+      });
+    } catch (error) {
+      logger.error('Error transferring product application funds to primary wallet', { error });
+      next(error);
+    }
+  }
+
+  /**
    * POST /api/v1/wallets/user/:userId/payout
    * Send money from a user's PayOnUs-backed wallet to an external bank account
    */
@@ -842,12 +1036,22 @@ export class WalletController {
         return;
       }
 
+      // Require a valid transaction PIN before moving money out.
+      const pinCheck = await TransactionPinService.verifyForTransfer(userId, req.body?.pin);
+      if (!pinCheck.ok) {
+        res.status(pinCheck.status).json({
+          success: false,
+          error: pinCheck.message,
+          code: pinCheck.code,
+          ...(pinCheck.attemptsRemaining !== undefined ? { attemptsRemaining: pinCheck.attemptsRemaining } : {}),
+          ...(pinCheck.lockedUntil ? { lockedUntil: pinCheck.lockedUntil } : {})
+        });
+        return;
+      }
+
       const result = await WalletService.payoutUserWalletToBank({
         userId,
-        accountNumber: value!.accountNumber,
-        bankCode: value!.bankCode,
-        accountName: value!.accountName,
-        bankName: value!.bankName,
+        savedBankAccountId: value!.savedBankAccountId,
         amount: value!.amount,
         currency: value!.currency,
         narration: value!.narration,
@@ -880,7 +1084,8 @@ export class WalletController {
           transaction: result.transaction,
           payoutReference: result.payoutReference,
           providerReference: result.providerReference,
-          providerStatus: result.providerStatus
+          providerStatus: result.providerStatus,
+          savedBankAccountId: result.savedBankAccountId
         }
       });
     } catch (error) {
@@ -890,13 +1095,234 @@ export class WalletController {
   }
 
   /**
+   * GET /api/v1/wallets/user/:userId/external-bank-accounts
+   * List saved external bank accounts for payouts from the user's PRIMARY wallet.
+   */
+  static async listUserExternalBankAccounts(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { userId } = req.params;
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Authentication required' });
+        return;
+      }
+      if (req.user.userId !== userId) {
+        res.status(403).json({ success: false, error: 'Access denied' });
+        return;
+      }
+
+      const result = await UserExternalBankAccountService.list(userId);
+      if (!result.success) {
+        res.status(500).json({ success: false, error: result.error });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: { accounts: result.accounts ?? [] }
+      });
+    } catch (error) {
+      logger.error('Error listing user external bank accounts', { error });
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/wallets/user/:userId/external-bank-accounts
+   * Verify and save an external bank account the user owns (PayOnUs name enquiry).
+   */
+  static async addUserExternalBankAccount(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { userId } = req.params;
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Authentication required' });
+        return;
+      }
+      if (req.user.userId !== userId) {
+        res.status(403).json({ success: false, error: 'Access denied' });
+        return;
+      }
+
+      const { error, value } = validateInput<AddUserExternalBankAccountData>(addUserExternalBankAccountSchema, req.body);
+      if (error) {
+        res.status(400).json({ success: false, error: 'Validation failed', details: error });
+        return;
+      }
+
+      const result = await UserExternalBankAccountService.add({
+        userId,
+        accountNumber: value!.accountNumber,
+        bankName: value!.bankName,
+        bankCode: value!.bankCode,
+        accountName: value!.accountName,
+        label: value!.label,
+        currency: value!.currency
+      });
+
+      if (!result.success) {
+        const status = result.error?.includes('already saved') ? 409 : 422;
+        res.status(status).json({ success: false, error: result.error });
+        return;
+      }
+
+      res.status(201).json({
+        success: true,
+        message: 'Bank account saved successfully',
+        data: { account: result.account }
+      });
+    } catch (error) {
+      logger.error('Error adding user external bank account', { error });
+      next(error);
+    }
+  }
+
+  /**
+   * DELETE /api/v1/wallets/user/:userId/external-bank-accounts/:accountId
+   */
+  static async removeUserExternalBankAccount(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { userId, accountId } = req.params;
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Authentication required' });
+        return;
+      }
+      if (req.user.userId !== userId) {
+        res.status(403).json({ success: false, error: 'Access denied' });
+        return;
+      }
+
+      const result = await UserExternalBankAccountService.remove(userId, accountId);
+      if (!result.success) {
+        res.status(404).json({ success: false, error: result.error });
+        return;
+      }
+
+      res.status(200).json({ success: true, message: 'Bank account removed' });
+    } catch (error) {
+      logger.error('Error removing user external bank account', { error });
+      next(error);
+    }
+  }
+
+  /**
+   * PATCH /api/v1/wallets/user/:userId/external-bank-accounts/:accountId/default
+   */
+  static async setDefaultUserExternalBankAccount(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { userId, accountId } = req.params;
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Authentication required' });
+        return;
+      }
+      if (req.user.userId !== userId) {
+        res.status(403).json({ success: false, error: 'Access denied' });
+        return;
+      }
+
+      const result = await UserExternalBankAccountService.setDefault(userId, accountId);
+      if (!result.success) {
+        res.status(404).json({ success: false, error: result.error });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Default bank account updated',
+        data: { account: result.account }
+      });
+    } catch (error) {
+      logger.error('Error setting default user external bank account', { error });
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/wallets/banks
+   * Return the list of banks PayOnUs supports for payouts (for a bank picker).
+   * Optional query: ?key=ZAR for the EFT bank list, ?refresh=true to bypass cache.
+   */
+  static async getBanks(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const key = typeof req.query.key === 'string' ? req.query.key : undefined;
+      const forceRefresh = req.query.refresh === 'true' || req.query.refresh === '1';
+
+      const result = await WalletService.listBanks({ key, forceRefresh });
+      if (!result.success) {
+        res.status(502).json({
+          success: false,
+          error: result.error || 'Failed to fetch bank list'
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        cached: result.cached ?? false,
+        count: result.banks.length,
+        data: result.banks
+      });
+    } catch (error) {
+      logger.error('Error fetching bank list', { error });
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/wallets/banks/name-enquiry
+   * Verify a beneficiary bank account and return the bank-confirmed account name,
+   * so the frontend can confirm the recipient before initiating a payout.
+   */
+  static async verifyBankAccount(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { error, value } = validateInput<{ accountNumber: string; bankCode: string; currency?: string }>(
+        bankNameEnquirySchema,
+        req.body
+      );
+      if (error) {
+        res.status(400).json({
+          success: false,
+          error: 'Validation failed',
+          details: error
+        });
+        return;
+      }
+
+      const result = await WalletService.verifyBankAccount({
+        accountNumber: value!.accountNumber,
+        bankCode: value!.bankCode,
+        currency: value!.currency
+      });
+
+      if (!result.success) {
+        res.status(422).json({
+          success: false,
+          error: result.error || 'Bank account verification failed'
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          accountName: result.accountName,
+          accountNumber: result.accountNumber,
+          bankCode: result.bankCode,
+          bankName: result.bankName
+        }
+      });
+    } catch (error) {
+      logger.error('Error verifying bank account', { error });
+      next(error);
+    }
+  }
+
+  /**
    * GET /api/v1/wallets/treasury/:merchantId/transactions
    * Filter Treasury Wallet transactions by date range and type
    */
-  static async filterSettlementTransactions(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async filterRepaymentTransactions(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { merchantId } = req.params;
-      const { startDate, endDate, type } = req.query;
+      const { startDate, endDate, type, appId } = req.query;
 
       if (!req.user) {
         res.status(401).json({
@@ -926,12 +1352,15 @@ export class WalletController {
         return;
       }
 
-      // Get Settlement Wallet for the merchant
-      const settlementResult = await WalletService.getSettlementWallet(merchantId);
-      if (!settlementResult.success || !settlementResult.wallet) {
+      // Get Repayment Wallet for the merchant (formerly "Settlement")
+      const repaymentResult = await WalletService.getRepaymentWallet(
+        merchantId,
+        typeof appId === 'string' ? appId : undefined
+      );
+      if (!repaymentResult.success || !repaymentResult.wallet) {
         res.status(404).json({
           success: false,
-          error: 'Settlement wallet not found'
+          error: 'Repayment wallet not found'
         });
         return;
       }
@@ -943,7 +1372,7 @@ export class WalletController {
         type: type as TransactionType
       };
 
-      const result = await WalletService.filterWalletTransactions(settlementResult.wallet.id, filterData);
+      const result = await WalletService.filterWalletTransactions(repaymentResult.wallet.id, filterData);
 
       if (!result.success) {
         res.status(400).json({
@@ -953,8 +1382,9 @@ export class WalletController {
         return;
       }
 
-      logger.info('Settlement wallet transactions filtered', {
+      logger.info('Repayment wallet transactions filtered', {
         merchantId,
+        appId,
         transactionCount: result.transactions?.length
       });
 
@@ -965,16 +1395,21 @@ export class WalletController {
         }
       });
     } catch (error) {
-      logger.error('Error filtering settlement transactions', { error });
+      logger.error('Error filtering repayment transactions', { error });
       next(error);
     }
+  }
+
+  /** @deprecated use filterRepaymentTransactions */
+  static async filterSettlementTransactions(req: Request, res: Response, next: NextFunction): Promise<void> {
+    return this.filterRepaymentTransactions(req, res, next);
   }
 
   /**
    * POST /api/v1/wallets/treasury/transfer
    * Transfer money out from Treasury Wallet to another wallet
    */
-  static async transferOutFromSettlement(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async transferOutFromRepayment(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {
         res.status(401).json({
@@ -985,6 +1420,7 @@ export class WalletController {
       }
 
       const merchantId = req.user.merchantId || req.user.userId;
+      const appId = typeof req.query.appId === 'string' ? req.query.appId : undefined;
 
       // Validate input data
       const { error, value } = validateInput<TransferOutData>(transferOutSchema, req.body);
@@ -999,20 +1435,20 @@ export class WalletController {
 
       const { fromWalletId, toWalletId, amount, description } = value!;
 
-      // Verify that the fromWallet is the Settlement Wallet of this merchant
-      const settlementResult = await WalletService.getSettlementWallet(merchantId);
-      if (!settlementResult.success || !settlementResult.wallet) {
+      // Verify that the fromWallet is the Repayment Wallet of this merchant (formerly "Settlement")
+      const repaymentResult = await WalletService.getRepaymentWallet(merchantId);
+      if (!repaymentResult.success || !repaymentResult.wallet) {
         res.status(404).json({
           success: false,
-          error: 'Settlement wallet not found'
+          error: 'Repayment wallet not found'
         });
         return;
       }
 
-      if (settlementResult.wallet.id !== fromWalletId) {
+      if (repaymentResult.wallet.id !== fromWalletId) {
         res.status(403).json({
           success: false,
-          error: 'You can only transfer from your Settlement Wallet'
+          error: 'You can only transfer from your Repayment Wallet'
         });
         return;
       }
@@ -1033,7 +1469,7 @@ export class WalletController {
         return;
       }
 
-      logger.info('Money transferred from Settlement Wallet', {
+      logger.info('Money transferred from Repayment Wallet', {
         merchantId,
         fromWalletId,
         toWalletId,
@@ -1050,9 +1486,14 @@ export class WalletController {
         }
       });
     } catch (error) {
-      logger.error('Error transferring money from Settlement Wallet', { error });
+      logger.error('Error transferring money from Repayment Wallet', { error });
       next(error);
     }
+  }
+
+  /** @deprecated use transferOutFromRepayment */
+  static async transferOutFromSettlement(req: Request, res: Response, next: NextFunction): Promise<void> {
+    return this.transferOutFromRepayment(req, res, next);
   }
 
   /**
@@ -1070,6 +1511,7 @@ export class WalletController {
       }
 
       const merchantId = req.user.merchantId || req.user.userId;
+      const appId = typeof req.query.appId === 'string' ? req.query.appId : undefined;
 
       // Validate input data
       const { error, value } = validateInput<BillingToKycTransferData>(billingToKycTransferSchema, req.body);
@@ -1087,6 +1529,7 @@ export class WalletController {
       // Perform the transfer
       const result = await WalletService.transferFromBillingToKyc({
         merchantId,
+        appId,
         amount,
         description
       });
@@ -1134,6 +1577,7 @@ export class WalletController {
       }
 
       const merchantId = req.user.merchantId || req.user.userId;
+      const appId = typeof req.query.appId === 'string' ? req.query.appId : undefined;
 
       // Validate input data
       const { error, value } = validateInput<KycToBillingTransferData>(kycToBillingTransferSchema, req.body);
@@ -1151,6 +1595,7 @@ export class WalletController {
       // Perform the transfer
       const result = await WalletService.transferFromKycToBilling({
         merchantId,
+        appId,
         amount,
         description
       });
@@ -1190,7 +1635,7 @@ export class WalletController {
   static async filterBillingTransactions(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { merchantId } = req.params;
-      const { startDate, endDate, type } = req.query;
+      const { startDate, endDate, type, appId } = req.query;
 
       if (!req.user) {
         res.status(401).json({
@@ -1227,7 +1672,11 @@ export class WalletController {
         type: type as TransactionType
       };
 
-      const result = await WalletService.filterBillingTransactions(merchantId, filterData);
+      const result = await WalletService.filterBillingTransactions(
+        merchantId,
+        filterData,
+        typeof appId === 'string' ? appId : undefined
+      );
 
       if (!result.success) {
         res.status(400).json({
@@ -1239,6 +1688,7 @@ export class WalletController {
 
       logger.info('Billing wallet transactions filtered', {
         merchantId,
+        appId,
         transactionCount: result.transactions?.length
       });
 
@@ -1261,7 +1711,7 @@ export class WalletController {
   static async filterKycTransactions(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { merchantId } = req.params;
-      const { startDate, endDate, type } = req.query;
+      const { startDate, endDate, type, appId } = req.query;
 
       if (!req.user) {
         res.status(401).json({
@@ -1298,7 +1748,11 @@ export class WalletController {
         type: type as TransactionType
       };
 
-      const result = await WalletService.filterKycTransactions(merchantId, filterData);
+      const result = await WalletService.filterKycTransactions(
+        merchantId,
+        filterData,
+        typeof appId === 'string' ? appId : undefined
+      );
 
       if (!result.success) {
         res.status(400).json({
@@ -1310,6 +1764,7 @@ export class WalletController {
 
       logger.info('KYC wallet transactions filtered', {
         merchantId,
+        appId,
         transactionCount: result.transactions?.length
       });
 
@@ -1340,6 +1795,7 @@ export class WalletController {
       }
 
       const merchantId = req.user.merchantId || req.user.userId;
+      const appId = typeof req.query.appId === 'string' ? req.query.appId : undefined;
 
       // Validate input data
       const { error, value } = validateInput<BillingDebitData>(debitTreasurySchema, req.body);
@@ -1357,6 +1813,7 @@ export class WalletController {
       // Perform the debit on the Billing Wallet
       const result = await WalletService.debitBillingWallet({
         merchantId,
+        appId,
         amount,
         description
       });
@@ -1403,6 +1860,7 @@ export class WalletController {
       }
 
       const merchantId = req.user.merchantId || req.user.userId;
+      const appId = typeof req.query.appId === 'string' ? req.query.appId : undefined;
 
       // Validate input data
       const { error, value } = validateInput<KycDebitData>(debitTreasurySchema, req.body);
@@ -1420,6 +1878,7 @@ export class WalletController {
       // Perform the debit on the KYC Wallet
       const result = await WalletService.debitKycWallet({
         merchantId,
+        appId,
         amount,
         description
       });
@@ -1466,6 +1925,7 @@ export class WalletController {
       }
 
       const merchantId = req.user.merchantId || req.user.userId;
+      const appId = typeof req.query.appId === 'string' ? req.query.appId : undefined;
 
       // Validate input data
       const { error, value } = validateInput<KycFeeData>(debitTreasurySchema, req.body);
@@ -1600,7 +2060,7 @@ export class WalletController {
    * POST /api/v1/wallets/treasury/debit-merchant
    * Debit the merchant's own Treasury Wallet (used for billing)
    */
-  static async debitSettlementWallet(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async debitRepaymentWallet(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {
         res.status(401).json({
@@ -1611,6 +2071,7 @@ export class WalletController {
       }
 
       const merchantId = req.user.merchantId || req.user.userId;
+      const appId = typeof req.query.appId === 'string' ? req.query.appId : undefined;
 
       // Validate input data
       const { error, value } = validateInput<DebitTreasuryData>(debitTreasurySchema, req.body);
@@ -1629,14 +2090,15 @@ export class WalletController {
       if (value!.merchantId !== merchantId) {
         res.status(403).json({
           success: false,
-          error: 'You can only debit your own Settlement Wallet'
+          error: 'You can only debit your own Repayment Wallet'
         });
         return;
       }
 
-      // Perform the debit on the Settlement Wallet
-      const result = await WalletService.debitSettlementWallet({
+      // Perform the debit on the Repayment Wallet (formerly "Settlement")
+      const result = await WalletService.debitRepaymentWallet({
         merchantId,
+        appId,
         amount,
         description
       });
@@ -1649,23 +2111,28 @@ export class WalletController {
         return;
       }
 
-      logger.info('Settlement wallet debited by merchant', {
+      logger.info('Repayment wallet debited by merchant', {
         merchantId,
         amount
       });
 
       res.status(200).json({
         success: true,
-        message: 'Settlement wallet debited successfully',
+        message: 'Repayment wallet debited successfully',
         data: {
           wallet: result.wallet,
           transaction: result.transaction
         }
       });
     } catch (error) {
-      logger.error('Error debiting Settlement wallet', { error });
+      logger.error('Error debiting Repayment wallet', { error });
       next(error);
     }
+  }
+
+  /** @deprecated use debitRepaymentWallet */
+  static async debitSettlementWallet(req: Request, res: Response, next: NextFunction): Promise<void> {
+    return this.debitRepaymentWallet(req, res, next);
   }
 
   /**
@@ -1745,6 +2212,65 @@ export class WalletController {
       logger.error('Error making API call from user wallet', { error });
       next(error);
     }
+  }
+
+  /**
+   * POST /api/v1/wallets/repayment/payout
+   * Payout from Repayment wallet (formerly "Settlement") to an external bank account via PayOnUs.
+   */
+  static async payoutRepaymentWalletToBank(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Authentication required' });
+        return;
+      }
+
+      const merchantId = req.user.merchantId || req.user.userId;
+      const { error, value } = validateInput<SettlementBankPayoutData>(settlementBankPayoutSchema, req.body);
+      if (error) {
+        res.status(400).json({ success: false, error: 'Validation failed', details: error });
+        return;
+      }
+
+      const result = await WalletService.payoutRepaymentWalletToBank({
+        merchantId,
+        appId: value!.appId,
+        accountNumber: value!.accountNumber,
+        bankCode: value!.bankCode,
+        accountName: value!.accountName,
+        bankName: value!.bankName,
+        amount: value!.amount,
+        currency: value!.currency,
+        narration: value!.narration,
+        reference: value!.reference
+      });
+
+      if (!result.success || !result.wallet) {
+        res.status(400).json({ success: false, error: result.error || 'Repayment payout failed' });
+        return;
+      }
+
+      res.status(result.duplicate ? 200 : 201).json({
+        success: true,
+        duplicate: result.duplicate === true,
+        message: result.duplicate ? 'Repayment payout already processed' : 'Repayment payout initiated',
+        data: {
+          wallet: result.wallet,
+          transaction: result.transaction,
+          payoutReference: result.payoutReference,
+          providerReference: result.providerReference,
+          providerStatus: result.providerStatus
+        }
+      });
+    } catch (error) {
+      logger.error('Error paying out repayment wallet to bank', { error });
+      next(error);
+    }
+  }
+
+  /** @deprecated use payoutRepaymentWalletToBank */
+  static async payoutSettlementWalletToBank(req: Request, res: Response, next: NextFunction): Promise<void> {
+    return this.payoutRepaymentWalletToBank(req, res, next);
   }
 
 }

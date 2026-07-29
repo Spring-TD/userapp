@@ -1,0 +1,4 @@
+{
+  "title": "Plan matured",
+  "body": "{{planName}} matured with balance {{amount}}."
+}

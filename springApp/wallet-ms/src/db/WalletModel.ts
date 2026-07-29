@@ -48,7 +48,8 @@ const WalletSchema = new Schema<IWalletDoc>(
     productType: { type: String, required: false },
     merchantWalletType: {
       type: String,
-      enum: [...Object.values(MerchantWalletType), 'TREASURY', 'OPERATION']
+      // Legacy stored values: TREASURY, OPERATION (-> BILLING), SETTLEMENT (-> REPAYMENT)
+      enum: [...Object.values(MerchantWalletType), 'TREASURY', 'OPERATION', 'SETTLEMENT']
     },
     name: { type: String, required: true },
     balance: { type: Number, required: true, default: 0 },

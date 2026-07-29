@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { config } from '../config/environment';
+import { type FuspayBranding, resolveFuspayBrandingForApp } from '../utils/fuspayBranding';
 
 type AxiosInstance = ReturnType<typeof axios.create>;
 
@@ -8,6 +9,7 @@ interface CreateFuspayUserRequest {
   phone: string;
   country: string;
   userRef: string;
+  branding?: FuspayBranding;
 }
 
 interface CreateFuspayUserResponse {
@@ -92,7 +94,8 @@ class FuspayModularService {
           phone: request.phone,
           app: config.fuspayModularAppId,
           country: countryCheck.code,
-          user_ref: request.userRef
+          user_ref: request.userRef,
+          ...(request.branding ? { branding: request.branding } : {})
         },
         { headers: this.authHeaders() }
       );

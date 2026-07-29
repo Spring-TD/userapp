@@ -1,0 +1,4 @@
+{
+  "title": "Returns update",
+  "body": "{{returns}} accrued on {{productName}}."
+}

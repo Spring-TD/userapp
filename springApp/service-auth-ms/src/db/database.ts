@@ -4,11 +4,13 @@ import { Role } from '../models/Role';
 import { Invitation } from '../models/Invitation';
 import { ApiKey, ApiKeyStatus } from '../models/ApiKey';
 import { Session } from '../models/Session';
-import UserAccountModel from './UserModel';
-import RoleModel from './RoleModel';
-import InvitationModel from './InvitationModel';
-import ApiKeyModel from './ApiKeyModel';
-import SessionModel from './SessionModel';
+import {
+  UserModel as UserAccountModel,
+  RoleModel,
+  InvitationModel,
+  ApiKeyModel,
+  SessionModel
+} from '../models/authModels';
 
 function userDocToAccount(doc: mongoose.Document | null): UserAccount | null {
   if (!doc) return null;

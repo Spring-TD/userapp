@@ -412,14 +412,31 @@
  *         description: Callback registered
  */
 
-import { Router } from 'express';
+import { NextFunction, Request, Response, Router } from 'express';
 import { SpecialController } from '../controllers/specialController';
 import { apiKeyAuth } from '../middleware/apiKeyAuth';
+import { config } from '../config/environment';
 
 const router = Router();
 
+const jwtSecretInternalAuth = (req: Request, res: Response, next: NextFunction): void => {
+  const provided = (req.header('x-internal-token') || '').trim();
+  if (!provided || provided !== config.jwtSecret) {
+    res.status(401).json({
+      success: false,
+      error: 'Invalid or missing internal token'
+    });
+    return;
+  }
+  next();
+};
+
 // 1. Get all App
 router.get('/apps', apiKeyAuth, SpecialController.getAllApps);
+router.get('/apps/billing-targets', jwtSecretInternalAuth, SpecialController.getBillingTargets);
+
+/** Service-to-service app lookup (account-ms commodity buy, etc.) */
+router.get('/internal/apps/:id', jwtSecretInternalAuth, SpecialController.getAppById);
 
 // 2. Get app by id
 router.get('/apps/:id', apiKeyAuth, SpecialController.getAppById);
@@ -474,6 +491,9 @@ router.get('/transactions/product/:productId', apiKeyAuth, SpecialController.get
 
 // 19. get transaction history by app
 router.get('/transactions/app/:appId', apiKeyAuth, SpecialController.getTransactionHistoryByApp);
+
+// Internal app transaction write endpoint (wallet-ms PayOnUs funding mirror)
+router.post('/transactions/app', jwtSecretInternalAuth, SpecialController.createAppTransaction);
 
 // 20. Subscribe a user to a product
 router.post('/subscriptions/users/:userId/products/:productId', apiKeyAuth, SpecialController.subscribeUserToProduct);

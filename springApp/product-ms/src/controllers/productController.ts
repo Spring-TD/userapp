@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import { ProductService } from '../services/productService';
 import { CreateProductRequest, UpdateProductRequest, SelectProductTypeRequest, CreateProductAfterTypeRequest } from '../types/product';
 import { ApiError } from '../middleware/errorHandler';
@@ -7,6 +8,8 @@ import { getAccessTokenUser } from '../utils/gatewayUser';
 import { sendProductConfigurationNotification } from '../services/notificationHelper';
 import { getProductOverviewByTypeForApp, getProductOverviewForApp } from '../services/productOverviewService';
 import { normalizeProductType } from '../utils/productType';
+import { config } from '../config/environment';
+import { ProductCatalogSyncScheduler } from '../services/productCatalogSyncScheduler';
 
 interface TypedRequest<T> extends Request {
   body: T;
@@ -387,6 +390,115 @@ export class ProductController {
       });
     }
   };
+
+  getPlataProductUpdatedWebhookStatus = async (_req: Request, res: Response): Promise<void> => {
+    res.json({
+      success: true,
+      data: {
+        endpoint: '/api/v1/products/webhooks/plata/product-updated',
+        events: ['product.updated'],
+        signatureHeader: 'X-Plata-Signature',
+        signatureRequired: Boolean(config.plataLoanWorkflowWebhookSecret)
+      }
+    });
+  };
+
+  handlePlataProductUpdatedWebhook = async (req: Request, res: Response): Promise<void> => {
+    try {
+      if (!this.verifyPlataWebhookSignature(req)) {
+        throw new ApiError(401, 'Invalid Plata webhook signature');
+      }
+
+      const root = req.body && typeof req.body === 'object' ? (req.body as Record<string, unknown>) : null;
+      if (!root) {
+        throw new ApiError(400, 'Webhook payload must be a JSON object');
+      }
+
+      const eventType = String(root.event ?? root.type ?? root.eventType ?? '').trim();
+      if (eventType && eventType !== 'product.updated') {
+        res.status(202).json({ success: true, ignored: true });
+        return;
+      }
+
+      const data =
+        root.data && typeof root.data === 'object' && !Array.isArray(root.data)
+          ? (root.data as Record<string, unknown>)
+          : root;
+      const productId = String(
+        data.productId ?? data.globalProductId ?? data.id ?? root.productId ?? ''
+      ).trim();
+      if (!productId) {
+        throw new ApiError(400, 'productId is required');
+      }
+
+      const result = await this.productService.syncLocalClonesFromUpstreamProductId(productId);
+      res.status(200).json({
+        success: true,
+        duplicate: false,
+        data: result
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({ success: false, error: error.message });
+        return;
+      }
+      console.error('Error processing Plata product.updated webhook:', error);
+      res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  };
+
+  getCatalogSyncSchedulerStatus = async (_req: Request, res: Response): Promise<void> => {
+    res.json({
+      success: true,
+      data: ProductCatalogSyncScheduler.getInstance().getStatus()
+    });
+  };
+
+  runCatalogSyncReconcile = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const force = req.body?.force === true || req.query.force === 'true';
+      const result = await ProductCatalogSyncScheduler.getInstance().runNow(force);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({ success: false, error: error.message });
+        return;
+      }
+      console.error('Error running product catalog reconcile:', error);
+      res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  };
+
+  private verifyPlataWebhookSignature(req: Request): boolean {
+    const secret = config.plataLoanWorkflowWebhookSecret;
+    if (!secret) {
+      return true;
+    }
+
+    const incoming = req.get('x-plata-signature')?.trim();
+    if (!incoming) {
+      return false;
+    }
+
+    const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
+    if (!rawBody) {
+      return false;
+    }
+
+    const hexDigest = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+    const base64Digest = crypto.createHmac('sha256', secret).update(rawBody).digest('base64');
+    return this.signatureMatches(incoming, hexDigest) || this.signatureMatches(incoming, base64Digest);
+  }
+
+  private signatureMatches(incoming: string, expectedDigest: string): boolean {
+    const normalizedIncoming = incoming.replace(/^sha256=/i, '').trim();
+    const expected = Buffer.from(expectedDigest);
+    const actual = Buffer.from(normalizedIncoming);
+    if (expected.length !== actual.length) {
+      return false;
+    }
+    return crypto.timingSafeEqual(expected, actual);
+  }
 
   // Toggle product activation for an app
   toggleProductActivation = async (req: Request, res: Response): Promise<void> => {

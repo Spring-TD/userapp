@@ -12,6 +12,7 @@ import { internalWalletRoutes } from './routes/internalWalletRoutes';
 import { transactionRoutes } from './routes/transactionRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { ensureWalletIndexes } from './db/database';
+import { registerTransactionReceiptHandler } from './services/transactionReceiptService';
 
 dotenv.config();
 
@@ -20,6 +21,13 @@ const app = express();
 const PORT = config.port || 3004;
 
 // Middleware setup (body limit from config)
+// PayOnUs webhooks often send JSON as text/plain;charset=ISO-8859-1
+app.use(
+  express.text({
+    limit: config.requestBodyLimit,
+    type: (req) => String(req.headers['content-type'] || '').toLowerCase().includes('text/plain')
+  })
+);
 app.use(express.json({ limit: config.requestBodyLimit }));
 app.use(express.urlencoded({ extended: true, limit: config.requestBodyLimit }));
 app.use(cors({
@@ -45,7 +53,7 @@ app.get('/', (req, res) => {
     },
     features: [
       'User Wallets',
-      'Merchant Wallets (Billing, KYC, Settlement)',
+      'Merchant Wallets (Billing, KYC, Repayment)',
       'Wallet Balance Management',
       'Transaction History',
       'Wallet Funding',
@@ -92,6 +100,7 @@ mongoose.connect(config.mongoUri)
   .then(() => {
     console.log('✅ Connected to MongoDB (DigitalOcean)');
     void ensureWalletIndexes();
+    registerTransactionReceiptHandler();
   })
   .catch((err) => {
     console.error('❌ MongoDB connection error:', err);

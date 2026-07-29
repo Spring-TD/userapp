@@ -48,17 +48,51 @@ export interface AppResponse {
   error?: string;
 }
 
+/** Query filters for listing apps. */
+export interface AppListQuery {
+  merchantIds?: string[];
+  page?: number;
+  limit?: number;
+}
+
+export interface PaginationMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+}
+
+export interface AppListResult {
+  apps: App[];
+  pagination: PaginationMeta;
+}
+
 // Transaction interface
 export interface Transaction {
   id: string;
   appId: string;
   /** When set, ties ledger rows to a merchant product (local catalog id or upstream id). */
   productId?: string;
+  userId?: string;
+  walletId?: string;
+  reference?: string;
+  metaRef?: string;
+  provider?: string;
+  providerReference?: string;
   amount: number;
   currency: string;
   type: 'credit' | 'debit';
   status: 'pending' | 'completed' | 'failed' | 'cancelled';
   description: string;
+  metadata?: Record<string, any>;
+  senderDetails?: {
+    name?: string;
+    accountNumber?: string;
+    bankName?: string;
+    bankCode?: string;
+  };
   createdAt: string;
   updatedAt: string;
 }

@@ -44,5 +44,6 @@ const TransactionSchema = new Schema<ITransactionDoc>(
 );
 
 TransactionSchema.index({ walletId: 1, createdAt: -1 });
+TransactionSchema.index({ externalReference: 1, source: 1 });
 
 export default mongoose.model<ITransactionDoc>('Transaction', TransactionSchema);

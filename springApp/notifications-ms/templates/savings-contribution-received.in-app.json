@@ -1,0 +1,4 @@
+{
+  "title": "Contribution received",
+  "body": "{{amount}} added to {{planName}}."
+}

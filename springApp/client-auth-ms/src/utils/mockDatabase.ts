@@ -102,12 +102,14 @@ class MockDatabase {
   }
 
   async findMerchantOwnerByTenantMerchantId(tenantMerchantId: string): Promise<UserAccount | null> {
+    const tid = tenantMerchantId.trim();
     for (const user of this.users.values()) {
-      if (
-        'user_merchant_id' in user &&
-        user.user_merchant_id === tenantMerchantId &&
-        user.user_type === 'merchant'
-      ) {
+      if ('user_merchant_id' in user && user.user_merchant_id === tid && user.user_type === 'merchant') {
+        return user;
+      }
+    }
+    for (const user of this.users.values()) {
+      if ('user_merchant_id' in user && user.user_merchant_id === tid) {
         return user;
       }
     }

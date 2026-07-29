@@ -1,0 +1,15 @@
+Hello {{applicantName}},
+
+Your mortgage application for {{productName}} has been approved.
+
+Approved loan amount: {{approvedAmount}}
+Down payment: {{downPaymentAmount}}
+
+{{detail}}
+
+Sign in to your app to review and accept your offer letter.
+
+Application ID: {{applicationId}}
+Lender: {{merchantName}}
+
+This is an automated message. Please do not reply to this email.

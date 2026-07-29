@@ -1,0 +1,4 @@
+{
+  "title": "Settlement scheduled",
+  "body": "{{commodityName}} settlement on {{settlementDate}}."
+}

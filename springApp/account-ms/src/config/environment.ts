@@ -2,6 +2,27 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+function trimTrailingSlash(url: string): string {
+  return url.replace(/\/+$/, '');
+}
+
+/**
+ * Plata account-ms gateway base URL (same pattern as product-ms catalog).
+ * Prefer PLATA_ACCOUNT_SERVICE_URL; if Plata API keys are set but no URL, default to production gateway.
+ */
+function resolvePlataAccountServiceUrl(): string {
+  const explicit = trimTrailingSlash(process.env.PLATA_ACCOUNT_SERVICE_URL || '');
+  if (explicit) {
+    return explicit;
+  }
+  const hasPlataKeys =
+    (process.env.PLATA_PUBLIC_KEY || '').trim() && (process.env.PLATA_SECRET_KEY || '').trim();
+  if (hasPlataKeys) {
+    return 'https://account-ms-plata.fly.dev';
+  }
+  return '';
+}
+
 interface EnvironmentConfig {
   port: number;
   nodeEnv: string;
@@ -24,6 +45,14 @@ interface EnvironmentConfig {
   tenantResolverTimeoutMs: number;
   /** Must match client-auth-ms JWT_SECRET for Bearer merchant tokens */
   jwtSecret: string;
+  /** Plata account-ms gateway for integrator API key flows (commodity principal, catalog, etc.) */
+  plataAccountServiceUrl: string;
+  plataPublicKey: string;
+  plataSecretKey: string;
+  /** Plata service-auth-ms for verifying inbound integrator PLATA keys (applicant profile pulls). */
+  plataServiceAuthUrl: string;
+  /** X-Internal-Token for Plata service-auth-ms (must match service-auth-ms-plata JWT_SECRET). */
+  plataServiceAuthInternalToken: string;
 }
 
 export const config: EnvironmentConfig = {
@@ -50,5 +79,17 @@ export const config: EnvironmentConfig = {
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean),
   tenantResolverTimeoutMs: parseInt(process.env.TENANT_RESOLVER_TIMEOUT_MS || '30000', 10),
-  jwtSecret: process.env.JWT_SECRET || 'fallback-secret-key-for-development-purposes-only'
+  jwtSecret: process.env.JWT_SECRET || 'fallback-secret-key-for-development-purposes-only',
+  plataAccountServiceUrl: resolvePlataAccountServiceUrl(),
+  plataPublicKey: (process.env.PLATA_PUBLIC_KEY || '').trim(),
+  plataSecretKey: (process.env.PLATA_SECRET_KEY || '').trim(),
+  plataServiceAuthUrl: trimTrailingSlash(
+    process.env.PLATA_SERVICE_AUTH_URL ||
+      (process.env.NODE_ENV === 'production' ? 'https://service-auth-ms-plata.fly.dev' : '')
+  ),
+  plataServiceAuthInternalToken: (
+    process.env.PLATA_SERVICE_AUTH_INTERNAL_TOKEN ||
+    process.env.JWT_SECRET ||
+    ''
+  ).trim()
 };

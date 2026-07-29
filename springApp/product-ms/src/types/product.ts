@@ -5,11 +5,15 @@ export interface ProductStructure {
   interestMethod?: string;
   amortizationSchedule?: string;
   allowMoratorium?: boolean;
+  /** LOAN only — ignored on MORTGAGE when present. */
+  autoApproveLoans?: boolean;
   moratoriumType?: string;
   moratorium?: Record<string, unknown> | number;
   repaymentWorkflow?: string;
   loanAmount?: { min?: number; max?: number };
   repaymentSchedule?: string;
+  /** MORTGAGE uses repaymentStructure instead of repaymentSchedule. */
+  repaymentStructure?: string;
   repaymentFrequency?: string;
   acceptableNPA?: string;
   equityRequirement?: string;
@@ -37,11 +41,11 @@ export interface ProductStructure {
 export interface LoanAbout {
   tenure?: Record<string, unknown> | string | number;
   duration?: Record<string, unknown> | string | number;
-  loanTypes?: Array<{ name: string; description: string }>;
-  mortgageTypes?: Array<{ name: string; description: string }>;
-  savingsTypes?: Array<{ name: string; description: string }>;
-  investmentTypes?: Array<{ name: string; description: string }>;
-  commodityTypes?: Array<{ name: string; description: string }>;
+  loanTypes?: Array<{ name?: string; description?: string }>;
+  mortgageTypes?: Array<{ name?: string; description?: string }>;
+  savingsTypes?: Array<{ name?: string; description?: string }>;
+  investmentTypes?: Array<{ name?: string; description?: string }>;
+  commodityTypes?: Array<{ name?: string; description?: string }>;
   previewAssetUrl?: string;
 }
 
@@ -60,11 +64,34 @@ export interface LoanRequirements {
     requirementType?: string;
     contentType?: string;
     description?: string;
+    templateFileUrl?: string;
     uploadRequired?: boolean;
   }>;
   contractId?: string;
   airSignSecretKey?: string;
   airSignUid?: string;
+}
+
+export interface MortgageProperty {
+  name?: string;
+  propertyType?: string;
+  value?: number | string;
+  location?: string;
+  propertyDescription?: string;
+  facilities?: string[];
+  customFacilities?: string[];
+  imageUrls?: string[];
+  videoUrl?: string;
+  /** Legacy / Spring-only preview field (kept for backward compatibility). */
+  previewAssetUrl?: string;
+  [key: string]: unknown;
+}
+
+export interface MortgageInspectionDateSlot {
+  scheduledFor: string;
+  label?: string;
+  location?: string;
+  notes?: string;
 }
 
 export interface CommodityPriceEntry {
@@ -98,14 +125,6 @@ export interface LoanFeesAndCharges {
   airSignUid?: string;
 }
 
-export interface MortgageProperty {
-  name?: string;
-  propertyType?: string;
-  value?: number | string;
-  location?: string;
-  previewAssetUrl?: string;
-}
-
 export interface ProductTypeConfig {
   compoundingFrequency?: string;
   lockInPeriodDays?: number;
@@ -127,6 +146,8 @@ export interface Product {
   isActive: boolean;
   /** Merchant storefront: highlight turned-on products; only meaningful when `isActive` is true. */
   isFeatured?: boolean;
+  /** Copied from Plata; applicants must upload a signature when true. */
+  requireApplicantSignature?: boolean;
   createdAt: string;
   updatedAt: string;
   metadata?: Record<string, unknown>;
@@ -134,9 +155,20 @@ export interface Product {
   about?: LoanAbout;
   requirements?: LoanRequirements;
   feesAndCharges?: LoanFeesAndCharges;
+  /** Fee snapshot copied from Plata/creator when the product is first turned on for this app. */
   baseFeesAndCharges?: LoanFeesAndCharges;
+  /**
+   * Spring merchant mark-ups only. May include **Management Fee** additions;
+   * other fees / late-repayment / forceful-withdrawal charges are rejected.
+   */
   merchantFeeAdditions?: LoanFeesAndCharges;
+  baseStructure?: ProductStructure;
+  merchantStructureAdditions?: Partial<ProductStructure>;
+  baseEquityContribution?: number;
+  merchantEquityAddition?: number;
   properties?: MortgageProperty[];
+  mortgageWorkflowStepOrder?: string[];
+  inspectionDates?: MortgageInspectionDateSlot[];
   config?: ProductTypeConfig;
   equityContribution?: number;
   propertyValue?: number;
@@ -144,6 +176,14 @@ export interface Product {
   minimumQuantity?: number;
   unitOfMeasure?: string;
   commodityPrices?: CommodityPriceEntry[];
+  /** Product creator metadata returned by the upstream Plata catalog. */
+  merchant?: {
+    id?: string;
+    name?: string | null;
+    companyName?: string | null;
+    companyLogoUrl?: string | null;
+    website?: string | null;
+  };
 }
 
 export interface CreateProductRequest {
@@ -161,9 +201,20 @@ export interface CreateProductRequest {
   about?: LoanAbout;
   requirements?: LoanRequirements;
   feesAndCharges?: LoanFeesAndCharges;
+  /** Fee snapshot copied from Plata/creator when the product is first turned on for this app. */
   baseFeesAndCharges?: LoanFeesAndCharges;
+  /**
+   * Spring merchant mark-ups only. May include **Management Fee** additions;
+   * other fees / late-repayment / forceful-withdrawal charges are rejected.
+   */
   merchantFeeAdditions?: LoanFeesAndCharges;
+  baseStructure?: ProductStructure;
+  merchantStructureAdditions?: Partial<ProductStructure>;
+  baseEquityContribution?: number;
+  merchantEquityAddition?: number;
   properties?: MortgageProperty[];
+  mortgageWorkflowStepOrder?: string[];
+  inspectionDates?: MortgageInspectionDateSlot[];
   config?: ProductTypeConfig;
   commodityPrices?: CommodityPriceEntry[];
 }
@@ -183,9 +234,20 @@ export interface UpdateProductRequest {
   about?: LoanAbout;
   requirements?: LoanRequirements;
   feesAndCharges?: LoanFeesAndCharges;
+  /** Fee snapshot copied from Plata/creator when the product is first turned on for this app. */
   baseFeesAndCharges?: LoanFeesAndCharges;
+  /**
+   * Spring merchant mark-ups only. May include **Management Fee** additions;
+   * other fees / late-repayment / forceful-withdrawal charges are rejected.
+   */
   merchantFeeAdditions?: LoanFeesAndCharges;
+  baseStructure?: ProductStructure;
+  merchantStructureAdditions?: Partial<ProductStructure>;
+  baseEquityContribution?: number;
+  merchantEquityAddition?: number;
   properties?: MortgageProperty[];
+  mortgageWorkflowStepOrder?: string[];
+  inspectionDates?: MortgageInspectionDateSlot[];
   config?: ProductTypeConfig;
   equityContribution?: number;
   propertyValue?: number;

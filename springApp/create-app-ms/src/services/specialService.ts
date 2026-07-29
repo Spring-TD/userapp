@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { config } from '../config/environment';
+import { AppModel } from '../models/appModel';
 import { App } from '../types/app';
 
 interface Product {
@@ -98,9 +99,7 @@ export class SpecialService {
 
   // 2. Get app by ID
   static async getAppById(id: string): Promise<App | null> {
-    // This would typically call the product service or database directly
-    // For now, we'll return null as a placeholder
-    return null;
+    return AppModel.getAppById(id);
   }
 
   // 3. Get all Products
@@ -141,9 +140,10 @@ export class SpecialService {
     try {
       let url = '';
       switch (walletType) {
+        case 'REPAYMENT':
         case 'SETTLEMENT':
         case 'TREASURY':
-          url = `${this.WALLET_SERVICE_URL}/api/v1/wallets/settlement/${merchantId}/transactions`;
+          url = `${this.WALLET_SERVICE_URL}/api/v1/wallets/repayment/${merchantId}/transactions`;
           break;
         case 'BILLING':
         case 'OPERATION':

@@ -21,6 +21,11 @@ interface BcryptConfig {
   rounds: number;
 }
 
+interface SessionConfig {
+  /** Idle window after which an inactive session is logged out, in milliseconds. */
+  idleTimeoutMs: number;
+}
+
 interface EnvironmentConfig {
   port: number;
   nodeEnv: string;
@@ -32,6 +37,8 @@ interface EnvironmentConfig {
   walletServiceUrl: string;
   /** Must match wallet-ms WALLET_INTERNAL_TOKEN. */
   walletInternalToken: string;
+  /** Shared internal token for trusted service-to-service user lookups. */
+  clientAuthInternalToken: string;
   /** ISO currency for new retail user wallets (NGN aligns with Payonus defaults). */
   userWalletDefaultCurrency: string;
   /** Timeout (ms) for wallet-ms internal calls. */
@@ -54,7 +61,10 @@ interface EnvironmentConfig {
   logLevel: string;
   jwt: JwtConfig;
   bcrypt: BcryptConfig;
+  session: SessionConfig;
 }
+
+const idleTimeoutMinutes = parseInt(process.env.SESSION_IDLE_TIMEOUT_MINUTES || '15', 10);
 
 export const config: EnvironmentConfig = {
   port: parseInt(process.env.PORT || '3001', 10),
@@ -64,11 +74,14 @@ export const config: EnvironmentConfig = {
   serviceAuthHttpTimeoutMs: parseInt(process.env.SERVICE_AUTH_HTTP_TIMEOUT_MS || '90000', 10),
   walletServiceUrl: (process.env.WALLET_SERVICE_URL || '').trim(),
   walletInternalToken: (process.env.WALLET_INTERNAL_TOKEN || '').trim(),
+  clientAuthInternalToken: (process.env.CLIENT_AUTH_INTERNAL_TOKEN || '').trim(),
   userWalletDefaultCurrency: (process.env.USER_WALLET_DEFAULT_CURRENCY || 'NGN').trim().toUpperCase() || 'NGN',
   walletServiceHttpTimeoutMs: parseInt(process.env.WALLET_SERVICE_HTTP_TIMEOUT_MS || '30000', 10),
   notificationsServiceUrl:
     process.env.NOTIFICATIONS_SERVICE_URL ||
-    (process.env.NODE_ENV === 'production' ? 'https://notifications-ms.fly.dev' : 'http://localhost:4009'),
+    (process.env.NODE_ENV === 'production'
+      ? 'https://springtd-notifications-ms.fly.dev'
+      : 'http://localhost:4009'),
   complianceServiceUrl:
     process.env.COMPLIANCE_SERVICE_URL ||
     (process.env.NODE_ENV === 'production' ? 'https://compliance-ms.fly.dev' : 'http://localhost:3003'),
@@ -89,10 +102,16 @@ export const config: EnvironmentConfig = {
   logLevel: process.env.LOG_LEVEL || 'info',
   jwt: {
     secret: process.env.JWT_SECRET || 'fallback-secret-key-for-development-purposes-only',
-    expiresIn: process.env.JWT_EXPIRES_IN || '1h',
+    // Keep the access token aligned with the idle window. Active use extends the
+    // session via verify-token (wallet + gateway heartbeat); refresh then issues
+    // a new access token. True idle still fails refresh / revoke on timeout.
+    expiresIn: process.env.JWT_EXPIRES_IN || `${idleTimeoutMinutes}m`,
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d'
   },
   bcrypt: {
     rounds: parseInt(process.env.BCRYPT_ROUNDS || '12', 10)
+  },
+  session: {
+    idleTimeoutMs: Math.max(idleTimeoutMinutes, 1) * 60 * 1000
   }
 };

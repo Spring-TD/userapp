@@ -38,6 +38,19 @@ export interface ProductWallet {
   };
 }
 
+export interface ProductWalletTransaction {
+  id: string;
+  walletId: string;
+  amount: number;
+  type: 'CREDIT' | 'DEBIT';
+  status: string;
+  description: string;
+  referenceId?: string;
+  balanceBefore?: number;
+  balanceAfter?: number;
+  metadata?: Record<string, unknown>;
+}
+
 export interface EnsureProductWalletInput {
   userId: string;
   merchantId: string;
@@ -50,15 +63,25 @@ export interface EnsureProductWalletInput {
 }
 
 class WalletService {
+  private walletBase(): string {
+    const base = normalizeWalletServiceBase(config.walletServiceUrl);
+    const token = config.walletInternalToken || config.jwtSecret;
+    if (!base || !token) {
+      throw new Error('Wallet product provisioning is not configured');
+    }
+    return base;
+  }
+
+  private internalToken(): string {
+    return (config.walletInternalToken || config.jwtSecret || '').trim();
+  }
+
   async ensureProductWallet(input: EnsureProductWalletInput): Promise<{
     wallet: ProductWallet;
     reusedUpstreamAccount?: boolean;
     skipped?: boolean;
   }> {
-    const base = normalizeWalletServiceBase(config.walletServiceUrl);
-    if (!base || !config.walletInternalToken) {
-      throw new Error('Wallet product provisioning is not configured');
-    }
+    const base = this.walletBase();
 
     const response = await axios.post<{
       success?: boolean;
@@ -73,7 +96,7 @@ class WalletService {
       {
         headers: {
           'Content-Type': 'application/json',
-          'X-Internal-Token': config.walletInternalToken
+          'X-Internal-Token': this.internalToken()
         },
         timeout: config.walletServiceHttpTimeoutMs
       }
@@ -87,6 +110,64 @@ class WalletService {
       wallet: response.data.data.wallet,
       skipped: response.data.skipped,
       reusedUpstreamAccount: response.data.reusedUpstreamAccount
+    };
+  }
+
+  async applyProductApplicationApproval(input: {
+    userId: string;
+    applicationId: string;
+    merchantId: string;
+    productId: string;
+    productName?: string;
+    productType: string;
+    appId?: string;
+    amount: number;
+    currency: string;
+    referenceId: string;
+    description?: string;
+    metadata?: Record<string, unknown>;
+    upstreamAccount?: {
+      accountNumber?: string;
+      bankName?: string;
+      bankCode?: string;
+      providerReference?: string;
+      accountType?: 'static' | 'reserved' | 'dynamic';
+      provisionStatus?: 'active' | 'failed';
+      provisionError?: string;
+      provisionedAt?: string;
+    };
+  }): Promise<{
+    wallet: ProductWallet;
+    transaction?: ProductWalletTransaction;
+    duplicate?: boolean;
+  }> {
+    const base = this.walletBase();
+    const response = await axios.post<{
+      success?: boolean;
+      duplicate?: boolean;
+      data?: { wallet?: ProductWallet; transaction?: ProductWalletTransaction };
+      error?: string;
+      message?: string;
+    }>(
+      `${base}/api/v1/internal/wallets/product-application/approval`,
+      input,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Internal-Token': this.internalToken()
+        },
+        timeout: config.walletServiceHttpTimeoutMs
+      }
+    );
+
+    if (!response.data?.success || !response.data.data?.wallet) {
+      throw new Error(response.data?.error || response.data?.message || 'Wallet service returned an error');
+    }
+
+    return {
+      wallet: response.data.data.wallet,
+      transaction: response.data.data.transaction,
+      duplicate: response.data.duplicate
     };
   }
 }

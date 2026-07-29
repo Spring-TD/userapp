@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { config } from '../config/environment';
+import { isInsecureDefaultApiKeyPair } from '../config/apiKeys';
 import { ApiError } from './errorHandler';
 
 /**
@@ -18,8 +19,18 @@ export const apiKeyAuth = (req: Request, res: Response, next: NextFunction): voi
       throw new ApiError(401, 'Missing API keys in headers');
     }
 
+    const specialKeyValue = Array.isArray(specialKey) ? specialKey[0] : specialKey;
+    const publicKeyValue = Array.isArray(publicKey) ? publicKey[0] : publicKey;
+
+    if (
+      config.nodeEnv === 'production' &&
+      isInsecureDefaultApiKeyPair(specialKeyValue, publicKeyValue)
+    ) {
+      throw new ApiError(403, 'Default API keys are not allowed in production');
+    }
+
     // Validate the keys
-    if (specialKey !== config.specialApiKey || publicKey !== config.publicKey) {
+    if (specialKeyValue !== config.specialApiKey || publicKeyValue !== config.publicKey) {
       throw new ApiError(403, 'Invalid API keys provided');
     }
 

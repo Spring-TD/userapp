@@ -1,4 +1,4 @@
-import { App, AppStatus, CreateAppRequest, UpdateAppRequest } from '../types/app';
+import { App, AppListQuery, AppListResult, AppStatus, CreateAppRequest, UpdateAppRequest } from '../types/app';
 import { AppModel } from '../models/appModel';
 import { AppPwaTemplateModel } from '../models/appPwaTemplateModel';
 import { ApiError } from '../middleware/errorHandler';
@@ -127,6 +127,10 @@ export class AppService {
   async getAllApps(): Promise<App[]> {
     const apps = await AppModel.getAllApps();
     return apps;
+  }
+
+  async listApps(query: AppListQuery = {}): Promise<AppListResult> {
+    return AppModel.listApps(query);
   }
 
   /**

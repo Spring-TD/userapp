@@ -1,1 +1,1 @@
-Your SpringTD Verification Code
+Your {{appName}} Verification Code

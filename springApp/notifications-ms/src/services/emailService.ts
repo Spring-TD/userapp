@@ -8,6 +8,7 @@ export interface EmailOptions {
   subject: string;
   html: string;
   text?: string;
+  fromName?: string;
 }
 
 export class EmailService {
@@ -64,10 +65,11 @@ export class EmailService {
   private async sendViaEmailApi(options: EmailOptions): Promise<boolean> {
     const token = config.mailtrap.apiToken;
     const fromEmail = config.mailtrap.fromEmail;
+    const fromName = options.fromName || config.mailtrap.fromName;
 
     try {
       const body = {
-        from: { email: fromEmail, name: 'SpringTD' },
+        from: { email: fromEmail, name: fromName },
         to: [{ email: options.to }],
         subject: options.subject,
         text: options.text || (options.html ? options.html.replace(/<[^>]*>/g, '').trim() : ''),
@@ -113,7 +115,10 @@ export class EmailService {
       console.log(`[EmailService] Sending email to: ${options.to}`);
 
       const info = await this.transporter.sendMail({
-        from: config.mailtrap.fromEmail,
+        from: {
+          address: config.mailtrap.fromEmail,
+          name: options.fromName || config.mailtrap.fromName
+        },
         to: options.to,
         subject: options.subject,
         text: options.text || '',

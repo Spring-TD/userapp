@@ -413,6 +413,14 @@ router.get(
   appController.getProductOverview
 );
 
+// Merchant dashboard: customers registered on one app
+router.get(
+  '/:appId/customers',
+  authenticate,
+  merchantOnly,
+  appController.getAppCustomers
+);
+
 // Merchant dashboard: customer applications on one app (summary before list path)
 router.get(
   '/:appId/customers/:userId/applications/summary',
@@ -515,7 +523,7 @@ router.post('/:id/product-key', appController.addProductKey);
 // Get product keys for app
 router.get('/:id/product-keys', appController.getProductKeys);
 
-// Get merchant wallets for app (BILLING, KYC, SETTLEMENT)
+// Get merchant wallets for app (BILLING, KYC, REPAYMENT)
 router.get('/:id/wallets', authenticate, merchantOnly, appController.getAppWallets);
 
 // App-level manifest files (independent from PWA templates)

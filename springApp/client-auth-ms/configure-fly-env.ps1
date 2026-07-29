@@ -11,7 +11,7 @@ $ErrorActionPreference = 'Stop'
 
 $app = if ($env:FLY_APP_NAME) { $env:FLY_APP_NAME } else { 'client-auth-ms' }
 $serviceAuthUrl = if ($env:SERVICE_AUTH_URL) { $env:SERVICE_AUTH_URL } else { 'http://service-auth-ms.internal:3000' }
-$notificationsUrl = if ($env:NOTIFICATIONS_SERVICE_URL) { $env:NOTIFICATIONS_SERVICE_URL } else { 'https://notifications-ms.fly.dev' }
+$notificationsUrl = if ($env:NOTIFICATIONS_SERVICE_URL) { $env:NOTIFICATIONS_SERVICE_URL } else { 'https://springtd-notifications-ms.fly.dev' }
 $internalToken = if ($env:SERVICE_AUTH_INTERNAL_TOKEN) { $env:SERVICE_AUTH_INTERNAL_TOKEN } else { 'Jb@1zP!k9#tW$xL&5aVn*QyR7gE^cF#Qb43' }
 
 Write-Host "Setting Fly secrets for app '$app'..." -ForegroundColor Green

@@ -767,6 +767,18 @@ export class RecordController {
         return;
       }
 
+      recordService.triggerSettlementCharge(record, {
+        amount,
+        transactionType: transactionType || TransactionType.PAYOUT,
+        txnRef: normalizedTxnRef,
+        toCurrency: (currency || record.currency || 'NGN').toUpperCase(),
+        feeBreakdown: {
+          payout_fee: feeBreakdown?.payout_fee ?? 0,
+          merchant_commission: feeBreakdown?.merchant_commission ?? 0,
+          other_fee: feeBreakdown?.other_fee
+        }
+      });
+
       const updatedRecord = await recordService.getRecordById(record.recordId);
       res.status(201).json({
         success: true,

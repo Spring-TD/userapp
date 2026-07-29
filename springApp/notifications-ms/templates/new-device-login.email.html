@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>New Login Detected</title>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #f4f4f4; padding: 20px; text-align: center; }
+    .content { padding: 20px; }
+    .footer { background: #f4f4f4; padding: 20px; text-align: center; font-size: 12px; color: #666; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header"><h1>New Login Detected</h1></div>
+    <div class="content">
+      <p>Hello {{userName}},</p>
+      <p>A new login was detected on <strong>{{device}}</strong> (IP: {{ip}}).</p>
+      <p>If this wasn't you, secure your account immediately by changing your password.</p>
+    </div>
+    <div class="footer"><p>&copy; {{year}} {{appName}}. All rights reserved.</p></div>
+  </div>
+</body>
+</html>

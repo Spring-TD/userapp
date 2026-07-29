@@ -62,7 +62,6 @@ export class BillingScheduler {
       console.log('Running recurring billing process...');
       
       const result = await RecurringBillingService.processDueRecurringBillings();
-      
       if (result.success) {
         console.log(`Recurring billing process completed: ${result.processedCount} billings processed, ${result.failedCount} failed`);
         if (result.errors.length > 0) {

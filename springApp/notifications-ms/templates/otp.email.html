@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Your One-Time Code</title>
+  <title>Your {{appName}} Verification Code</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -58,7 +58,7 @@
 <body>
   <div class="container">
     <div class="header">
-      <h1>Your One-Time Code</h1>
+      <h1>Your Verification Code</h1>
     </div>
     <div class="content">
       <p>Hello,</p>
@@ -66,13 +66,13 @@
       <div class="otp-code">{{otpCode}}</div>
       <p>This code will expire in <strong>5 minutes</strong>.</p>
       <div class="warning">
-        <strong>Security Notice:</strong> Never share this code with anyone. SpringTD will never ask you for this code via phone or chat.
+        <strong>Security Notice:</strong> Never share this code with anyone. {{appName}} will never ask you for this code via phone or chat.
       </div>
       <p>If you didn't request this code, please ignore this email.</p>
     </div>
     <div class="footer">
       <p>This is an automated message. Please do not reply to this email.</p>
-      <p>&copy; 2024 SpringTD. All rights reserved.</p>
+      <p>&copy; {{year}} {{appName}}. All rights reserved.</p>
     </div>
   </div>
 </body>

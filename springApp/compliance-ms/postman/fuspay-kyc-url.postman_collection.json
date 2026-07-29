@@ -1,0 +1,285 @@
+{
+  "info": {
+    "name": "Compliance MS - Fuspay KYC URL",
+    "description": "Postman tests for creating a Fuspay modular hosted KYC URL through compliance-ms. Fill the collection variables before running: baseUrl, accessToken, userId, and optionally fuspayCustomerId if you need to seed a KYC profile.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "0. Optional - Seed Minimal KYC Profile With Fuspay Customer ID",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accessToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userType\": \"individual\",\n  \"fuspay\": {\n    \"customerId\": \"{{fuspayCustomerId}}\",\n    \"userRef\": \"{{userId}}\",\n    \"country\": \"{{country}}\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/kyc/profile/{{userId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "kyc",
+            "profile",
+            "{{userId}}"
+          ]
+        },
+        "description": "Run only if the authenticated user has no KYC profile or the profile does not have fuspay.customerId. If the profile already exists, this may return 400 and can be skipped."
+      },
+      "response": []
+    },
+    {
+      "name": "1. Create Fuspay KYC Verification URL",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('status is 201 Created', function () {",
+              "  pm.response.to.have.status(201);",
+              "});",
+              "",
+              "const json = pm.response.json();",
+              "",
+              "pm.test('response is successful', function () {",
+              "  pm.expect(json.success).to.eql(true);",
+              "});",
+              "",
+              "const data = json.data || {};",
+              "const verificationId = json.verification_id || data.verification_id || data.id || (data.data && (data.data.id || data.data.verification_id));",
+              "const verificationUrl = json.verification_url || data.verification_url || data.url || (data.data && (data.data.url || data.data.verification_url));",
+              "",
+              "pm.test('verification id is returned', function () {",
+              "  pm.expect(verificationId, JSON.stringify(json)).to.be.a('string').and.not.empty;",
+              "});",
+              "",
+              "pm.test('verification url is returned', function () {",
+              "  pm.expect(verificationUrl, JSON.stringify(json)).to.be.a('string').and.match(/^https?:\\/\\//);",
+              "});",
+              "",
+              "if (verificationId) pm.collectionVariables.set('verificationId', verificationId);",
+              "if (verificationUrl) pm.collectionVariables.set('verificationUrl', verificationUrl);",
+              "",
+              "console.log('Fuspay verification id:', verificationId);",
+              "console.log('Fuspay verification url:', verificationUrl);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accessToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "x-tenant-app-id",
+            "value": "{{tenantAppId}}",
+            "disabled": true
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"kyc_type\": \"individual\",\n  \"country\": \"{{country}}\",\n  \"callback\": \"{{callbackUrl}}\",\n  \"redirect\": \"{{redirectUrl}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/kyc/modular/verification",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "kyc",
+            "modular",
+            "verification"
+          ]
+        },
+        "description": "Creates a hosted Fuspay modular KYC verification URL for the authenticated user. The backend uses fuspay.customerId from the user's KYC profile; it does not trust user_id/customer_id from browser request bodies."
+      },
+      "response": []
+    },
+    {
+      "name": "2. Get Saved Fuspay KYC Verification URL",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('status is 200 OK', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "const json = pm.response.json();",
+              "const data = json.data || {};",
+              "",
+              "pm.test('saved verification url exists', function () {",
+              "  pm.expect(data.verificationUrl, JSON.stringify(json)).to.be.a('string').and.match(/^https?:\\/\\//);",
+              "});",
+              "",
+              "if (data.verificationId) pm.collectionVariables.set('verificationId', data.verificationId);",
+              "if (data.verificationUrl) pm.collectionVariables.set('verificationUrl', data.verificationUrl);",
+              "",
+              "console.log('Saved Fuspay verification url:', data.verificationUrl);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accessToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/kyc/modular/verification-url",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "kyc",
+            "modular",
+            "verification-url"
+          ]
+        },
+        "description": "Fetches the verification URL that compliance-ms saved on the authenticated user's KYC profile."
+      },
+      "response": []
+    },
+    {
+      "name": "3. Poll Fuspay KYC Verification Status",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('status is 200 OK', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "const json = pm.response.json();",
+              "pm.test('response is successful', function () {",
+              "  pm.expect(json.success).to.eql(true);",
+              "});",
+              "",
+              "console.log('Fuspay status response:', json);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accessToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/kyc/modular/status/{{verificationId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "kyc",
+            "modular",
+            "status",
+            "{{verificationId}}"
+          ]
+        },
+        "description": "Poll after opening/completing the hosted Fuspay KYC page. Requires verificationId captured by the create request."
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3003"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "userId",
+      "value": ""
+    },
+    {
+      "key": "fuspayCustomerId",
+      "value": ""
+    },
+    {
+      "key": "country",
+      "value": "NG"
+    },
+    {
+      "key": "callbackUrl",
+      "value": "https://account-ms.fly.dev/api/v1/kyc/modular/webhook"
+    },
+    {
+      "key": "redirectUrl",
+      "value": "https://your-frontend-app.com/kyc/done"
+    },
+    {
+      "key": "tenantAppId",
+      "value": ""
+    },
+    {
+      "key": "verificationId",
+      "value": ""
+    },
+    {
+      "key": "verificationUrl",
+      "value": ""
+    }
+  ]
+}

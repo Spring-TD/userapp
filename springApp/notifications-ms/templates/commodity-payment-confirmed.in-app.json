@@ -1,0 +1,4 @@
+{
+  "title": "Payment confirmed",
+  "body": "Payment confirmed for {{commodityName}}."
+}

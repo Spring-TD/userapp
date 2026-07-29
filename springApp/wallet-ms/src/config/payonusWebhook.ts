@@ -8,12 +8,12 @@ function truthyEnv(v?: string): boolean {
 }
 
 function parseMerchantWalletType(value?: string): MerchantWalletType {
-  return normalizeMerchantWalletType(value) ?? MerchantWalletType.SETTLEMENT;
+  return normalizeMerchantWalletType(value) ?? MerchantWalletType.REPAYMENT;
 }
 
 export const payonusWebhookConfig = {
   enabled: truthyEnv(process.env.PAYONUS_WEBHOOK_ENABLED || 'true'),
   verificationKey: process.env.PAYONUS_WEBHOOK_VERIFICATION_KEY || '',
-  enforceSignature: truthyEnv(process.env.PAYONUS_WEBHOOK_ENFORCE_SIGNATURE || 'true'),
+  enforceSignature: truthyEnv(process.env.PAYONUS_WEBHOOK_ENFORCE_SIGNATURE || 'false'),
   defaultMerchantWalletType: parseMerchantWalletType(process.env.PAYONUS_DEFAULT_MERCHANT_WALLET_TYPE)
 };

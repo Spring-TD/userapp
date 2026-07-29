@@ -4,6 +4,7 @@ import { config } from '../config/environment';
 
 export type ResolvedTenantContext = {
   appId: string;
+  appName?: string;
   merchantId: string;
   subdomain: string;
 };
@@ -12,11 +13,85 @@ type ResolvedAppResponse = {
   success: boolean;
   data?: {
     id: string;
+    appName?: string;
+    name?: string;
     merchantId: string;
+    pwaManifest?: {
+      name?: string;
+      short_name?: string;
+    };
     subdomain: string;
     status: string;
   };
 };
+
+/**
+ * The storefront app id for the current request, injected as `x-tenant-app-id`
+ * by the account-ms gateway. Returns undefined for non-storefront (dashboard)
+ * traffic, which maps to the global/no-app identity scope.
+ */
+export function tenantAppIdFromRequest(req: Request): string | undefined {
+  const raw = req.headers['x-tenant-app-id'];
+  const value = (Array.isArray(raw) ? raw[0] : raw)?.trim();
+  return value ? value : undefined;
+}
+
+/** Storefront display name injected by account-ms as `x-tenant-app-name`. */
+export function tenantAppNameFromRequest(req: Request): string | undefined {
+  const raw = req.headers['x-tenant-app-name'];
+  const value = (Array.isArray(raw) ? raw[0] : raw)?.trim();
+  return value ? value : undefined;
+}
+
+/**
+ * Resolve display name for a storefront app id via create-app-ms (best-effort).
+ */
+export async function resolveAppDisplayName(appId?: string): Promise<string | undefined> {
+  const id = (appId || '').trim();
+  if (!id || !config.createAppServiceUrl) {
+    return undefined;
+  }
+
+  try {
+    const response = await axios.get<{
+      success?: boolean;
+      data?: { name?: string; appName?: string };
+    }>(`${config.createAppServiceUrl}/api/v1/special/internal/apps/${encodeURIComponent(id)}`, {
+      headers: { 'X-Internal-Token': config.jwt.secret },
+      timeout: config.tenantResolverTimeoutMs,
+      validateStatus: () => true
+    });
+    if (response.status >= 200 && response.status < 300 && response.data?.success) {
+      const name = (response.data.data?.appName || response.data.data?.name || '').trim();
+      return name || undefined;
+    }
+  } catch {
+    // Branding is best-effort; callers fall back to SpringTD.
+  }
+
+  return undefined;
+}
+
+/**
+ * Resolve the brand name for OTP / auth emails.
+ * Prefer gateway header, then host/subdomain create-app lookup, then appId lookup.
+ */
+export async function resolveBrandingAppName(
+  req: Request,
+  appId?: string
+): Promise<string | undefined> {
+  const fromHeader = tenantAppNameFromRequest(req);
+  if (fromHeader) {
+    return fromHeader;
+  }
+
+  const tenant = await resolveTenantFromRequest(req);
+  if (tenant?.appName?.trim()) {
+    return tenant.appName.trim();
+  }
+
+  return resolveAppDisplayName(appId || tenantAppIdFromRequest(req) || tenant?.appId);
+}
 
 function normalizeHost(host: string): string {
   const value = host.split(',')[0].trim().toLowerCase();
@@ -141,13 +216,7 @@ function subdomainFromBody(req: Request): string | null {
   return value;
 }
 
-export async function resolveTenantFromRequest(req: Request): Promise<ResolvedTenantContext | null> {
-  const explicit = explicitSubdomainFromHeaders(req);
-  const fromBody = subdomainFromBody(req);
-  const host = extractRequestHost(req);
-  const subdomain =
-    explicit || fromBody || (host ? extractTenantSubdomainFromHost(host) : null);
-
+export async function resolveTenantBySubdomain(subdomain: string): Promise<ResolvedTenantContext | null> {
   if (!subdomain || !config.createAppServiceUrl) {
     return null;
   }
@@ -163,12 +232,28 @@ export async function resolveTenantFromRequest(req: Request): Promise<ResolvedTe
     }
 
     const app = response.data.data;
+    const appName =
+      app.appName ||
+      app.name ||
+      app.pwaManifest?.short_name ||
+      app.pwaManifest?.name;
     return {
       appId: app.id,
+      ...(appName ? { appName } : {}),
       merchantId: app.merchantId,
       subdomain: app.subdomain
     };
   } catch {
     return null;
   }
+}
+
+export async function resolveTenantFromRequest(req: Request): Promise<ResolvedTenantContext | null> {
+  const explicit = explicitSubdomainFromHeaders(req);
+  const fromBody = subdomainFromBody(req);
+  const host = extractRequestHost(req);
+  const subdomain =
+    explicit || fromBody || (host ? extractTenantSubdomainFromHost(host) : null);
+
+  return subdomain ? resolveTenantBySubdomain(subdomain) : null;
 }

@@ -1,6 +1,11 @@
 import axios from 'axios';
 import { logger } from '../utils/logger';
 import { auditLogger } from '../utils/audit';
+import {
+  type FuspayBranding,
+  FUSPAY_PLATFORM_BRANDING_DEFAULTS,
+  resolveFuspayBrandingForApp
+} from '../utils/fuspayBranding';
 
 type AxiosInstance = ReturnType<typeof axios.create>;
 
@@ -9,6 +14,7 @@ export interface FuspayCreateUserRequest {
   phone: string;
   country: string;
   userRef: string;
+  branding?: FuspayBranding | Record<string, unknown>;
 }
 
 interface FuspayCreateUserPayload {
@@ -17,6 +23,7 @@ interface FuspayCreateUserPayload {
   app: string;
   country: string;
   user_ref: string;
+  branding?: FuspayBranding;
 }
 
 export interface FuspayCreateUserResponse {
@@ -43,6 +50,7 @@ export interface FuspayCreateVerificationUserPayload {
   callback?: string;
   /** Optional user return URL after flow; defaults to `callback` or env. */
   redirect?: string;
+  branding?: FuspayBranding | Record<string, unknown>;
   individual_checks?: Record<string, unknown>;
   business_checks?: Record<string, unknown>;
   aml_checks?: Record<string, unknown>;
@@ -105,6 +113,33 @@ export interface FuspayCompleteVerificationResponse {
   completed_checks?: number;
   total_checks?: number;
   [key: string]: unknown;
+}
+
+/**
+ * Fuspay modular individual_checks for retail/guarantor flows.
+ * @see Fuspay tenant guide — top-level `bio` / `document_verification`; `liveliness` under `verification_types`.
+ */
+export const INDIVIDUAL_FUSPAY_VERIFICATION_CHECKS = {
+  bio: true,
+  document_verification: false,
+  verification_types: {
+    phone: true,
+    email: true,
+    nin: true,
+    bvn: true,
+    /** Fuspay spelling — `liveness` is rejected by API validation. */
+    liveliness: true
+  }
+} as const;
+
+/** Guarantor Fuspay KYC uses the same individual_checks as retail. */
+export const GUARANTOR_FUSPAY_VERIFICATION_CHECKS = INDIVIDUAL_FUSPAY_VERIFICATION_CHECKS;
+
+export const INDIVIDUAL_FUSPAY_DISABLED_BUSINESS_CHECKS = { tin: false, cac: false } as const;
+
+export function isIndividualFuspayKycType(kycType: string | undefined): boolean {
+  const normalized = (kycType || 'individual').toLowerCase();
+  return normalized === 'individual' || normalized === 'retail';
 }
 
 export class FuspayModularKycService {
@@ -199,42 +234,24 @@ export class FuspayModularKycService {
 
   /**
    * Default checks for create-verification when caller doesn't provide one.
-   * Keeps frontend payload minimal while still creating actionable verification sessions.
+   * Individual flows: bio, phone, email, nin, bvn, liveliness (document_verification disabled).
    */
   private defaultChecks(kycType: string): {
     individual_checks?: Record<string, unknown>;
     business_checks?: Record<string, unknown>;
-    aml_checks: Record<string, unknown>;
+    aml_checks?: Record<string, unknown>;
   } {
-    const normalized = (kycType || 'individual').toLowerCase();
-    if (normalized === 'business' || normalized === 'merchant') {
+    if (isIndividualFuspayKycType(kycType)) {
       return {
-        business_checks: {
-          tin: true,
-          cac: true
-        },
-        aml_checks: {
-          aml_check: true,
-          sanction_list: true
-        }
+        individual_checks: { ...INDIVIDUAL_FUSPAY_VERIFICATION_CHECKS },
+        business_checks: { ...INDIVIDUAL_FUSPAY_DISABLED_BUSINESS_CHECKS }
       };
     }
 
     return {
-      individual_checks: {
-        verification_types: {
-          bvn: true,
-          nin: true,
-          phone: true,
-          email: true
-        },
-        address_verification: {
-          enabled: true,
-          upload_proof_of_address: true
-        },
-        bio: true,
-        document_verification: true,
-        disclaimer: true
+      business_checks: {
+        tin: true,
+        cac: true
       },
       aml_checks: {
         aml_check: true,
@@ -243,81 +260,80 @@ export class FuspayModularKycService {
     };
   }
 
+  /** Force individual retail/guarantor verification to Fuspay recommended NG individual_checks. */
+  private applyIndividualVerificationPolicy(body: Record<string, unknown>, kycType: string): void {
+    if (!isIndividualFuspayKycType(kycType)) return;
+
+    body.individual_checks = { ...INDIVIDUAL_FUSPAY_VERIFICATION_CHECKS };
+    body.business_checks = { ...INDIVIDUAL_FUSPAY_DISABLED_BUSINESS_CHECKS };
+    delete body.aml_checks;
+  }
+
+  /** Fuspay expects field schema objects, not `{ key, value }` prefill payloads. */
+  private normalizeAdditionalFields(fields: unknown): Array<Record<string, unknown>> | undefined {
+    if (!Array.isArray(fields) || fields.length === 0) return undefined;
+
+    const normalized: Array<Record<string, unknown>> = [];
+    for (const item of fields) {
+      if (!item || typeof item !== 'object') continue;
+      const record = item as Record<string, unknown>;
+      const fieldName =
+        (typeof record.field_name === 'string' && record.field_name.trim()) ||
+        (typeof record.fieldName === 'string' && record.fieldName.trim()) ||
+        (typeof record.key === 'string' && record.key.trim()) ||
+        '';
+      if (!fieldName) continue;
+
+      // If caller already sent schema-style fields, keep them (minus unsupported value keys).
+      if (
+        typeof record.data_type === 'string' ||
+        typeof record.field_description === 'string' ||
+        typeof record.is_required === 'boolean'
+      ) {
+        const { value: _value, field_value: _fieldValue, fieldValue: _fieldValueCamel, key: _key, ...rest } = record;
+        normalized.push({ ...rest, field_name: fieldName });
+        continue;
+      }
+
+      // Legacy `{ key, value }` payloads are not valid for create-verification; skip them.
+    }
+
+    return normalized.length > 0 ? normalized : undefined;
+  }
+
   private defaultCountry(): string {
     return (process.env.FUSPAY_MODULAR_DEFAULT_COUNTRY || 'NG').trim().toUpperCase();
   }
 
   /**
-   * Default branding for hosted verification page.
-   * Caller can override by passing `branding` in request body.
+   * Resolve tenant branding from create-app-ms PWA manifest (Fuspay tenant branding guide).
+   * Optional `override` merges caller-provided branding keys on top of manifest / platform defaults.
    */
-  private defaultBranding(): Record<string, unknown> {
-    return {
-      bg_color: '#1a1a2e',
-      text_color: '#ffffff',
-      button_color: '#00ff88',
-      brand_logo: 'https://example.com/logo.png',
-      brand_name: 'Xyz'
-    };
-  }
-
-  private buildCreateAppManifestUrl(appId: string): string | undefined {
-    if (!this.createAppServiceBaseUrl) return undefined;
-
-    let base = this.createAppServiceBaseUrl;
-    if (base.endsWith('/api/v1/apps')) {
-      base = base.slice(0, -'/api/v1/apps'.length);
-    } else if (base.endsWith('/api/v1')) {
-      base = base.slice(0, -'/api/v1'.length);
-    }
-
-    return `${base}/api/v1/apps/${encodeURIComponent(appId)}/pwa/manifest.webmanifest`;
-  }
-
-  /**
-   * Resolve branding from create-app-ms app config (via published manifest) and
-   * return Fuspay branding keys. Returns undefined when app context is missing.
-   * Caller can fall back to built-in defaults.
-   */
-  async getBrandingForApp(appId?: string): Promise<Record<string, unknown> | undefined> {
-    if (!appId) return undefined;
-
-    const manifestUrl = this.buildCreateAppManifestUrl(appId);
-    if (!manifestUrl) return undefined;
-
+  async getBrandingForApp(
+    appId?: string,
+    override?: Record<string, unknown> | null
+  ): Promise<FuspayBranding> {
     try {
-      const response = await axios.get<any>(manifestUrl, { timeout: 5000 });
-      const manifest = response?.data && typeof response.data === 'object' ? response.data : {};
-      const defaults = this.defaultBranding();
-
-      const icons = Array.isArray(manifest.icons) ? manifest.icons : [];
-      const firstIcon = icons.find((icon: any) => icon && typeof icon.src === 'string' && icon.src.trim().length > 0);
-      const brandLogo = firstIcon?.src as string | undefined;
-      const brandName =
-        (typeof manifest.name === 'string' && manifest.name.trim()) ||
-        (typeof manifest.short_name === 'string' && manifest.short_name.trim()) ||
-        undefined;
-      const buttonColor =
-        (typeof manifest.theme_color === 'string' && manifest.theme_color.trim()) ||
-        undefined;
-      const backgroundColor =
-        (typeof manifest.background_color === 'string' && manifest.background_color.trim()) ||
-        undefined;
-
-      return {
-        ...defaults,
-        ...(backgroundColor ? { bg_color: backgroundColor } : {}),
-        ...(buttonColor ? { button_color: buttonColor } : {}),
-        ...(brandLogo ? { brand_logo: brandLogo } : {}),
-        ...(brandName ? { brand_name: brandName } : {})
-      };
+      return await resolveFuspayBrandingForApp(this.createAppServiceBaseUrl, appId, override);
     } catch (error: any) {
-      logger.warn('Failed to resolve Fuspay branding from create-app-ms; using defaults', {
+      logger.warn('Failed to resolve Fuspay branding from create-app-ms; using platform defaults', {
         appId,
         error: error?.message || 'Unknown error'
       });
-      return undefined;
+      return { ...FUSPAY_PLATFORM_BRANDING_DEFAULTS };
     }
+  }
+
+  private resolveBranding(
+    branding?: FuspayBranding | Record<string, unknown>
+  ): FuspayBranding {
+    if (!branding || typeof branding !== 'object') {
+      return { ...FUSPAY_PLATFORM_BRANDING_DEFAULTS };
+    }
+    return {
+      ...FUSPAY_PLATFORM_BRANDING_DEFAULTS,
+      ...branding
+    } as FuspayBranding;
   }
 
   async createUser(request: FuspayCreateUserRequest): Promise<{
@@ -344,7 +360,8 @@ export class FuspayModularKycService {
         phone: request.phone,
         app: this.appId,
         country: countryCheck.code,
-        user_ref: request.userRef
+        user_ref: request.userRef,
+        branding: this.resolveBranding(request.branding)
       };
 
       auditLogger('FUSPAY_CREATE_USER_REQUEST', 'system', {
@@ -454,8 +471,12 @@ export class FuspayModularKycService {
           body.business_checks = { tin: false, cac: false };
         }
         if (!body.branding) {
-          body.branding = this.defaultBranding();
+          body.branding = { ...FUSPAY_PLATFORM_BRANDING_DEFAULTS };
+        } else {
+          body.branding = this.resolveBranding(body.branding as FuspayBranding);
         }
+        this.applyIndividualVerificationPolicy(body, requestedType);
+        delete body.kyc_type;
       } else if ('user_id' in request && request.user_id) {
         const up = request as FuspayCreateVerificationUserPayload;
         const cr = this.resolveCallbackAndRedirect(up.callback, up.redirect);
@@ -478,7 +499,7 @@ export class FuspayModularKycService {
           callback: cr.callback,
           redirect: cr.redirect,
           country: defaultCountryRes.code,
-          branding: this.defaultBranding(),
+          branding: this.resolveBranding(up.branding),
           ...(up.individual_checks ? { individual_checks: up.individual_checks } : defaults.individual_checks ? { individual_checks: defaults.individual_checks } : {}),
           ...(up.business_checks
             ? { business_checks: up.business_checks }
@@ -487,6 +508,7 @@ export class FuspayModularKycService {
               : { business_checks: { tin: false, cac: false } }),
           ...(up.aml_checks ? { aml_checks: up.aml_checks } : defaults.aml_checks ? { aml_checks: defaults.aml_checks } : {})
         };
+        this.applyIndividualVerificationPolicy(body, kycType);
       } else {
         return {
           success: false,
@@ -497,6 +519,13 @@ export class FuspayModularKycService {
       auditLogger('FUSPAY_CREATE_VERIFICATION_REQUEST', 'system', {
         mode: 'customer_id' in body ? 'extended' : 'user_payload'
       });
+
+      const normalizedAdditionalFields = this.normalizeAdditionalFields(body.additional_fields);
+      if (normalizedAdditionalFields) {
+        body.additional_fields = normalizedAdditionalFields;
+      } else {
+        delete body.additional_fields;
+      }
 
       const response = await this.axiosInstance.post<FuspayCreateVerificationResponse>(
         '/api/v1/modular/verification',

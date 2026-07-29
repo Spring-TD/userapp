@@ -55,6 +55,7 @@ class GuarantorKycService {
         userRef,
         applicationId: input.applicationId,
         productId: input.product.id,
+        appId: input.product.appId,
         callback: input.callback,
         redirect: input.redirect
       },

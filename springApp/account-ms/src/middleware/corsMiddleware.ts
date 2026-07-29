@@ -43,5 +43,5 @@ export const corsMiddleware = cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Tenant-Host']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Tenant-Host', 'PLATA_PUBLIC_KEY', 'PLATA_SECRET_KEY']
 });

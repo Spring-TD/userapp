@@ -1,4 +1,5 @@
 import express from 'express';
+import http from 'http';
 import { corsMiddleware } from './middleware/corsMiddleware';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -9,11 +10,13 @@ import { swaggerServices, getServiceById, gatewaySpec } from './config/swagger';
 import accountRoutes from './routes/accountRoutes';
 import loanRoutes from './routes/loanRoutes';
 import commodityRoutes from './routes/commodityRoutes';
-import savingsRoutes from './routes/savingsRoutes';
 import mortgageRoutes from './routes/mortgageRoutes';
 import apiKeyRoutes from './routes/apiKeyRoutes';
 import { setupProxies } from './middleware/proxyMiddleware';
+import { plataIntegratorGatewayAuth } from './middleware/plataIntegratorGatewayAuth';
 import { tenantResolverMiddleware } from './middleware/tenantResolverMiddleware';
+import { userListAppScopeMiddleware } from './middleware/userListAppScopeMiddleware';
+import { sessionActivityTouchMiddleware } from './middleware/sessionActivityTouchMiddleware';
 import type { TenantRequest } from './types/tenant';
 import { tenantManifestWebmanifest, tenantRootOrGatewayStatus } from './handlers/tenantPublicPwaHandler';
 
@@ -26,8 +29,14 @@ app.use(corsMiddleware);
 app.use(morgan(config.logLevel));
 app.use(tenantResolverMiddleware);
 
+// Plata integrator API key verification for applicant-profile pulls (before proxies)
+app.use(plataIntegratorGatewayAuth);
+
+// Keep client-auth session idle clock in sync with real gateway API usage
+app.use(sessionActivityTouchMiddleware);
+
 // Setup Proxies (must be before body parser)
-setupProxies(app);
+const { notificationsProxy } = setupProxies(app, { userListAppScopeMiddleware });
 
 // Body parsers (for local routes)
 app.use(express.json());
@@ -37,7 +46,6 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/v1', accountRoutes);
 app.use('/api/v1/loans', loanRoutes);
 app.use('/api/v1/commodities', commodityRoutes);
-app.use('/api/v1/savings-accounts', savingsRoutes);
 app.use('/api/v1/mortgages', mortgageRoutes);
 app.use('/api/v1/keys', apiKeyRoutes);
 
@@ -103,10 +111,13 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   res.status(500).json({ error: 'Something went wrong!' });
 });
 
-// Start server
-app.listen(PORT, () => {
+// Start server (HTTP + WebSocket upgrade for notifications inbox)
+const server = http.createServer(app);
+server.on('upgrade', notificationsProxy.upgrade);
+server.listen(PORT, () => {
   console.log(`Account Service listening on port ${PORT}`);
   console.log(`Environment: ${config.nodeEnv}`);
+  console.log('WebSocket proxy enabled for /api/v1/notifications/inbox/ws');
 });
 
 export default app;

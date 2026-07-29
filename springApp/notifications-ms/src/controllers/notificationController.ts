@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import notificationService from '../services/notificationService';
 import { SendEmailAndInAppRequest, SendNotificationRequest } from '../types/notification';
 import { ApiError } from '../middleware/errorHandler';
+import { serializeInboxItem } from '../utils/inboxSerializer';
 
 export class NotificationController {
   /**
@@ -146,17 +147,14 @@ export class NotificationController {
         success: true,
         data: {
           notifications: result.notifications.map(n => ({
-            id: n.id,
-            channel: n.channel,
-            template: n.template,
-            status: n.status,
-            createdAt: n.createdAt,
-            sentAt: n.sentAt,
-            ...(n.channel === 'in_app'
-              ? {
-                  data: n.data
-                }
-              : {})
+            ...(n.channel === 'in_app' ? serializeInboxItem(n) : {
+              id: n.id,
+              channel: n.channel,
+              template: n.template,
+              status: n.status,
+              createdAt: n.createdAt,
+              sentAt: n.sentAt
+            })
           })),
           total: result.total,
           limit,

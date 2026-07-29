@@ -1,30 +1,10 @@
 import axios from 'axios';
-
-function normalizeWalletServiceBase(raw: string): string {
-  let s = raw.trim().replace(/\/+$/g, '');
-  const suffixes = ['/api/v1/internal/wallets', '/api/v1/wallets', '/api/v1/internal', '/api/v1', '/api'];
-  for (;;) {
-    let changed = false;
-    for (const suf of suffixes) {
-      if (s.length >= suf.length && s.slice(-suf.length).toLowerCase() === suf.toLowerCase()) {
-        s = s.slice(0, -suf.length).replace(/\/+$/g, '');
-        changed = true;
-      }
-    }
-    if (!changed) break;
-  }
-  return s;
-}
-
-function walletServiceUrl(): string {
-  return normalizeWalletServiceBase(
-    process.env.WALLET_SERVICE_URL || process.env.WALLET_MS_URL || 'http://localhost:4004'
-  );
-}
-
-function walletInternalToken(): string {
-  return (process.env.WALLET_INTERNAL_TOKEN || '').trim();
-}
+import {
+  isWalletMsInternalConfigured,
+  walletMsInternalHeaders,
+  walletMsRequestTimeoutMs,
+  walletServiceUrl
+} from '../utils/walletMsClient';
 
 export type ProvisionUserNubanResult = {
   success: boolean;
@@ -38,9 +18,11 @@ export type ProvisionUserNubanResult = {
  */
 export async function provisionUserNubanAfterKyc(userId: string): Promise<ProvisionUserNubanResult> {
   const base = walletServiceUrl();
-  const token = walletInternalToken();
-  if (!base || !token) {
-    return { success: false, error: 'Wallet service internal API is not configured (WALLET_SERVICE_URL, WALLET_INTERNAL_TOKEN)' };
+  if (!isWalletMsInternalConfigured()) {
+    return {
+      success: false,
+      error: 'Wallet service internal API is not configured (WALLET_SERVICE_URL, JWT_SECRET)'
+    };
   }
 
   const url = `${base}/api/v1/internal/wallets/user/${encodeURIComponent(userId)}/provision-nuban`;
@@ -55,11 +37,8 @@ export async function provisionUserNubanAfterKyc(userId: string): Promise<Provis
       url,
       {},
       {
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Internal-Token': token
-        },
-        timeout: Math.max(10000, parseInt(process.env.WALLET_SERVICE_HTTP_TIMEOUT_MS || '90000', 10))
+        headers: walletMsInternalHeaders(),
+        timeout: walletMsRequestTimeoutMs(90000)
       }
     );
 

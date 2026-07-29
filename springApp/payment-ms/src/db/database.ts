@@ -16,34 +16,35 @@ import {
 } from '../types/record';
 import { Payment } from '../types/payment';
 
-type RecordDoc = mongoose.Document & Record<string, unknown>;
 type RecordUnion = MerchantRecord | MerchantUserRecord;
 
-function docToMerchantRecord(doc: RecordDoc | null): MerchantRecord | null {
+function toPlainDoc(doc: mongoose.Document | Record<string, unknown>): Record<string, unknown> {
+  return typeof (doc as mongoose.Document).toObject === 'function'
+    ? (doc as mongoose.Document).toObject()
+    : (doc as Record<string, unknown>);
+}
+
+function docToMerchantRecord(doc: mongoose.Document | null): MerchantRecord | null {
   if (!doc) return null;
-  const o = doc.toObject ? doc.toObject() : doc as Record<string, unknown>;
-  const { _id, __v, ...rest } = o as Record<string, unknown> & { _id: mongoose.Types.ObjectId };
+  const { _id, __v, ...rest } = toPlainDoc(doc) as Record<string, unknown> & { _id: mongoose.Types.ObjectId };
   return rest as unknown as MerchantRecord;
 }
 
-function docToMerchantUserRecord(doc: RecordDoc | null): MerchantUserRecord | null {
+function docToMerchantUserRecord(doc: mongoose.Document | null): MerchantUserRecord | null {
   if (!doc) return null;
-  const o = doc.toObject ? doc.toObject() : doc as Record<string, unknown>;
-  const { _id, __v, ...rest } = o as Record<string, unknown> & { _id: mongoose.Types.ObjectId };
+  const { _id, __v, ...rest } = toPlainDoc(doc) as Record<string, unknown> & { _id: mongoose.Types.ObjectId };
   return rest as unknown as MerchantUserRecord;
 }
 
-function docToLedgerEntry(doc: RecordDoc | null): LedgerEntry | null {
+function docToLedgerEntry(doc: mongoose.Document | null): LedgerEntry | null {
   if (!doc) return null;
-  const o = doc.toObject ? doc.toObject() : doc as Record<string, unknown>;
-  const { _id, __v, ...rest } = o as Record<string, unknown> & { _id: mongoose.Types.ObjectId };
+  const { _id, __v, ...rest } = toPlainDoc(doc) as Record<string, unknown> & { _id: mongoose.Types.ObjectId };
   return rest as unknown as LedgerEntry;
 }
 
-function docToPayment(doc: RecordDoc | null): Payment | null {
+function docToPayment(doc: mongoose.Document | null): Payment | null {
   if (!doc) return null;
-  const o = doc.toObject ? doc.toObject() : doc as Record<string, unknown>;
-  const { _id, __v, ...rest } = o as Record<string, unknown> & { _id: mongoose.Types.ObjectId };
+  const { _id, __v, ...rest } = toPlainDoc(doc) as Record<string, unknown> & { _id: mongoose.Types.ObjectId };
   return rest as unknown as Payment;
 }
 
@@ -64,27 +65,27 @@ export const db = {
   },
 
   async findRecordById(recordId: string): Promise<RecordUnion | null> {
-    let doc = await MerchantRecordModel.findOne({ recordId });
-    if (doc) return docToMerchantRecord(doc);
-    doc = await MerchantUserRecordModel.findOne({ recordId }) as RecordDoc | null;
-    if (doc) return docToMerchantUserRecord(doc);
+    const merchantDoc = await MerchantRecordModel.findOne({ recordId });
+    if (merchantDoc) return docToMerchantRecord(merchantDoc);
+    const userDoc = await MerchantUserRecordModel.findOne({ recordId });
+    if (userDoc) return docToMerchantUserRecord(userDoc);
     return null;
   },
 
   async findRecordByUserId(userId: string): Promise<RecordUnion | null> {
-    let doc = await MerchantRecordModel.findOne({ userId });
-    if (doc) return docToMerchantRecord(doc);
-    doc = await MerchantUserRecordModel.findOne({ userId }) as RecordDoc | null;
-    if (doc) return docToMerchantUserRecord(doc);
+    const merchantDoc = await MerchantRecordModel.findOne({ userId });
+    if (merchantDoc) return docToMerchantRecord(merchantDoc);
+    const userDoc = await MerchantUserRecordModel.findOne({ userId });
+    if (userDoc) return docToMerchantUserRecord(userDoc);
     return null;
   },
 
   async findRecordByEmail(email: string): Promise<RecordUnion | null> {
     const norm = email.toLowerCase();
-    let doc = await MerchantRecordModel.findOne({ email: norm });
-    if (doc) return docToMerchantRecord(doc);
-    doc = await MerchantUserRecordModel.findOne({ email: norm }) as RecordDoc | null;
-    if (doc) return docToMerchantUserRecord(doc);
+    const merchantDoc = await MerchantRecordModel.findOne({ email: norm });
+    if (merchantDoc) return docToMerchantRecord(merchantDoc);
+    const userDoc = await MerchantUserRecordModel.findOne({ email: norm });
+    if (userDoc) return docToMerchantUserRecord(userDoc);
     return null;
   },
 
@@ -118,7 +119,7 @@ export const db = {
     const normalized = txnRef.trim();
     if (!normalized) return null;
     const doc = await LedgerEntryModel.findOne({ recordId, txn_ref: normalized });
-    return docToLedgerEntry(doc as RecordDoc | null);
+    return docToLedgerEntry(doc);
   },
 
   async getLedgerEntries(query: LedgerQueryParams): Promise<LedgerEntry[]> {

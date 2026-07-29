@@ -29,8 +29,8 @@ export interface BaseWallet {
 // Define wallet types for merchants (one set per app at creation)
 export enum MerchantWalletType {
   BILLING = 'BILLING',         // Billing Wallet
-  KYC = 'KYC',                 // KYC Wallet
-  SETTLEMENT = 'SETTLEMENT'    // Settlement Wallet
+  KYC = 'KYC',                 // KYC link fee Wallet (Spring-only; distinct from Repayment)
+  REPAYMENT = 'REPAYMENT'      // Repayment Wallet (formerly Settlement)
 }
 
 export type UserWalletPurpose = 'PRIMARY' | 'PRODUCT';
@@ -79,6 +79,12 @@ export interface Transaction {
   category?: string;
   source?: string;
   metadata?: Record<string, any>;
+  senderDetails?: {
+    name?: string;
+    accountNumber?: string;
+    bankName?: string;
+    bankCode?: string;
+  };
   tags?: string[];
   externalReference?: string;
   ipAddress?: string;

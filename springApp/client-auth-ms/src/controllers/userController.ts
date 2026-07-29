@@ -3,6 +3,13 @@ import { AuthService } from '../services/AuthService';
 import { UserType } from '../models/User';
 import { userProfileUpdateSchema, validateForm, updateEmailSchema } from '../utils/validation';
 
+function firstString(value: unknown): string {
+  if (Array.isArray(value)) {
+    return firstString(value[0]);
+  }
+  return typeof value === 'string' ? value.trim() : '';
+}
+
 export class UserController {
   // Get user profile
   static async getProfile(req: Request, res: Response): Promise<void> {
@@ -24,9 +31,12 @@ export class UserController {
         return;
       }
 
+      // Retail users get their KYC status so the storefront can gate/route UX.
+      const kycSummary = await AuthService.resolveKycSummary(user);
+
       res.status(200).json({
         success: true,
-        data: { user }
+        data: { user, ...(kycSummary ?? {}) }
       });
     } catch (error) {
       console.error('Error getting user profile:', error);
@@ -63,7 +73,10 @@ export class UserController {
         return;
       }
 
-      const result = await AuthService.updateUserProfile(req.user.userId, validation.value || {});
+      const result = await AuthService.updateUserProfile(req.user.userId, {
+        ...(validation.value || {}),
+        profilePictureFile: req.file
+      });
 
       if (!result.success) {
         res.status(400).json({
@@ -160,8 +173,23 @@ export class UserController {
         req.user.userType === UserType.ADMIN
           ? req.user.userMerchantId || 'admin'
           : req.user.userMerchantId || req.user.userId;
+      const appId =
+        firstString(req.headers['x-tenant-app-id']) ||
+        firstString(req.headers['x-app-id']) ||
+        firstString(req.query.appId) ||
+        firstString(req.query.app_id) ||
+        firstString(req.query.applicationId);
 
-      const result = await AuthService.getMerchantUsers(merchantId);
+      if (req.user.userType === UserType.MERCHANT && !appId) {
+        res.status(400).json({
+          success: false,
+          error:
+            'appId is required to list app-scoped customers. Use GET /api/v1/user/list?appId={appId} or GET /api/v1/apps/{appId}/customers'
+        });
+        return;
+      }
+
+      const result = await AuthService.getMerchantUsers(merchantId, appId || undefined);
 
       if (!result.success) {
         res.status(400).json({
@@ -335,11 +363,39 @@ export class UserController {
       }
 
       const { userId } = req.params;
+      if (!userId) {
+        res.status(400).json({
+          success: false,
+          error: 'userId is required'
+        });
+        return;
+      }
 
-      res.status(500).json({
-        success: false,
-        error: 'Suspend user functionality not fully implemented in this simplified version'
-      });
+      const result = await AuthService.suspendStaffUser(req.user.userId, userId);
+
+      if (result.success) {
+        res.status(200).json({
+          success: true,
+          message: 'User suspended successfully',
+          data: { user: result.user }
+        });
+        return;
+      }
+
+      const err = result.error || 'Request failed';
+      if (err === 'User not found') {
+        res.status(404).json({ success: false, error: err });
+        return;
+      }
+      if (err === 'Actor user not found') {
+        res.status(401).json({ success: false, error: 'Authentication required' });
+        return;
+      }
+      if (err.startsWith('Insufficient permissions')) {
+        res.status(403).json({ success: false, error: err });
+        return;
+      }
+      res.status(400).json({ success: false, error: err });
     } catch (error) {
       console.error('Error suspending user:', error);
       res.status(500).json({
@@ -361,11 +417,39 @@ export class UserController {
       }
 
       const { userId } = req.params;
+      if (!userId) {
+        res.status(400).json({
+          success: false,
+          error: 'userId is required'
+        });
+        return;
+      }
 
-      res.status(500).json({
-        success: false,
-        error: 'Activate user functionality not fully implemented in this simplified version'
-      });
+      const result = await AuthService.activateStaffUser(req.user.userId, userId);
+
+      if (result.success) {
+        res.status(200).json({
+          success: true,
+          message: 'User activated successfully',
+          data: { user: result.user }
+        });
+        return;
+      }
+
+      const err = result.error || 'Request failed';
+      if (err === 'User not found') {
+        res.status(404).json({ success: false, error: err });
+        return;
+      }
+      if (err === 'Actor user not found') {
+        res.status(401).json({ success: false, error: 'Authentication required' });
+        return;
+      }
+      if (err.startsWith('Insufficient permissions')) {
+        res.status(403).json({ success: false, error: err });
+        return;
+      }
+      res.status(400).json({ success: false, error: err });
     } catch (error) {
       console.error('Error activating user:', error);
       res.status(500).json({

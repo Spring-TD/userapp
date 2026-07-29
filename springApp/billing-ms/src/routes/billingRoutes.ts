@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { BillingController } from '../controllers/BillingController';
+import { MerchantMonthlyBillingController } from '../controllers/MerchantMonthlyBillingController';
 import { pricingRoutes } from './pricingRoutes';
 import { triggerRoutes } from './triggerRoutes';
 
@@ -34,6 +35,10 @@ router.get('/billing-page/:userId', BillingController.getBillingPageInfo);
 // Recurring billing routes
 router.post('/recurring-billing/trigger', BillingController.triggerRecurringBilling);
 router.get('/recurring-billing/status', BillingController.getRecurringBillingStatus);
+
+// Merchant monthly Billing-wallet charges (per registered customer)
+router.get('/merchant-monthly/status', MerchantMonthlyBillingController.getStatus);
+router.post('/merchant-monthly/trigger', MerchantMonthlyBillingController.trigger);
 
 // New recurring billing routes based on the new data structure
 router.post('/recurring-billings', BillingController.createRecurringBilling);

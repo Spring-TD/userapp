@@ -149,12 +149,41 @@ Verification routes map 1:1 to Fuspay Modular endpoints:
 - Status: [Fuspay Get Verification Status](https://docs.fuspay.us/modular-kyc/get-verification-status)
 - Complete: [Fuspay Complete Verification](https://docs.fuspay.us/modular-kyc/complete-verification)
 
-- `POST /api/v1/kyc/modular/verification` → create verification
+- `POST /api/v1/kyc/modular/verification` → create verification (**debits the merchant app KYC wallet** before Fuspay link creation; see [KYC wallet billing](#kyc-wallet-billing))
 - `GET /api/v1/kyc/modular/verification-url` → fetch saved verification details for authenticated user
 - `POST /api/v1/kyc/modular/submit/:verificationId` → submit check payloads
 - `GET /api/v1/kyc/modular/status/:verificationId` → fetch verification status
 - `POST /api/v1/kyc/modular/complete/:verificationId` → request completion
 - `POST /api/v1/kyc/modular/webhook` → receive Fuspay webhook, persist full payload on `KYCProfile`, and trigger PayOnUs fixed VA for retail users (see below)
+
+**Individual / retail verification checks:** compliance-ms sends Fuspay `individual_checks` with top-level `bio: true`, `document_verification: false`, plus `verification_types` for **phone, email, NIN, BVN, and liveliness** (`liveliness` — not `liveness`). AML and business checks are excluded for `kyc_type` `individual` or `retail` (client overrides are ignored).
+
+**Tenant branding (Fuspay guide):** `branding` is sent on **`POST /modular/user`** (signup via `client-auth-ms`) and **`POST /modular/verification`**. When `CREATE_APP_SERVICE_URL` is set, compliance-ms and client-auth-ms resolve branding from `GET /api/v1/apps/:appId/pwa/manifest.webmanifest`:
+
+| Fuspay field | PWA manifest source |
+|--------------|---------------------|
+| `brand_name` | `name` or `short_name` |
+| `brand_logo` | first `icons[].src` (HTTPS only) |
+| `button_color` | `theme_color` |
+| `bg_color` | `background_color` |
+| `text_color` | derived from `bg_color` luminance (`#212020` on light, `#FFFFFF` on dark) |
+
+Optional `branding` in the verification request body merges over manifest values. Platform defaults apply when manifest lookup fails (`brand_name: Fuspay`, `bg_color: #FFFFFF`, `text_color: #212020`, `button_color: #2925FA`).
+
+#### KYC wallet billing
+
+Before a **retail customer** KYC link is created (`POST /api/v1/kyc/modular/verification`), compliance-ms debits the merchant’s **app-scoped KYC wallet** via wallet-ms internal API.
+
+| Rule | Behavior |
+|------|----------|
+| Fee | Flat per link — `KYC_LINK_FEE` (default **500**, currency matches wallet) |
+| Scope | Requires `x-tenant-app-id` + `x-tenant-merchant-id` (account-ms gateway forwards these) |
+| Active pending link | If the user already has a non-terminal Fuspay verification with id + url, returns the existing link **without charging again** |
+| Insufficient balance | **402** with `fundingInstructions` (balance, shortfall, KYC wallet NUBAN when provisioned) |
+| Fuspay failure after debit | Auto-refund to the KYC wallet |
+| Guarantor links | **Not charged** (`POST /api/v1/kyc/modular/guarantor-verification`) |
+
+**Env:** `WALLET_SERVICE_URL`, shared **`JWT_SECRET`** (sent as `X-Internal-Token` to wallet-ms; must match wallet-ms), `KYC_LINK_FEE`, optional `KYC_LINK_BILLING_ENABLED=false` to disable.
 
 #### Fuspay modular webhook (`verification.completed`) and PayOnUs
 
@@ -165,6 +194,18 @@ POST https://account-ms.fly.dev/api/v1/kyc/modular/webhook
 ```
 
 (or `https://<compliance-ms>/api/v1/kyc/modular/webhook`)
+
+**Important:** Fuspay must call this URL with **`POST`** and a JSON body. Opening the URL in a browser sends **`GET`**, which returns `404 Route not found` on older deployments. After deploy, `GET` returns a small health JSON confirming the endpoint is active; only `POST` processes webhooks.
+
+**Quick test (POST):**
+
+```bash
+curl -X POST "https://account-ms.fly.dev/api/v1/kyc/modular/webhook" \
+  -H "Content-Type: application/json" \
+  -d '{"data":{"user_id":"your-fuspay-user-id"}}'
+```
+
+Expected: `200` with `{ "success": true, ... }` (profile may show `matched: 0` for a fake id).
 
 **On each webhook**, compliance-ms:
 
@@ -225,9 +266,9 @@ POST https://account-ms.fly.dev/api/v1/kyc/modular/webhook
 
 ```env
 WALLET_SERVICE_URL=https://wallet-ms.fly.dev
-WALLET_INTERNAL_TOKEN=<same as wallet-ms WALLET_INTERNAL_TOKEN>
-COMPLIANCE_WALLET_INTERNAL_TOKEN=<same; wallet-ms uses this to read BVN>
+# JWT_SECRET must match wallet-ms (sent as X-Internal-Token to internal wallet routes)
 WALLET_SERVICE_HTTP_TIMEOUT_MS=90000
+COMPLIANCE_WALLET_INTERNAL_TOKEN=<wallet-ms uses this to read BVN from compliance-ms>
 ```
 
 Optional: `FUSPAY_MODULAR_WEBHOOK_SECRET` — require header `x-fuspay-webhook-secret` or `x-webhook-secret`.
@@ -241,27 +282,15 @@ Optional: `FUSPAY_MODULAR_WEBHOOK_SECRET` — require header `x-fuspay-webhook-s
   "callback": "https://your-app.com/kyc-callback",
   "redirect": "https://your-app.com/dashboard",
   "individual_checks": {
-    "verification_types": {
-      "bvn": true,
-      "nin": true,
-      "phone": true,
-      "email": true
-    },
-    "address_verification": {
-      "enabled": true,
-      "upload_proof_of_address": true
-    },
     "bio": true,
-    "document_verification": true,
-    "disclaimer": true
-  },
-  "business_checks": {
-    "tin": false,
-    "cac": false
-  },
-  "aml_checks": {
-    "aml_check": true,
-    "sanction_list": true
+    "document_verification": false,
+    "verification_types": {
+      "phone": true,
+      "email": true,
+      "nin": true,
+      "bvn": true,
+      "liveliness": true
+    }
   }
 }
 ```
@@ -277,18 +306,14 @@ Example create verification response:
     "reference": "VRF_409fdc11-b7c1-4ccd-8441-2a740d71499d",
     "verification_url": "https://transid2.fuspay.finance/?verificationId=69fdad2de19e6a83826a5a31",
     "todo": [
-      "bvn",
-      "nin",
       "phone",
       "email",
-      "address_verification",
       "bio",
-      "document_verification",
-      "disclaimer",
-      "aml_check",
-      "sanction_list"
+      "nin",
+      "bvn",
+      "liveliness"
     ],
-    "total_checks": 10,
+    "total_checks": 6,
     "status": "pending"
   },
   "verification_url": "https://transid2.fuspay.finance/?verificationId=69fdad2de19e6a83826a5a31",
@@ -328,7 +353,7 @@ For image-based checks (when required by provider):
 
 ```json
 {
-  "check_type": "liveness",
+  "check_type": "liveliness",
   "data": {
     "image": "data:image/jpeg;base64,<base64>"
   }

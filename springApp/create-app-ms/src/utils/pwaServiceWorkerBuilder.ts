@@ -16,6 +16,41 @@ self.addEventListener('fetch', (event) => {
     caches.match(event.request).then((cached) => cached || fetch(event.request))
   );
 });
+self.addEventListener('push', (event) => {
+  let payload = { title: 'Notification', body: '', url: '/' };
+  try {
+    if (event.data) {
+      payload = Object.assign(payload, event.data.json());
+    }
+  } catch (e) {}
+  const title = payload.title || 'Notification';
+  const options = {
+    body: payload.body || '',
+    icon: payload.icon,
+    badge: payload.badge,
+    data: {
+      url: payload.url || '/',
+      template: payload.template
+    }
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const targetUrl = (event.notification.data && event.notification.data.url) || '/';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if ('focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+    })
+  );
+});
 `.trim();
 }
 
@@ -32,4 +67,3 @@ export function buildServiceWorkerMeta(
     contentType: 'application/javascript'
   };
 }
-

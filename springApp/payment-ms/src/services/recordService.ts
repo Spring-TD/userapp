@@ -23,12 +23,57 @@ import {
   CategorySummary,
   AnalyticsSummary
 } from '../types/record';
+import { collectPaymentSettlementCharge } from './paymentSettlementService';
 
 /**
  * RecordService
  * Handles creation and management of merchant and merchant-user records
  */
 export class RecordService {
+  private async maybeCollectSettlementCharge(
+    record: MerchantRecord | MerchantUserRecord,
+    request: {
+      amount: number;
+      transactionType: TransactionType;
+      txnRef: string;
+      toCurrency: string;
+      feeBreakdown: FeeBreakdown;
+    }
+  ): Promise<void> {
+    void collectPaymentSettlementCharge({
+      merchantId: record.userMerchantId,
+      userId: record.userId,
+      appId:
+        record.metadata && typeof record.metadata.appId === 'string'
+          ? record.metadata.appId
+          : undefined,
+      amount: request.amount,
+      currency: request.toCurrency,
+      txnRef: request.txnRef,
+      transactionType: request.transactionType,
+      feeBreakdown: request.feeBreakdown
+    }).catch((error) => {
+      logger.warn('Settlement charge hook failed', {
+        txnRef: request.txnRef,
+        error: error instanceof Error ? error.message : error
+      });
+    });
+  }
+
+  /** Fire-and-forget settlement collect (e.g. wallet-payout-ledger after addLedgerEntry). */
+  triggerSettlementCharge(
+    record: MerchantRecord | MerchantUserRecord,
+    request: {
+      amount: number;
+      transactionType: TransactionType;
+      txnRef: string;
+      toCurrency: string;
+      feeBreakdown: FeeBreakdown;
+    }
+  ): void {
+    this.maybeCollectSettlementCharge(record, request);
+  }
+
   /**
    * Create a record (Merchant or Merchant-User) after successful verification
    * This is triggered by a webhook from service-auth-ms
@@ -513,6 +558,14 @@ export class RecordService {
         newBalance: updatedRecord?.currentBalance
       });
 
+      await this.maybeCollectSettlementCharge(record, {
+        amount: request.amount,
+        transactionType: request.transactionType,
+        txnRef: request.txnRef,
+        toCurrency: request.toCurrency,
+        feeBreakdown: request.feeBreakdown
+      });
+
       return {
         success: true,
         data: {
@@ -607,6 +660,14 @@ export class RecordService {
         category: request.category,
         amount: request.amount,
         newBalance: updatedRecord?.currentBalance
+      });
+
+      await this.maybeCollectSettlementCharge(record, {
+        amount: request.amount,
+        transactionType: request.transactionType,
+        txnRef: request.txnRef,
+        toCurrency: request.toCurrency,
+        feeBreakdown: request.feeBreakdown
       });
 
       return {

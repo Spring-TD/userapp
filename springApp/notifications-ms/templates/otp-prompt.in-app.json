@@ -1,0 +1,4 @@
+{
+  "title": "{{purpose}} code sent",
+  "body": "We sent a one-time code to your email for {{purpose}}. Check your inbox and enter the code in the app. The code is not shown here for your security."
+}

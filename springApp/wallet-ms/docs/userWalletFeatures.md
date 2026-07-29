@@ -4,13 +4,14 @@ This document describes the enhanced features available for User Wallets in the 
 
 ## Overview
 
-User Wallets now support five key features:
+User Wallets support these key features:
 1. **Wallet Record Filtering** - Filter transaction records by date range and type
 2. **Transfer Out** - Transfer money from user wallet to other wallets
 3. **Debit Wallet** - Allow money to be debited via billing (already implemented)
 4. **3rd Party API Calls** - Make API calls to external services and debit the wallet
 5. **Funding Callbacks** - Receive notifications when wallet is funded via external payment methods
 6. **Bank Payouts** - Send money from a PayOnUs-backed user wallet to an external bank account
+7. **Transaction PIN** - A 4-digit PIN, set after Fuspay KYC, required to authorize money-out operations (transfer / payout)
 
 ## API Endpoints
 
@@ -55,14 +56,15 @@ Filter user wallet transactions by date range and transaction type.
 
 #### POST `/api/v1/wallets/user/:userId/transfer`
 
-Transfer money from a user wallet to another wallet.
+Transfer money from a user wallet to another wallet. Requires a valid [transaction PIN](#7-transaction-pin) in the body.
 
 **Request Body:**
 ```json
 {
   "toWalletId": "wallet_xyz",
   "amount": 50,
-  "description": "Payment for services"
+  "description": "Payment for services",
+  "pin": "1234"
 }
 ```
 
@@ -118,7 +120,7 @@ Merchants can debit user wallets for billing purposes. This endpoint already exi
 
 #### POST `/api/v1/wallets/user/:userId/payout`
 
-Send money from the user's active PayOnUs virtual account wallet to an external bank account.
+Send money from the user's active PayOnUs virtual account wallet to an external bank account. Requires a valid [transaction PIN](#7-transaction-pin) in the body.
 
 **Request Body:**
 ```json
@@ -129,11 +131,21 @@ Send money from the user's active PayOnUs virtual account wallet to an external 
   "amount": 50,
   "currency": "NGN",
   "narration": "Withdrawal to bank",
-  "reference": "optional-client-reference"
+  "reference": "optional-client-reference",
+  "pin": "1234"
 }
 ```
 
-Only the wallet owner can call this endpoint. The service checks the user's wallet balance and active `virtualNuban`, asks PayOnUs to initiate the payout, then debits the wallet and records a `DEBIT` transaction with provider metadata.
+Only the wallet owner can call this endpoint. The service checks the user's wallet balance and active `virtualNuban`, asks PayOnUs to initiate the payout, then debits the wallet and records a `DEBIT` transaction with provider metadata (initial `metadata.providerStatus` is typically `PENDING` / `PROCESSING`).
+
+#### POST `/api/v1/wallets/payout/callback` (PayOnUs payout status webhook)
+
+Public webhook that captures the **final** PayOnUs payout status and reconciles the original payout transaction automatically. Configure `PAYONUS_PAYOUT_NOTIFICATION_URL` to point here.
+
+- Matches the callback to the payout transaction by `onusReference` (`externalReference`) or `merchantReference` (`referenceId`), scoped to `source = PAYONUS`.
+- `SUCCESSFUL` → records the final `providerStatus` / `payoutStatus` and `statusHistory`; balance unchanged.
+- `FAILED` / `REJECTED` / `REVERSED` → **auto-reverses the debit once**: credits the wallet back, writes a `PAYOUT_REVERSAL` credit transaction (`<payoutReference>::reversal`), marks the original `FAILED` with `metadata.reversed = true`, and mirrors the credit to the app.
+- Idempotent (repeat callbacks are acknowledged with `200`, no double refund). PayOnUs callbacks that arrive at `/funding/callback` instead are detected and routed to the same logic.
 
 ### 4. 3rd Party API Calls
 
@@ -251,13 +263,57 @@ Manually check the status of a funding transaction.
 - The endpoint automatically credits the wallet when a successful funding notification is received
 - Supported payment methods: CARD, BANK_TRANSFER, WALLET, OTHER
 
+### 7. Transaction PIN
+
+A **4-digit transaction PIN** authorizes money-out operations (transfer, bank payout). It is user-scoped — one PIN per `userId` regardless of how many wallets the user owns — and stored hashed (scrypt) in the `transactionpins` collection. All PIN endpoints require a Bearer token for the same user.
+
+**Lifecycle:**
+1. After a user completes **Fuspay KYC**, the storefront calls the status endpoint and, if no PIN exists, prompts the user to create one.
+2. Existing users who never set a PIN are prompted on their **first transfer-out** (the transfer returns `409 TRANSACTION_PIN_REQUIRED`).
+
+#### GET `/api/v1/wallets/user/:userId/transaction-pin/status`
+
+```json
+{ "success": true, "data": { "hasTransactionPin": false, "locked": false, "lockedUntil": null } }
+```
+
+#### POST `/api/v1/wallets/user/:userId/transaction-pin`
+
+Create a PIN (only when one does not already exist).
+
+```json
+{ "pin": "1234" }
+```
+
+#### PUT `/api/v1/wallets/user/:userId/transaction-pin`
+
+Change an existing PIN; requires the current PIN.
+
+```json
+{ "currentPin": "1234", "newPin": "5678" }
+```
+
+#### Enforcement & error codes
+
+The PIN is verified before any funds move on `…/transfer` and `…/payout`. Failure responses include a machine-readable `code`:
+
+| HTTP | `code` | Meaning |
+|------|--------|---------|
+| `409` | `TRANSACTION_PIN_REQUIRED` | No PIN set → prompt to create one, then retry |
+| `400` | `TRANSACTION_PIN_MISSING` | PIN exists but none supplied |
+| `401` | `INVALID_TRANSACTION_PIN` | Wrong PIN (response includes `attemptsRemaining`) |
+| `423` | `TRANSACTION_PIN_LOCKED` | Locked after 5 wrong attempts for 15 minutes (response includes `lockedUntil`) |
+
+**Implementation:** `src/utils/transactionPin.ts`, `src/db/TransactionPinModel.ts`, `src/services/transactionPinService.ts`, `src/controllers/transactionPinController.ts`.
+
 ## Security & Access Control
 
 1. **Wallet Record Filtering**: Users can only filter their own transactions. Merchants can filter transactions of their users.
-2. **Transfer Out**: Only wallet owners can transfer money out from their wallets.
+2. **Transfer Out**: Only wallet owners can transfer money out from their wallets, and only with a valid transaction PIN.
 3. **Debit Wallet**: Only merchants can debit wallets of their associated users.
 4. **API Calls**: Only wallet owners can make API calls from their wallets.
 5. **Funding Callbacks**: Public endpoint for payment provider notifications with signature verification.
+6. **Transaction PIN**: Only the wallet owner can set/change/check their PIN. PINs are hashed (scrypt), never returned, and lock for 15 minutes after 5 incorrect attempts.
 
 ## Implementation Details
 
@@ -266,6 +322,7 @@ Manually check the status of a funding transaction.
 1. `filterUserTransactions(userId, filterData)` - Filters user transactions
 2. `transferOutFromUser(transferData)` - Transfers money from user wallet to another wallet
 3. `makeUserApiCall(apiCallData)` - Makes 3rd party API calls from user wallet
+4. `TransactionPinService.{setPin,changePin,getStatus,verifyForTransfer}(...)` - Manages and verifies the transaction PIN (with failed-attempt lockout)
 
 ### Controller Methods
 

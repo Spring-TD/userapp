@@ -31,6 +31,10 @@ export type PayonusBankPayoutRequest = {
   currency: string;
   reference: string;
   narration?: string;
+  /** Beneficiary/customer email — PayOnUs bank-transfer body requires one. */
+  email?: string;
+  /** ISO country code; defaults to PAYONUS_PAYOUT_COUNTRY_CODE (NG). */
+  countryCode?: string;
 };
 
 export type PayonusBankPayoutResult = {
@@ -40,6 +44,29 @@ export type PayonusBankPayoutResult = {
   raw?: unknown;
   errorMessage?: string;
   httpStatus?: number;
+};
+
+export type PayonusNameEnquiryResult = {
+  ok: boolean;
+  accountName?: string;
+  accountNumber?: string;
+  bankCode?: string;
+  bankName?: string;
+  errorMessage?: string;
+  httpStatus?: number;
+};
+
+export type PayonusBank = {
+  code: string;
+  name: string;
+};
+
+export type PayonusBankListResult = {
+  ok: boolean;
+  banks: PayonusBank[];
+  errorMessage?: string;
+  httpStatus?: number;
+  cached?: boolean;
 };
 
 type PayonusTokenResponse = {
@@ -483,9 +510,13 @@ async function postPayoutJson(path: string, body: Record<string, unknown>): Prom
 
   const url = joinPayonusUrl(payonusNubanConfig.baseUrl, path);
   const headers = await buildRequestHeaders();
+  const method = (payonusNubanConfig.payoutMethod || 'POST').toUpperCase();
 
   try {
-    const res = await axios.post<unknown>(url, body, {
+    const res = await axios.request<unknown>({
+      url,
+      method: method as 'POST' | 'PUT' | 'PATCH',
+      data: body,
       headers,
       timeout: payonusNubanConfig.timeoutMs,
       validateStatus: () => true
@@ -497,7 +528,10 @@ async function postPayoutJson(path: string, body: Record<string, unknown>): Prom
     if (res.status === 401 && payonusNubanConfig.authMode === 'oauth') {
       try {
         const freshToken = await getOAuthAccessToken(true);
-        const retried = await axios.post<unknown>(url, body, {
+        const retried = await axios.request<unknown>({
+          url,
+          method: method as 'POST' | 'PUT' | 'PATCH',
+          data: body,
           headers: {
             'Content-Type': 'application/json',
             Accept: 'application/json',
@@ -515,7 +549,7 @@ async function postPayoutJson(path: string, body: Record<string, unknown>): Prom
           ok: false,
           ...extracted,
           raw: payload,
-          errorMessage: readPayonusErrorMessage(payload, retried.status),
+          errorMessage: describePayoutError(payload, retried.status, method, path),
           httpStatus: retried.status
         };
       } catch (tokenError) {
@@ -525,11 +559,24 @@ async function postPayoutJson(path: string, body: Record<string, unknown>): Prom
     }
 
     if (res.status >= 200 && res.status < 300) {
+      // A 2xx can still carry a terminal failure status; don't treat those as ok
+      // (otherwise the caller would debit the wallet for a rejected transfer).
+      const status = (extracted.providerStatus || '').toUpperCase();
+      if (status === 'FAILED' || status === 'REJECTED') {
+        return {
+          ok: false,
+          ...extracted,
+          raw: payload,
+          errorMessage: `PayOnUs transfer ${status}`,
+          httpStatus: res.status
+        };
+      }
       return { ok: true, ...extracted, raw: payload, httpStatus: res.status };
     }
 
     logger.warn('Payonus payout request failed', {
       httpStatus: res.status,
+      method,
       extracted,
       path
     });
@@ -538,7 +585,7 @@ async function postPayoutJson(path: string, body: Record<string, unknown>): Prom
       ok: false,
       ...extracted,
       raw: payload,
-      errorMessage: readPayonusErrorMessage(payload, res.status),
+      errorMessage: describePayoutError(payload, res.status, method, path),
       httpStatus: res.status
     };
   } catch (err) {
@@ -557,28 +604,277 @@ function mergeBody(
   return { ...base, ...extra };
 }
 
-export async function initiateBankPayout(input: PayonusBankPayoutRequest): Promise<PayonusBankPayoutResult> {
-  const body: Record<string, unknown> = {
+/**
+ * When the provider returns 404 for the payout call it almost always means
+ * `PAYONUS_PAYOUT_PATH` is unset/incorrect for this account (the default
+ * `/api/v1/transfers/bank` is a placeholder). Surface an actionable hint so the
+ * operator configures the right path rather than chasing a transfer that "fails".
+ */
+function describePayoutError(payload: unknown, status: number, method: string, path: string): string {
+  const providerMsg = readPayonusErrorMessage(payload, status);
+  if (status === 404) {
+    return `PayOnUs payout endpoint not found (${method} ${path}). Set PAYONUS_PAYOUT_PATH (and, if needed, PAYONUS_PAYOUT_METHOD / PAYONUS_PAYOUT_BODY_JSON) to the disbursement route documented for your PayOnUs account. Provider said: ${providerMsg}`;
+  }
+  return providerMsg;
+}
+
+/** Placeholder values available to PAYONUS_PAYOUT_BODY_JSON templates. */
+function payoutTemplateValues(input: PayonusBankPayoutRequest): Record<string, string | number> {
+  return {
     amount: input.amount,
     currency: input.currency,
     reference: input.reference,
     narration: input.narration || 'Wallet payout',
-    businessId: payonusNubanConfig.vaBusinessId || undefined,
     sourceAccountNumber: input.sourceAccountNumber,
-    source: {
-      accountNumber: input.sourceAccountNumber
-    },
     destinationAccountNumber: input.destinationAccountNumber,
     destinationBankCode: input.destinationBankCode,
     destinationAccountName: input.destinationAccountName,
-    beneficiary: {
-      accountNumber: input.destinationAccountNumber,
-      bankCode: input.destinationBankCode,
-      accountName: input.destinationAccountName
+    businessId: payonusNubanConfig.vaBusinessId || ''
+  };
+}
+
+function resolvePayoutEmail(input: PayonusBankPayoutRequest): string {
+  const explicit = input.email?.trim();
+  if (explicit) return explicit;
+  const configured = payonusNubanConfig.payoutDefaultEmail.trim();
+  if (configured) return configured;
+  // Last resort: a deterministic placeholder so the required field is populated.
+  return buildVirtualAccountEmail(`payout-${input.destinationAccountNumber}`);
+}
+
+/**
+ * PayOnUs Name Enquiry — verify a beneficiary bank account before transfer.
+ * POST /api/v1/transfer-requests/name-enquiry
+ */
+export async function nameEnquiry(params: {
+  accountNumber: string;
+  bankCode: string;
+  currency?: string;
+}): Promise<PayonusNameEnquiryResult> {
+  if (!isPayonusPayoutReady()) {
+    return { ok: false, errorMessage: 'Payonus payout is not configured' };
+  }
+  const url = joinPayonusUrl(payonusNubanConfig.baseUrl, payonusNubanConfig.payoutNameEnquiryPath);
+  const headers = await buildRequestHeaders();
+  const body: Record<string, unknown> = {
+    institutionCode: params.bankCode,
+    accountNumber: params.accountNumber,
+    businessId: payonusNubanConfig.vaBusinessId || undefined,
+    currency: (params.currency || 'NGN').toUpperCase()
+  };
+  if (!body.businessId) delete body.businessId;
+
+  try {
+    const res = await axios.post<unknown>(url, body, {
+      headers,
+      timeout: payonusNubanConfig.timeoutMs,
+      validateStatus: () => true
+    });
+    // Response data may be the object directly or nested under `data` (the docs
+    // show an extra wrapping brace); handle both.
+    let node: unknown = res.data;
+    const dataNode = getAtPath(res.data, 'data');
+    if (dataNode && typeof dataNode === 'object') node = dataNode;
+    const accountName = firstString(node, ['accountName', 'account_name', 'data.accountName']);
+    const ok = res.status >= 200 && res.status < 300 && Boolean(accountName);
+    if (!ok) {
+      return {
+        ok: false,
+        errorMessage: describePayoutError(res.data, res.status, 'POST', payonusNubanConfig.payoutNameEnquiryPath),
+        httpStatus: res.status
+      };
     }
+    return {
+      ok: true,
+      accountName,
+      accountNumber: firstString(node, ['accountNumber', 'account_number']) || params.accountNumber,
+      bankCode: firstString(node, ['bankCode', 'bank_code', 'institutionCode']) || params.bankCode,
+      bankName: firstString(node, ['bankName', 'bank_name']),
+      httpStatus: res.status
+    };
+  } catch (err) {
+    const ax = err as AxiosError;
+    const msg = ax.message || 'Payonus name enquiry failed';
+    logger.error('Payonus name enquiry HTTP error', { message: msg, status: ax.response?.status });
+    return { ok: false, errorMessage: msg, httpStatus: ax.response?.status };
+  }
+}
+
+/** Parse PayOnUs `GET /api/v1/banks` payload into a sorted [{ code, name }] list. */
+function extractBankList(payload: unknown): PayonusBank[] {
+  let node: unknown = payload;
+  const dataNode = getAtPath(payload, 'data');
+  if (dataNode !== undefined && dataNode !== null) node = dataNode;
+
+  const banks: PayonusBank[] = [];
+  const seen = new Set<string>();
+
+  const push = (code: unknown, name: unknown) => {
+    const c = String(code ?? '').trim();
+    const n = String(name ?? '').trim();
+    if (!c || !n || seen.has(c)) return;
+    seen.add(c);
+    banks.push({ code: c, name: n });
   };
 
+  if (Array.isArray(node)) {
+    // Array form: either [{code,name}] objects or ["code":"name"]-style maps.
+    for (const item of node) {
+      if (item && typeof item === 'object') {
+        const o = item as Record<string, unknown>;
+        if ('code' in o || 'name' in o) {
+          push(o.code ?? o.bankCode ?? o.institutionCode, o.name ?? o.bankName);
+        } else {
+          for (const [code, name] of Object.entries(o)) push(code, name);
+        }
+      }
+    }
+  } else if (node && typeof node === 'object') {
+    // Object map form: { "<code>": "<BANK NAME>" }.
+    for (const [code, name] of Object.entries(node as Record<string, unknown>)) push(code, name);
+  }
+
+  banks.sort((a, b) => a.name.localeCompare(b.name));
+  return banks;
+}
+
+type BankListCacheEntry = { banks: PayonusBank[]; expiresAtMs: number };
+const bankListCache = new Map<string, BankListCacheEntry>();
+
+/**
+ * Fetch the PayOnUs bank list (`GET /api/v1/banks`). The list is large and rarely
+ * changes, so results are cached in-process for PAYONUS_BANK_LIST_CACHE_TTL_MS.
+ * Pass `key` (e.g. `ZAR`) to fetch the EFT bank list.
+ */
+export async function fetchBanks(options?: { key?: string; forceRefresh?: boolean }): Promise<PayonusBankListResult> {
+  if (!isPayonusPayoutReady()) {
+    return { ok: false, banks: [], errorMessage: 'Payonus is not configured' };
+  }
+
+  const key = options?.key?.trim().toUpperCase() || 'DEFAULT';
+  const now = Date.now();
+  if (!options?.forceRefresh) {
+    const cached = bankListCache.get(key);
+    if (cached && cached.expiresAtMs > now) {
+      return { ok: true, banks: cached.banks, cached: true };
+    }
+  }
+
+  const path = options?.key ? `/api/v1/banks?key=${encodeURIComponent(options.key)}` : '/api/v1/banks';
+  const url = joinPayonusUrl(payonusNubanConfig.baseUrl, path);
+  const headers = await buildRequestHeaders();
+
+  try {
+    const res = await axios.get<unknown>(url, {
+      headers,
+      timeout: payonusNubanConfig.timeoutMs,
+      validateStatus: () => true
+    });
+
+    if (res.status >= 200 && res.status < 300) {
+      const banks = extractBankList(res.data);
+      if (banks.length) {
+        bankListCache.set(key, { banks, expiresAtMs: now + payonusNubanConfig.bankListCacheTtlMs });
+        return { ok: true, banks, httpStatus: res.status };
+      }
+      return { ok: false, banks: [], errorMessage: 'PayOnUs returned an empty bank list', httpStatus: res.status };
+    }
+
+    return {
+      ok: false,
+      banks: [],
+      errorMessage: readPayonusErrorMessage(res.data, res.status),
+      httpStatus: res.status
+    };
+  } catch (err) {
+    const ax = err as AxiosError;
+    const msg = ax.message || 'Payonus bank list request failed';
+    logger.error('Payonus bank list HTTP error', { message: msg, status: ax.response?.status });
+    return { ok: false, banks: [], errorMessage: msg, httpStatus: ax.response?.status };
+  }
+}
+
+const PLACEHOLDER_ONLY = /^\{\{\s*([a-zA-Z]+)\s*\}\}$/;
+const PLACEHOLDER_GLOBAL = /\{\{\s*([a-zA-Z]+)\s*\}\}/g;
+
+/**
+ * Recursively render a payout body template. A string that is exactly one
+ * placeholder is replaced with the typed value (so `"{{amount}}"` becomes a
+ * number); placeholders embedded in a larger string are interpolated as text.
+ */
+function renderPayoutTemplate(node: unknown, values: Record<string, string | number>): unknown {
+  if (typeof node === 'string') {
+    const exact = node.match(PLACEHOLDER_ONLY);
+    if (exact) {
+      const key = exact[1];
+      return key in values ? values[key] : node;
+    }
+    return node.replace(PLACEHOLDER_GLOBAL, (m, key: string) => (key in values ? String(values[key]) : m));
+  }
+  if (Array.isArray(node)) {
+    return node.map((item) => renderPayoutTemplate(item, values));
+  }
+  if (node && typeof node === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+      out[k] = renderPayoutTemplate(v, values);
+    }
+    return out;
+  }
+  return node;
+}
+
+export async function initiateBankPayout(input: PayonusBankPayoutRequest): Promise<PayonusBankPayoutResult> {
+  // PayOnUs requires a name enquiry before a bank transfer. Verify the account
+  // first and use the bank-confirmed account name on the transfer for accuracy.
+  let beneficiaryAccountName = input.destinationAccountName;
+  if (payonusNubanConfig.payoutNameEnquiryEnabled) {
+    const enquiry = await nameEnquiry({
+      accountNumber: input.destinationAccountNumber,
+      bankCode: input.destinationBankCode,
+      currency: input.currency
+    });
+    if (!enquiry.ok) {
+      return {
+        ok: false,
+        errorMessage: enquiry.errorMessage || 'Bank account verification (name enquiry) failed',
+        httpStatus: enquiry.httpStatus
+      };
+    }
+    if (enquiry.accountName) beneficiaryAccountName = enquiry.accountName;
+  }
+
+  // When an operator supplies PAYONUS_PAYOUT_BODY_JSON, render it verbatim so the
+  // request body matches exactly what PayOnUs documents for the account.
+  if (payonusNubanConfig.payoutBodyTemplate) {
+    const rendered = renderPayoutTemplate(
+      payonusNubanConfig.payoutBodyTemplate,
+      { ...payoutTemplateValues(input), destinationAccountName: beneficiaryAccountName }
+    ) as Record<string, unknown>;
+    return postPayoutJson(
+      payonusNubanConfig.payoutPath,
+      mergeBody(rendered, payonusNubanConfig.payoutExtraBody)
+    );
+  }
+
+  // Documented PayOnUs "Initiate Bank Transfer" body.
+  const body: Record<string, unknown> = {
+    amount: input.amount,
+    beneficiaryAccountNumber: input.destinationAccountNumber,
+    beneficiaryAccountName,
+    beneficiaryBankCode: input.destinationBankCode,
+    reference: input.reference,
+    transferType: payonusNubanConfig.payoutTransferType,
+    countryCode: input.countryCode || payonusNubanConfig.payoutCountryCode,
+    currency: input.currency,
+    email: resolvePayoutEmail(input),
+    businessId: payonusNubanConfig.vaBusinessId || undefined,
+    narration: input.narration || 'Wallet payout'
+  };
+  const notificationUrl = payonusNubanConfig.payoutNotificationUrl.trim();
+  if (notificationUrl) body.notificationUrl = notificationUrl;
   if (!body.businessId) delete body.businessId;
+
   return postPayoutJson(payonusNubanConfig.payoutPath, mergeBody(body, payonusNubanConfig.payoutExtraBody));
 }
 

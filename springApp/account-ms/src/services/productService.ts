@@ -42,6 +42,13 @@ export interface ProductInfo {
     type: string;
     appId: string;
     status: string;
+    upstreamProductId?: string;
+    upstreamAppId?: string;
+    merchant?: {
+        id?: string;
+        name?: string | null;
+        companyName?: string | null;
+    };
     price?: number;
     interestRate?: {
         type: 'percentage' | 'amount';
@@ -239,7 +246,7 @@ class ProductService {
 
     async updateProductApplicationStatus(
         applicationId: string,
-        status: Exclude<ProductApplicationStatus, 'PENDING'>,
+        status: 'BLACKLISTED',
         reason?: string
     ): Promise<ProductApplication> {
         try {

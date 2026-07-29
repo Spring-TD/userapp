@@ -39,5 +39,7 @@ const router = Router();
 router.post('/', authenticate, RoleController.createRole);
 router.get('/', authenticate, RoleController.getRoles);
 router.get('/permissions', authenticate, RoleController.getPermissions);
+router.put('/:roleId', authenticate, RoleController.updateRole);
+router.delete('/:roleId', authenticate, RoleController.deleteRole);
 
 export const roleRoutes = router;

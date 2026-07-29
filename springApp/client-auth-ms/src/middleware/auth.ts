@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken } from '../utils/crypto';
+import { SessionService } from '../services/SessionService';
 
 // Extend the Express Request type to include user
 declare global {
@@ -44,7 +45,28 @@ export const authenticate = async (
       });
       return;
     }
-    
+
+    // Enforce the inactivity timeout and record activity on the session.
+    const activity = await SessionService.touchActivity(
+      verification.payload.sessionId as string | undefined,
+      verification.payload.userId
+    );
+    if (activity.status === 'inactive') {
+      res.status(401).json({
+        success: false,
+        error: 'Session expired due to inactivity',
+        code: 'SESSION_IDLE_TIMEOUT'
+      });
+      return;
+    }
+    if (activity.status === 'invalid') {
+      res.status(401).json({
+        success: false,
+        error: 'Session is no longer valid'
+      });
+      return;
+    }
+
     // Attach user info to request
     req.user = {
       userId: verification.payload.userId,
@@ -78,13 +100,21 @@ export const optionalAuthenticate = async (
     const token = authHeader.substring(7);
     const verification = verifyToken(token, 'access');
     if (verification.valid && verification.payload) {
-      req.user = {
-        userId: verification.payload.userId,
-        email: verification.payload.email,
-        userType: verification.payload.userType,
-        userMerchantId: verification.payload.userMerchantId,
-        sessionId: verification.payload.sessionId as string | undefined,
-      };
+      // Honour the inactivity timeout: an idle/invalid session is treated as
+      // anonymous rather than failing the (optional-auth) request.
+      const activity = await SessionService.touchActivity(
+        verification.payload.sessionId as string | undefined,
+        verification.payload.userId
+      );
+      if (activity.status === 'ok') {
+        req.user = {
+          userId: verification.payload.userId,
+          email: verification.payload.email,
+          userType: verification.payload.userType,
+          userMerchantId: verification.payload.userMerchantId,
+          sessionId: verification.payload.sessionId as string | undefined,
+        };
+      }
     }
     next();
   } catch {

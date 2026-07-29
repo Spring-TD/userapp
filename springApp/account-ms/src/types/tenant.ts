@@ -1,5 +1,6 @@
 export interface TenantContext {
   appId: string;
+  appName?: string;
   merchantId: string;
   subdomain: string;
 }

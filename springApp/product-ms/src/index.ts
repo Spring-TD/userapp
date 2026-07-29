@@ -7,7 +7,8 @@ import { config } from './config/environment';
 import swaggerSpec from './config/swagger';
 import { corsMiddleware } from './middleware';
 import { errorHandler, notFoundHandler } from './middleware';
-import { productRoutes, configurationRoutes, productApplicationRoutes, applicationRoutes } from './routes';
+import { productRoutes, configurationRoutes, productApplicationRoutes, applicationRoutes, savingsAccountRoutes, investmentAccountRoutes, commodityAccountRoutes } from './routes';
+import productCatalogSyncScheduler from './services/productCatalogSyncScheduler';
 
 const app = express();
 
@@ -17,7 +18,14 @@ app.use(corsMiddleware);
 app.use(morgan('combined'));
 
 // Body parsing middleware (limit from config)
-app.use(express.json({ limit: config.requestBodyLimit }));
+app.use(
+  express.json({
+    limit: config.requestBodyLimit,
+    verify: (req, _res, buf) => {
+      (req as express.Request & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+    }
+  })
+);
 app.use(express.urlencoded({ extended: true, limit: config.requestBodyLimit }));
 
 // Swagger / OpenAPI documentation
@@ -39,12 +47,17 @@ app.get('/', (_req, res) => {
       apiDocs: '/api-docs',
       openApiSpec: '/api-docs.json',
       products: '/api/v1/products',
+      productCatalogSyncStatus: '/api/v1/products/internal/catalog-sync/status',
+      productCatalogSyncWebhook: '/api/v1/products/webhooks/plata/product-updated',
       productOverview: '/api/v1/products/app/:appId/product-overview',
       productOverviewByType: '/api/v1/products/app/:appId/product-overview/by-type/:productType',
       configurations: '/api/v1/configurations',
       applications: '/api/v1/applications',
       applicationsSummary: '/api/v1/applications/summary',
-      productApplications: '/api/v1/product-applications'
+      productApplications: '/api/v1/product-applications',
+      savingsAccounts: '/api/v1/savings-accounts',
+      investmentAccounts: '/api/v1/investment-accounts',
+      commodityAccounts: '/api/v1/commodity-accounts'
     },
     features: [
       'Loan Products',
@@ -73,6 +86,9 @@ app.use('/api/v1/products', productRoutes);
 app.use('/api/v1/configurations', configurationRoutes);
 app.use('/api/v1/applications', applicationRoutes);
 app.use('/api/v1/product-applications', productApplicationRoutes);
+app.use('/api/v1/savings-accounts', savingsAccountRoutes);
+app.use('/api/v1/investment-accounts', investmentAccountRoutes);
+app.use('/api/v1/commodity-accounts', commodityAccountRoutes);
 
 // Error handling middleware
 app.use(notFoundHandler);
@@ -103,10 +119,12 @@ const server = app.listen(config.port, '0.0.0.0', () => {
   console.log(`🚀 Product Microservice listening on 0.0.0.0:${config.port}`);
   console.log(`📱 Environment: ${config.nodeEnv}`);
   connectMongo();
+  productCatalogSyncScheduler.start();
 });
 
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully');
+  productCatalogSyncScheduler.stop();
   server.close(() => {
     mongoose.connection.close().then(() => {
       console.log('Process terminated');
@@ -117,6 +135,7 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down gracefully');
+  productCatalogSyncScheduler.stop();
   server.close(() => {
     mongoose.connection.close().then(() => {
       console.log('Process terminated');

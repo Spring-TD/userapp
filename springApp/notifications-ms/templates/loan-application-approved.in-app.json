@@ -1,0 +1,4 @@
+{
+  "title": "Loan approved",
+  "body": "Your loan for {{productName}} has been approved."
+}

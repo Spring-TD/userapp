@@ -1,4 +1,4 @@
-export type NotificationChannel = 'email' | 'sms' | 'in_app';
+export type NotificationChannel = 'email' | 'sms' | 'in_app' | 'web_push';
 
 export type NotificationStatus = 'pending' | 'sent' | 'failed';
 
@@ -12,19 +12,22 @@ export interface SendNotificationRequest {
   priority?: NotificationPriority;
 }
 
-/** Send both in-app (by user id) and email for the same template + data. */
+/** Send in-app (+ Web Push when subscribed) and optionally email for the same template + data. */
 export interface SendEmailAndInAppRequest {
   userId: string;
-  email: string;
+  /** When omitted, only in-app (+ Web Push) is sent. */
+  email?: string;
   template: string;
   data: Record<string, any>;
   priority?: NotificationPriority;
+  /** When true, skip Web Push even if the user has browser subscriptions. */
+  skipWebPush?: boolean;
 }
 
 export interface SendEmailAndInAppResponse {
   success: boolean;
   inApp?: { success: boolean; id?: string; error?: string };
-  email?: { success: boolean; id?: string; error?: string };
+  email?: { success: boolean; id?: string; error?: string; skipped?: boolean };
   error?: string;
 }
 

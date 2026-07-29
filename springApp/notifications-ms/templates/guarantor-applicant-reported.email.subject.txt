@@ -1,0 +1,1 @@
+Applicant reported by guarantor — {{applicantName}}

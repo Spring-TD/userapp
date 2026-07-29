@@ -84,7 +84,7 @@ async function testFundingCallback() {
     // for merchant wallet funding
     const merchantFundingData = {
       merchantId: merchantId,
-      merchantWalletType: MerchantWalletType.SETTLEMENT,
+      merchantWalletType: MerchantWalletType.REPAYMENT,
       amount: 1000,
       currency: 'USD',
       transactionId: 'txn_merchant_funding_12345',

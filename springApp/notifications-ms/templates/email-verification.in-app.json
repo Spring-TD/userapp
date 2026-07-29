@@ -1,0 +1,4 @@
+{
+  "title": "Verify your email",
+  "body": "Hi {{userName}}, please verify your new email address. We also sent a verification link to your inbox."
+}

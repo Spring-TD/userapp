@@ -1,0 +1,4 @@
+{
+  "title": "Repayment received",
+  "body": "Repayment of {{amount}} received for {{productName}}. Outstanding: {{outstandingBalance}}."
+}

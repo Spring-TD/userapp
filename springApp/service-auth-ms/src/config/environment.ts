@@ -18,7 +18,7 @@ const envSchema = Joi.object({
 
   // JWT
   JWT_SECRET: Joi.string().min(32).required(),
-  JWT_EXPIRES_IN: Joi.string().default('1h'),
+  JWT_EXPIRES_IN: Joi.string().default('24h'),
   JWT_REFRESH_EXPIRES_IN: Joi.string().default('7d'),
 
   // Password

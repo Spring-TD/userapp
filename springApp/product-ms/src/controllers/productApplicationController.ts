@@ -1,7 +1,15 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
+import { config } from '../config/environment';
 import { ApiError } from '../middleware/errorHandler';
 import productApplicationService from '../services/productApplicationService';
+import applicantProfileService from '../services/applicantProfileService';
+import pendingApprovedMortgageService from '../services/pendingApprovedMortgageService';
+import pendingApprovedLoanService from '../services/pendingApprovedLoanService';
+import {
+  resolveLoanChargeOnProductTransfer,
+  collectLoanChargeOnProductTransfer
+} from '../services/settlement/loanTransferSettlementService';
 import {
   isSpacesConfigured,
   uploadToSpaces,
@@ -10,8 +18,10 @@ import {
 import type {
   ApplicationListQuery,
   CreateApplicationGuarantorRequest,
+  CreateApplicationSpouseKycRequest,
   CreateProductApplicationRequest,
   ProductApplicationStatus,
+  SaveProductApplicationProgressRequest,
   SubmitProductApplicationRequest,
   SubmitProductApplicationRequirementsRequest,
   UpdateProductApplicationStatusRequest
@@ -19,6 +29,62 @@ import type {
 import type { ApplicationAuthRequest } from '../middleware/applicationAuth';
 
 class ProductApplicationController {
+  getPlataLoanWorkflowWebhookStatus = async (_req: Request, res: Response): Promise<void> => {
+    res.status(200).json({
+      success: true,
+      message: 'Plata loan workflow webhook endpoint is active. Send POST requests with loan_workflow_status.updated events.',
+      endpoint: '/api/v1/applications/webhooks/plata/loan-workflow',
+      methods: ['GET', 'POST']
+    });
+  };
+
+  getPlataGuarantorKycWebhookStatus = async (_req: Request, res: Response): Promise<void> => {
+    res.status(200).json({
+      success: true,
+      message: 'Plata guarantor KYC webhook endpoint is active. Send POST requests with guarantor_kyc.approved or guarantor_kyc.applicant_reported events.',
+      endpoint: '/api/v1/applications/webhooks/plata/guarantor-kyc',
+      methods: ['GET', 'POST']
+    });
+  };
+
+  handlePlataLoanWorkflowWebhook = async (req: Request, res: Response): Promise<void> => {
+    try {
+      if (!this.verifyPlataWebhookSignature(req)) {
+        throw new ApiError(401, 'Invalid Plata webhook signature');
+      }
+
+      const result = await productApplicationService.applyPlataLoanWorkflowWebhook(req.body);
+
+      res.status(result.ignored ? 202 : 200).json({
+        success: true,
+        duplicate: result.duplicate,
+        ignored: result.ignored === true,
+        data: result.application
+      });
+    } catch (error) {
+      this.handleError(error, res, 'Error processing Plata loan workflow webhook');
+    }
+  };
+
+  handlePlataGuarantorKycWebhook = async (req: Request, res: Response): Promise<void> => {
+    try {
+      if (!this.verifyPlataWebhookSignature(req)) {
+        throw new ApiError(401, 'Invalid Plata webhook signature');
+      }
+
+      const result = await productApplicationService.applyPlataGuarantorKycWebhook(req.body);
+
+      res.status(result.ignored ? 202 : 200).json({
+        success: true,
+        duplicate: result.duplicate,
+        ignored: result.ignored === true,
+        notified: result.notified === true
+      });
+    } catch (error) {
+      this.handleError(error, res, 'Error processing Plata guarantor KYC webhook');
+    }
+  };
+
   uploadApplicationDocument = async (req: Request, res: Response): Promise<void> => {
     try {
       if (!req.file || !req.file.buffer) {
@@ -59,7 +125,7 @@ class ProductApplicationController {
   createApplication = async (req: Request, res: Response): Promise<void> => {
     try {
       const body = (req.validatedBody ?? req.body) as CreateProductApplicationRequest;
-      const application = await productApplicationService.createApplication(body);
+      const application = await productApplicationService.createApplication(body, req.get('authorization'));
 
       res.status(201).json({
         success: true,
@@ -74,12 +140,14 @@ class ProductApplicationController {
   initializeApplication = async (req: Request, res: Response): Promise<void> => {
     try {
       const body = (req.validatedBody ?? req.body) as CreateProductApplicationRequest;
-      const application = await productApplicationService.initializeApplication(body);
+      const result = await productApplicationService.initializeApplication(body, req.get('authorization'));
 
-      res.status(201).json({
+      res.status(result.created ? 201 : 200).json({
         success: true,
-        message: 'Application initialized. Bank account created; continue with requirements.',
-        data: application
+        message: result.created
+          ? 'Application initialized. Bank account created; continue with requirements.'
+          : 'Application already initialized. Continue with requirements.',
+        data: result.application
       });
     } catch (error) {
       this.handleError(error, res, 'Error initializing product application');
@@ -101,18 +169,155 @@ class ProductApplicationController {
     }
   };
 
+  saveProgress = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const body = (req.validatedBody ?? req.body) as SaveProductApplicationProgressRequest;
+      const application = await productApplicationService.saveProgress(req.params.id, body);
+
+      res.json({
+        success: true,
+        message: 'Application progress saved.',
+        data: application
+      });
+    } catch (error) {
+      this.handleError(error, res, 'Error saving product application progress');
+    }
+  };
+
   createGuarantor = async (req: Request, res: Response): Promise<void> => {
     try {
       const body = (req.validatedBody ?? req.body) as CreateApplicationGuarantorRequest;
       const result = await productApplicationService.createGuarantor(req.params.id, body);
 
+      if (result.alreadyAdded) {
+        res.status(200).json({
+          success: true,
+          alreadyAdded: true,
+          message: 'Guarantor already added for this application.',
+          data: {
+            application: result.application,
+            guarantor: result.guarantor,
+            guarantors: result.guarantors
+          }
+        });
+        return;
+      }
+
       res.status(201).json({
         success: true,
+        alreadyAdded: false,
         message: 'Guarantor KYC verification link created.',
-        data: result
+        data: {
+          application: result.application,
+          guarantor: result.guarantor,
+          guarantors: result.guarantors
+        }
       });
     } catch (error) {
       this.handleError(error, res, 'Error creating guarantor KYC verification');
+    }
+  };
+
+  createSpouseKyc = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const body = (req.validatedBody ?? req.body) as CreateApplicationSpouseKycRequest;
+      const result = await productApplicationService.createSpouseKyc(req.params.id, body);
+
+      res.status(201).json({
+        success: true,
+        message: 'Spouse KYC verification link created.',
+        data: result,
+        verificationUrl: result.spouse.verificationUrl
+      });
+    } catch (error) {
+      this.handleError(error, res, 'Error creating spouse KYC verification');
+    }
+  };
+
+  handleInternalGuarantorKycCompleted = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const body = (req.body || {}) as { applicationId?: string; guarantorId?: string };
+      const applicationId = typeof body.applicationId === 'string' ? body.applicationId.trim() : '';
+      const guarantorId = typeof body.guarantorId === 'string' ? body.guarantorId.trim() : '';
+      if (!applicationId || !guarantorId) {
+        throw new ApiError(400, 'applicationId and guarantorId are required');
+      }
+
+      const result = await productApplicationService.handleGuarantorKycCompleted(applicationId, guarantorId);
+      res.status(result.duplicate ? 200 : 201).json({
+        success: true,
+        duplicate: result.duplicate,
+        notified: result.notified
+      });
+    } catch (error) {
+      this.handleError(error, res, 'Error processing guarantor KYC completion');
+    }
+  };
+
+  resolveLoanChargeOnProductTransfer = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const applicationId = String(req.params.applicationId || '').trim();
+      const body = (req.body || {}) as { userId?: string };
+      const userId = typeof body.userId === 'string' ? body.userId.trim() : '';
+      if (!applicationId || !userId) {
+        throw new ApiError(400, 'applicationId and userId are required');
+      }
+
+      const result = await resolveLoanChargeOnProductTransfer({ applicationId, userId });
+      if ('error' in result) {
+        const status = result.error.includes('not found') ? 404 : 400;
+        res.status(status).json({ success: false, error: result.error });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      this.handleError(error, res, 'Error resolving loan charge on product transfer');
+    }
+  };
+
+  collectLoanChargeOnProductTransfer = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const applicationId = String(req.params.applicationId || '').trim();
+      const body = (req.body || {}) as { userId?: string };
+      const userId = typeof body.userId === 'string' ? body.userId.trim() : '';
+      if (!applicationId || !userId) {
+        throw new ApiError(400, 'applicationId and userId are required');
+      }
+
+      const result = await collectLoanChargeOnProductTransfer({ applicationId, userId });
+
+      if (result.insufficientFunds) {
+        res.status(402).json({
+          success: false,
+          error: result.error || 'Insufficient balance in primary wallet for loan charge',
+          code: 'INSUFFICIENT_USER_WALLET_BALANCE',
+          data: { skipped: result.skipped, skippedReason: result.skippedReason }
+        });
+        return;
+      }
+
+      if (!result.success && !result.skipped) {
+        const status = result.error?.includes('not found') ? 404 : 400;
+        res.status(status).json({
+          success: false,
+          error: result.error || 'Failed to collect loan charge on product transfer'
+        });
+        return;
+      }
+
+      res.status(result.duplicate ? 200 : 201).json({
+        success: true,
+        duplicate: result.duplicate === true,
+        skipped: result.skipped === true,
+        skippedReason: result.skippedReason,
+        data: { transactionId: result.transactionId }
+      });
+    } catch (error) {
+      this.handleError(error, res, 'Error collecting loan charge on product transfer');
     }
   };
 
@@ -128,6 +333,26 @@ class ProductApplicationController {
       });
     } catch (error) {
       this.handleError(error, res, 'Error submitting product application');
+    }
+  };
+
+  getInternalApplicantProfile = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const localApplicationId = String(req.params.localApplicationId || '').trim();
+      const plataApplicationId =
+        typeof req.query.plataApplicationId === 'string' ? req.query.plataApplicationId.trim() : undefined;
+      const offeringMerchantId =
+        typeof req.query.offeringMerchantId === 'string' ? req.query.offeringMerchantId.trim() : undefined;
+
+      const data = await applicantProfileService.buildApplicantProfile({
+        localApplicationId,
+        plataApplicationId,
+        offeringMerchantId
+      });
+
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      this.handleError(error, res, 'Error building internal applicant profile');
     }
   };
 
@@ -149,13 +374,14 @@ class ProductApplicationController {
 
   listApplications = async (req: Request, res: Response): Promise<void> => {
     try {
-      const applications = await productApplicationService.listApplications(
+      const result = await productApplicationService.listApplications(
         this.listQueryFromRequest(req)
       );
 
       res.json({
         success: true,
-        data: applications
+        data: result.applications,
+        pagination: result.pagination
       });
     } catch (error) {
       this.handleError(error, res, 'Error listing product applications');
@@ -179,14 +405,17 @@ class ProductApplicationController {
 
   listPendingApplications = async (req: Request, res: Response): Promise<void> => {
     try {
-      const applications = await productApplicationService.listApplications({
-        merchantId: (req as ApplicationAuthRequest).applicationsMerchantIdFilter,
+      const query = this.listQueryFromRequest(req);
+      const result = await productApplicationService.listApplications({
+        ...query,
+        merchantId: (req as ApplicationAuthRequest).applicationsMerchantIdFilter ?? query.merchantId,
         status: 'PENDING'
       });
 
       res.json({
         success: true,
-        data: applications
+        data: result.applications,
+        pagination: result.pagination
       });
     } catch (error) {
       this.handleError(error, res, 'Error listing pending product applications');
@@ -197,55 +426,46 @@ class ProductApplicationController {
     try {
       const query = this.listQueryFromRequest(req);
       query.userId = req.params.userId;
-      const applications = await productApplicationService.listApplications(query);
+      const result = await productApplicationService.listApplications(query);
 
       res.json({
         success: true,
-        data: applications
+        data: result.applications,
+        pagination: result.pagination
       });
     } catch (error) {
       this.handleError(error, res, 'Error listing user product applications');
     }
   };
 
-  approveApplication = async (req: Request, res: Response): Promise<void> => {
+  getUserProductInitStatus = async (req: Request, res: Response): Promise<void> => {
     try {
-      const application = await productApplicationService.updateApplicationStatus(req.params.id, 'APPROVED');
+      const { userId, productId } = req.params;
+      const merchantId = typeof req.query.merchantId === 'string' ? req.query.merchantId.trim() : undefined;
+      const appId = typeof req.query.appId === 'string' ? req.query.appId.trim() : undefined;
+
+      const status = await productApplicationService.getInitStatus({
+        userId,
+        productId,
+        ...(merchantId ? { merchantId } : {}),
+        ...(appId ? { appId } : {})
+      });
 
       res.json({
         success: true,
-        message: 'Application approved.',
-        data: {
-          application
-        }
+        data: status
       });
     } catch (error) {
-      this.handleError(error, res, 'Error approving product application');
-    }
-  };
-
-  rejectApplication = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const reason = typeof req.body.reason === 'string' ? req.body.reason.trim() : '';
-      if (!reason) {
-        throw new ApiError(400, 'Rejection reason is required');
-      }
-
-      const application = await productApplicationService.updateApplicationStatus(req.params.id, 'REJECTED', reason);
-
-      res.json({
-        success: true,
-        message: 'Application rejected.',
-        data: application
-      });
-    } catch (error) {
-      this.handleError(error, res, 'Error rejecting product application');
+      this.handleError(error, res, 'Error getting product application init status');
     }
   };
 
   updateApplicationStatus = async (req: Request, res: Response): Promise<void> => {
     try {
       const body = (req.validatedBody ?? req.body) as UpdateProductApplicationStatusRequest;
+      if (body.status !== 'BLACKLISTED') {
+        throw new ApiError(400, 'SpringApp does not approve or reject loan applications locally. Use Plata loan workflow.');
+      }
       const application = await productApplicationService.updateApplicationStatus(
         req.params.id,
         body.status,
@@ -273,10 +493,21 @@ class ProductApplicationController {
         authReq.applicationsMerchantIdFilter ??
         (typeof req.query.merchantId === 'string' ? req.query.merchantId : undefined),
       userId: typeof req.query.userId === 'string' ? req.query.userId : undefined,
+      productId: typeof req.query.productId === 'string' ? req.query.productId : undefined,
       appId,
       status: this.statusQuery(req.query.status),
-      productType: typeof req.query.productType === 'string' ? req.query.productType : undefined
+      productType: typeof req.query.productType === 'string' ? req.query.productType : undefined,
+      page: this.positiveIntegerQuery(req.query.page),
+      limit: this.positiveIntegerQuery(req.query.limit)
     };
+  }
+
+  private positiveIntegerQuery(value: unknown): number | undefined {
+    if (typeof value !== 'string') {
+      return undefined;
+    }
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
   }
 
   private statusQuery(value: unknown): ProductApplicationStatus | undefined {
@@ -297,6 +528,230 @@ class ProductApplicationController {
 
   private safePathSegment(value: string): string {
     return value.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120) || 'anonymous';
+  }
+
+  listPendingApprovedMortgages = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = String(req.params.userId ?? '').trim();
+      if (!userId) {
+        throw new ApiError(400, 'userId is required');
+      }
+      const data = await pendingApprovedMortgageService.listForUser(userId);
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      this.handleError(error, res, 'Error listing pending approved mortgages');
+    }
+  };
+
+  getPendingApprovedMortgage = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = String(req.query.userId ?? '').trim();
+      if (!userId) {
+        throw new ApiError(400, 'userId query parameter is required');
+      }
+      const data = await pendingApprovedMortgageService.getDetail(req.params.id, userId);
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      this.handleError(error, res, 'Error getting pending approved mortgage');
+    }
+  };
+
+  respondToPendingMortgageOffer = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const body = req.validatedBody as {
+        userId: string;
+        action: 'accept' | 'decline';
+        acceptedTerms?: boolean;
+      };
+      const data = await pendingApprovedMortgageService.respondToOffer(req.params.id, body.userId, {
+        action: body.action,
+        acceptedTerms: body.acceptedTerms
+      });
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      this.handleError(error, res, 'Error responding to mortgage offer');
+    }
+  };
+
+  schedulePendingMortgageInspection = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const body = req.validatedBody as {
+        userId: string;
+        scheduledFor: string;
+        notes?: string;
+        location?: string;
+      };
+      const data = await pendingApprovedMortgageService.scheduleAppointment(req.params.id, body.userId, body);
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      this.handleError(error, res, 'Error scheduling mortgage inspection');
+    }
+  };
+
+  startPendingMortgageInspection = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const body = req.validatedBody as { userId: string };
+      const data = await pendingApprovedMortgageService.startInspection(req.params.id, body.userId);
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      this.handleError(error, res, 'Error starting mortgage inspection');
+    }
+  };
+
+  completePendingMortgageInspection = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const body = req.validatedBody as { userId: string; outcome: 'completed' | 'declined_offer' };
+      const data = await pendingApprovedMortgageService.completeInspection(req.params.id, body.userId, {
+        outcome: body.outcome
+      });
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      this.handleError(error, res, 'Error completing mortgage inspection');
+    }
+  };
+
+  signPendingMortgageContract = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const body = req.validatedBody as { userId: string; acceptedTerms: boolean };
+      const data = await pendingApprovedMortgageService.signContract(req.params.id, body.userId, {
+        acceptedTerms: body.acceptedTerms
+      });
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      this.handleError(error, res, 'Error signing mortgage contract');
+    }
+  };
+
+  uploadPendingMortgageSignedContract = async (req: Request & { file?: any }, res: Response): Promise<void> => {
+    try {
+      const userId = String(req.body?.userId ?? '').trim();
+      if (!userId) {
+        res.status(400).json({ success: false, error: 'userId is required' });
+        return;
+      }
+      if (!req.file?.buffer) {
+        res.status(400).json({ success: false, error: 'No file uploaded. Send a single PDF in the "file" field.' });
+        return;
+      }
+
+      const data = await pendingApprovedMortgageService.uploadSignedContract(req.params.id, userId, {
+        buffer: req.file.buffer,
+        fileName: req.file.originalname || 'signed-contract.pdf',
+        mimeType: req.file.mimetype || 'application/pdf'
+      });
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      this.handleError(error, res, 'Error uploading signed mortgage contract');
+    }
+  };
+
+  payPendingMortgageDownPayment = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const body = req.validatedBody as { userId: string; amount?: number };
+      const data = await pendingApprovedMortgageService.payDownPayment(
+        req.params.id,
+        body.userId,
+        body.amount
+      );
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      this.handleError(error, res, 'Error paying mortgage down payment');
+    }
+  };
+
+  listPendingApprovedLoans = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = String(req.params.userId ?? '').trim();
+      if (!userId) {
+        throw new ApiError(400, 'userId is required');
+      }
+      const data = await pendingApprovedLoanService.listForUser(userId);
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      this.handleError(error, res, 'Error listing pending approved loans');
+    }
+  };
+
+  getPendingApprovedLoan = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = String(req.query.userId ?? '').trim();
+      if (!userId) {
+        throw new ApiError(400, 'userId query parameter is required');
+      }
+      const data = await pendingApprovedLoanService.getDetail(req.params.id, userId);
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      this.handleError(error, res, 'Error getting pending approved loan');
+    }
+  };
+
+  respondToPendingLoanOffer = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const body = req.validatedBody as {
+        userId: string;
+        action: 'accept' | 'decline';
+        acceptedTerms?: boolean;
+      };
+      const data = await pendingApprovedLoanService.respondToOffer(req.params.id, body.userId, {
+        action: body.action,
+        acceptedTerms: body.acceptedTerms
+      });
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      this.handleError(error, res, 'Error responding to loan offer');
+    }
+  };
+
+  uploadPendingLoanSignedContract = async (req: Request & { file?: any }, res: Response): Promise<void> => {
+    try {
+      const userId = String(req.body?.userId ?? '').trim();
+      if (!userId) {
+        res.status(400).json({ success: false, error: 'userId is required' });
+        return;
+      }
+      if (!req.file?.buffer) {
+        res.status(400).json({ success: false, error: 'No file uploaded. Send a single PDF in the "file" field.' });
+        return;
+      }
+
+      const data = await pendingApprovedLoanService.uploadSignedContract(req.params.id, userId, {
+        buffer: req.file.buffer,
+        fileName: req.file.originalname || 'signed-contract.pdf',
+        mimeType: req.file.mimetype || 'application/pdf'
+      });
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      this.handleError(error, res, 'Error uploading signed loan contract');
+    }
+  };
+
+  private verifyPlataWebhookSignature(req: Request): boolean {
+    const secret = config.plataLoanWorkflowWebhookSecret;
+    if (!secret) {
+      return true;
+    }
+
+    const incoming = req.get('x-plata-signature')?.trim();
+    if (!incoming) {
+      return false;
+    }
+
+    const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
+    if (!rawBody) {
+      return false;
+    }
+
+    const hmac = crypto.createHmac('sha256', secret).update(rawBody);
+    const hexDigest = hmac.digest('hex');
+    const base64Digest = crypto.createHmac('sha256', secret).update(rawBody).digest('base64');
+    return this.signatureMatches(incoming, hexDigest) || this.signatureMatches(incoming, base64Digest);
+  }
+
+  private signatureMatches(incoming: string, expectedDigest: string): boolean {
+    const normalizedIncoming = incoming.replace(/^sha256=/i, '').trim();
+    const expected = Buffer.from(expectedDigest);
+    const actual = Buffer.from(normalizedIncoming);
+    return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
   }
 
   private handleError(error: unknown, res: Response, context: string): void {

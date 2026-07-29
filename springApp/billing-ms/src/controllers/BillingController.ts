@@ -448,13 +448,13 @@ export class BillingController {
           data: null
         });
       }
-      res.status(200).json({
+      return res.status(200).json({
         success: true,
         message: 'Recurring billing retrieved successfully',
         data: result
       });
     } catch (error) {
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         message: 'Error retrieving recurring billing',
         error: error instanceof Error ? error.message : 'Unknown error'
@@ -498,13 +498,13 @@ export class BillingController {
           data: null
         });
       }
-      res.status(200).json({
+      return res.status(200).json({
         success: true,
         message: 'Recurring billing updated successfully',
         data: result
       });
     } catch (error) {
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         message: 'Error updating recurring billing',
         error: error instanceof Error ? error.message : 'Unknown error'

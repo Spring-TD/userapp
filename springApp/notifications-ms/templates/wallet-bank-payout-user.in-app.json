@@ -1,0 +1,4 @@
+{
+  "title": "Withdrawal {{status}}",
+  "body": "{{amount}} to {{destinationBankName}} ••••{{destinationAccountLast4}} — ref {{reference}}"
+}

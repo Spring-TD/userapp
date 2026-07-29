@@ -376,6 +376,22 @@ For loan and mortgage products, the mobile storefront should use the modal butto
 5. Storefront uploads files with `POST /api/v1/applications/upload`, then submits the completed requirement rows with `PATCH /api/v1/applications/{applicationId}/requirements`.
 6. Storefront shows the final summary / mortgage “Buy More” screen, then calls `POST /api/v1/applications/{applicationId}/submit`.
 
+### Post-approval mortgage flow (after merchant approves)
+
+When Plata approves a **MORTGAGE**, the loan-workflow webhook includes `disbursementDeferred: true` and `postApprovalFulfillment` — the storefront **does not** receive wallet credit until disbursement completes. Drive these screens from the pending-approved-mortgage APIs (proxied by account-ms → product-ms):
+
+| Screen | Method | Path |
+|--------|--------|------|
+| List active offers | `GET` | `/api/v1/applications/user/{userId}/pending-approved-mortgages` |
+| Offer / step detail | `GET` | `/api/v1/applications/{id}/pending-approved-mortgage?userId=` |
+| Accept / decline offer | `POST` | `/api/v1/applications/{id}/pending-approved-mortgage/offer` |
+| Schedule inspection | `POST` | `/api/v1/applications/{id}/pending-approved-mortgage/appointment` |
+| Start inspection | `POST` | `/api/v1/applications/{id}/pending-approved-mortgage/inspection/start` |
+| Complete inspection | `POST` | `/api/v1/applications/{id}/pending-approved-mortgage/inspection/complete` |
+| Pay down payment (wallet) | `POST` | `/api/v1/applications/{id}/pending-approved-mortgage/down-payment` |
+
+Down-payment detail includes `requiredAmount`, `currency`, `centralWalletAvailable: true`, and `bankDetails.merchantReference` (`equity-payment:{upstreamApplicationId}`) for bank transfer. After disbursement, the standard loan-workflow webhook includes `loanDisbursement` and the PRODUCT wallet is credited.
+
 **Initialize loan / mortgage application:**
 
 ```http
@@ -403,6 +419,8 @@ Content-Type: application/json
 - `data.id` as the `applicationId` for the requirements submit call.
 - `data.requirementsSnapshot` to render the requirements screen. This is copied from the product DB `requirements` object, including `security`, `documentsToDownload`, and `otherRequirements`.
 - `data.productWallet.upstreamAccount` for the Plata-created bank account. The init call now requires `upstreamAccount.accountNumber`; if Plata does not return an account number, the endpoint fails with `502`.
+
+**Response `200`:** the user already has a pending initialized application for the same `userId`, `productId`, `merchantId`, and app. `data` is the existing application; skip the create-bank-account modal and continue from `data.id`.
 
 For `requirements.documentsToDownload`, render each item as a **Download File** + **Upload File** row. The user downloads the configured `fileUrl`, fills the form, uploads the completed form through `/api/v1/applications/upload`, then includes that returned upload URL in `requirementSubmissions`. Match the submitted row by the document `name` using `requirementType` or `label`.
 
@@ -543,7 +561,7 @@ For mortgage products, include the final mortgage selection shown on the last sc
 }
 ```
 
-The submit call validates that all configured requirements have been uploaded, then sets `loanWorkflowStatus` to `under_review`. Mortgage final-screen details are stored in `contractSnapshot.finalSubmission.mortgageSelection`.
+The submit call validates that all configured requirements have been uploaded, sends the Plata final application payload with `application.submittedRequirements[]`, then sets local `loanWorkflowStatus` to `under_review`. Mortgage final-screen details are stored in `contractSnapshot.finalSubmission.mortgageSelection`. If the Plata final-submit sync fails, the endpoint returns `502` and stores the message in `upstreamSyncError` so the user can retry.
 
 ### Common apply body
 
@@ -604,12 +622,12 @@ Any `requirements.otherRequirements[]` item with `uploadRequired: true` or `requ
 | `LOAN` | `POST` | `/api/v1/applications/apply` | Canonical apply path; proxied to `product-ms` |
 | `MORTGAGE` | `POST` | `/api/v1/applications/apply` | Canonical apply path; proxied to `product-ms` |
 | `COMMODITY` | `POST` | `/api/v1/commodities/buy` | Validates commodity type |
-| `SAVINGS` | `POST` | `/api/v1/savings-accounts` | See body below |
-| `INVESTMENT` | `POST` | `/api/v1/applications/apply` | Not supported by the product application table today; use product-specific flow |
+| `SAVINGS` | `POST` | `/api/v1/savings-accounts` | Provision only; fund via `POST /api/v1/savings-accounts/:id/deposits` |
+| `INVESTMENT` | `POST` | `/api/v1/investment-accounts` | Provision only (mirrors savings); fund via `POST /api/v1/investment-accounts/:id/deposits` |
 
-`/api/v1/applications/*` is proxied by `account-ms` to `product-ms`. Submitted loan/mortgage applications live in the `product-ms` `product_applications` collection. `/api/v1/loans/apply` and `/api/v1/mortgages/apply` remain gateway aliases, but new storefront clients should use `/api/v1/applications/apply`.
+`/api/v1/applications/*` is proxied by `account-ms` to `product-ms`. Submitted loan/mortgage applications live in the `product-ms` `product_applications` collection. `POST /api/v1/loans/apply` is disabled; storefront clients should use `/api/v1/applications/apply` or the two-step `/api/v1/applications/init` flow.
 
-For Plata upstream sync (`POST /api/v1/products/external-applications` via account-ms), include **`applicantName`**, **`phone`**, **`bvn`** (11 digits), and a valid **`email`**. The product must be activated from the Plata catalog (`upstreamProductId` on the local product).
+For Plata upstream account creation (`POST /api/v1/products/external-accounts` via account-ms), include **`applicantName`**, **`phone`**, **`bvn`** (11 digits), and a valid **`email`**. The product must be activated from the Plata catalog (`upstreamProductId` on the local product).
 
 **Merchant roles:** Spring is the Plata integrator (`merchantId` from server env `PLATA_INTEGRATOR_MERCHANT_ID`). The tenant from login/app (`merchantId` on the apply body from gateway) is the **sub-merchant** (`offeringMerchantId`). Optionally send `subMerchant` or `subMerchantContactEmail` + `subMerchantContactPhone` for the usage event.
 
@@ -620,9 +638,32 @@ For Plata upstream sync (`POST /api/v1/products/external-applications` via accou
   "userId": "user-uuid",
   "currency": "NGN",
   "productId": "6790abc123def45678901234",
-  "email": "jane@example.com"
+  "email": "jane@example.com",
+  "applicantName": "Jane Smith",
+  "phone": "+2348012345678",
+  "bvn": "22123456789"
 }
 ```
+
+The product must be activated from the Plata catalog (`upstreamProductId` on the local product). Enrollment is mirrored locally and synced to Plata under the **product creator** merchant/app via `POST /api/v1/products/external-applications` (same integrator keys as loans). `merchantId` on the request (or tenant header) is the **offering/sub-merchant** storefront id.
+
+**Investment body** (same shape as savings):
+
+```json
+{
+  "userId": "user-uuid",
+  "currency": "NGN",
+  "productId": "6790abc123def45678901234",
+  "email": "jane@example.com",
+  "applicantName": "Jane Smith",
+  "phone": "+2348012345678",
+  "bvn": "22123456789"
+}
+```
+
+Provision: `POST /api/v1/investment-accounts` → returns `applicationId` and optional NUBAN on `account.productWallet`.  
+Include platform fields required by Plata on submitted enrollments: `isPoliticallyExposedPerson`, `monthlyIncome`, `repaymentSource`, `maritalStatus`.  
+Fund from user PRIMARY wallet: `POST /api/v1/investment-accounts/:applicationId/deposits` with `{ "userId", "amount", "currency?" }`. Debits principal once and splits storefront merchant charge + Plata creator principal (see wallet repayment docs). Do **not** use `POST /api/v1/applications/apply` for INVESTMENT.
 
 ### Success — pending application (`LOAN` / `MORTGAGE`)
 
@@ -679,6 +720,28 @@ For Plata upstream sync (`POST /api/v1/products/external-applications` via accou
 }
 ```
 
+### Savings deposit (after enrollment)
+
+Enroll and deposit are **separate** calls. Commission on deposit is **0%** in v1.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/v1/savings-accounts/{applicationId}/deposit-details?userId=` | Min/max, balance, bank-transfer `merchantReference` |
+| `POST` | `/api/v1/savings-accounts/{applicationId}/deposits` | Debit user **PRIMARY** wallet and credit Plata creator |
+
+**Wallet deposit body:**
+
+```json
+{
+  "userId": "user-uuid",
+  "amount": 5000,
+  "currency": "NGN",
+  "referenceId": "optional-idempotency-key"
+}
+```
+
+**Bank transfer:** fund the user's PayOnUs NUBAN with `merchantReference` = `savings-deposit:{upstreamApplicationId}` (from `deposit-details`). PayOnUs funding webhook routes to product-ms without crediting PRIMARY first; principal is settled to the Plata product creator (`SAVINGS_DEPOSIT`).
+
 ### Errors
 
 | Status | Meaning |
@@ -698,6 +761,8 @@ For Plata upstream sync (`POST /api/v1/products/external-applications` via accou
 | **Method** | `GET` |
 | **Path** | `/api/v1/applications/user/{userId}` |
 | **Auth** | None required by route today; send Bearer in production |
+
+Optional query filters: `status`, `productType`, `productId`, `appId`, and `merchantId`.
 
 **Response:**
 
@@ -746,6 +811,16 @@ Often required before disbursement or funding.
 
 Poll after KYC completes to show `virtualNuban` when provisioned.
 
+### Product-type wallet totals (dashboard tabs)
+
+| | |
+|---|---|
+| **Method** | `GET` |
+| **Path** | `/api/v1/wallets/user/{userId}/product-type-summary` |
+| **Auth** | Bearer |
+
+Returns totals for `MORTGAGE`, `LOAN`, `SAVINGS`, `INVESTMENT`, and `COMMODITY` from **PRODUCT** wallets only. The PRIMARY funding wallet is excluded. Product types with no wallets return `totalAmount: 0` and `accountCount: 0`.
+
 ### Fuspay modular KYC (retail)
 
 Proxied under `/api/v1/kyc/…` (compliance-ms). Typical flow:
@@ -755,7 +830,9 @@ Proxied under `/api/v1/kyc/…` (compliance-ms). Typical flow:
 3. `GET /api/v1/kyc/modular/status/{verificationId}` — poll status
 4. After webhook → wallet NUBAN available via wallet GET above
 
-See **compliance-ms** README for full modular KYC payloads.
+See **compliance-ms** README for full modular KYC payloads. Individual retail verification requests **bio**, **phone**, **email**, **NIN**, **BVN**, and **liveliness** (`verification_types.liveliness`). Gov't ID upload (`document_verification`) is disabled.
+
+**Hosted page branding:** compliance-ms and client-auth-ms pass Fuspay `branding` on signup and verification, resolved from the tenant PWA manifest (`theme_color` → `button_color`, `background_color` → `bg_color`, `name` → `brand_name`, first HTTPS icon → `brand_logo`, derived `text_color`). Tenant headers (`x-tenant-app-id`) or the user's `app_id` supply the app context; optional `branding` in the verification body overrides individual fields.
 
 ---
 
@@ -781,7 +858,7 @@ See **compliance-ms** README for full modular KYC payloads.
        → CTA → Apply
 
 [Apply]
-  POST by type (loans / mortgages / commodities / savings / applications)
+  POST by type (applications / mortgages / commodities / savings)
        → success → Applications list or Wallet
 
 [My applications]
@@ -835,7 +912,7 @@ async function applyForLoan(
   body: { userId: string; productId: string; amount: number; currency: string; email?: string },
   token: string
 ) {
-  const res = await fetch(`${API_BASE}/api/v1/loans/apply`, {
+  const res = await fetch(`${API_BASE}/api/v1/applications/apply`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -856,8 +933,244 @@ async function applyForLoan(
 | `/api/v1/apps/*` | create-app-ms |
 | `/api/v1/auth/*`, `/api/v1/registration/*`, `/api/v1/user/*` | client-auth-ms |
 | `/api/v1/products/*`, `/api/v1/configurations/*` | product-ms |
-| `/api/v1/applications/*`, `/api/v1/loans/*`, `/api/v1/mortgages/*`, `/api/v1/savings-accounts/*`, `/api/v1/commodities/*` | account-ms (local) |
+| `/api/v1/applications/*`, `/api/v1/loans/*`, `/api/v1/mortgages/*`, `/api/v1/savings-accounts/*`, `/api/v1/commodities/*` | account-ms → product-ms (proxied) |
 | `/api/v1/kyc/*`, `/api/v1/compliance/*` | compliance-ms |
 | `/api/v1/wallets/*` | wallet-ms |
+| `/api/v1/notifications/*` | notifications-ms |
+
+---
+
+## Notifications (in-app inbox + Web Push)
+
+Storefront users receive **email + in-app + browser push** (when subscribed) for account and application lifecycle events. The PWA uses the same origin (account-ms proxies to notifications-ms).
+
+### Enable browser push (after login)
+
+Requires HTTPS (or localhost), a registered service worker, and user permission.
+
+**Step 1 — Get VAPID public key**
+
+| | |
+|---|---|
+| **Method** | `GET` |
+| **Path** | `/api/v1/notifications/push/vapid-public-key` |
+| **Auth** | None |
+
+**Step 2 — Subscribe in the PWA**
+
+```ts
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+}
+
+async function subscribeToWebPush(userId: string, appId: string, swUrl: string, accessToken: string) {
+  const keyRes = await fetch('/api/v1/notifications/push/vapid-public-key');
+  const { data } = await keyRes.json();
+  if (!data?.publicKey) return;
+
+  const registration = await navigator.serviceWorker.register(swUrl);
+  await navigator.serviceWorker.ready;
+
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') return;
+
+  const subscription = await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(data.publicKey)
+  });
+
+  await fetch('/api/v1/notifications/push/subscribe', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`
+    },
+    body: JSON.stringify({
+      userId,
+      appId,
+      subscription: subscription.toJSON()
+    })
+  });
+}
+```
+
+Use `pwaInstall.serviceWorkerUrl` from app resolve/bootstrap. On logout, call `DELETE /api/v1/notifications/push/subscribe` with `{ userId, endpoint: subscription.endpoint }`.
+
+**Note:** Merchants must **republish the PWA** after this feature so `sw.js` includes push event handlers.
+
+### In-app inbox (authenticated)
+
+All inbox routes require **`Authorization: Bearer <accessToken>`** (client-auth-ms access JWT). The server enforces that you only access **your own** inbox (`userId` from the token).
+
+#### List inbox (preferred)
+
+| | |
+|---|---|
+| **Method** | `GET` |
+| **Path** | `/api/v1/notifications/inbox?limit=50&offset=0&unreadOnly=false` |
+| **Auth** | Bearer **required** |
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "notifications": [
+      {
+        "id": "674a1b2c3d4e5f6789012345",
+        "channel": "in_app",
+        "template": "product-application-workflow-updated",
+        "status": "sent",
+        "createdAt": "2026-06-18T12:00:00.000Z",
+        "sentAt": "2026-06-18T12:00:00.000Z",
+        "readAt": null,
+        "isRead": false,
+        "data": {
+          "inAppTitle": "Application Under review",
+          "inAppBody": "Personal Loan for Jane Smith is now Under review.",
+          "productName": "Personal Loan",
+          "applicationId": "6790abc123def45678901234"
+        }
+      }
+    ],
+    "total": 12,
+    "limit": 50,
+    "offset": 0
+  }
+}
+```
+
+#### Unread count
+
+| | |
+|---|---|
+| **Method** | `GET` |
+| **Path** | `/api/v1/notifications/inbox/unread-count` |
+| **Auth** | Bearer **required** |
+
+**Response `200`:** `{ "success": true, "data": { "unreadCount": 3 } }`
+
+#### Mark as read
+
+**One item:**
+
+```http
+PATCH /api/v1/notifications/inbox/{id}/read
+Authorization: Bearer <accessToken>
+```
+
+**Response `200`:** `{ "success": true, "data": { "id": "…", "isRead": true, "readAt": "2026-06-18T13:00:00.000Z", … } }`
+
+**Bulk (omit `ids` to mark all unread):**
+
+```http
+PATCH /api/v1/notifications/inbox/read
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{ "ids": ["id1", "id2"] }
+```
+
+**Response `200`:** `{ "success": true, "data": { "modifiedCount": 2, "readAt": "2026-06-18T13:00:00.000Z" } }`
+
+#### Delete
+
+**One item:**
+
+```http
+DELETE /api/v1/notifications/inbox/{id}
+Authorization: Bearer <accessToken>
+```
+
+**Bulk:**
+
+```http
+DELETE /api/v1/notifications/inbox
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{ "ids": ["id1", "id2"] }
+```
+
+**Response `200`:** `{ "success": true, "data": { "deletedCount": 2, "ids": ["id1", "id2"] } }`
+
+#### Legacy list (still supported)
+
+`GET /api/v1/notifications/user/{userId}?channel=in_app` — requires Bearer and `{userId}` must match the token.
+
+---
+
+### Real-time inbox (WebSocket)
+
+Connect after login for live updates (new notifications, read/delete sync, unread count).
+
+| | |
+|---|---|
+| **URL** | `wss://{storefront-origin}/api/v1/notifications/inbox/ws?token={accessToken}` |
+| **Auth** | Access JWT in query param `token` (browser WebSocket cannot set headers reliably) |
+
+**Server → client events:**
+
+| `type` | When |
+|--------|------|
+| `inbox.connected` | On connect; includes `unreadCount` |
+| `notification.new` | New in-app item; includes full `notification` object |
+| `notification.read` | Single item marked read (`id`, `readAt`) |
+| `notification.read_bulk` | Bulk mark read |
+| `notification.deleted` | Single item deleted |
+| `notification.deleted_bulk` | Bulk delete |
+| `inbox.unread_count` | Unread badge update |
+
+**Client → server:** `{ "type": "ping" }` → `{ "type": "pong" }`
+
+**Example (browser):**
+
+```ts
+function connectInboxSocket(accessToken: string) {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(
+    `${protocol}//${location.host}/api/v1/notifications/inbox/ws?token=${encodeURIComponent(accessToken)}`
+  );
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    if (msg.type === 'notification.new') {
+      // prepend to inbox state
+    }
+    if (msg.type === 'inbox.unread_count') {
+      // update badge
+    }
+  };
+  return ws;
+}
+```
+
+---
+
+### Storefront events covered
+
+| Event | Email | In-app | Web Push |
+|-------|-------|--------|----------|
+| Signup | OTP (`otp` template) | `user-registered` | if subscribed |
+| OTP resend / password reset / change OTP | OTP email | `otp-prompt` | if subscribed |
+| Password changed | `password-change` | `password-change` | if subscribed |
+| Email address updated | `email-verification` | `email-verification` | if subscribed |
+| Application submitted | `product-application-submitted` | same template | if subscribed |
+| Application status update | `product-application-workflow-updated` | same template | if subscribed |
+| Guarantor KYC approved | `guarantor-kyc-approved` | same template | if subscribed |
+
+OTP codes are **never** included in in-app or push payloads.
+
+### PWA integration notes
+
+1. After login, store `accessToken` and `user.id`.
+2. Connect **`connectInboxSocket(accessToken)`** for real-time updates (reconnect on token refresh).
+3. Load inbox with **`GET /api/v1/notifications/inbox`** (not the legacy user path unless needed).
+4. Optionally call `subscribeToWebPush` for browser alerts when the app is backgrounded.
+5. Use **`GET /inbox/unread-count`** for badge on first paint; keep in sync via WebSocket `inbox.unread_count`.
+6. Mark read / delete via PATCH/DELETE inbox routes; UI updates locally or from WebSocket events.
 
 

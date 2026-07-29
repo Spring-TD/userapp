@@ -68,6 +68,51 @@ class ComplianceService {
       };
     }
   }
+
+  /**
+   * Fetch a user's current KYC status from compliance-ms.
+   * Returns `notFound: true` when the user has no compliance profile yet.
+   */
+  async getKycStatus(userId: string): Promise<{
+    success: boolean;
+    status?: string;
+    completedAt?: string | null;
+    notFound?: boolean;
+    error?: string;
+  }> {
+    try {
+      const response = await this.axiosInstance.get(
+        `/api/v1/kyc/status/${encodeURIComponent(userId)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${this.serviceToken()}`
+          }
+        }
+      );
+
+      const payload = response.data as {
+        success?: boolean;
+        data?: { status?: string; completedAt?: string | null };
+        error?: string;
+      };
+      if (!payload?.success || !payload.data) {
+        return { success: false, error: payload?.error || 'Failed to fetch KYC status' };
+      }
+      return {
+        success: true,
+        status: payload.data.status,
+        completedAt: payload.data.completedAt ?? null
+      };
+    } catch (error: any) {
+      if (error?.response?.status === 404) {
+        return { success: false, notFound: true, error: 'No KYC profile found for this user' };
+      }
+      return {
+        success: false,
+        error: error?.response?.data?.error || error?.message || 'Failed to fetch KYC status'
+      };
+    }
+  }
 }
 
 export const complianceService = new ComplianceService();

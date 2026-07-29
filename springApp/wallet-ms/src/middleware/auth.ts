@@ -99,6 +99,38 @@ export const authenticate = async (
   }
 };
 
+/**
+ * Best-effort auth: if a valid Bearer token is present, populates req.user; otherwise
+ * proceeds without error. Used by endpoints that also accept a signed link token
+ * (e.g. receipt PDF download links embedded in notifications).
+ */
+export const optionalAuthenticate = async (
+  req: Request,
+  _res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      next();
+      return;
+    }
+    const token = authHeader.substring(7);
+    const response = await axios.post(
+      `${config.authServiceUrl}/api/v1/auth/verify-token`,
+      {},
+      { headers: { Authorization: `Bearer ${token}` }, validateStatus: () => true }
+    );
+    if (response.data?.success && response.data?.data?.user) {
+      const user = response.data.data.user;
+      req.user = { ...user, merchantId: user.merchantId || user.userMerchantId };
+    }
+  } catch {
+    // best-effort; fall through unauthenticated
+  }
+  next();
+};
+
 export const authorizeMerchant = (
   req: Request,
   res: Response,

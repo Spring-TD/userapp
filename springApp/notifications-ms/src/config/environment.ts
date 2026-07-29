@@ -17,12 +17,21 @@ interface EnvironmentConfig {
     user: string;
     password: string;
     fromEmail: string;
+    fromName: string;
   };
   // Twilio SMS configuration
   twilio: {
     accountSid: string;
     authToken: string;
     phoneNumber: string;
+  };
+  /** Same secret client-auth-ms uses to sign access tokens (inbox auth + WebSocket). */
+  jwtSecret: string;
+  /** Web Push (VAPID + web-push library) */
+  vapid: {
+    publicKey: string;
+    privateKey: string;
+    subject: string;
   };
 }
 
@@ -42,12 +51,18 @@ export const config: EnvironmentConfig = {
     secure: process.env.MAILTRAP_SECURE === 'true',
     user: process.env.MAILTRAP_USER || '',
     password: process.env.MAILTRAP_PASSWORD || '',
-    fromEmail: process.env.MAILTRAP_FROM_EMAIL || 'noreply@springtd.com'
+    fromEmail: process.env.MAILTRAP_FROM_EMAIL || 'noreply@springtd.com',
+    fromName: process.env.MAILTRAP_FROM_NAME || 'SpringTD'
   },
   twilio: {
     accountSid: process.env.TWILIO_ACCOUNT_SID || '',
     authToken: process.env.TWILIO_AUTH_TOKEN || '',
     phoneNumber: process.env.TWILIO_PHONE_NUMBER || ''
+  },
+  jwtSecret: process.env.JWT_SECRET || 'fallback-secret-key-for-development-purposes-only',
+  vapid: {
+    publicKey: process.env.VAPID_PUBLIC_KEY?.trim() || '',
+    privateKey: process.env.VAPID_PRIVATE_KEY?.trim() || '',
+    subject: process.env.VAPID_SUBJECT?.trim() || 'mailto:noreply@springtd.com'
   }
 };
-

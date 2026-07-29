@@ -1,0 +1,4 @@
+{
+  "title": "Investment request received",
+  "body": "Your investment request for {{productName}} is being processed."
+}

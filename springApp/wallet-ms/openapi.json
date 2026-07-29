@@ -396,6 +396,17 @@
         "responses": { "200": { "description": "Balance updated" } }
       }
     },
+    "/api/v1/wallets/user/{userId}/product-type-summary": {
+      "get": {
+        "summary": "Product-type wallet totals for a user",
+        "tags": ["Wallets - User"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "userId", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Per product-type totals (missing types => 0)" } }
+      }
+    },
     "/api/v1/wallets/user/{userId}/transactions": {
       "get": {
         "summary": "Filter user transactions",

@@ -25,7 +25,7 @@ const loanAboutSchema = new Schema(
     commodityTypes: { type: [loanLoanTypeItemSchema], default: undefined },
     previewAssetUrl: { type: String }
   },
-  { _id: false }
+  { _id: false, strict: false }
 );
 
 const loanStructureTabSchema = new Schema(
@@ -33,6 +33,7 @@ const loanStructureTabSchema = new Schema(
     interestRate: { type: Schema.Types.Mixed },
     interestMethod: { type: String },
     allowMoratorium: { type: Boolean },
+    autoApproveLoans: { type: Boolean },
     moratoriumType: { type: String },
     moratorium: { type: Schema.Types.Mixed },
     repaymentWorkflow: { type: String },
@@ -41,12 +42,13 @@ const loanStructureTabSchema = new Schema(
       max: { type: Number }
     },
     repaymentSchedule: { type: String },
+    repaymentStructure: { type: String },
     amortizationSchedule: { type: String },
     repaymentFrequency: { type: String },
     acceptableNPA: { type: String },
     equityRequirement: { type: String }
   },
-  { _id: false }
+  { _id: false, strict: false }
 );
 
 const loanSecuritySchema = new Schema(
@@ -75,9 +77,10 @@ const loanOtherRequirementItemSchema = new Schema(
     requirementType: { type: String },
     contentType: { type: String },
     description: { type: String },
+    templateFileUrl: { type: String },
     uploadRequired: { type: Boolean }
   },
-  { _id: false }
+  { _id: false, strict: false }
 );
 
 const loanRequirementsSchema = new Schema(
@@ -89,7 +92,7 @@ const loanRequirementsSchema = new Schema(
     airSignSecretKey: { type: String },
     airSignUid: { type: String }
   },
-  { _id: false }
+  { _id: false, strict: false }
 );
 
 const loanFeeItemSchema = new Schema(
@@ -167,9 +170,25 @@ const mortgagePropertyItemSchema = new Schema(
     propertyType: { type: String },
     value: { type: Schema.Types.Mixed },
     location: { type: String },
+    propertyDescription: { type: String },
+    facilities: { type: [String], default: undefined },
+    customFacilities: { type: [String], default: undefined },
+    imageUrls: { type: [String], default: undefined },
+    videoUrl: { type: String },
     previewAssetUrl: { type: String }
   },
-  { _id: false }
+  // Preserve any extra Plata property fields on catalog clone / turn-on.
+  { _id: false, strict: false }
+);
+
+const mortgageInspectionDateSlotSchema = new Schema(
+  {
+    scheduledFor: { type: String },
+    label: { type: String },
+    location: { type: String },
+    notes: { type: String }
+  },
+  { _id: false, strict: false }
 );
 
 const mortgageDiscriminatorSchema = new Schema(
@@ -179,7 +198,9 @@ const mortgageDiscriminatorSchema = new Schema(
     requirements: { type: loanRequirementsSchema },
     properties: { type: [mortgagePropertyItemSchema], default: undefined },
     equityContribution: { type: Number },
-    propertyValue: { type: Number }
+    propertyValue: { type: Number },
+    mortgageWorkflowStepOrder: { type: [String], default: undefined },
+    inspectionDates: { type: [mortgageInspectionDateSlotSchema], default: undefined }
   },
   { _id: false, id: false }
 );
@@ -261,6 +282,17 @@ const commodityDiscriminatorSchema = new Schema(
   { _id: false, id: false }
 );
 
+const productMerchantSchema = new Schema(
+  {
+    id: { type: String },
+    name: { type: String, default: null },
+    companyName: { type: String, default: null },
+    companyLogoUrl: { type: String, default: null },
+    website: { type: String, default: null }
+  },
+  { _id: false }
+);
+
 const baseProductSchema = new Schema<IProductDocument>(
   {
     upstreamProductId: { type: String, index: true },
@@ -270,6 +302,7 @@ const baseProductSchema = new Schema<IProductDocument>(
     description: { type: String, required: true, default: '' },
     isActive: { type: Boolean, default: true },
     isFeatured: { type: Boolean, default: false },
+    requireApplicantSignature: { type: Boolean, default: false },
     type: { type: String, required: true, enum: PRODUCT_DISCRIMINATORS },
     subType: { type: String },
     appId: { type: String, required: true, index: true },
@@ -283,7 +316,12 @@ const baseProductSchema = new Schema<IProductDocument>(
     metadata: { type: Schema.Types.Mixed },
     feesAndCharges: { type: loanFeesAndChargesSchema },
     baseFeesAndCharges: { type: loanFeesAndChargesSchema },
-    merchantFeeAdditions: { type: loanFeesAndChargesSchema }
+    merchantFeeAdditions: { type: loanFeesAndChargesSchema },
+    baseStructure: { type: loanStructureTabSchema },
+    merchantStructureAdditions: { type: loanStructureTabSchema },
+    baseEquityContribution: { type: Number },
+    merchantEquityAddition: { type: Number },
+    merchant: { type: productMerchantSchema }
   },
   { discriminatorKey: 'type', collection: 'products', timestamps: false }
 );
@@ -320,6 +358,7 @@ export function toProduct(doc: IProductDocument | Record<string, unknown>): Prod
     status: (raw.status as Product['status']) ?? 'incomplete',
     isActive: raw.isActive !== false && raw.isActive !== 0,
     isFeatured: raw.isFeatured === true || raw.isFeatured === 1,
+    requireApplicantSignature: raw.requireApplicantSignature === true,
     createdAt: raw.createdAt as string,
     updatedAt: raw.updatedAt as string,
     subType: raw.subType as string | undefined,
@@ -351,9 +390,29 @@ export function toProduct(doc: IProductDocument | Record<string, unknown>): Prod
       raw.merchantFeeAdditions !== undefined && raw.merchantFeeAdditions !== null && typeof raw.merchantFeeAdditions === 'object'
         ? (raw.merchantFeeAdditions as Product['merchantFeeAdditions'])
         : undefined,
+    baseStructure:
+      raw.baseStructure !== undefined && raw.baseStructure !== null && typeof raw.baseStructure === 'object'
+        ? (raw.baseStructure as Product['baseStructure'])
+        : undefined,
+    merchantStructureAdditions:
+      raw.merchantStructureAdditions !== undefined &&
+      raw.merchantStructureAdditions !== null &&
+      typeof raw.merchantStructureAdditions === 'object'
+        ? (raw.merchantStructureAdditions as Product['merchantStructureAdditions'])
+        : undefined,
+    baseEquityContribution: raw.baseEquityContribution as number | undefined,
+    merchantEquityAddition: raw.merchantEquityAddition as number | undefined,
     properties:
       raw.properties !== undefined && Array.isArray(raw.properties)
         ? (raw.properties as Product['properties'])
+        : undefined,
+    mortgageWorkflowStepOrder:
+      raw.mortgageWorkflowStepOrder !== undefined && Array.isArray(raw.mortgageWorkflowStepOrder)
+        ? (raw.mortgageWorkflowStepOrder as Product['mortgageWorkflowStepOrder'])
+        : undefined,
+    inspectionDates:
+      raw.inspectionDates !== undefined && Array.isArray(raw.inspectionDates)
+        ? (raw.inspectionDates as Product['inspectionDates'])
         : undefined,
     config:
       raw.config !== undefined && raw.config !== null && typeof raw.config === 'object'
@@ -367,6 +426,10 @@ export function toProduct(doc: IProductDocument | Record<string, unknown>): Prod
     commodityPrices:
       raw.commodityPrices !== undefined && Array.isArray(raw.commodityPrices)
         ? (raw.commodityPrices as Product['commodityPrices'])
+        : undefined,
+    merchant:
+      raw.merchant !== undefined && raw.merchant !== null && typeof raw.merchant === 'object'
+        ? (raw.merchant as Product['merchant'])
         : undefined
   };
 }

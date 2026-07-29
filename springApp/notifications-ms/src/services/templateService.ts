@@ -25,11 +25,16 @@ export class TemplateService {
    */
   private renderTemplate(template: string, data: TemplateData): string {
     let rendered = template;
+    const templateData: TemplateData = {
+      ...data,
+      appName: typeof data.appName === 'string' && data.appName.trim() ? data.appName.trim() : 'SpringTD',
+      year: data.year ?? new Date().getFullYear()
+    };
 
     // Simple variable substitution: {{variableName}}
-    Object.keys(data).forEach(key => {
+    Object.keys(templateData).forEach(key => {
       const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
-      const value = data[key] !== null && data[key] !== undefined ? String(data[key]) : '';
+      const value = templateData[key] !== null && templateData[key] !== undefined ? String(templateData[key]) : '';
       rendered = rendered.replace(regex, value);
     });
 
@@ -140,7 +145,18 @@ export class TemplateService {
       'password-change': 'Password changed',
       'app-deactivated': 'App update',
       'app-reactivated': 'App active again',
-      'product-configuration': 'Product configuration update'
+      'product-configuration': 'Product configuration update',
+      'commodity-enrolled': 'Payment Confirmed for Your Order',
+      'commodity-withdrawn': 'Payout Processed for Your Commodity Sale',
+      'commodity-payout-processed': 'Payout Processed for Your Commodity Sale',
+      'loan-repayment-reminder': 'Upcoming Loan Repayment Due',
+      'loan-closure': 'Loan Fully Repaid — Congratulations',
+      'mortgage-application-submitted': "We've Received Your Mortgage Application",
+      'loan-application-submitted': "We've Received Your Loan Application",
+      'mortgage-disbursed': 'Your Loan Has Been Disbursed',
+      'loan-disbursed': 'Your Loan Has Been Disbursed',
+      'savings-plan-created': 'Your Savings Plan is Live',
+      'investment-active': 'Your Investment is Now Active'
     };
 
     return defaultSubjects[templateName] || 'Notification from SpringTD';

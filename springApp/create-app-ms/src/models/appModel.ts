@@ -1,5 +1,20 @@
-import { App, CreateAppRequest } from '../types/app';
+import { App, AppListQuery, AppListResult, CreateAppRequest } from '../types/app';
 import { AppMongoModel } from './app.mongo';
+
+const DEFAULT_APP_PAGE_SIZE = 20;
+const MAX_APP_PAGE_SIZE = 20;
+
+function normalizeAppPagination(query: AppListQuery): { page: number; limit: number; skip: number } {
+  const page = Number.isFinite(query.page) && query.page && query.page > 0 ? Math.floor(query.page) : 1;
+  const requestedLimit =
+    Number.isFinite(query.limit) && query.limit && query.limit > 0 ? Math.floor(query.limit) : DEFAULT_APP_PAGE_SIZE;
+  const limit = Math.min(requestedLimit, MAX_APP_PAGE_SIZE);
+  return {
+    page,
+    limit,
+    skip: (page - 1) * limit
+  };
+}
 
 export class AppModel {
   static async getAppBySubdomain(subdomain: string): Promise<App | null> {
@@ -71,5 +86,31 @@ export class AppModel {
   static async getAllApps(): Promise<App[]> {
     const apps = await AppMongoModel.find();
     return apps.map(app => app.toJSON() as unknown as App);
+  }
+
+  static async listApps(query: AppListQuery = {}): Promise<AppListResult> {
+    const filter: Record<string, unknown> = {};
+    if (query.merchantIds?.length) {
+      filter.merchantId = { $in: query.merchantIds };
+    }
+
+    const { page, limit, skip } = normalizeAppPagination(query);
+    const [total, apps] = await Promise.all([
+      AppMongoModel.countDocuments(filter),
+      AppMongoModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit)
+    ]);
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      apps: apps.map((app) => app.toJSON() as unknown as App),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1
+      }
+    };
   }
 }

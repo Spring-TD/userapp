@@ -154,7 +154,7 @@ import multer from 'multer';
 import { validateKYCSubmission } from '../middleware/kycValidation';
 import { authenticate } from '../middleware/auth';
 import { authenticateService } from '../middleware/serviceAuth';
-import { walletInternalTokenAuth } from '../middleware/walletInternalAuth';
+import { walletInternalTokenAuth, requireServiceInternalToken } from '../middleware/walletInternalAuth';
 import { auditLog } from '../middleware/audit';
 import { KYCController } from '../controllers/kycController';
 import { getMaxUploadSizeBytes } from '../services/spacesService';
@@ -176,11 +176,25 @@ router.use(auditLog);
 // Apply service authentication middleware to allow service-to-service requests
 router.use(authenticateService);
 
+/** product-ms: merchant business profile enrichment for loan workflow snapshots. */
+router.get(
+  '/internal/business-info/:merchantId',
+  walletInternalTokenAuth,
+  KYCController.internalBusinessInfoForMerchant
+);
+
 /** Wallet-ms: retail user BVN from Fuspay modular KYC webhook. */
 router.get(
   '/internal/payonus/user-bvn/:userId',
   walletInternalTokenAuth,
   KYCController.getUserBvnForPayonusInternal
+);
+
+/** product-ms: sanitized applicant KYC for Plata pull at loan review. */
+router.get(
+  '/internal/applicant-profile/:userId',
+  walletInternalTokenAuth,
+  KYCController.getApplicantProfileForInternal
 );
 
 /** Wallet-ms: resolve first shareholder BVN (merchant owner = client-auth JWT userId). */
@@ -210,7 +224,16 @@ router.post('/review/:kycId', authenticate, KYCController.reviewKYCSubmission);
 router.get('/search', authenticate, KYCController.searchKYCProfiles);
 
 // Fuspay Modular KYC routes
+router.get('/modular/webhook', KYCController.getFuspayModularWebhookInfo);
 router.post('/modular/webhook', KYCController.handleFuspayModularWebhook);
+
+// product-ms -> Fuspay modular: guarantor KYC (bio, phone, email, nin, bvn, liveliness).
+router.post(
+  '/guarantor-verifications',
+  requireServiceInternalToken,
+  KYCController.createGuarantorFuspayVerification
+);
+
 router.post('/modular/guarantor-verification', authenticate, KYCController.createGuarantorFuspayVerification);
 router.post('/modular/verification', authenticate, KYCController.createFuspayVerification);
 router.get('/modular/verification-url', authenticate, KYCController.getMyFuspayVerification);

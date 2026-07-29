@@ -33,6 +33,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 # Copy built application from builder
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/openapi.json ./openapi.json
+COPY scripts ./scripts
 
 # Change ownership to non-root user
 RUN chown -R appuser:appgroup /app

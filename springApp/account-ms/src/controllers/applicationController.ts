@@ -73,69 +73,6 @@ class ApplicationController {
         }
     }
 
-    // Approve application
-    async approveApplication(req: Request, res: Response) {
-        try {
-            const { id } = req.params;
-            const adminId = (req as AuthRequest).adminId;
-
-            if (!adminId) {
-                // Should be caught by middleware, but safe check
-                res.status(403).json({
-                    success: false,
-                    error: 'Admin ID is required'
-                });
-                return;
-            }
-
-            const result = await applicationService.approveApplication(id, adminId);
-            res.status(200).json(result);
-            return;
-        } catch (error: any) {
-            console.error('Error in approveApplication:', error);
-            res.status(errorStatus(error)).json({
-                success: false,
-                error: error.message || 'Internal server error'
-            });
-            return;
-        }
-    }
-
-    // Reject application
-    async rejectApplication(req: Request, res: Response) {
-        try {
-            const { id } = req.params;
-            const { reason } = req.body;
-            const adminId = (req as AuthRequest).adminId;
-
-            if (!adminId) {
-                res.status(403).json({
-                    success: false,
-                    error: 'Admin ID is required'
-                });
-                return;
-            }
-
-            if (!reason) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'Rejection reason is required'
-                });
-            }
-
-            const result = await applicationService.rejectApplication(id, reason, adminId);
-            res.status(200).json(result);
-            return;
-        } catch (error: any) {
-            console.error('Error in rejectApplication:', error);
-            res.status(errorStatus(error)).json({
-                success: false,
-                error: error.message || 'Internal server error'
-            });
-            return;
-        }
-    }
-
     // Get all applications (admin: all; merchant: scoped to token merchantId)
     async getAllApplications(req: Request, res: Response) {
         try {

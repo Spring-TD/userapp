@@ -7,6 +7,7 @@ export type FuspayWebhookApplyResult = {
   matched: number;
   modified: number;
   fuspayUserId?: string;
+  userRef?: string;
   verificationId?: string;
   reference?: string;
   profileStatus?: KYCStatus;
@@ -16,6 +17,8 @@ export type FuspayWebhookApplyResult = {
   userType?: UserType;
   /** True when retail KYC completed and PayOnUs fixed VA should be provisioned */
   shouldProvisionNuban?: boolean;
+  /** True when webhook indicates verification completed (approved) */
+  kycCompleted?: boolean;
 };
 
 const approvedHints = ['approved', 'completed', 'complete', 'verified', 'success'];
@@ -176,14 +179,18 @@ export async function applyFuspayModularWebhook(
     }
   }
 
+  const kycCompleted = isFuspayVerificationCompleted(event, rawStatusStr);
+
   const filter = buildProfileMatchFilter({ fuspayUserId, verificationId, reference, userRef });
   if (!filter) {
     return {
       matched: 0,
       modified: 0,
       fuspayUserId: fuspayUserId || undefined,
+      userRef: userRef || undefined,
       verificationId: verificationId || undefined,
-      reference: reference || undefined
+      reference: reference || undefined,
+      kycCompleted
     };
   }
 
@@ -211,7 +218,6 @@ export async function applyFuspayModularWebhook(
     userType = profile?.userType as UserType | undefined;
   }
 
-  const kycCompleted = isFuspayVerificationCompleted(event, rawStatusStr);
   const shouldProvisionNuban =
     result.matchedCount > 0 &&
     kycCompleted &&
@@ -236,12 +242,14 @@ export async function applyFuspayModularWebhook(
     matched: result.matchedCount,
     modified: result.modifiedCount ?? 0,
     fuspayUserId: fuspayUserId || undefined,
+    userRef: userRef || undefined,
     verificationId: verificationId || undefined,
     reference: reference || undefined,
     profileStatus: newProfileStatus,
     bvnStored: Boolean(bvnNormalized),
     profileUserId,
     userType,
-    shouldProvisionNuban
+    shouldProvisionNuban,
+    kycCompleted
   };
 }

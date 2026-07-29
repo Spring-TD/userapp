@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 import { SessionModel } from '../models/SessionModel';
+import { config } from '../config/environment';
 import {
   generateAccessToken,
   generateRefreshToken,
@@ -17,6 +18,11 @@ export type SessionListItem = {
   userAgent?: string;
   ip?: string;
 };
+
+export type TouchActivityResult =
+  | { status: 'ok' }
+  | { status: 'inactive' }
+  | { status: 'invalid' };
 
 export class SessionService {
   /**
@@ -47,6 +53,55 @@ export class SessionService {
     return { accessToken, refreshToken, sessionId: sid };
   }
 
+  /** Avoid rewriting last_active_at on every API call (gateway may touch often). */
+  private static readonly ACTIVITY_WRITE_THROTTLE_MS = 30_000;
+
+  /**
+   * Register activity on a session and enforce the inactivity (idle) timeout.
+   * Called on authenticated client-auth requests and on verify-token (used by
+   * other services / the gateway): if the session has been idle longer than the
+   * configured window it is revoked and the request must be rejected.
+   */
+  static async touchActivity(
+    sessionId: string | undefined,
+    userId: string
+  ): Promise<TouchActivityResult> {
+    // Tokens issued without a session binding cannot be idle-tracked; allow them.
+    if (!sessionId) {
+      return { status: 'ok' };
+    }
+    if (!mongoose.Types.ObjectId.isValid(sessionId)) {
+      return { status: 'invalid' };
+    }
+
+    const session = await SessionModel.findById(sessionId).exec();
+    if (!session || session.revoked_at || session.user_id.toString() !== userId) {
+      return { status: 'invalid' };
+    }
+
+    const now = Date.now();
+    if (session.expires_at.getTime() < now) {
+      await SessionModel.updateOne({ _id: session._id }, { $set: { revoked_at: new Date() } });
+      return { status: 'invalid' };
+    }
+
+    const idleFor = now - session.last_active_at.getTime();
+    if (idleFor > config.session.idleTimeoutMs) {
+      await SessionModel.updateOne({ _id: session._id }, { $set: { revoked_at: new Date() } });
+      return { status: 'inactive' };
+    }
+
+    // Throttle writes: idle clock still resets from last_active_at; frequent
+    // gateway touches must not hammer Mongo on every proxied request.
+    if (idleFor < SessionService.ACTIVITY_WRITE_THROTTLE_MS) {
+      return { status: 'ok' };
+    }
+
+    session.last_active_at = new Date(now);
+    await session.save();
+    return { status: 'ok' };
+  }
+
   static async refreshTokens(
     refreshToken: string
   ): Promise<
@@ -67,6 +122,13 @@ export class SessionService {
     if (session.expires_at < new Date()) {
       await SessionModel.updateOne({ _id: session._id }, { $set: { revoked_at: new Date() } });
       return { success: false, error: 'Session expired' };
+    }
+
+    // Enforce the inactivity timeout: a session idle beyond the window cannot be
+    // refreshed and is revoked, forcing the user to log in again.
+    if (Date.now() - session.last_active_at.getTime() > config.session.idleTimeoutMs) {
+      await SessionModel.updateOne({ _id: session._id }, { $set: { revoked_at: new Date() } });
+      return { success: false, error: 'Session expired due to inactivity' };
     }
 
     const incomingHash = hashTokenForStorage(refreshToken);

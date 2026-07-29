@@ -122,7 +122,7 @@ REDIS_PASSWORD=                        # Optional redis password
 ```bash
 # JWT Authentication
 JWT_SECRET=your-super-secure-secret-key-minimum-32-characters  # Required (min 32 chars)
-JWT_EXPIRES_IN=1h                      # JWT token expiration (default: 1h)
+JWT_EXPIRES_IN=24h                     # JWT token expiration (default: 24h)
 JWT_REFRESH_EXPIRES_IN=7d              # Refresh token expiration (default: 7d)
 
 # Password Hashing
