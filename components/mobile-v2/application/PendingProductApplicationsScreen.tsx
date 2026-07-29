@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { PendingApplicationsListSkeleton } from '@/components/mobile-v2/data-skeletons'
-import { fetchUserApplications, needsFinalApplicationSubmit, type StorefrontApplication } from '@/lib/storefrontApplicationClient'
+import { fetchUserApplications, needsFinalApplicationSubmit, canShowPendingPage, type StorefrontApplication } from '@/lib/storefrontApplicationClient'
 import {
   buildMortgageThread,
   mortgageStepCta,
@@ -194,6 +194,7 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreen
                 const appKind = applicationPendingKind(application)
                 if (!appKind) return null
                 const awaitingSubmit = needsFinalApplicationSubmit(application)
+                const pendingReady = canShowPendingPage(application)
                 const resumeApplyHref = awaitingSubmit ? continueApplyHref(application, appKind) : null
                 const mortgageLocal = readMortgageWorkflow(applicationId)
                 const loanLocal = readLoanWorkflow(applicationId)
@@ -201,11 +202,11 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreen
                   appKind === 'mortgage' ? resolveMortgageWorkflowStep(application, mortgageLocal) : null
                 const loanStep = appKind === 'loan' ? resolveLoanWorkflowStep(application, loanLocal) : null
                 const mortgageCta =
-                  !awaitingSubmit && appKind === 'mortgage' && productId && applicationId && mortgageStep
+                  pendingReady && appKind === 'mortgage' && productId && applicationId && mortgageStep
                     ? mortgageStepCta(mortgageStep, productId, applicationId)
                     : null
                 const loanCta =
-                  !awaitingSubmit && appKind === 'loan' && applicationId && loanStep
+                  pendingReady && appKind === 'loan' && applicationId && loanStep
                     ? loanStepCta(loanStep, applicationId)
                     : null
                 const cta = awaitingSubmit
@@ -217,11 +218,11 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreen
                     : loanCta
                 const detailHref = awaitingSubmit
                   ? resumeApplyHref
-                  : appKind === 'mortgage' && applicationId
+                  : pendingReady && appKind === 'mortgage' && applicationId
                     ? mortgagePendingDetailHref(applicationId)
-                    : appKind === 'loan' && applicationId
+                    : pendingReady && appKind === 'loan' && applicationId
                       ? loanPendingDetailHref(applicationId)
-                      : null
+                      : resumeApplyHref
                 const nextStepLabel = awaitingSubmit
                   ? 'Complete application'
                   : appKind === 'mortgage'
@@ -246,7 +247,7 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreen
                         </p>
                         {awaitingSubmit ? (
                           <p className="mt-1 text-[10px] text-amber-700">
-                            Draft only — submit to send this application for review.
+                            Not synced for review yet — finish apply and submit (needs upstream application id).
                           </p>
                         ) : null}
                       </div>

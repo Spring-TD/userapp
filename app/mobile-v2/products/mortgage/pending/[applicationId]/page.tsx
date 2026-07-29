@@ -2,13 +2,20 @@
 
 import React, { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { PendingApplicationThreadSkeleton } from '@/components/mobile-v2/data-skeletons'
 import { MortgagePendingThreadScreen } from '@/components/mobile-v2/mortgage/MortgagePendingThreadScreen'
-import { fetchUserApplications, type StorefrontApplication } from '@/lib/storefrontApplicationClient'
+import {
+  canShowPendingPage,
+  fetchUserApplications,
+  needsFinalApplicationSubmit,
+  type StorefrontApplication,
+} from '@/lib/storefrontApplicationClient'
+import { mortgageApplyHref } from '@/lib/mortgageApplyRoutes'
 import { initMortgageWorkflowSubmitted, readMortgageWorkflow } from '@/lib/mortgageWorkflow'
 
 function PendingDetailContent() {
+  const router = useRouter()
   const params = useParams()
   const applicationId = typeof params?.applicationId === 'string' ? params.applicationId : ''
   const [application, setApplication] = useState<StorefrontApplication | null>(null)
@@ -38,13 +45,25 @@ function PendingDetailContent() {
 
   useEffect(() => {
     if (!application || !applicationId) return
+    // Local PENDING / account_created without Plata sync must finish apply submit first.
+    if (needsFinalApplicationSubmit(application) || !canShowPendingPage(application)) {
+      const productId = String(application.productId || '').trim()
+      if (productId) {
+        router.replace(
+          `${mortgageApplyHref(productId)}&applicationId=${encodeURIComponent(applicationId)}`,
+        )
+      } else {
+        router.replace('/mobile-v2/products/mortgage/pending')
+      }
+      return
+    }
     if (readMortgageWorkflow(applicationId)) return
     initMortgageWorkflowSubmitted(
       applicationId,
       String(application.productId ?? ''),
       'equity_contribution',
     )
-  }, [application, applicationId])
+  }, [application, applicationId, router])
 
   if (loading) {
     return <PendingApplicationThreadSkeleton title="Pending Mortgage" />
@@ -56,6 +75,26 @@ function PendingDetailContent() {
         <p className="text-sm text-gray-600">{error || 'Application not found.'}</p>
         <Link href="/mobile-v2/products/mortgage/pending" className="text-sm font-semibold text-[var(--sf-button,#1E40AF)]">
           Back to pending list
+        </Link>
+      </div>
+    )
+  }
+
+  if (needsFinalApplicationSubmit(application) || !canShowPendingPage(application)) {
+    return (
+      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 sf-page-bg-tint px-6 text-center">
+        <p className="text-sm text-gray-600">
+          This application still needs to be submitted for review before the pending workflow is available.
+        </p>
+        <Link
+          href={
+            application.productId
+              ? `${mortgageApplyHref(String(application.productId))}&applicationId=${encodeURIComponent(applicationId)}`
+              : '/mobile-v2/products/mortgage/pending'
+          }
+          className="text-sm font-semibold text-[var(--sf-button,#1E40AF)]"
+        >
+          Continue application
         </Link>
       </div>
     )
