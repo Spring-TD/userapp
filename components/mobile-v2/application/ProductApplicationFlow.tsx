@@ -22,8 +22,9 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import {
   addApplicationGuarantor,
+  canShowPendingPage,
   initializeProductApplication,
-  isApplicationAlreadySubmitted,
+  needsFinalApplicationSubmit,
   readInitializedApplication,
   saveApplicationProgress,
   saveInitializedApplication,
@@ -1255,14 +1256,13 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       setSheet('success')
     }
 
-    // Already past draft (e.g. APPROVED) — don't call submit again; continue to pending.
-    if (isApplicationAlreadySubmitted(initializedApplication?.status)) {
+    // Only leave apply when Spring has synced to Plata (upstreamApplicationId + review workflow).
+    // Do NOT treat local status === PENDING / account_created as enough.
+    if (canShowPendingPage(initializedApplication)) {
       setError(null)
       setStepErrors([])
       setDraftNotice(null)
-      toast.message(
-        `This application is already ${String(initializedApplication?.status).toUpperCase()}. Continuing to next steps.`,
-      )
+      toast.message('Application already submitted for review.')
       if (kind === 'mortgage') {
         finishMortgageSuccess(applicationId)
       } else {
@@ -1295,10 +1295,19 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       productKind: kind,
     })
     const fileIssues = validateFileUploadStep(documentsToDownload, requirementSubmissions)
+    const platformPayload = platformFieldsFromDraft(platformFields)
+    const mortgageSelection =
+      kind === 'mortgage' ? buildMortgageSelectionPayload(catalogProduct, parseApplicationAmount(applicationAmount) || 0) : null
     const issues = [
       ...requirementIssues,
       ...(fileIssues ? [fileIssues] : []),
       ...(accepted ? [] : ['Accept the terms and conditions before submitting.']),
+      ...(kind === 'mortgage' && !mortgageSelection?.propertyName
+        ? ['Mortgage property selection is required before submitting.']
+        : []),
+      ...(platformPayload.monthlyIncome == null
+        ? ['Complete platform application fields (income, PEP, repayment, marital status, loan reason).']
+        : []),
     ]
     if (issues.length > 0) {
       setStepErrors(issues)
@@ -1340,34 +1349,45 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       const submitResult = await submitInitializedApplication(applicationId, {
         userId,
         acceptedTerms: true,
-        ...platformFieldsFromDraft(platformFields),
-        ...(kind === 'mortgage' ? { mortgageSelection: buildMortgageSelectionPayload(catalogProduct, parsed) } : {}),
+        ...platformPayload,
+        ...(kind === 'mortgage'
+          ? { mortgageSelection: buildMortgageSelectionPayload(catalogProduct, parsed) }
+          : {}),
       })
 
       if (!submitResult.ok) {
         const message = submitResult.error || 'Could not submit your application.'
-        // If backend says already submitted, continue to pending for mortgage.
-        if (
-          kind === 'mortgage' &&
-          /already|not in draft|invalid status/i.test(message)
-        ) {
-          toast.message(message)
-          finishMortgageSuccess(applicationId)
-          return
-        }
         setError(message)
         toast.error(message)
         scrollToFeedback()
         return
       }
 
+      const submittedApp = submitResult.application
       const resolvedApplicationId = String(
-        submitResult.application?.id ?? submitResult.application?._id ?? applicationId,
+        submittedApp?.id ?? submittedApp?._id ?? applicationId,
       )
 
-      if (kind === 'mortgage' && resolvedApplicationId) {
+      // Backend rule: only route to pending after sync (upstreamApplicationId + review status).
+      if (kind === 'mortgage') {
+        if (!canShowPendingPage(submittedApp)) {
+          const message =
+            'Application was accepted by Spring but has not synced to review yet (missing upstream application). Stay on this form and try Submit again.'
+          setError(message)
+          toast.error(message)
+          scrollToFeedback()
+          return
+        }
         finishMortgageSuccess(resolvedApplicationId)
       } else {
+        if (needsFinalApplicationSubmit(submittedApp) && !canShowPendingPage(submittedApp)) {
+          const message =
+            'Application was accepted by Spring but has not synced to review yet. Please try Submit again.'
+          setError(message)
+          toast.error(message)
+          scrollToFeedback()
+          return
+        }
         clearApplicationDraft(currentDraftKey)
         setSheet('success')
       }
@@ -2033,7 +2053,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
               {submitting ? 'Submitting...' : 'Please wait...'}
             </span>
           ) : activeStep === 'product' ? (
-            isApplicationAlreadySubmitted(initializedApplication?.status) ? (
+            canShowPendingPage(initializedApplication) ? (
               'Continue'
             ) : (
               'Submit application'

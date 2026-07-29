@@ -47,6 +47,8 @@ export type StorefrontApplication = {
   currency?: string
   status?: string
   loanWorkflowStatus?: string
+  /** Plata / upstream application id — required before borrower pending workflow UI. */
+  upstreamApplicationId?: string
   appId?: string
   merchantId?: string
   createdAt?: string
@@ -308,34 +310,80 @@ export function isApplicationAlreadySubmitted(status?: string | null): boolean {
   ].includes(s)
 }
 
+function normalizeWorkflowStatus(status?: string | null): string {
+  return String(status || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_")
+}
+
+export function applicationUpstreamId(application?: StorefrontApplication | null): string {
+  return String(application?.upstreamApplicationId || "").trim()
+}
+
 /**
- * Local Spring draft that has not been final-submitted.
- * Plata sync only runs on guarantor add or POST /applications/:id/submit — these apps never reached Plata.
+ * Only show /mortgage/pending/:id after Spring has synced to Plata.
+ * Local PENDING + account_created is NOT enough.
+ */
+export function canShowPendingPage(application?: StorefrontApplication | null): boolean {
+  if (!applicationUpstreamId(application)) return false
+  const workflow = normalizeWorkflowStatus(application?.loanWorkflowStatus)
+  return (
+    workflow === "under_review" ||
+    workflow === "guarantor_kyc_requested" ||
+    workflow === "offer_pending" ||
+    workflow === "offer_sent" ||
+    workflow === "approved" ||
+    workflow === "rejected" ||
+    workflow === "declined" ||
+    workflow === "awaiting_disbursement" ||
+    workflow === "awaiting_acceptance" ||
+    workflow === "disbursed" ||
+    workflow === "completed" ||
+    workflow === "active" ||
+    workflow.includes("offer") ||
+    workflow.includes("disburs")
+  )
+}
+
+/**
+ * Stay on apply and require progress + submit.
+ * Covers backend case: status PENDING + no upstreamApplicationId + account_created|account_requested|upstream_synced,
+ * plus other unsynced local drafts.
  */
 export function needsFinalApplicationSubmit(application: StorefrontApplication | null | undefined): boolean {
   if (!application) return false
+  if (canShowPendingPage(application)) return false
+
   const status = String(application.status || "").trim().toUpperCase()
-  if (["CANCELLED", "CANCELED", "FAILED"].includes(status)) return false
-  if (isApplicationAlreadySubmitted(status)) return false
-  const workflow = String(application.loanWorkflowStatus || "")
-    .trim()
-    .toLowerCase()
-  // Already past borrower apply form (merchant review / offer / disbursement).
+  if (["CANCELLED", "CANCELED", "FAILED", "REJECTED", "DECLINED"].includes(status)) return false
+
+  const workflow = normalizeWorkflowStatus(application.loanWorkflowStatus)
+  const upstreamId = applicationUpstreamId(application)
+
+  // Backend gate (PENDING but not synced to Plata yet).
   if (
-    [
-      "under_review",
-      "offer_sent",
-      "awaiting_acceptance",
-      "awaiting_disbursement",
-      "approved",
-      "disbursed",
-      "completed",
-      "active",
-    ].includes(workflow)
+    status === "PENDING" &&
+    !upstreamId &&
+    ["account_created", "account_requested", "upstream_synced"].includes(workflow)
   ) {
-    return false
+    return true
   }
-  return true
+
+  // Any local draft / pre-review state without Plata sync must finish submit.
+  if (!upstreamId) {
+    if (
+      ["account_created", "account_requested", "upstream_synced", "requested", ""].includes(workflow)
+    ) {
+      return true
+    }
+    // under_review without upstreamApplicationId is still not pending-ready.
+    if (workflow === "under_review" || workflow === "guarantor_kyc_requested") return true
+    // Unknown / empty workflow on an initialized app — keep on apply until synced.
+    return true
+  }
+
+  return false
 }
 
 
@@ -756,7 +804,23 @@ export async function submitInitializedApplication(
       return { ok: false as const, error: parseApiError(res.data, res.status) }
     }
 
-    return { ok: true as const, application: res.data?.data }
+    const payload = res.data?.data
+    const application =
+      payload && typeof payload === "object" && "id" in (payload as object)
+        ? (payload as StorefrontApplication)
+        : payload && typeof payload === "object" && "application" in (payload as object)
+          ? ((payload as { application?: StorefrontApplication }).application ?? null)
+          : (payload as StorefrontApplication | null | undefined) ?? null
+
+    if (application) {
+      const current = readInitializedApplication()
+      saveInitializedApplication({
+        ...(current || {}),
+        ...application,
+      })
+    }
+
+    return { ok: true as const, application: application ?? undefined }
   } catch (error: unknown) {
     return {
       ok: false as const,
