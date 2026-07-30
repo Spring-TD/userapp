@@ -329,6 +329,9 @@ export const ENDPOINTS = {
       `${WALLET_BASE}/user/${encodeURIComponent(userId)}/product-type-summary`,
     userTransactions: (userId: string) =>
       `${WALLET_BASE}/user/${encodeURIComponent(userId)}/transactions`,
+    /** POST — move product-application wallet funds to the user's PRIMARY wallet. */
+    transferProductToPrimary: (userId: string, applicationId: string) =>
+      `${WALLET_BASE}/user/${encodeURIComponent(userId)}/product-applications/${encodeURIComponent(applicationId)}/transfer-to-primary`,
     banks: `${WALLET_BASE}/banks`,
     nameEnquiry: `${WALLET_BASE}/banks/name-enquiry`,
     externalBankAccounts: (userId: string) =>
@@ -346,6 +349,8 @@ export const ENDPOINTS = {
   applications: {
     init: "/v1/applications/init",
     user: (userId: string) => `/v1/applications/user/${encodeURIComponent(userId)}`,
+    approvedAmountSummary: (userId: string) =>
+      `/v1/applications/user/${encodeURIComponent(userId)}/approved-amount-summary`,
   },
   pricing: {
     product: (productId: string) => `/v1/pricing/product/${encodeURIComponent(productId)}`,

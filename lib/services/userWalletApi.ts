@@ -7,6 +7,9 @@ import { ENDPOINTS } from "@/lib/endpoints"
 import { fetchWithAuth } from "@/lib/fetchWithAuth"
 import { parseUserWalletFromResponse } from "@/lib/userWallet"
 import type {
+  TransferProductToPrimaryPayload,
+  TransferProductToPrimaryResponse,
+  TransferProductToPrimaryResult,
   UserProductTypeSummary,
   UserProductTypeSummaryResponse,
   UserWallet,
@@ -108,6 +111,44 @@ export async function fetchUserWalletTransactions(
 
   return {
     transactions: Array.isArray(list) ? list : [],
+    error: null,
+    status: res.status,
+  }
+}
+
+/**
+ * POST /api/v1/wallets/user/{userId}/product-applications/{applicationId}/transfer-to-primary
+ * Moves funds from a product application wallet into the user's PRIMARY wallet.
+ */
+export async function transferProductApplicationToPrimary(
+  userId: string,
+  applicationId: string,
+  payload: TransferProductToPrimaryPayload,
+): Promise<{
+  data: TransferProductToPrimaryResult | null
+  message: string | null
+  error: string | null
+  status: number
+}> {
+  const url = bffUrl(ENDPOINTS.wallet.transferProductToPrimary(userId, applicationId))
+  const res = await fetchWithAuth(url, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
+  const data = (await res.json().catch(() => ({}))) as TransferProductToPrimaryResponse
+
+  if (!res.ok || data.success === false) {
+    return {
+      data: null,
+      message: null,
+      error: data.error || data.message || `Transfer failed (${res.status})`,
+      status: res.status,
+    }
+  }
+
+  return {
+    data: data.data ?? null,
+    message: data.message || "Product application funds transferred to primary wallet",
     error: null,
     status: res.status,
   }
