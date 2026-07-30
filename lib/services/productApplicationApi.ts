@@ -41,9 +41,16 @@ function normalizeApplications(data: ProductApplicationInitResponse): ProductApp
   return list.map(normalizeApplication)
 }
 
-function shouldShowInAccounts(application: ProductApplication): boolean {
+function shouldShowInAccounts(
+  application: ProductApplication,
+  opts?: { status?: string },
+): boolean {
   const status = String(application.status || "").toUpperCase()
-  if (status === "DRAFT" || status === "CANCELLED") return false
+  if (status === "DRAFT" || status === "CANCELLED" || status === "CANCELED") return false
+  // Approved list: show each approved application (do not require NUBAN yet).
+  if (String(opts?.status || "").toUpperCase() === "APPROVED") {
+    return Boolean(applicationIdOf(application) && (application.productId || application.productType))
+  }
   const wallet = application.productWallet?.upstreamAccount
   if (wallet?.accountNumber?.trim() || wallet?.bankName?.trim() || wallet?.provisionStatus) return true
   return Boolean(applicationIdOf(application) && application.productId)
@@ -59,14 +66,71 @@ export function matchProductApplicationId(
   return candidate === target
 }
 
-/** List user applications with provisioned product accounts (GET /v1/applications/user/{userId}). */
+export type ProductApplicationListParams = {
+  productType?: string
+  appId?: string
+  status?: string
+  page?: number
+  limit?: number
+}
+
+export type ApprovedAmountBucket = {
+  totalAmount: number
+  applicationCount: number
+  currency: string
+}
+
+export type ApprovedProductType = "LOAN" | "MORTGAGE" | "SAVINGS" | "INVESTMENT" | "COMMODITY"
+
+export type ApprovedAmountSummary = {
+  userId: string
+  appId: string
+  status: "APPROVED" | string
+  summary: Partial<Record<ApprovedProductType, ApprovedAmountBucket>>
+}
+
+/** GET /v1/applications/user/:userId/approved-amount-summary?appId= */
+export async function fetchApprovedAmountSummary(
+  userId: string,
+  appId: string,
+): Promise<{ summary: ApprovedAmountSummary | null; error: string | null; status: number }> {
+  const qs = new URLSearchParams({ appId })
+  const path = ENDPOINTS.applications.approvedAmountSummary(userId)
+  const url = bffUrl(`${path}?${qs}`)
+  const res = await fetchWithAuth(url, { method: "GET" })
+  const data = (await res.json().catch(() => ({}))) as {
+    success?: boolean
+    data?: ApprovedAmountSummary
+    error?: string
+    message?: string
+  }
+
+  if (!res.ok || data.success === false) {
+    return {
+      summary: null,
+      error: data.error || data.message || "Unable to load account totals",
+      status: res.status,
+    }
+  }
+
+  return {
+    summary: data.data ?? null,
+    error: null,
+    status: res.status,
+  }
+}
+
+/** List user applications (GET /v1/applications/user/{userId}). */
 export async function fetchUserProductApplications(
   userId: string,
-  params?: { productType?: string; appId?: string },
+  params?: ProductApplicationListParams,
 ): Promise<{ applications: ProductApplication[]; error: string | null; status: number }> {
   const qs = new URLSearchParams()
   if (params?.productType) qs.set("productType", params.productType)
   if (params?.appId) qs.set("appId", params.appId)
+  if (params?.status) qs.set("status", params.status)
+  if (params?.page != null) qs.set("page", String(params.page))
+  if (params?.limit != null) qs.set("limit", String(params.limit))
 
   const path = ENDPOINTS.applications.user(userId)
   const url = bffUrl(qs.toString() ? `${path}?${qs}` : path)
@@ -81,28 +145,9 @@ export async function fetchUserProductApplications(
     }
   }
 
-  const applications = normalizeApplications(data).filter(shouldShowInAccounts)
-
-  // Debug: trace ACCOUNT REQUESTED / ACTIVE badges (backend provisionStatus vs frontend label).
-  console.log('[Accounts][fetchUserProductApplications] response', {
-    url,
-    status: res.status,
-    productType: params?.productType ?? null,
-    appId: params?.appId ?? null,
-    raw: data,
-    applications: applications.map((app) => ({
-      id: app.id,
-      productId: app.productId,
-      productName: app.productName,
-      productType: app.productType,
-      status: app.status,
-      loanWorkflowStatus: app.loanWorkflowStatus,
-      provisionStatus: app.productWallet?.upstreamAccount?.provisionStatus ?? null,
-      accountNumber: app.productWallet?.upstreamAccount?.accountNumber ?? null,
-      bankName: app.productWallet?.upstreamAccount?.bankName ?? null,
-      upstreamAccount: app.productWallet?.upstreamAccount ?? null,
-    })),
-  })
+  const applications = normalizeApplications(data).filter((app) =>
+    shouldShowInAccounts(app, { status: params?.status }),
+  )
 
   return {
     applications,

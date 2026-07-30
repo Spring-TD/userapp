@@ -11,15 +11,20 @@ import {
     WalletAccountRowSkeleton,
     WalletBalanceCardSkeleton,
 } from '@/components/mobile-v2/data-skeletons';
+import { TransferToPrimaryDrawer } from '@/components/mobile-v2/TransferToPrimaryDrawer';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { useUserWallet } from '@/hooks/useUserWallet';
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
-import { fetchUserProductApplications } from '@/lib/services/productApplicationApi';
-import { fetchUserProductTypeSummary } from '@/lib/services/userWalletApi';
+import {
+    fetchApprovedAmountSummary,
+    fetchUserProductApplications,
+    type ApprovedAmountBucket,
+    type ApprovedAmountSummary,
+    type ApprovedProductType,
+} from '@/lib/services/productApplicationApi';
 import { fetchAuthUserProfile, type AuthUserProfile } from '@/lib/userProfileClient';
 import {
-    aggregateCommodityHoldingBalance,
     canWithdrawCommodity,
     withdrawCommodity,
 } from '@/lib/commodityApi';
@@ -27,7 +32,7 @@ import { formatWalletBalance } from '@/lib/userWallet';
 import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
 import { MobileV2NotificationBell } from '@/components/mobile-v2/MobileV2NotificationBell';
 import type { ProductApplication } from '@/types/productApplication';
-import type { ProductTypeSummaryItem, UserProductTypeSummary, WalletProductType } from '@/types/userWallet';
+import type { WalletProductType } from '@/types/userWallet';
 
 type CommodityContractSnapshot = {
     commodityPrincipal?: number;
@@ -174,25 +179,6 @@ function isPendingProvisionToken(normalized: string): boolean {
     )
 }
 
-/**
- * Count "Active" from the same badge the card shows.
- * Includes approved apps still waiting on NUBAN provisioning.
- */
-function isActiveProductApplication(application: ProductApplication): boolean {
-    const label = getProductAccountDisplayStatus(application).toLowerCase()
-    return (
-        label === 'active' ||
-        label === 'approved' ||
-        label === 'disbursed' ||
-        label === 'account pending'
-    )
-}
-
-function isActiveSummaryAccount(status?: string | null): boolean {
-    const normalized = normalizeStatusToken(status)
-    return isLiveStatusToken(normalized)
-}
-
 function applicationUpdatedAt(application: ProductApplication): number {
     const raw =
         (application as { updatedAt?: string }).updatedAt ||
@@ -202,43 +188,70 @@ function applicationUpdatedAt(application: ProductApplication): number {
     return Number.isFinite(ts) ? ts : 0
 }
 
-/**
- * Accounts tab: only live accounts, and at most one row per product.
- */
+/** Approved accounts list: one row per application id, newest first. */
 function selectDisplayableProductAccounts(applications: ProductApplication[]): ProductApplication[] {
-    const active = applications.filter(isActiveProductApplication)
-    const byProduct = new Map<string, ProductApplication>()
+    return [...applications].sort((a, b) => applicationUpdatedAt(b) - applicationUpdatedAt(a))
+}
 
-    for (const application of active) {
-        const productKey = String(application.productId || application.id || '').trim()
-        if (!productKey) continue
+function emptyAmountBucket(currency = 'NGN'): ApprovedAmountBucket {
+    return { totalAmount: 0, applicationCount: 0, currency }
+}
 
-        const existing = byProduct.get(productKey)
-        if (!existing) {
-            byProduct.set(productKey, application)
-            continue
-        }
-
-        const existingHasNuban = Boolean(existing.productWallet?.upstreamAccount?.accountNumber?.trim())
-        const nextHasNuban = Boolean(application.productWallet?.upstreamAccount?.accountNumber?.trim())
-        if (nextHasNuban && !existingHasNuban) {
-            byProduct.set(productKey, application)
-            continue
-        }
-        if (applicationUpdatedAt(application) >= applicationUpdatedAt(existing)) {
-            byProduct.set(productKey, application)
-        }
+function formatApprovedTotal(amount: number, currency: string): string {
+    try {
+        return new Intl.NumberFormat('en-NG', {
+            style: 'currency',
+            currency: currency || 'NGN',
+            minimumFractionDigits: 2,
+        }).format(amount)
+    } catch {
+        return `${currency || 'NGN'} ${amount.toFixed(2)}`
     }
-
-    return Array.from(byProduct.values()).sort(
-        (a, b) => applicationUpdatedAt(b) - applicationUpdatedAt(a),
-    )
 }
 
 /**
  * Single user-facing status for Accounts cards.
  * Never pair an "Approved" badge with a "Pending provisioning" subtitle.
  */
+/** Spendable balance sitting on the product application wallet (not PRIMARY). */
+function productWalletAvailableBalance(application: ProductApplication): number {
+    const wallet = application.productWallet
+    const upstream = wallet?.upstreamAccount
+    const candidates = [
+        wallet?.mainBalance,
+        wallet?.balance,
+        upstream?.mainBalance,
+        upstream?.balance,
+        application.amount,
+    ]
+    for (const value of candidates) {
+        if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value
+    }
+    return 0
+}
+
+function canTransferProductToPrimary(
+    application: ProductApplication,
+    activeFilter: AccountFilter,
+): boolean {
+    if (activeFilter === 'Commodity') return false
+    if (!application.id) return false
+    const statusLabel = getProductAccountDisplayStatus(application).toLowerCase()
+    if (statusLabel.includes('pending') || statusLabel === 'rejected' || statusLabel === 'cancelled') {
+        return false
+    }
+    // Loan / mortgage disbursements are the primary use-case; also allow savings/invest when funded.
+    if (activeFilter === 'Loan' || activeFilter === 'Mortgage') {
+        return (
+            statusLabel === 'approved' ||
+            statusLabel === 'disbursed' ||
+            statusLabel === 'active' ||
+            productWalletAvailableBalance(application) > 0
+        )
+    }
+    return productWalletAvailableBalance(application) > 0
+}
+
 function getProductAccountDisplayStatus(application: ProductApplication): string {
     const appStatus = normalizeStatusToken(application.status)
     const account = application.productWallet?.upstreamAccount
@@ -283,52 +296,28 @@ function getProductAccountDisplayStatus(application: ProductApplication): string
     return String(application.status || 'Active').replace(/_/g, ' ')
 }
 
-function getApplicationListedAmount(application: ProductApplication): number {
-    const raw = application as ProductApplication & Record<string, unknown>
-    const wallet = raw.productWallet as
-        | (ProductApplication['productWallet'] & Record<string, unknown>)
-        | undefined
-    const upstream = wallet?.upstreamAccount as Record<string, unknown> | undefined
-    const snapshot = commoditySnapshot(application)
-
-    const candidates: unknown[] = [
-        snapshot?.commodityPrincipal,
-        raw.amount,
-        raw.balance,
-        raw.currentBalance,
-        raw.principal,
-        raw.fundedAmount,
-        wallet?.balance,
-        wallet?.availableBalance,
-        upstream?.balance,
-        upstream?.availableBalance,
-    ]
-
-    for (const value of candidates) {
-        const n = typeof value === 'number' ? value : Number(value)
-        if (Number.isFinite(n) && n > 0) return n
-    }
-    return 0
-}
-
 function ProductAccountCard({
     application,
     activeFilter,
     userId,
+    currency,
     onWithdrawComplete,
 }: {
     application: ProductApplication;
     activeFilter: AccountFilter;
     userId?: string;
+    currency?: string;
     onWithdrawComplete?: () => void;
 }) {
     const [withdrawing, setWithdrawing] = useState(false);
     const [withdrawError, setWithdrawError] = useState<string | null>(null);
+    const [transferOpen, setTransferOpen] = useState(false);
     const account = application.productWallet?.upstreamAccount;
     const accountDetailsHref = `/mobile-v2/accounts/${application.id}`;
     const snapshot = activeFilter === 'Commodity' ? commoditySnapshot(application) : null;
     const statusLabel = getProductAccountDisplayStatus(application);
-    const principal = snapshot?.commodityPrincipal ?? (application as { amount?: number }).amount;
+    const productBalance = productWalletAvailableBalance(application);
+    const principal = snapshot?.commodityPrincipal ?? application.amount ?? (productBalance || undefined);
     const withdrawable = Boolean(
         activeFilter === 'Commodity' &&
         userId &&
@@ -338,6 +327,8 @@ function ProductAccountCard({
             maturityAt: snapshot?.maturityAt,
         }),
     );
+    const transferable = Boolean(userId && canTransferProductToPrimary(application, activeFilter));
+    const hasCardAction = withdrawable || transferable;
 
     const handleWithdraw = async (event: React.MouseEvent) => {
         event.preventDefault();
@@ -391,10 +382,10 @@ function ProductAccountCard({
             </div>
             {principal != null ? (
                 <p className="mt-3 text-sm font-semibold text-[var(--sf-ink,#1E1B4B)]">
-                    {formatWalletBalance(principal)}
+                    {formatWalletBalance(principal, currency)}
                     {snapshot?.totalAtMaturity != null ? (
                         <span className="ml-2 text-xs font-medium text-gray-500">
-                            → {formatWalletBalance(snapshot.totalAtMaturity)} at maturity
+                            → {formatWalletBalance(snapshot.totalAtMaturity, currency)} at maturity
                         </span>
                     ) : null}
                 </p>
@@ -421,20 +412,44 @@ function ProductAccountCard({
                     ) : null}
                 </div>
             ) : null}
+            {transferable ? (
+                <div className="mt-4" onClick={(event) => event.preventDefault()}>
+                    <Button
+                        type="button"
+                        onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            setTransferOpen(true);
+                        }}
+                        className="h-10 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-sm font-semibold text-white"
+                    >
+                        Transfer to primary wallet
+                    </Button>
+                </div>
+            ) : null}
         </div>
     );
 
-    if (activeFilter === 'Commodity' && withdrawable) {
-        return (
-            <div className="block">
-                <Link href={accountDetailsHref} className="block">
-                    {content}
-                </Link>
-            </div>
-        );
-    }
-
-    return (
+    const card = hasCardAction ? (
+        <div className="block">
+            <Link href={accountDetailsHref} className="block">
+                {content}
+            </Link>
+            {userId && transferable ? (
+                <TransferToPrimaryDrawer
+                    open={transferOpen}
+                    onOpenChange={setTransferOpen}
+                    userId={userId}
+                    applicationId={application.id}
+                    productName={application.productName}
+                    productType={application.productType || activeFilter}
+                    availableBalance={productBalance}
+                    currency={application.currency || currency || 'NGN'}
+                    onSuccess={onWithdrawComplete}
+                />
+            ) : null}
+        </div>
+    ) : (
         <Link
             href={accountDetailsHref}
             aria-label={`Open ${activeFilter.toLowerCase()} details`}
@@ -443,6 +458,8 @@ function ProductAccountCard({
             {content}
         </Link>
     );
+
+    return card;
 }
 
 export default function AccountsPage() {
@@ -451,13 +468,24 @@ export default function AccountsPage() {
     const [activeFilter, setActiveFilter] = useState<AccountFilter>('Mortgage');
     const { appId } = useMobileV2Tenant();
     const { wallet, loading: walletLoading, error: walletError, refetch: refetchWallet } = useUserWallet();
-    const [productSummary, setProductSummary] = useState<UserProductTypeSummary | null>(null);
+    const [approvedSummary, setApprovedSummary] = useState<ApprovedAmountSummary | null>(null);
     const [applications, setApplications] = useState<ProductApplication[]>([]);
     const [summaryLoading, setSummaryLoading] = useState(false);
     const [summaryError, setSummaryError] = useState<string | null>(null);
     const [applicationsLoading, setApplicationsLoading] = useState(false);
     const [applicationsError, setApplicationsError] = useState<string | null>(null);
-    const activeProductType = ACCOUNT_FILTER_TO_PRODUCT_TYPE[activeFilter];
+    const activeProductType = ACCOUNT_FILTER_TO_PRODUCT_TYPE[activeFilter] as ApprovedProductType;
+
+    const approvedListParams = useMemo(
+        () => ({
+            productType: activeProductType,
+            appId: appId || undefined,
+            status: 'APPROVED',
+            page: 1,
+            limit: 20,
+        }),
+        [activeProductType, appId],
+    );
 
     useEffect(() => {
         let cancelled = false;
@@ -475,8 +503,8 @@ export default function AccountsPage() {
 
     useEffect(() => {
         const userId = wallet?.userId;
-        if (!userId) {
-            setProductSummary(null);
+        if (!userId || !appId) {
+            setApprovedSummary(null);
             return;
         }
 
@@ -484,9 +512,9 @@ export default function AccountsPage() {
         setSummaryLoading(true);
         setSummaryError(null);
 
-        void fetchUserProductTypeSummary(userId).then((result) => {
+        void fetchApprovedAmountSummary(userId, appId).then((result) => {
             if (cancelled) return;
-            setProductSummary(result.summary);
+            setApprovedSummary(result.summary);
             setSummaryError(result.error);
             setSummaryLoading(false);
         });
@@ -494,11 +522,11 @@ export default function AccountsPage() {
         return () => {
             cancelled = true;
         };
-    }, [wallet?.userId]);
+    }, [wallet?.userId, appId]);
 
     useEffect(() => {
         const userId = wallet?.userId;
-        if (!userId) {
+        if (!userId || !appId) {
             setApplications([]);
             return;
         }
@@ -508,21 +536,8 @@ export default function AccountsPage() {
         setApplicationsLoading(true);
         setApplicationsError(null);
 
-        const params =
-            activeProductType === 'COMMODITY' && appId
-                ? { productType: activeProductType, appId }
-                : { productType: activeProductType };
-
-        void fetchUserProductApplications(userId, params).then((result) => {
+        void fetchUserProductApplications(userId, approvedListParams).then((result) => {
             if (cancelled) return;
-            console.log('[Accounts] page list result', {
-                filter: activeFilter,
-                productType: activeProductType,
-                error: result.error,
-                status: result.status,
-                count: result.applications.length,
-                applications: result.applications,
-            });
             setApplications(result.applications);
             setApplicationsError(result.error);
             setApplicationsLoading(false);
@@ -531,59 +546,36 @@ export default function AccountsPage() {
         return () => {
             cancelled = true;
         };
-    }, [wallet?.userId, activeProductType, appId]);
+    }, [wallet?.userId, appId, approvedListParams]);
 
     const reloadApplications = useCallback(() => {
         const userId = wallet?.userId;
-        if (!userId) return;
-        const params =
-            activeProductType === 'COMMODITY' && appId
-                ? { productType: activeProductType, appId }
-                : { productType: activeProductType };
-        void fetchUserProductApplications(userId, params).then((result) => {
+        if (!userId || !appId) return;
+        void fetchUserProductApplications(userId, approvedListParams).then((result) => {
             setApplications(result.applications);
             setApplicationsError(result.error);
         });
+        void fetchApprovedAmountSummary(userId, appId).then((result) => {
+            setApprovedSummary(result.summary);
+            setSummaryError(result.error);
+        });
         void refetchWallet();
-    }, [wallet?.userId, activeProductType, appId, refetchWallet]);
+    }, [wallet?.userId, appId, approvedListParams, refetchWallet]);
 
     const displayName = useMemo(() => displayNameFromProfile(profile), [profile]);
     const totalLabel = ACCOUNT_TOTAL_LABELS[activeFilter];
-    const activeSummary: ProductTypeSummaryItem = productSummary?.summary?.[activeProductType] ?? {
-        totalAmount: 0,
-        currency: productSummary?.currency || wallet?.currency || 'NGN',
-        accountCount: 0,
-        accounts: [],
-    };
+    const activeBucket: ApprovedAmountBucket =
+        approvedSummary?.summary?.[activeProductType] ??
+        emptyAmountBucket(wallet?.currency || 'NGN');
     const activeApplications = applications.filter(
         (application) => String(application.productType || '').toUpperCase() === activeProductType,
     );
     const displayedApplications = selectDisplayableProductAccounts(activeApplications);
-    const commodityHoldingTotal =
-        activeFilter === 'Commodity'
-            ? aggregateCommodityHoldingBalance(displayedApplications)
-            : 0;
-    const listedApplicationsTotal = displayedApplications.reduce(
-        (sum, application) => sum + getApplicationListedAmount(application),
-        0,
-    );
-    const activeStatusFromSummary = (activeSummary.accounts || []).filter((account) =>
-        isActiveSummaryAccount(account.status),
-    ).length;
-    // Prefer unique active product accounts from the list; fall back to summary only when list is empty.
-    const displayedAccountCount =
-        displayedApplications.length > 0
-            ? displayedApplications.length
-            : activeStatusFromSummary;
-    // Summary API often returns 0 while funded apps still await NUBAN — fall back to listed amounts.
-    const summaryTotal = Number(activeSummary.totalAmount) || 0;
-    const activeTotalAmount =
-        activeFilter === 'Commodity'
-            ? commodityHoldingTotal
-            : Math.max(summaryTotal, listedApplicationsTotal);
-    const activeFormattedBalance = formatWalletBalance(
+    const displayedAccountCount = Number(activeBucket.applicationCount) || 0;
+    const activeTotalAmount = Number(activeBucket.totalAmount) || 0;
+    const activeFormattedBalance = formatApprovedTotal(
         activeTotalAmount,
-        activeSummary.currency || wallet?.currency || 'NGN',
+        activeBucket.currency || wallet?.currency || 'NGN',
     );
     const isSummaryBusy = walletLoading || summaryLoading || applicationsLoading;
 
@@ -631,7 +623,7 @@ export default function AccountsPage() {
                 </div>
 
                 <div className="px-6 mb-8">
-                    {isSummaryBusy && !productSummary ? (
+                    {isSummaryBusy && !approvedSummary ? (
                         <WalletBalanceCardSkeleton />
                     ) : (
                         <div className="relative isolate w-full h-[220px] rounded-[30px] overflow-hidden bg-[var(--sf-button,#1E40AF)] shadow-xl shadow-blue-900/10">
@@ -670,7 +662,7 @@ export default function AccountsPage() {
                 </div>
 
                 <div className="px-6 space-y-6">
-                    {applicationsLoading || (isSummaryBusy && !productSummary && applications.length === 0) ? (
+                    {applicationsLoading || (isSummaryBusy && !approvedSummary && applications.length === 0) ? (
                         <WalletAccountRowSkeleton />
                     ) : displayedApplications.length > 0 ? (
                         displayedApplications.map((application) => (
@@ -679,6 +671,7 @@ export default function AccountsPage() {
                                 application={application}
                                 activeFilter={activeFilter}
                                 userId={wallet?.userId}
+                                currency={wallet?.currency}
                                 onWithdrawComplete={reloadApplications}
                             />
                         ))

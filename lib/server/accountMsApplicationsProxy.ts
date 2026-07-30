@@ -103,12 +103,30 @@ export async function proxyAccountMsApplicationsRequest(
 
     try {
       const res = await axios.request(config)
-      if (process.env.NODE_ENV === "development" && res.status >= 400) {
+      if (process.env.NODE_ENV === "development") {
         const row = res.data as Record<string, unknown> | null
-        console.log("[applications proxy] ← upstream", {
-          status: res.status,
-          error: row?.error ?? row?.message,
-        })
+        const data = (row?.data && typeof row.data === "object" ? row.data : row) as
+          | Record<string, unknown>
+          | null
+        const isPendingLoanDetail = path.includes("pending-approved-loan") && method === "GET"
+        if (res.status >= 400) {
+          console.log("[applications proxy] ← upstream", {
+            status: res.status,
+            error: row?.error ?? row?.message,
+          })
+        } else if (isPendingLoanDetail && data) {
+          const paf = data.postApprovalFulfillment as Record<string, unknown> | undefined
+          const offer = paf?.offer as Record<string, unknown> | undefined
+          const offerLetter = data.offerLetter as Record<string, unknown> | undefined
+          console.log("[applications proxy] ← pending-approved-loan", {
+            status: res.status,
+            loanWorkflowStatus: data.loanWorkflowStatus,
+            pafStatus: paf?.status,
+            offerSentAt: offer?.sentAt ?? null,
+            hasOfferPdf: Boolean(offerLetter?.pdfUrl),
+            downPaymentDue: (data.terms as Record<string, unknown> | undefined)?.downPaymentDue,
+          })
+        }
       }
       return NextResponse.json(res.data, { status: res.status })
     } catch (e) {

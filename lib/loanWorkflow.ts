@@ -171,7 +171,8 @@ const STEP_META: Record<
   },
   accept_offer: {
     title: 'Accept offer',
-    description: 'Accept the loan offer to begin disbursement processing.',
+    description:
+      'Review the offer terms and pay any required down payment from your central wallet to accept.',
     actionLabel: 'Accept offer',
   },
   awaiting_disbursement: {

@@ -129,3 +129,43 @@ export interface UserWalletTransactionsResponse {
   data?: { transactions?: WalletTransaction[] } | WalletTransaction[]
   error?: string
 }
+
+/** Response slice from POST …/product-applications/:id/transfer-to-primary */
+export interface LoanChargeCollection {
+  attempted?: boolean
+  success?: boolean
+  skipped?: boolean
+  skippedReason?: string
+  duplicate?: boolean
+  chargeAmount?: number
+  netToPrimary?: number
+}
+
+export interface ProductWalletSnapshot {
+  walletPurpose?: string
+  mainBalance?: number
+  balance?: number
+  currency?: string
+}
+
+export interface TransferProductToPrimaryPayload {
+  amount: number
+  description?: string
+}
+
+export interface TransferProductToPrimaryResult {
+  fromWallet?: ProductWalletSnapshot
+  toWallet?: ProductWalletSnapshot
+  transaction?: WalletTransaction
+  loanChargeCollection?: LoanChargeCollection
+}
+
+export interface TransferProductToPrimaryResponse {
+  success: boolean
+  message?: string
+  data?: TransferProductToPrimaryResult
+  error?: string
+}
+
+/** Backend max amount per transfer-to-primary request. */
+export const TRANSFER_TO_PRIMARY_MAX_AMOUNT = 1_000_000

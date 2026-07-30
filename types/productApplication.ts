@@ -6,12 +6,18 @@ export interface ProductApplicationUpstreamAccount {
   bankCode?: string
   providerReference?: string
   provisionStatus?: string
+  balance?: number
+  mainBalance?: number
+  currency?: string
 }
 
 export interface ProductApplicationWallet {
   walletId?: string
   walletPurpose?: string
   reusedUpstreamAccount?: boolean
+  balance?: number
+  mainBalance?: number
+  currency?: string
   upstreamAccount?: ProductApplicationUpstreamAccount
 }
 
@@ -22,6 +28,8 @@ export interface ProductApplication {
   productName?: string
   productType: ProductApplicationType
   status: string
+  amount?: number
+  currency?: string
   loanWorkflowStatus?: string
   requirementsSnapshot?: Record<string, unknown>
   productWallet?: ProductApplicationWallet
