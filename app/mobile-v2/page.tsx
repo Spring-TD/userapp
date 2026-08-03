@@ -95,7 +95,7 @@ function MobileV2Configured({
                     buttonTextColor={config.onboarding.buttonTextColor}
                     onComplete={handleOnboardingComplete}
                     onSignIn={handleOnboardingSignIn}
-                    onSkip={handleOnboardingComplete}
+                    onSkip={handleOnboardingSignIn}
                     leadingSlot={<StorefrontPwaInstall installAppId={installAppId} />}
                 />
             )}
