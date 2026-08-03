@@ -252,8 +252,8 @@ const STEP_META: Record<
   },
   down_payment: {
     title: 'Down Payment',
-    description: 'Review your wallet balance and pay the required down payment.',
-    actionLabel: 'Make payment',
+    description: 'Pay the required equity from your Central Wallet or by bank transfer to the merchant repayment account.',
+    actionLabel: 'Pay down payment',
   },
   contract_signing: {
     title: 'Contract Signing',

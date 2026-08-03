@@ -193,7 +193,13 @@ export default function OrdersPage() {
                   <p className="mt-1 text-xs text-gray-400">{row.subtitle}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-semibold sf-text-ink">
+                  <p
+                    className={`text-sm font-semibold ${
+                      typeof row.amount === 'number' && row.amount < 0
+                        ? 'text-red-600'
+                        : 'sf-text-ink'
+                    }`}
+                  >
                     {row.amount != null ? formatWalletBalance(row.amount, wallet?.currency) : '—'}
                   </p>
                   <p className="mt-1 text-[10px] text-gray-400">
@@ -212,7 +218,13 @@ export default function OrdersPage() {
                   <p className="mt-1 text-xs text-gray-400">{row.subtitle}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-semibold sf-text-ink">
+                  <p
+                    className={`text-sm font-semibold ${
+                      typeof row.amount === 'number' && row.amount < 0
+                        ? 'text-red-600'
+                        : 'sf-text-ink'
+                    }`}
+                  >
                     {row.amount != null ? formatWalletBalance(row.amount, wallet?.currency) : 'Application'}
                   </p>
                   <p className="mt-1 text-[10px] text-gray-400">

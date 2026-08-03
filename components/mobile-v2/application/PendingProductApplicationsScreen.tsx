@@ -19,6 +19,9 @@ import {
 } from '@/lib/loanWorkflow'
 import { mortgageApplyHref, mortgagePendingDetailHref } from '@/lib/mortgageApplyRoutes'
 import { loanApplyHref, loanPendingDetailHref } from '@/lib/loanApplyRoutes'
+import { listPendingApprovedMortgages } from '@/lib/pendingApprovedMortgageApi'
+import { resolveWalletUserId } from '@/lib/resolveWalletUserId'
+import { isMortgageDownPaymentPending } from '@/lib/postApprovalMortgage'
 
 type PendingKind = 'loan' | 'mortgage'
 type PendingScreenKind = PendingKind | 'all'
@@ -89,12 +92,29 @@ function titleFor(application: StorefrontApplication, kind: PendingKind) {
 
 function mortgageNextStepLabel(application: StorefrontApplication) {
   if (needsFinalApplicationSubmit(application)) return 'Complete application'
+  if (isMortgageDownPaymentPending(application as unknown as Record<string, unknown>)) {
+    return 'Pay down payment'
+  }
   const applicationId = String(application.id ?? application._id ?? '')
   const local = readMortgageWorkflow(applicationId)
   const step = resolveMortgageWorkflowStep(application, local)
   const thread = buildMortgageThread(step)
   const current = thread.find((item) => item.status === 'current')
   return current?.title ?? 'In progress'
+}
+
+function mergeByApplicationId(
+  primary: StorefrontApplication[],
+  secondary: StorefrontApplication[],
+): StorefrontApplication[] {
+  const map = new Map<string, StorefrontApplication>()
+  for (const row of [...secondary, ...primary]) {
+    const id = String(row.id ?? row._id ?? '').trim()
+    if (!id) continue
+    const existing = map.get(id)
+    map.set(id, existing ? { ...existing, ...row } : row)
+  }
+  return Array.from(map.values())
 }
 
 function continueApplyHref(application: StorefrontApplication, kind: PendingKind) {
@@ -137,9 +157,23 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreen
       if (!result.ok) {
         setApplications([])
         setError(result.error)
-      } else {
-        setApplications(result.applications)
+        setLoading(false)
+        return
       }
+
+      let merged = result.applications
+      if (kind === 'mortgage' || kind === 'all') {
+        const userId = await resolveWalletUserId()
+        if (userId) {
+          const approved = await listPendingApprovedMortgages(userId)
+          if (approved.ok && Array.isArray(approved.data)) {
+            merged = mergeByApplicationId(merged, approved.data)
+          }
+        }
+      }
+
+      if (cancelled) return
+      setApplications(merged)
       setLoading(false)
     }
 
@@ -203,7 +237,13 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreen
                 const loanStep = appKind === 'loan' ? resolveLoanWorkflowStep(application, loanLocal) : null
                 const mortgageCta =
                   pendingReady && appKind === 'mortgage' && productId && applicationId && mortgageStep
-                    ? mortgageStepCta(mortgageStep, productId, applicationId)
+                    ? isMortgageDownPaymentPending(application as unknown as Record<string, unknown>)
+                      ? {
+                          label: 'Pay down payment',
+                          href: `${mortgagePendingDetailHref(applicationId)}?action=down_payment`,
+                          modal: 'down_payment' as const,
+                        }
+                      : mortgageStepCta(mortgageStep, productId, applicationId)
                     : null
                 const loanCta =
                   pendingReady && appKind === 'loan' && applicationId && loanStep

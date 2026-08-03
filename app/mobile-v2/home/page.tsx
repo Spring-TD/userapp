@@ -19,6 +19,7 @@ import {
     Building2,
     Clock,
     X,
+    PiggyBank,
 } from 'lucide-react';
 import { CopyableDetailRow } from '@/components/mobile-v2/CopyableDetailRow';
 import { WalletBalanceCardSkeleton } from '@/components/mobile-v2/data-skeletons';
@@ -29,6 +30,7 @@ import { fetchUserWalletTransactions } from '@/lib/services/userWalletApi';
 import {
     formatWalletBalance,
     isVirtualNubanActive,
+    walletSpendableBalance,
     walletTransactionMethodLabel,
     walletTransactionTitle,
 } from '@/lib/userWallet';
@@ -44,6 +46,7 @@ import {
     type StorefrontProductType,
 } from '@/lib/storefrontProducts';
 import type { WalletTransaction } from '@/types/userWallet';
+import { hasPendingMortgageSavings, mortgagePendingSavingsHref } from '@/lib/mortgageDownPaymentSavings';
 
 function profileAvatarUrl(user: ReturnType<typeof useAuthUserProfile>['user']): string | null {
     if (!user) return null
@@ -125,6 +128,7 @@ export default function HomePage() {
     const { wallet, formattedBalance, loading: walletLoading, error: walletError, notFound } = useUserWallet();
     const [recentTransactions, setRecentTransactions] = useState<WalletTransaction[]>([]);
     const [transactionsLoading, setTransactionsLoading] = useState(false);
+    const [showPendingSavings, setShowPendingSavings] = useState(false);
     const nuban = wallet?.virtualNuban;
     const nubanReady = isVirtualNubanActive(wallet);
     const accountHolder = wallet?.name || displayNameFromProfile(profile) || '—';
@@ -143,10 +147,26 @@ export default function HomePage() {
                 link: '/mobile-v2/withdraw',
             },
             { icon: <Clock className="w-6 h-6" />, label: 'Pending', link: '/mobile-v2/pending' },
+            ...(showPendingSavings
+                ? [
+                    {
+                        icon: <PiggyBank className="w-6 h-6" />,
+                        label: 'Pending Savings',
+                        link: mortgagePendingSavingsHref(),
+                    } satisfies QuickActionItem,
+                ]
+                : []),
             { icon: <FileText className="w-6 h-6" />, label: 'Records', link: '/mobile-v2/orders' },
         ];
         return [...productQuickLinks, ...utilityQuickActions];
-    }, [productQuickLinks]);
+    }, [productQuickLinks, showPendingSavings]);
+
+    useEffect(() => {
+        const sync = () => setShowPendingSavings(hasPendingMortgageSavings())
+        sync()
+        window.addEventListener('focus', sync)
+        return () => window.removeEventListener('focus', sync)
+    }, []);
 
     useEffect(() => {
         const userId = wallet?.userId;
@@ -173,6 +193,35 @@ export default function HomePage() {
 
     const avatarSrc = profileAvatarUrl(profile);
     const initials = profileInitials(profile);
+    const balance = wallet ? walletSpendableBalance(wallet) : 0;
+
+    const greetingSubtitle = useMemo(() => {
+        if (profileLoading) return null;
+        if (!profile) return 'Sign in to personalise your home';
+        if (walletError || notFound) return "We're having trouble loading your main wallet";
+        if (balance <= 0) return 'Your main wallet is ready — fund it to get started';
+        return 'Your main wallet balance is up to date';
+    }, [profileLoading, profile, walletError, notFound, balance]);
+
+    const balanceCardLabel = 'Main wallet balance';
+
+    const balanceCardHint = useMemo(() => {
+        if (notFound) {
+            return 'No wallet is linked to your account yet. Sign out and sign in again, or complete signup if you are new.';
+        }
+        if (walletError) return walletError;
+        if (nubanReady) {
+            if (balance <= 0) {
+                return 'Transfer to your virtual account below to fund this wallet.';
+            }
+            return 'Spendable in your central wallet. Top up anytime via your virtual account.';
+        }
+        if (balance > 0) {
+            return 'Spendable balance in your central wallet. Bank transfer funding activates after KYC.';
+        }
+        return fundingUnavailableMessage;
+    }, [notFound, walletError, nubanReady, balance, fundingUnavailableMessage]);
+
     const sortedRecentTransactions = useMemo(
         () => [...recentTransactions].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
         [recentTransactions],
@@ -206,10 +255,8 @@ export default function HomePage() {
                     <p className="text-gray-500 text-[13px] min-h-[1.25rem]">
                         {profileLoading ? (
                             <Skeleton className="mt-0.5 h-4 w-52 max-w-[70vw] rounded-md bg-gray-200/90" aria-hidden />
-                        ) : profile ? (
-                            'Your finances are looking good'
                         ) : (
-                            'Sign in to personalise your home'
+                            greetingSubtitle
                         )}
                     </p>
                 </div>
@@ -245,7 +292,7 @@ export default function HomePage() {
                             </div>
                         </div>
 
-                        <span className="text-sm font-medium text-blue-100 mb-1">Your available balance is</span>
+                        <span className="text-sm font-medium text-blue-100 mb-1">{balanceCardLabel}</span>
                         <h2 className="text-4xl font-bold mb-2 min-h-[2.5rem] flex items-center justify-center gap-2">
                             {walletLoading ? (
                                 <Skeleton className="h-10 w-40 max-w-[70vw] rounded-lg bg-white/25" aria-label="Loading balance" />
@@ -256,13 +303,7 @@ export default function HomePage() {
                             )}
                         </h2>
                         <p className="text-[11px] text-blue-200/90 px-2 text-center max-w-[280px]">
-                            {notFound
-                                ? 'No wallet is linked to your account yet. Sign out and sign in again, or complete signup if you are new.'
-                                : walletError
-                                  ? walletError
-                                  : nubanReady
-                                    ? 'Fund via your virtual account below.'
-                                    : 'Balance reflects your main wallet.'}
+                            {balanceCardHint}
                         </p>
                     </div>
                 </div>

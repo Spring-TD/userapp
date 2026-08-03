@@ -58,6 +58,24 @@ export type StorefrontApplication = {
   metadata?: Record<string, unknown>
   mortgageSelection?: Record<string, unknown>
   product?: Record<string, unknown>
+  /** Present on pending-approved mortgage list/detail responses. */
+  postApprovalFulfillment?: {
+    status?: string
+    downPayment?: {
+      requiredAmount?: number
+      currency?: string
+      paidAt?: string
+      channel?: string
+    }
+    bankDetails?: {
+      merchantReference?: string
+      accountNumber?: string
+      bankName?: string
+      bankCode?: string
+      accountName?: string
+    }
+  }
+  requiredAmount?: number
   account?: {
     id?: string
     accountId?: string
