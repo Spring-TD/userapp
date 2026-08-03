@@ -130,20 +130,32 @@ function provisionStatusTone(status?: string | null): string {
         normalized.includes('under review') ||
         normalized.includes('provision')
     ) {
-        return 'text-orange-500'
+        return 'bg-orange-100 text-orange-700'
+    }
+
+    // Live / operational account
+    if (normalized.includes('active')) {
+        return 'bg-emerald-600 text-white'
+    }
+
+    // Merchant-approved application (not the same stage as Active)
+    if (normalized.includes('approved')) {
+        return 'bg-blue-600 text-white'
     }
 
     if (
-        normalized.includes('active') ||
-        normalized.includes('approved') ||
         normalized.includes('disbursed') ||
         normalized.includes('successful') ||
         normalized.includes('completed')
     ) {
-        return 'text-green-600'
+        return 'bg-teal-600 text-white'
     }
 
-    return 'text-orange-500'
+    if (normalized.includes('reject') || normalized.includes('cancel') || normalized.includes('withdraw')) {
+        return 'bg-red-100 text-red-700'
+    }
+
+    return 'bg-orange-100 text-orange-700'
 }
 
 function normalizeStatusToken(status?: string | null): string {
@@ -366,7 +378,7 @@ function ProductAccountCard({
                                 : account?.bankName || application.productName || 'Product account'}
                     </p>
                 </div>
-                <span className={`shrink-0 rounded-full bg-white px-3 py-1 text-[11px] font-semibold uppercase ${provisionStatusTone(statusLabel)}`}>
+                <span className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold uppercase ${provisionStatusTone(statusLabel)}`}>
                     {statusLabel}
                 </span>
             </div>

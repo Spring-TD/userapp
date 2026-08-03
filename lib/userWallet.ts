@@ -127,10 +127,18 @@ export function walletSpendableBalance(wallet: UserWallet | null | undefined): n
 }
 
 export function formatWalletBalance(amount: number, currency = "NGN"): string {
+  const n = Number(amount)
+  const safe = Number.isFinite(n) ? n : 0
+  const absFormatted = Math.abs(safe).toLocaleString("en-NG", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    useGrouping: true,
+  })
+  const sign = safe < 0 ? "-" : ""
   if (currency === "NGN") {
-    return `₦${amount.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    return `${sign}₦${absFormatted}`
   }
-  return `${currency} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  return `${sign}${currency} ${absFormatted}`
 }
 
 function titleCaseWords(value: string): string {

@@ -351,6 +351,14 @@ export const ENDPOINTS = {
     user: (userId: string) => `/v1/applications/user/${encodeURIComponent(userId)}`,
     approvedAmountSummary: (userId: string) =>
       `/v1/applications/user/${encodeURIComponent(userId)}/approved-amount-summary`,
+    pendingApprovedMortgages: (userId: string) =>
+      `/v1/applications/user/${encodeURIComponent(userId)}/pending-approved-mortgages`,
+    pendingApprovedMortgage: (applicationId: string, userId: string) => {
+      const qs = new URLSearchParams({ userId })
+      return `/v1/applications/${encodeURIComponent(applicationId)}/pending-approved-mortgage?${qs}`
+    },
+    pendingApprovedMortgageDownPayment: (applicationId: string) =>
+      `/v1/applications/${encodeURIComponent(applicationId)}/pending-approved-mortgage/down-payment`,
   },
   pricing: {
     product: (productId: string) => `/v1/pricing/product/${encodeURIComponent(productId)}`,

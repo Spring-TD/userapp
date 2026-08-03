@@ -12,6 +12,14 @@ export function mortgageApplyChoosePaymentHref(productId: string) {
   return `/mobile-v2/products/mortgage/apply/choose-payment?productId=${encodeURIComponent(sanitizeProductId(productId))}`
 }
 
+export function mortgageDownPaymentSavingsHref(productId: string) {
+  return `/mobile-v2/products/mortgage/down-payment-savings?productId=${encodeURIComponent(sanitizeProductId(productId))}`
+}
+
+export function mortgagePendingSavingsHref() {
+  return '/mobile-v2/products/mortgage/pending-savings'
+}
+
 export function mortgagePendingDetailHref(applicationId: string) {
   return `/mobile-v2/products/mortgage/pending/${encodeURIComponent(applicationId)}`
 }

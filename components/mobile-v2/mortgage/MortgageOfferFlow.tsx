@@ -1,18 +1,27 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Calendar, Check, ChevronLeft, Loader2 } from 'lucide-react'
+import { Calendar, Check, ChevronLeft, Landmark, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { CopyableDetailRow } from '@/components/mobile-v2/CopyableDetailRow'
 import { MortgageSheet, MORTGAGE_PRIMARY } from '@/components/mobile-v2/mortgage/MortgageSheet'
 import { mortgagePendingDetailHref } from '@/lib/mortgageApplyRoutes'
 import { patchMortgageWorkflowAsync } from '@/lib/mortgageWorkflow'
+import type { InsufficientCentralWalletBalance } from '@/lib/pendingApprovedLoanApi'
 import { pendingApprovedMortgageApi } from '@/lib/pendingApprovedMortgageApi'
+import {
+  isMortgageDownPaymentPaidOrLater,
+  mortgageDownPaymentDue,
+  mortgageEquityBankDetails,
+  mortgageFulfillmentStatus,
+  type PendingApprovedMortgageDetail,
+} from '@/lib/postApprovalMortgage'
 import { useUserWallet } from '@/hooks/useUserWallet'
 import { formatNaira, formatNgn } from '@/lib/mobileProductDetailDisplay'
+import { formatWalletBalance, isVirtualNubanActive } from '@/lib/userWallet'
 import { cn } from '@/lib/utils'
 
 export type MortgageOfferFlowStep =
@@ -81,31 +90,58 @@ export function MortgageOfferFlow({
   productId,
   applicationId,
   productName,
-  provider,
+  provider: _provider,
   propertyValue,
   downPaymentPercent,
   backHref,
   initialStep = 'schedule_inspection',
 }: MortgageOfferFlowProps) {
   const router = useRouter()
-  const { wallet, formattedBalance, loading: walletLoading } = useUserWallet()
+  const { wallet, formattedBalance, loading: walletLoading, refetch: refetchWallet } = useUserWallet()
   const userId = wallet?.userId
   const [step, setStep] = useState<MortgageOfferFlowStep>(initialStep)
   const [inspectionSheet, setInspectionSheet] = useState<InspectionSheet>('none')
   const [inspectionChoice, setInspectionChoice] = useState<'completed' | 'declined' | null>(null)
   const [paymentSheet, setPaymentSheet] = useState<PaymentSheet>('none')
   const [paying, setPaying] = useState(false)
+  const [payMethod, setPayMethod] = useState<'wallet' | 'bank'>('wallet')
+  const [detail, setDetail] = useState<PendingApprovedMortgageDetail | null>(null)
+  const [insufficient, setInsufficient] = useState<InsufficientCentralWalletBalance | null>(null)
 
   const percent = downPaymentPercent ?? 10
-  const downPaymentAmount = useMemo(() => {
+  const computedFallbackAmount = useMemo(() => {
     if (!propertyValue || Number.isNaN(propertyValue)) return null
     return Math.round(propertyValue * (percent / 100))
   }, [percent, propertyValue])
 
+  const downPaymentAmount = useMemo(() => {
+    const fromApi = mortgageDownPaymentDue(detail)
+    if (fromApi > 0) return fromApi
+    return computedFallbackAmount
+  }, [computedFallbackAmount, detail])
+
   const displayAmount = downPaymentAmount != null ? formatNaira(downPaymentAmount) : formatNgn(propertyValue)
-  const bankName = wallet?.virtualNuban?.bankName || `${provider} Bank`
-  const accountNumber = wallet?.virtualNuban?.accountNumber || '7012345678'
+  const bankDetails = mortgageEquityBankDetails(detail)
+  const alreadyPaid = isMortgageDownPaymentPaidOrLater(mortgageFulfillmentStatus(detail))
+  const nuban = wallet?.virtualNuban
+  const nubanReady = isVirtualNubanActive(wallet)
+  const accountHolder = String(wallet?.name || '').trim() || 'Your central wallet'
   const pendingHref = applicationId ? mortgagePendingDetailHref(applicationId) : backHref
+
+  useEffect(() => {
+    if (!userId || !applicationId || step !== 'down_payment') return
+    let cancelled = false
+    void pendingApprovedMortgageApi.getDetail(applicationId, userId).then((res) => {
+      if (cancelled || !res.ok) return
+      setDetail(res.data)
+      if (isMortgageDownPaymentPaidOrLater(mortgageFulfillmentStatus(res.data))) {
+        setPaymentSheet('success')
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [applicationId, step, userId])
 
   const patch = async (data: Parameters<typeof patchMortgageWorkflowAsync>[1]) => {
     if (!applicationId) return
@@ -187,22 +223,58 @@ export function MortgageOfferFlow({
       toast.error('Sign in to pay down payment.')
       return
     }
+    if (alreadyPaid) {
+      setPaymentSheet('success')
+      return
+    }
     setPaying(true)
     try {
-      const res = await pendingApprovedMortgageApi.payDownPayment(applicationId, userId, 'wallet')
+      const res = await pendingApprovedMortgageApi.payDownPayment(
+        applicationId,
+        userId,
+        downPaymentAmount ?? undefined,
+      )
       if (!res.ok) {
-        const balance = wallet?.balance ?? 0
-        const canPay = downPaymentAmount != null && balance >= downPaymentAmount
+        if (res.insufficient) {
+          setInsufficient(res.insufficient)
+          setPaymentSheet('pending')
+          return
+        }
         setPaymentSheet('pending')
-        toast.error(
-          !canPay
-            ? 'Insufficient wallet balance.'
-            : res.error || 'Could not submit down payment. Please try again.',
-        )
+        toast.error(res.error || 'Could not submit down payment. Please try again.')
         return
       }
-      await patch({ downPaymentConfirmed: true })
+      setDetail(res.data)
+      void refetchWallet()
       setPaymentSheet('success')
+      toast.success('Payment received — awaiting confirmation')
+    } finally {
+      setPaying(false)
+    }
+  }
+
+  const handleRefreshBankPayment = async () => {
+    if (!userId || !applicationId) {
+      toast.error('Sign in to check payment status.')
+      return
+    }
+    setPaying(true)
+    try {
+      const res = await pendingApprovedMortgageApi.pollDownPaymentStatus(applicationId, userId, {
+        attempts: 4,
+        intervalMs: 2000,
+      })
+      if (!res.ok) {
+        toast.error(res.error || 'Could not refresh payment status.')
+        return
+      }
+      setDetail(res.data)
+      if (isMortgageDownPaymentPaidOrLater(mortgageFulfillmentStatus(res.data))) {
+        setPaymentSheet('success')
+        toast.success('Payment received — awaiting confirmation')
+      } else {
+        toast.message('Payment not detected yet. Keep the merchant reference in your transfer narration.')
+      }
     } finally {
       setPaying(false)
     }
@@ -288,33 +360,75 @@ export function MortgageOfferFlow({
                   <span className="text-gray-500">Amount</span>
                   <span className="font-bold text-[var(--sf-ink,#1E293B)]">{displayAmount}</span>
                 </div>
-                <CopyableDetailRow label="Bank Name" value={bankName} />
-                <CopyableDetailRow label="Account Number" value={accountNumber} />
-                <div className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3">
-                  <p className="mb-2 text-xs font-semibold text-gray-500">Payment method</p>
-                  <label className="flex cursor-pointer items-center gap-3">
-                    <input type="radio" name="paymentMethod" defaultChecked className="h-4 w-4 accent-[var(--sf-button,#1E40AF)]" />
-                    <div className="text-left">
-                      <p className="text-sm font-semibold text-[var(--sf-ink,#1E293B)]">Central Wallet</p>
-                      <p className="text-xs text-gray-500">
-                        {walletLoading ? 'Loading balance…' : `Available: ${formattedBalance}`}
-                      </p>
-                    </div>
-                  </label>
+
+                <div className="grid grid-cols-2 gap-2 rounded-2xl border border-gray-100 bg-gray-50 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setPayMethod('wallet')}
+                    className={cn(
+                      'rounded-xl py-2.5 text-xs font-semibold',
+                      payMethod === 'wallet' ? 'bg-[var(--sf-button,#1E40AF)] text-white' : 'text-gray-600',
+                    )}
+                  >
+                    Central Wallet
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPayMethod('bank')}
+                    className={cn(
+                      'rounded-xl py-2.5 text-xs font-semibold',
+                      payMethod === 'bank' ? 'bg-[var(--sf-button,#1E40AF)] text-white' : 'text-gray-600',
+                    )}
+                  >
+                    Bank transfer
+                  </button>
                 </div>
+
+                {payMethod === 'wallet' ? (
+                  <div className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3">
+                    <p className="text-sm font-semibold text-[var(--sf-ink,#1E293B)]">Central Wallet</p>
+                    <p className="text-xs text-gray-500">
+                      {walletLoading ? 'Loading balance…' : `Available: ${formattedBalance}`}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                      Merchant repayment account
+                    </p>
+                    {bankDetails?.accountNumber ? (
+                      <>
+                        <CopyableDetailRow
+                          label="Account Name"
+                          value={bankDetails.accountName || 'Merchant Repayment Wallet'}
+                        />
+                        <CopyableDetailRow label="Account Number" value={bankDetails.accountNumber} />
+                        <CopyableDetailRow label="Bank Name" value={bankDetails.bankName} />
+                      </>
+                    ) : (
+                      <p className="text-xs text-amber-800">
+                        Repayment account not provisioned yet. Use the reference below once available, or
+                        pay from wallet.
+                      </p>
+                    )}
+                    <CopyableDetailRow label="Narration / reference" value={bankDetails?.merchantReference} />
+                  </div>
+                )}
               </div>
               <Button
                 className={cn('mt-8 h-12 w-full max-w-xs rounded-full text-sm font-semibold', MORTGAGE_PRIMARY)}
                 disabled={paying}
-                onClick={() => void handlePayNow()}
+                onClick={() => void (payMethod === 'wallet' ? handlePayNow() : handleRefreshBankPayment())}
               >
                 {paying ? (
                   <span className="inline-flex items-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Processing…
                   </span>
-                ) : (
+                ) : payMethod === 'wallet' ? (
                   'Pay Now'
+                ) : (
+                  "I've paid — refresh status"
                 )}
               </Button>
             </>
@@ -397,30 +511,15 @@ export function MortgageOfferFlow({
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-green-600">
             <Check className="h-8 w-8" />
           </div>
-          <h3 className="text-lg font-bold text-[var(--sf-ink,#1E293B)]">Successful</h3>
-          <p className="mt-2 text-sm text-gray-500">Your down payment has been submitted successfully</p>
+          <h3 className="text-lg font-bold text-[var(--sf-ink,#1E293B)]">
+            Payment received — awaiting confirmation
+          </h3>
+          <p className="mt-2 text-sm text-gray-500">
+            The merchant still needs to confirm receipt before your contract is issued. This is not
+            disbursement yet.
+          </p>
           <Button
             className={cn('mt-8 h-12 w-full rounded-full', MORTGAGE_PRIMARY)}
-            onClick={async () => {
-              await patch({ downPaymentConfirmed: true })
-              setPaymentSheet('none')
-              setStep('contract')
-            }}
-          >
-            Continue
-          </Button>
-        </div>
-      </MortgageSheet>
-
-      <MortgageSheet open={paymentSheet === 'pending'} onClose={() => setPaymentSheet('none')}>
-        <div className="px-2 pb-2 pt-4 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-2xl font-bold text-amber-600">
-            !
-          </div>
-          <h3 className="text-lg font-bold text-[var(--sf-ink,#1E293B)]">Pending</h3>
-          <p className="mt-2 text-sm text-gray-500">We&apos;re reviewing your transaction</p>
-          <Button
-            className={cn('mt-6 h-12 w-full rounded-full', MORTGAGE_PRIMARY)}
             onClick={() => {
               setPaymentSheet('none')
               finishToPending()
@@ -428,6 +527,90 @@ export function MortgageOfferFlow({
           >
             Done
           </Button>
+        </div>
+      </MortgageSheet>
+
+      <MortgageSheet
+        open={paymentSheet === 'pending'}
+        onClose={() => {
+          setPaymentSheet('none')
+          setInsufficient(null)
+        }}
+      >
+        <div className="px-2 pb-2 pt-4">
+          {insufficient ? (
+            <div className="space-y-5 text-left">
+              <div className="text-center">
+                <h3 className="text-lg font-bold text-[var(--sf-ink,#1E293B)]">Top up your central wallet</h3>
+                <p className="mt-2 text-sm text-gray-500">
+                  Transfer at least the shortfall, wait for it to reflect, then retry.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <div className="flex justify-between gap-3">
+                  <span>Required</span>
+                  <span className="font-semibold">
+                    {formatWalletBalance(insufficient.requiredAmount, insufficient.currency)}
+                  </span>
+                </div>
+                <div className="mt-1 flex justify-between gap-3">
+                  <span>Available</span>
+                  <span className="font-semibold">
+                    {formatWalletBalance(insufficient.availableBalance, insufficient.currency)}
+                  </span>
+                </div>
+                <div className="mt-1 flex justify-between gap-3 border-t border-amber-200/80 pt-1">
+                  <span>Shortfall</span>
+                  <span className="font-bold">
+                    {formatWalletBalance(insufficient.shortfall, insufficient.currency)}
+                  </span>
+                </div>
+              </div>
+              <div className="space-y-3 rounded-2xl border border-gray-100 px-4 py-4">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <Landmark className="h-4 w-4 text-[var(--sf-button,#1E40AF)]" />
+                  Fund via bank transfer
+                </div>
+                {nubanReady ? (
+                  <>
+                    <CopyableDetailRow label="Account Holder" value={accountHolder} />
+                    <CopyableDetailRow label="Account Number" value={nuban?.accountNumber} />
+                    <CopyableDetailRow label="Bank Name" value={nuban?.bankName} />
+                  </>
+                ) : (
+                  <p className="text-sm text-gray-600">Your bank transfer account is not active yet.</p>
+                )}
+              </div>
+              <Button
+                className={cn('h-12 w-full rounded-full', MORTGAGE_PRIMARY)}
+                disabled={paying}
+                onClick={() => {
+                  setInsufficient(null)
+                  void refetchWallet()
+                  void handlePayNow()
+                }}
+              >
+                I&apos;ve funded — retry payment
+              </Button>
+            </div>
+          ) : (
+            <div className="text-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-2xl font-bold text-amber-600">
+                !
+              </div>
+              <h3 className="text-lg font-bold text-[var(--sf-ink,#1E293B)]">Pending</h3>
+              <p className="mt-2 text-sm text-gray-500">We couldn&apos;t complete the payment yet.</p>
+              <Button
+                className={cn('mt-6 h-12 w-full rounded-full', MORTGAGE_PRIMARY)}
+                onClick={() => {
+                  setPaymentSheet('none')
+                  finishToPending()
+                }}
+              >
+                Done
+              </Button>
+            </div>
+          )}
         </div>
       </MortgageSheet>
     </div>
