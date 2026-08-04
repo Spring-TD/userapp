@@ -2,9 +2,6 @@ import { apiClient } from "@/lib/api"
 import type { MortgageWorkflowLocalState } from "@/lib/mortgageWorkflow"
 
 export type MortgageWorkflowApiProgress = {
-  virtualTourCompletedAt?: string
-  /** Some backends persist a boolean alongside / instead of the timestamp. */
-  virtualTourCompleted?: boolean
   offerAcceptedAt?: string
   offerDeclinedAt?: string
   inspectionBookedAt?: string
@@ -38,10 +35,7 @@ export function localPatchToApiProgress(
   const now = new Date().toISOString()
   const progress: MortgageWorkflowApiProgress = {}
 
-  if (patch.virtualTourCompleted === true) {
-    progress.virtualTourCompletedAt = now
-    progress.virtualTourCompleted = true
-  }
+  // Virtual tour uses POST …/virtual-inspection/complete — not this loan-workflow patch.
   if (patch.offerAccepted === true) progress.offerAcceptedAt = now
   if (patch.offerDeclined === true || patch.cancelled === true) {
     progress.offerDeclinedAt = now

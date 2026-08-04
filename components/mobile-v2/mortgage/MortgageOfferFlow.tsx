@@ -189,7 +189,7 @@ export function MortgageOfferFlow({
     const res = await pendingApprovedMortgageApi.completeInspection(
       applicationId,
       userId,
-      inspectionChoice === 'completed' ? 'completed' : 'declined',
+      inspectionChoice === 'completed' ? 'completed' : 'declined_offer',
     )
     if (!res.ok) {
       toast.error(res.error || 'Could not update inspection. Please try again.')

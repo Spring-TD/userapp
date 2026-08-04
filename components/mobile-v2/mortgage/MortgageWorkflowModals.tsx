@@ -270,7 +270,8 @@ export function MortgageWorkflowModals({
       if (!startRes.ok) {
         console.warn('[mortgage] inspection/start failed:', startRes.error)
       }
-      const res = await pendingApprovedMortgageApi.completeInspection(applicationId, userId, outcome)
+      const apiOutcome = outcome === 'declined' ? 'declined_offer' : 'completed'
+      const res = await pendingApprovedMortgageApi.completeInspection(applicationId, userId, apiOutcome)
       if (!res.ok) {
         toast.error(res.error || 'Could not update inspection. Please try again.')
         return

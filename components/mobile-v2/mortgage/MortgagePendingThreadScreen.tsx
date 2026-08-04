@@ -15,6 +15,7 @@ import {
   cancelStorefrontApplication,
   type StorefrontApplication,
 } from '@/lib/storefrontApplicationClient'
+import { pendingApprovedMortgageApi } from '@/lib/pendingApprovedMortgageApi'
 import { buildPropertyTourData } from '@/lib/mortgagePropertyTour'
 import { resolveSpringLocalProductLookup } from '@/lib/springLocalProduct'
 import {
@@ -209,19 +210,25 @@ export function MortgagePendingThreadScreen({
 
   const handleVirtualTourComplete = () => {
     void (async () => {
+      const userId = wallet?.userId || String(application.userId || '').trim()
+      if (!userId) {
+        toast.error('Sign in to complete the virtual tour.')
+        return
+      }
+
+      const apiRes = await pendingApprovedMortgageApi.completeVirtualInspection(applicationId, userId)
+      if (!apiRes.ok) {
+        toast.error(apiRes.error || 'Could not sync virtual tour with the bank. Please try again.')
+        return
+      }
+
       const result = await patchMortgageWorkflowAsync(applicationId, { virtualTourCompleted: true })
       if (!result) {
-        toast.error('Could not save virtual tour progress. Please try again.')
+        toast.error('Tour synced, but local progress failed to save. Refresh and continue.')
         return
       }
       refreshWorkflow()
-      if (!result.synced) {
-        toast.error('Tour saved on this device, but the bank did not receive it', {
-          description: result.syncError || 'Open this screen again later, or contact support if Plata stays on Virtual Inspection.',
-        })
-        return
-      }
-      toast.success('Virtual tour completed — waiting for the bank to update')
+      toast.success('Virtual tour completed')
     })()
   }
 
