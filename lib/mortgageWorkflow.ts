@@ -87,27 +87,45 @@ export function patchMortgageWorkflow(
   return next
 }
 
+export type MortgageWorkflowPatchResult = {
+  state: MortgageWorkflowLocalState
+  /** False when local state saved but account-ms sync failed (Plata will not advance). */
+  synced: boolean
+  syncError?: string
+}
+
 /** Persist locally and await API sync (use before navigation on critical steps). */
 export async function patchMortgageWorkflowAsync(
   applicationId: string,
   patch: Partial<MortgageWorkflowLocalState>,
-): Promise<MortgageWorkflowLocalState | null> {
+): Promise<MortgageWorkflowPatchResult | null> {
   const next = applyMortgageWorkflowPatch(applicationId, patch)
   if (!next) return null
   const result = await syncMortgageWorkflowPatchToApi(applicationId, patch, next)
   if (!result.ok) {
     console.warn('[mortgageWorkflow] API sync failed:', result.error)
+    return { state: next, synced: false, syncError: result.error }
   }
-  return next
+  return { state: next, synced: true }
 }
 
+/**
+ * Upsert local workflow state. Creates a minimal record when missing so API sync
+ * still runs (e.g. virtual tour completed from pending screen).
+ */
 function applyMortgageWorkflowPatch(
   applicationId: string,
   patch: Partial<MortgageWorkflowLocalState>,
 ): MortgageWorkflowLocalState | null {
+  if (!applicationId) return null
   const existing = readMortgageWorkflow(applicationId)
-  if (!existing) return null
-  const next = { ...existing, ...patch, applicationId, updatedAt: new Date().toISOString() }
+  const next: MortgageWorkflowLocalState = {
+    applicationId,
+    productId: existing?.productId || String(patch.productId || '').trim(),
+    ...existing,
+    ...patch,
+    updatedAt: new Date().toISOString(),
+  }
   saveMortgageWorkflow(next)
   return next
 }

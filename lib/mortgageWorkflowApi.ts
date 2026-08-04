@@ -3,6 +3,8 @@ import type { MortgageWorkflowLocalState } from "@/lib/mortgageWorkflow"
 
 export type MortgageWorkflowApiProgress = {
   virtualTourCompletedAt?: string
+  /** Some backends persist a boolean alongside / instead of the timestamp. */
+  virtualTourCompleted?: boolean
   offerAcceptedAt?: string
   offerDeclinedAt?: string
   inspectionBookedAt?: string
@@ -16,6 +18,7 @@ type ApiEnvelope = {
   success?: boolean
   error?: string
   message?: string
+  data?: unknown
 }
 
 function parseApiError(data: unknown, status: number): string {
@@ -35,7 +38,10 @@ export function localPatchToApiProgress(
   const now = new Date().toISOString()
   const progress: MortgageWorkflowApiProgress = {}
 
-  if (patch.virtualTourCompleted === true) progress.virtualTourCompletedAt = now
+  if (patch.virtualTourCompleted === true) {
+    progress.virtualTourCompletedAt = now
+    progress.virtualTourCompleted = true
+  }
   if (patch.offerAccepted === true) progress.offerAcceptedAt = now
   if (patch.offerDeclined === true || patch.cancelled === true) {
     progress.offerDeclinedAt = now
