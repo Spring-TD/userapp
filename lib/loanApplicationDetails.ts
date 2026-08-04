@@ -19,8 +19,9 @@ function formatNgn(amount?: number | null, currency = "NGN"): string {
   if (amount == null || !Number.isFinite(amount)) return `${currency}—`
   const symbol = currency === "NGN" ? "N" : `${currency} `
   return `${symbol}${amount.toLocaleString("en-NG", {
-    minimumFractionDigits: 0,
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
+    useGrouping: true,
   })}`
 }
 

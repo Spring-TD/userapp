@@ -12,7 +12,11 @@ export function formatCurrency(amount: number, currency: string = 'NGN'): string
     }
 
     const symbol = symbols[currency] || currency
-    return `${symbol}${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+    return `${symbol}${amount.toLocaleString('en-NG', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+        useGrouping: true,
+    })}`
 }
 
 /**

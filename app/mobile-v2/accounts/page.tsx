@@ -215,9 +215,11 @@ function formatApprovedTotal(amount: number, currency: string): string {
             style: 'currency',
             currency: currency || 'NGN',
             minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+            useGrouping: true,
         }).format(amount)
     } catch {
-        return `${currency || 'NGN'} ${amount.toFixed(2)}`
+        return formatWalletBalance(amount, currency || 'NGN')
     }
 }
 

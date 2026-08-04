@@ -17,6 +17,7 @@ import { YesNoField, PepSearchNotice } from '@/components/mobile-v2/application/
 import type { PepAnswer } from '@/lib/applicantProfileFields';
 import { resolveProductApplicationAccount } from '@/lib/resolveProductApplicationAccount';
 import { resolveWalletUserId } from '@/lib/resolveWalletUserId';
+import { formatWalletBalance } from '@/lib/userWallet';
 
 type FundingFlowStep = 'terms' | 'accountCreated' | 'application' | 'accountDetails' | 'success' | 'failure';
 
@@ -679,7 +680,7 @@ export function ProductFundingFlowSheet({
                     </p>
                     {step === 'failure' ? (
                         <p className="mt-4 text-xs font-medium text-gray-500">
-                            Available balance: ₦{centralWalletBalance.toLocaleString()}
+                            Available balance: {formatWalletBalance(centralWalletBalance)}
                         </p>
                     ) : null}
 

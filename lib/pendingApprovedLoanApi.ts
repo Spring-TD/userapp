@@ -258,7 +258,11 @@ export function formatLoanTermValue(
           minimumFractionDigits: 2,
         }).format(value)
       } catch {
-        return `${options.currency} ${value.toLocaleString("en-NG")}`
+        return `${options.currency} ${value.toLocaleString("en-NG", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+          useGrouping: true,
+        })}`
       }
     }
     return options?.suffix ? `${value}${options.suffix}` : String(value)

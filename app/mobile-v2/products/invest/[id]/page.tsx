@@ -41,7 +41,7 @@ export default function InvestDetailPage() {
             : [
                 [
                     'Amount to invest',
-                    product ? amountRange(product) : amountValue != null ? `NGN${amountValue.toLocaleString('en-NG')}` : 'Flexible amount',
+                    product ? amountRange(product) : amountValue != null ? formatNgn(amountValue) : 'Flexible amount',
                 ],
             ];
     const returnDisplay = product ? `${rateLabel(product)} returns` : 'Returns available';

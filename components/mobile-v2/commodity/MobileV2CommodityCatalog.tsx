@@ -12,13 +12,8 @@ import {
   type CommodityCatalogProduct,
 } from '@/lib/commodityCatalog'
 import { commodityDetailHref } from '@/lib/commodityApplyRoutes'
-import { poweredBy } from '@/lib/mobileProductDetailDisplay'
+import { formatNgn, poweredBy } from '@/lib/mobileProductDetailDisplay'
 import { cn } from '@/lib/utils'
-
-function formatNgn(amount?: number | null) {
-  if (amount == null || Number.isNaN(amount)) return 'NGN—'
-  return `NGN${amount.toLocaleString('en-NG')}`
-}
 
 function FeaturedCommodityCard({ product, providerName }: { product: CommodityCatalogProduct; providerName: string }) {
   const [slide, setSlide] = useState(0)
