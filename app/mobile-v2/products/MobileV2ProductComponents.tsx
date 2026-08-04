@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeletons';
 import { loanApplyStartHref, loanProductApplyDetailHref } from '@/lib/loanApplyRoutes';
 import { mortgageProductApplyDetailHref } from '@/lib/mortgageApplyRoutes';
-import { amountRange, poweredBy, rateLabel } from '@/lib/mobileProductDetailDisplay';
+import { amountRange, formatNgn, poweredBy, rateLabel } from '@/lib/mobileProductDetailDisplay';
 
 // ─── Tab bar shared across all V2 product pages ───────────────────────────────
 const ALL_TABS = ['Mortgage', 'Loan', 'Savings', 'Invest', 'Commodity'] as const;
@@ -161,9 +161,9 @@ export function FeaturedLoanProductCard({ product }: { product: MobileProduct })
     const [slide, setSlide] = React.useState(0);
     const loanAmount =
         product.amountMax != null
-            ? product.amountMax.toLocaleString('en-NG')
+            ? formatNgn(product.amountMax).replace(/^NGN/, '')
             : product.amountMin != null
-                ? product.amountMin.toLocaleString('en-NG')
+                ? formatNgn(product.amountMin).replace(/^NGN/, '')
                 : amountRange(product).replaceAll('NGN', '');
     const provider = poweredBy(displayName || undefined);
 

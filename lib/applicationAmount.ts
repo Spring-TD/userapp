@@ -6,12 +6,22 @@ export function parseApplicationAmount(value: string): number | null {
   return amount
 }
 
+const MONEY_FORMAT: Intl.NumberFormatOptions = {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+  useGrouping: true,
+}
+
+function formatNgnAmount(amount: number): string {
+  return `NGN${amount.toLocaleString('en-NG', MONEY_FORMAT)}`
+}
+
 export function formatApplicationAmountHint(min?: number | null, max?: number | null): string {
   if (min != null && max != null) {
-    return `Enter between NGN${min.toLocaleString('en-NG')} and NGN${max.toLocaleString('en-NG')}`
+    return `Enter between ${formatNgnAmount(min)} and ${formatNgnAmount(max)}`
   }
-  if (min != null) return `Minimum NGN${min.toLocaleString('en-NG')}`
-  if (max != null) return `Maximum NGN${max.toLocaleString('en-NG')}`
+  if (min != null) return `Minimum ${formatNgnAmount(min)}`
+  if (max != null) return `Maximum ${formatNgnAmount(max)}`
   return 'Enter the amount you want to apply for'
 }
 
@@ -21,10 +31,10 @@ export function validateApplicationAmount(
   max?: number | null,
 ): string | null {
   if (min != null && amount < min) {
-    return `Amount must be at least NGN${min.toLocaleString('en-NG')}`
+    return `Amount must be at least ${formatNgnAmount(min)}`
   }
   if (max != null && amount > max) {
-    return `Amount must not exceed NGN${max.toLocaleString('en-NG')}`
+    return `Amount must not exceed ${formatNgnAmount(max)}`
   }
   return null
 }

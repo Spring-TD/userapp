@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button'
 import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 import { mortgageApplyStartHref } from '@/lib/mortgageApplyRoutes'
-import { mortgageDownPaymentSavingsHref } from '@/lib/mortgageDownPaymentSavings'
 import { computeDownPaymentAmount } from '@/lib/mortgageWorkflow'
 import { formatNaira } from '@/lib/mobileProductDetailDisplay'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
@@ -58,7 +57,12 @@ function ChoosePaymentContent() {
 
   const openSavingsPlan = () => {
     sessionStorage.setItem(`mortgage_down_payment_method_${productId}`, 'savings_plan')
-    router.push(mortgageDownPaymentSavingsHref(productId))
+    const qs = new URLSearchParams({
+      from: 'mortgage',
+      productId,
+    })
+    if (downPayment != null) qs.set('goalAmount', String(downPayment))
+    router.push(`/mobile-v2/products/savings?${qs.toString()}`)
   }
 
   return (
@@ -97,7 +101,7 @@ function ChoosePaymentContent() {
               <span>
                 <span className="block text-sm font-semibold text-[var(--sf-ink,#1E293B)]">Savings plan</span>
                 <span className="mt-1 block text-xs text-gray-500">
-                  Build toward your down payment with a Target Savings plan for FI review.
+                  Browse savings products and start saving toward your down payment.
                 </span>
               </span>
             </button>

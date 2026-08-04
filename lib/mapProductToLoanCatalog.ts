@@ -4,12 +4,20 @@ import type { LoanCatalogItem } from "@/types/loanCatalog"
 
 function formatNgnAmount(value: number | undefined): string {
   if (value == null || Number.isNaN(value)) return "NGN—"
-  return `NGN${value.toLocaleString("en-NG")}`
+  return `NGN${value.toLocaleString("en-NG", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    useGrouping: true,
+  })}`
 }
 
 function formatPlainAmount(value: number | undefined): string | null {
   if (value == null || Number.isNaN(value)) return null
-  return value.toLocaleString("en-NG")
+  return value.toLocaleString("en-NG", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    useGrouping: true,
+  })
 }
 
 function amountRange(product: MobileProduct): { formatted: string; plain: string } {

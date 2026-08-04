@@ -38,7 +38,7 @@ import {
   type CommodityPurchaseContext,
 } from '@/lib/commodityApi'
 import { formatNgn, formatNaira, poweredBy } from '@/lib/mobileProductDetailDisplay'
-import { isVirtualNubanActive } from '@/lib/userWallet'
+import { formatWalletBalance, isVirtualNubanActive } from '@/lib/userWallet'
 import { walletSpendableBalance } from '@/lib/userWallet'
 import { YesNoField, PepSearchNotice } from '@/components/mobile-v2/application/ApplicantProfileFields'
 import type { PepAnswer } from '@/lib/applicantProfileFields'
@@ -57,11 +57,7 @@ type PurchaseSummary = {
 }
 
 function formatWalletNgn(amount?: number | null) {
-  if (amount == null || Number.isNaN(amount)) return 'NGN 0.0'
-  return `NGN ${amount.toLocaleString('en-NG', {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  })}`
+  return formatWalletBalance(amount ?? 0, 'NGN')
 }
 
 function formatDateLabel(value?: string | null) {

@@ -1,16 +1,19 @@
 import type { MobileProduct } from '@/lib/storefrontProducts';
 
+const MONEY_FORMAT: Intl.NumberFormatOptions = {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+  useGrouping: true,
+};
+
 export function formatNgn(amount?: number | null): string {
   if (amount == null || Number.isNaN(amount)) return 'NGN—';
-  return `NGN${amount.toLocaleString('en-NG')}`;
+  return `NGN${amount.toLocaleString('en-NG', MONEY_FORMAT)}`;
 }
 
 export function formatNaira(amount?: number | null): string {
   if (amount == null || Number.isNaN(amount)) return 'N0.00';
-  return `N${amount.toLocaleString('en-NG', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  return `N${amount.toLocaleString('en-NG', MONEY_FORMAT)}`;
 }
 
 export function amountRange(product: MobileProduct): string {
