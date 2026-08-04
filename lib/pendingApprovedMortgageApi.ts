@@ -209,14 +209,39 @@ export async function startMortgageInspection(applicationId: string, userId: str
   )
 }
 
+/**
+ * Step 3 — Virtual Inspection (borrower completes property tour in User-App).
+ * `POST …/pending-approved-mortgage/virtual-inspection/complete`
+ */
+export async function completeVirtualInspection(
+  applicationId: string,
+  userId: string,
+  notes?: string,
+) {
+  return postApplication(
+    `/v1/applications/${encodeURIComponent(applicationId)}/pending-approved-mortgage/virtual-inspection/complete`,
+    {
+      userId,
+      ...(notes?.trim() ? { notes: notes.trim() } : {}),
+    },
+  )
+}
+
+/**
+ * Step 6 — Inspection Outcome (accept / reject house after physical visit).
+ * `POST …/pending-approved-mortgage/inspection/complete`
+ * Outcome: `completed` | `declined_offer`
+ */
 export async function completeMortgageInspection(
   applicationId: string,
   userId: string,
-  outcome: "completed" | "declined",
+  outcome: "completed" | "declined_offer" | "declined",
 ) {
+  const normalized: "completed" | "declined_offer" =
+    outcome === "completed" ? "completed" : "declined_offer"
   return postApplication(
     `/v1/applications/${encodeURIComponent(applicationId)}/pending-approved-mortgage/inspection/complete`,
-    { userId, outcome },
+    { userId, outcome: normalized },
   )
 }
 
@@ -309,6 +334,7 @@ export const pendingApprovedMortgageApi = {
   respondToOffer: respondToMortgageOffer,
   scheduleInspection: scheduleMortgageInspection,
   startInspection: startMortgageInspection,
+  completeVirtualInspection,
   completeInspection: completeMortgageInspection,
   payDownPayment: payMortgageDownPayment,
   pollDownPaymentStatus: pollMortgageDownPaymentStatus,

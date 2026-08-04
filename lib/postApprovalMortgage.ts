@@ -47,6 +47,8 @@ export type PostApprovalFulfillment = {
   updatedAt?: string
   currentWorkflowStepId?: string
   completedWorkflowSteps?: string[]
+  virtualTourCompletedAt?: string
+  virtualInspectionCompletedAt?: string
   downPayment?: MortgageDownPaymentInfo
   bankDetails?: MortgageEquityBankDetails
   contract?: {
