@@ -21,7 +21,6 @@ import {
   buildMortgageThread,
   mortgageStepCta,
   mortgageStepToModal,
-  patchMortgageWorkflow,
   patchMortgageWorkflowAsync,
   readMortgageWorkflow,
   resolveMortgageWorkflowStep,
@@ -209,8 +208,21 @@ export function MortgagePendingThreadScreen({
   }, [applicationId, embedded, router, searchParams])
 
   const handleVirtualTourComplete = () => {
-    patchMortgageWorkflow(applicationId, { virtualTourCompleted: true })
-    refreshWorkflow()
+    void (async () => {
+      const result = await patchMortgageWorkflowAsync(applicationId, { virtualTourCompleted: true })
+      if (!result) {
+        toast.error('Could not save virtual tour progress. Please try again.')
+        return
+      }
+      refreshWorkflow()
+      if (!result.synced) {
+        toast.error('Tour saved on this device, but the bank did not receive it', {
+          description: result.syncError || 'Open this screen again later, or contact support if Plata stays on Virtual Inspection.',
+        })
+        return
+      }
+      toast.success('Virtual tour completed — waiting for the bank to update')
+    })()
   }
 
   const handleVirtualTourCancel = async (reason?: string) => {
