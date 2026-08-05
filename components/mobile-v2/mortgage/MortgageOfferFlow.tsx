@@ -144,8 +144,19 @@ export function MortgageOfferFlow({
   }, [applicationId, step, userId])
 
   const patch = async (data: Parameters<typeof patchMortgageWorkflowAsync>[1]) => {
-    if (!applicationId) return
-    await patchMortgageWorkflowAsync(applicationId, data)
+    if (!applicationId) return false
+    const result = await patchMortgageWorkflowAsync(applicationId, data)
+    if (!result) {
+      toast.error('Could not save workflow progress.')
+      return false
+    }
+    if (!result.synced) {
+      toast.error(result.syncError || 'Workflow sync failed', {
+        description: 'Server did not accept the workflow update.',
+      })
+      return false
+    }
+    return true
   }
 
   const finishToPending = () => {
@@ -170,9 +181,13 @@ export function MortgageOfferFlow({
     }
     const startRes = await pendingApprovedMortgageApi.startInspection(applicationId, userId)
     if (!startRes.ok) {
-      console.warn('[mortgage] inspection/start failed:', startRes.error)
+      toast.error(startRes.error || 'Inspection start failed', {
+        description: 'POST …/inspection/start',
+      })
+      return
     }
-    await patch({ inspectionScheduled: true })
+    const ok = await patch({ inspectionScheduled: true })
+    if (!ok) return
     setStep('inspection')
     toast.success('Inspection appointment noted.')
   }
@@ -195,10 +210,11 @@ export function MortgageOfferFlow({
       toast.error(res.error || 'Could not update inspection. Please try again.')
       return
     }
-    await patch({
+    const ok = await patch({
       inspectionCompleted: true,
       ...(inspectionChoice === 'declined' ? { offerDeclined: true, offerAccepted: false } : {}),
     })
+    if (!ok) return
     if (inspectionChoice === 'declined') {
       toast.message('Inspection declined')
       finishToPending()
@@ -290,7 +306,8 @@ export function MortgageOfferFlow({
       toast.error(res.error || 'Could not sign contract. Please try again.')
       return
     }
-    await patch({ contractAccepted: true })
+    const ok = await patch({ contractAccepted: true })
+    if (!ok) return
     toast.success('Contract signed')
     finishToPending()
   }

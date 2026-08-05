@@ -35,7 +35,7 @@ export function localPatchToApiProgress(
   const now = new Date().toISOString()
   const progress: MortgageWorkflowApiProgress = {}
 
-  // Virtual tour uses POST …/virtual-inspection/complete — not this loan-workflow patch.
+  // Virtual tour is synced only via POST …/virtual-inspection/complete — never loan-workflow.
   if (patch.offerAccepted === true) progress.offerAcceptedAt = now
   if (patch.offerDeclined === true || patch.cancelled === true) {
     progress.offerDeclinedAt = now

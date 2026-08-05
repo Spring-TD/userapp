@@ -61,6 +61,17 @@ export type StorefrontApplication = {
   /** Present on pending-approved mortgage list/detail responses. */
   postApprovalFulfillment?: {
     status?: string
+    currentWorkflowStepId?: string
+    completedWorkflowSteps?: string[]
+    virtualInspection?: {
+      completedAt?: string
+      completedByUserId?: string
+      notes?: string
+    }
+    /** @deprecated Prefer virtualInspection.completedAt */
+    virtualTourCompletedAt?: string
+    /** @deprecated Prefer virtualInspection.completedAt */
+    virtualInspectionCompletedAt?: string
     downPayment?: {
       requiredAmount?: number
       currency?: string

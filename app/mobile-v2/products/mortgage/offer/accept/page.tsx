@@ -73,10 +73,20 @@ function AcceptOfferContent() {
         toast.error(apiRes.error || 'Could not accept offer. Please try again.')
         return
       }
-      await patchMortgageWorkflowAsync(applicationId, {
+      const local = await patchMortgageWorkflowAsync(applicationId, {
         offerAccepted: true,
         offerDeclined: false,
       })
+      if (!local) {
+        toast.error('Could not save workflow progress.')
+        return
+      }
+      if (!local.synced) {
+        toast.error(local.syncError || 'Workflow sync failed', {
+          description: 'PATCH …/loan-workflow (mortgageWorkflow)',
+        })
+        return
+      }
       toast.success('Mortgage offer accepted')
       setSheetOpen(false)
       router.replace(pendingHref)
@@ -97,7 +107,20 @@ function AcceptOfferContent() {
         toast.error(apiRes.error || 'Could not decline offer. Please try again.')
         return
       }
-      await patchMortgageWorkflowAsync(applicationId, { offerDeclined: true, offerAccepted: false })
+      const local = await patchMortgageWorkflowAsync(applicationId, {
+        offerDeclined: true,
+        offerAccepted: false,
+      })
+      if (!local) {
+        toast.error('Could not save workflow progress.')
+        return
+      }
+      if (!local.synced) {
+        toast.error(local.syncError || 'Workflow sync failed', {
+          description: 'PATCH …/loan-workflow (mortgageWorkflow)',
+        })
+        return
+      }
       toast.message('Offer declined')
       setSheetOpen(false)
       router.replace(pendingHref)

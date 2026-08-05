@@ -2,6 +2,9 @@ import type { StorefrontApplication } from '@/lib/storefrontApplicationClient'
 import { syncMortgageWorkflowPatchToApi } from '@/lib/mortgageWorkflowApi'
 import {
   extractPostApprovalFulfillment,
+  isVirtualInspectionComplete,
+  normalizeWorkflowStepId,
+  type PostApprovalFulfillment,
   type PostApprovalMortgageStatus,
 } from '@/lib/postApprovalMortgage'
 
@@ -72,19 +75,17 @@ export function saveMortgageWorkflow(state: MortgageWorkflowLocalState) {
   writeAll(all)
 }
 
+/**
+ * @deprecated Fire-and-forget sync hides API failures. Use `patchMortgageWorkflowAsync` and check `synced`.
+ */
 export function patchMortgageWorkflow(
   applicationId: string,
   patch: Partial<MortgageWorkflowLocalState>,
 ): MortgageWorkflowLocalState | null {
-  const next = applyMortgageWorkflowPatch(applicationId, patch)
-  if (next) {
-    void syncMortgageWorkflowPatchToApi(applicationId, patch, next).then((result) => {
-      if (!result.ok) {
-        console.warn('[mortgageWorkflow] API sync failed:', result.error)
-      }
-    })
-  }
-  return next
+  console.error(
+    '[mortgageWorkflow] patchMortgageWorkflow is deprecated — use patchMortgageWorkflowAsync and surface sync errors',
+  )
+  return applyMortgageWorkflowPatch(applicationId, patch)
 }
 
 export type MortgageWorkflowPatchResult = {
@@ -94,18 +95,33 @@ export type MortgageWorkflowPatchResult = {
   syncError?: string
 }
 
-/** Persist locally and await API sync (use before navigation on critical steps). */
+/** Persist locally only after API sync succeeds (when a sync payload exists). */
 export async function patchMortgageWorkflowAsync(
   applicationId: string,
   patch: Partial<MortgageWorkflowLocalState>,
 ): Promise<MortgageWorkflowPatchResult | null> {
+  if (!applicationId) return null
+  const existing = readMortgageWorkflow(applicationId)
+  const preview: MortgageWorkflowLocalState = {
+    applicationId,
+    productId: existing?.productId || String(patch.productId || '').trim(),
+    ...existing,
+    ...patch,
+    updatedAt: new Date().toISOString(),
+  }
+
+  const result = await syncMortgageWorkflowPatchToApi(applicationId, patch, preview)
+  if (!result.ok) {
+    console.error('[mortgageWorkflow] API sync failed — local state not updated:', result.error)
+    return {
+      state: existing || preview,
+      synced: false,
+      syncError: result.error,
+    }
+  }
+
   const next = applyMortgageWorkflowPatch(applicationId, patch)
   if (!next) return null
-  const result = await syncMortgageWorkflowPatchToApi(applicationId, patch, next)
-  if (!result.ok) {
-    console.warn('[mortgageWorkflow] API sync failed:', result.error)
-    return { state: next, synced: false, syncError: result.error }
-  }
   return { state: next, synced: true }
 }
 
@@ -143,28 +159,87 @@ export function initMortgageWorkflowSubmitted(
   })
 }
 
+/**
+ * Drop a stale local tour flag when the backend never recorded virtualInspection.completedAt
+ * (e.g. previous bug wrote localStorage before a failed sync).
+ */
+export function clearUnsyncedVirtualTourFlag(applicationId: string, paf?: unknown) {
+  const local = readMortgageWorkflow(applicationId)
+  if (!local?.virtualTourCompleted) return
+  if (isVirtualInspectionComplete(paf as PostApprovalFulfillment | null | undefined)) return
+  applyMortgageWorkflowPatch(applicationId, { virtualTourCompleted: false })
+}
+
 function isMerchantApproved(application: StorefrontApplication): boolean {
   const workflow = String(application.loanWorkflowStatus || '').toLowerCase()
   const status = String(application.status || '').toLowerCase()
+  const paf = extractPostApprovalFulfillment(application as unknown as Record<string, unknown>)
+  const pafStatus = String(paf?.status || '').toLowerCase()
+  const stepId = normalizeWorkflowStepId(paf?.currentWorkflowStepId)
+
   return (
     workflow === 'approved' ||
     workflow === 'offer_sent' ||
+    workflow === 'offer_pending' ||
     status === 'approved' ||
     status === 'completed' ||
-    status === 'active'
+    status === 'active' ||
+    pafStatus === 'offer_pending' ||
+    pafStatus === 'offer_accepted' ||
+    stepId === 'virtual_tour' ||
+    stepId === 'virtual_inspection' ||
+    stepId === 'offer_letter'
   )
+}
+
+function stepFromCurrentWorkflowStepId(
+  stepId: string,
+  local: MortgageWorkflowLocalState | null,
+  _tourDone: boolean,
+): MortgageWorkflowStep | null {
+  if (!stepId) return null
+  // Trust backend currentWorkflowStepId — do not clamp offer_letter back to virtual_tour.
+  if (stepId === 'virtual_tour' || stepId === 'virtual_inspection') {
+    return 'virtual_tour'
+  }
+  if (stepId === 'offer_letter') {
+    if (!local?.offerLetterDownloaded) return 'offer_letter'
+    if (!local?.offerAccepted) return 'accept_offer'
+    return 'accept_offer'
+  }
+  if (stepId === 'inspection_booking' || stepId === 'appointment' || stepId === 'appointment_scheduled') {
+    return 'book_inspection'
+  }
+  if (stepId === 'inspection_outcome' || stepId === 'physical_inspection') {
+    return local?.inspectionCompleted ? 'down_payment' : 'book_inspection'
+  }
+  if (stepId === 'down_payment' || stepId === 'equity_payment') return 'down_payment'
+  if (stepId === 'contract_issued' || stepId === 'contract_signed') {
+    return local?.contractAccepted ? 'mortgage_allocation' : 'contract_signing'
+  }
+  if (stepId === 'loan_disbursement' || stepId === 'disbursement') return 'mortgage_allocation'
+  if (stepId === 'application_submission' || stepId === 'review_approval') {
+    return 'application_submission'
+  }
+  return null
 }
 
 function stepFromPostApproval(
   status: PostApprovalMortgageStatus,
   local: MortgageWorkflowLocalState | null,
+  paf?: PostApprovalFulfillment | null,
 ): MortgageWorkflowStep {
-  // Docs: offer_pending → accept → offer_accepted → book → appointment → inspect → down payment…
   const offerAcceptedLocally = Boolean(local?.offerAccepted)
+  const tourDone = isVirtualInspectionComplete(paf)
+  const stepId = normalizeWorkflowStepId(paf?.currentWorkflowStepId)
+
+  const fromStep = stepFromCurrentWorkflowStepId(stepId, local, tourDone)
+  if (fromStep) return fromStep
 
   switch (status) {
     case 'offer_pending':
-      if (!local?.virtualTourCompleted) return 'virtual_tour'
+      // No currentWorkflowStepId — only stay on tour while backend is still on virtual_inspection.
+      if (stepId === 'virtual_tour' || stepId === 'virtual_inspection') return 'virtual_tour'
       if (!local?.offerLetterDownloaded) return 'offer_letter'
       if (!offerAcceptedLocally) return 'accept_offer'
       return 'accept_offer'
@@ -203,11 +278,20 @@ export function resolveMortgageWorkflowStep(
   if (local?.cancelled || local?.offerDeclined) return 'declined'
 
   const paf = extractPostApprovalFulfillment(application as unknown as Record<string, unknown>)
-  if (paf?.status) {
-    return stepFromPostApproval(paf.status, local)
+  if (paf) {
+    if (paf.status) {
+      return stepFromPostApproval(paf.status, local, paf)
+    }
+    const fromStep = stepFromCurrentWorkflowStepId(
+      normalizeWorkflowStepId(paf.currentWorkflowStepId),
+      local,
+      isVirtualInspectionComplete(paf),
+    )
+    if (fromStep) return fromStep
   }
 
   // Local-only path (no postApprovalFulfillment yet) — same order as docs.
+  // Never advance past virtual tour from localStorage alone (must sync to backend for Plata).
   if (local?.allocationDownloaded) return 'mortgage_allocation'
   if (local?.contractAccepted) return 'mortgage_allocation'
   if (local?.downPaymentConfirmed) return 'contract_signing'
@@ -215,7 +299,6 @@ export function resolveMortgageWorkflowStep(
   if (local?.inspectionScheduled) return 'book_inspection'
   if (local?.offerAccepted) return 'book_inspection'
   if (local?.offerLetterDownloaded) return 'accept_offer'
-  if (local?.virtualTourCompleted) return 'offer_letter'
   if (isMerchantApproved(application)) return 'virtual_tour'
   return 'application_submission'
 }

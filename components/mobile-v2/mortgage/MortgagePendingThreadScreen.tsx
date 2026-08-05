@@ -12,14 +12,18 @@ import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
 import { useSpringLocalProductForVirtualTour } from '@/hooks/useSpringLocalProductForVirtualTour'
 import { useUserWallet } from '@/hooks/useUserWallet'
 import {
+  applicationUpstreamId,
   cancelStorefrontApplication,
+  fetchUserApplications,
   type StorefrontApplication,
 } from '@/lib/storefrontApplicationClient'
 import { pendingApprovedMortgageApi } from '@/lib/pendingApprovedMortgageApi'
 import { buildPropertyTourData } from '@/lib/mortgagePropertyTour'
 import { resolveSpringLocalProductLookup } from '@/lib/springLocalProduct'
+import { isVirtualInspectionComplete, normalizeWorkflowStepId } from '@/lib/postApprovalMortgage'
 import {
   buildMortgageThread,
+  clearUnsyncedVirtualTourFlag,
   mortgageStepCta,
   mortgageStepToModal,
   patchMortgageWorkflowAsync,
@@ -119,6 +123,77 @@ export function MortgagePendingThreadScreen({
   const [workflowVersion, setWorkflowVersion] = useState(0)
   const [activeModal, setActiveModal] = useState<WorkflowModalKind | null>(null)
   const [virtualTourOpen, setVirtualTourOpen] = useState(false)
+  const [liveApplication, setLiveApplication] = useState<StorefrontApplication>(application)
+
+  useEffect(() => {
+    setLiveApplication(application)
+  }, [application])
+
+  // Clear stale local tour-complete left by failed PATCHes (UI was ahead of Plata).
+  useEffect(() => {
+    const paf = liveApplication.postApprovalFulfillment
+    const before = readMortgageWorkflow(applicationId)
+    clearUnsyncedVirtualTourFlag(applicationId, paf)
+    const after = readMortgageWorkflow(applicationId)
+    if (before?.virtualTourCompleted && !after?.virtualTourCompleted) {
+      setWorkflowVersion((v) => v + 1)
+    }
+  }, [applicationId, liveApplication.postApprovalFulfillment])
+
+  // Keep approval / post-approval state fresh — pending page used to load once and miss Plata approve.
+  useEffect(() => {
+    const userId = wallet?.userId || String(application.userId || '').trim()
+    if (!applicationId || !userId) return
+
+    let cancelled = false
+
+    const refreshLive = async () => {
+      const [listRes, detailRes] = await Promise.all([
+        fetchUserApplications(userId, { productType: 'MORTGAGE', limit: 100 }),
+        pendingApprovedMortgageApi.getDetail(applicationId, userId),
+      ])
+
+      if (cancelled) return
+
+      const fromList =
+        listRes.ok
+          ? listRes.applications.find((item) => String(item.id ?? item._id ?? '') === applicationId)
+          : null
+
+      const detail = detailRes.ok ? detailRes.data : null
+      const detailApp = detail?.application
+      const paf = detail?.postApprovalFulfillment || detailApp?.postApprovalFulfillment
+
+      setLiveApplication((prev) => {
+        const base = fromList || prev
+        return {
+          ...base,
+          ...(fromList || {}),
+          loanWorkflowStatus:
+            fromList?.loanWorkflowStatus ||
+            detailApp?.loanWorkflowStatus ||
+            detail?.loanWorkflowStatus ||
+            base.loanWorkflowStatus,
+          status: fromList?.status || detailApp?.status || base.status,
+          postApprovalFulfillment: (paf || base.postApprovalFulfillment) as StorefrontApplication['postApprovalFulfillment'],
+          upstreamApplicationId:
+            applicationUpstreamId(fromList) ||
+            applicationUpstreamId(base) ||
+            String(detail?.applicationId || '').trim() ||
+            undefined,
+        }
+      })
+    }
+
+    void refreshLive()
+    const timer = window.setInterval(() => {
+      void refreshLive()
+    }, 5000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [applicationId, application.userId, wallet?.userId])
 
   // General product fields (amounts, equity, etc.)
   const { product: catalogProduct } = useMobileProductDetail({
@@ -133,7 +208,7 @@ export function MortgagePendingThreadScreen({
     error: springTourError,
     refetch: refetchSpringTourProduct,
   } = useSpringLocalProductForVirtualTour({
-    application,
+    application: liveApplication,
     enabled: Boolean(productId || productLookup.appId),
   })
 
@@ -158,8 +233,10 @@ export function MortgagePendingThreadScreen({
 
   const product = springTourProduct ?? catalogProduct
 
+  // Re-read local workflow when version bumps after tour/step patches.
+  void workflowVersion
   const local = readMortgageWorkflow(applicationId)
-  const currentStep = resolveMortgageWorkflowStep(application, local)
+  const currentStep = resolveMortgageWorkflowStep(liveApplication, local)
   const thread = buildMortgageThread(currentStep, { workflowComplete: Boolean(local?.allocationDownloaded) })
   const cta =
     productId && applicationId && !local?.allocationDownloaded
@@ -167,11 +244,12 @@ export function MortgagePendingThreadScreen({
       : null
 
   const tourData = useMemo(
-    () => buildPropertyTourData(springTourProduct ?? product, application),
-    [application, product, springTourProduct],
+    () => buildPropertyTourData(springTourProduct ?? product, liveApplication),
+    [liveApplication, product, springTourProduct],
   )
 
-  const propertyValue = product?.properties?.[0]?.value ?? product?.propertyValue ?? product?.amountMax ?? application.amount
+  const propertyValue =
+    product?.properties?.[0]?.value ?? product?.propertyValue ?? product?.amountMax ?? liveApplication.amount
   const downPaymentPercent = product?.equityContribution ?? 10
 
   const openStepModal = useCallback(
@@ -216,41 +294,83 @@ export function MortgagePendingThreadScreen({
         return
       }
 
-      const apiRes = await pendingApprovedMortgageApi.completeVirtualInspection(applicationId, userId)
-      if (!apiRes.ok) {
-        toast.error(apiRes.error || 'Could not sync virtual tour with the bank. Please try again.')
-        return
+      const applyDetail = (detail: Awaited<ReturnType<typeof pendingApprovedMortgageApi.getDetail>>) => {
+        if (!detail.ok) return null
+        const paf = detail.data.postApprovalFulfillment
+        setLiveApplication((prev) => ({
+          ...prev,
+          loanWorkflowStatus:
+            detail.data.application?.loanWorkflowStatus ||
+            detail.data.loanWorkflowStatus ||
+            prev.loanWorkflowStatus,
+          status: detail.data.application?.status || prev.status,
+          postApprovalFulfillment: paf as StorefrontApplication['postApprovalFulfillment'],
+        }))
+        return paf
       }
 
-      const result = await patchMortgageWorkflowAsync(applicationId, { virtualTourCompleted: true })
-      if (!result) {
-        toast.error('Tour synced, but local progress failed to save. Refresh and continue.')
+      // Re-fetch first — backend may already be on offer_letter (complete would 409).
+      const beforeRes = await pendingApprovedMortgageApi.getDetail(applicationId, userId)
+      if (!beforeRes.ok) {
+        toast.error(beforeRes.error || 'Could not load mortgage status')
         return
       }
+      let paf = applyDetail(beforeRes)
+      const stepId = normalizeWorkflowStepId(paf?.currentWorkflowStepId)
+      const alreadyPastTour =
+        isVirtualInspectionComplete(paf) ||
+        (Boolean(stepId) &&
+          stepId !== 'virtual_tour' &&
+          stepId !== 'virtual_inspection' &&
+          stepId !== 'application_submission' &&
+          stepId !== 'review_approval')
+
+      if (!alreadyPastTour) {
+        const apiRes = await pendingApprovedMortgageApi.completeVirtualInspection(applicationId, userId)
+        if (!apiRes.ok) {
+          toast.error(apiRes.error || 'Virtual inspection complete failed', {
+            description: `POST …/pending-approved-mortgage/virtual-inspection/complete${apiRes.status ? ` (${apiRes.status})` : ''}`,
+          })
+          return
+        }
+        const afterRes = await pendingApprovedMortgageApi.getDetail(applicationId, userId)
+        if (!afterRes.ok) {
+          toast.error(afterRes.error || 'Tour POST succeeded, but re-fetch failed', {
+            description: 'GET …/pending-approved-mortgage',
+          })
+          return
+        }
+        paf = applyDetail(afterRes)
+      }
+
+      await patchMortgageWorkflowAsync(applicationId, { virtualTourCompleted: true })
       refreshWorkflow()
-      toast.success('Virtual tour completed')
+      toast.success(alreadyPastTour ? 'Continuing to offer letter' : 'Virtual tour completed')
     })()
   }
 
   const handleVirtualTourCancel = async (reason?: string) => {
     const userId = wallet?.userId || String(application.userId || '').trim()
-    await patchMortgageWorkflowAsync(applicationId, {
+    if (!userId) {
+      toast.error('Sign in to cancel this application.')
+      return
+    }
+    const res = await cancelStorefrontApplication(applicationId, userId, reason)
+    if (!res.ok) {
+      toast.error(res.error || 'Could not cancel application on the server', {
+        description: 'PATCH …/applications/:id (CANCELLED)',
+      })
+      return
+    }
+    const local = await patchMortgageWorkflowAsync(applicationId, {
       cancelled: true,
       offerDeclined: true,
       ...(reason ? { cancelReason: reason } : {}),
     })
-    if (userId) {
-      const res = await cancelStorefrontApplication(applicationId, userId, reason)
-      if (!res.ok) {
-        toast.message('Application cancelled locally', {
-          description: res.error || 'Server cancel may still be pending.',
-        })
-      } else {
-        toast.success('Application cancelled')
-      }
-    } else {
-      toast.success('Application cancelled')
+    if (local && !local.synced) {
+      toast.error(local.syncError || 'Cancelled on server, but local workflow sync failed')
     }
+    toast.success('Application cancelled')
     refreshWorkflow()
     if (!embedded) {
       router.push('/mobile-v2/accounts')
@@ -330,9 +450,14 @@ export function MortgagePendingThreadScreen({
         <div className="mb-4 rounded-2xl bg-white px-4 py-4 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Application</p>
           <h2 className="mt-1 text-base font-bold text-[var(--sf-ink,#1E293B)]">
-            {application.productName || product?.name || 'Mortgage application'}
+            {liveApplication.productName || product?.name || 'Mortgage application'}
           </h2>
-          <p className="mt-2 text-lg font-bold text-[var(--sf-button,#1E40AF)]">{formatAmount(application)}</p>
+          <p className="mt-2 text-lg font-bold text-[var(--sf-button,#1E40AF)]">{formatAmount(liveApplication)}</p>
+          {currentStep === 'application_submission' ? (
+            <p className="mt-2 text-xs text-amber-700">
+              Waiting for the bank to approve — this screen refreshes automatically.
+            </p>
+          ) : null}
         </div>
 
         {workflowCard}

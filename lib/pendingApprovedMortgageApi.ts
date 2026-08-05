@@ -148,6 +148,7 @@ export function normalizePendingApprovedMortgageDetail(
     applicationId,
     id: applicationId || record.id,
     postApprovalFulfillment,
+    offerLetter: record.offerLetter || application?.offerLetter,
     bankDetails: record.bankDetails || postApprovalFulfillment?.bankDetails,
     requiredAmount,
     currency: record.currency || postApprovalFulfillment?.downPayment?.currency || "NGN",
@@ -210,27 +211,11 @@ export async function startMortgageInspection(applicationId: string, userId: str
 }
 
 /**
- * Step 3 — Virtual Inspection (borrower completes property tour in User-App).
- * `POST …/pending-approved-mortgage/virtual-inspection/complete`
- */
-export async function completeVirtualInspection(
-  applicationId: string,
-  userId: string,
-  notes?: string,
-) {
-  return postApplication(
-    `/v1/applications/${encodeURIComponent(applicationId)}/pending-approved-mortgage/virtual-inspection/complete`,
-    {
-      userId,
-      ...(notes?.trim() ? { notes: notes.trim() } : {}),
-    },
-  )
-}
-
-/**
- * Step 6 — Inspection Outcome (accept / reject house after physical visit).
  * `POST …/pending-approved-mortgage/inspection/complete`
- * Outcome: `completed` | `declined_offer`
+ * Body: `{ userId, outcome: "completed" | "declined_offer" }`
+ *
+ * Only valid when backend `currentWorkflowStepId` is `inspection_outcome`
+ * (physical inspection). Do **not** use this for virtual tour.
  */
 export async function completeMortgageInspection(
   applicationId: string,
@@ -242,6 +227,22 @@ export async function completeMortgageInspection(
   return postApplication(
     `/v1/applications/${encodeURIComponent(applicationId)}/pending-approved-mortgage/inspection/complete`,
     { userId, outcome: normalized },
+  )
+}
+
+/**
+ * Virtual inspection (property tour) complete.
+ * `POST …/pending-approved-mortgage/virtual-inspection/complete`
+ * Body: `{ userId }`
+ *
+ * After success, re-fetch GET …/pending-approved-mortgage and drive UI from
+ * `postApprovalFulfillment.currentWorkflowStepId` / `virtualInspection.completedAt`.
+ * Do not PATCH loan-workflow or use virtualTourCompletedAt.
+ */
+export async function completeVirtualInspection(applicationId: string, userId: string) {
+  return postApplication(
+    `/v1/applications/${encodeURIComponent(applicationId)}/pending-approved-mortgage/virtual-inspection/complete`,
+    { userId },
   )
 }
 
