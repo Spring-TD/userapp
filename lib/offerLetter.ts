@@ -13,23 +13,50 @@ export type OfferLetterPayload = {
   signedPdfFileName?: string
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null
+}
+
+function pickPdfFromOfferLike(source: Record<string, unknown> | null | undefined): {
+  pdfUrl?: string
+  pdfFileName?: string
+} {
+  if (!source) return {}
+  const pdfUrl = String(
+    source.pdfUrl || source.documentUrl || source.url || source.fileUrl || "",
+  ).trim()
+  const pdfFileName = String(
+    source.pdfFileName || source.documentFileName || source.fileName || source.name || "",
+  ).trim()
+  return {
+    pdfUrl: pdfUrl || undefined,
+    pdfFileName: pdfFileName || undefined,
+  }
+}
+
 export function extractOfferLetterFromRecord(
   raw: Record<string, unknown> | null | undefined,
 ): OfferLetterPayload | null {
   if (!raw || typeof raw !== "object") return null
 
-  const offerLetter = raw.offerLetter
-  const fromOffer =
-    offerLetter && typeof offerLetter === "object" ? (offerLetter as Record<string, unknown>) : null
+  const application = asRecord(raw.application)
+  const topOfferLetter = asRecord(raw.offerLetter)
+  const nestedOfferLetter = asRecord(application?.offerLetter)
+  const fromOffer = topOfferLetter || nestedOfferLetter
 
-  const paf = raw.postApprovalFulfillment
-  const contract =
-    paf && typeof paf === "object"
-      ? ((paf as Record<string, unknown>).contract as Record<string, unknown> | undefined)
-      : undefined
+  const topPaf = asRecord(raw.postApprovalFulfillment)
+  const nestedPaf = asRecord(application?.postApprovalFulfillment)
+  const paf = topPaf || nestedPaf
+  const contract = asRecord(paf?.contract)
+  const offer = asRecord(paf?.offer)
 
-  const pdfUrl = String(fromOffer?.pdfUrl || contract?.documentUrl || "").trim()
-  const pdfFileName = String(fromOffer?.pdfFileName || contract?.documentFileName || "").trim()
+  const fromOfferPdf = pickPdfFromOfferLike(fromOffer)
+  const fromContractPdf = pickPdfFromOfferLike(contract)
+  const fromPafOfferPdf = pickPdfFromOfferLike(offer)
+
+  const pdfUrl = fromOfferPdf.pdfUrl || fromContractPdf.pdfUrl || fromPafOfferPdf.pdfUrl
+  const pdfFileName =
+    fromOfferPdf.pdfFileName || fromContractPdf.pdfFileName || fromPafOfferPdf.pdfFileName
 
   if (!pdfUrl && !fromOffer) return null
 

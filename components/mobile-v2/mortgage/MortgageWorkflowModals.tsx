@@ -200,17 +200,56 @@ export function MortgageWorkflowModals({
   }, [active])
 
   const patch = async (data: Parameters<typeof patchMortgageWorkflowAsync>[1]) => {
-    await patchMortgageWorkflowAsync(applicationId, data)
+    const result = await patchMortgageWorkflowAsync(applicationId, data)
+    if (!result) {
+      toast.error('Could not save workflow progress.')
+      return false
+    }
+    if (!result.synced) {
+      toast.error(result.syncError || 'Workflow sync failed', {
+        description: 'Server did not accept the workflow update.',
+      })
+      return false
+    }
     onStepAdvanced()
+    return true
   }
 
   const handleDownloadOffer = async () => {
-    if (!offerDocUrl) {
-      toast.error('Offer letter is not available yet. Please try again shortly.')
+    let url = offerDocUrl
+    let name = offerPdfName || 'mortgage-offer-letter.pdf'
+
+    // Letter may land shortly after virtual-tour auto-send — refresh before failing.
+    if (!url && userId) {
+      setBusy(true)
+      try {
+        const res = await pendingApprovedMortgageApi.getDetail(applicationId, userId)
+        if (res.ok) {
+          setDetail(res.data)
+          const letter = extractOfferLetterFromRecord(res.data as unknown as Record<string, unknown>)
+          if (letter?.pdfUrl) {
+            setOfferPdfUrl(letter.pdfUrl)
+            setOfferPdfName(letter.pdfFileName || null)
+            url = letter.pdfUrl
+            name = letter.pdfFileName || name
+          }
+        }
+      } finally {
+        setBusy(false)
+      }
+    }
+
+    if (!url) {
+      toast.error('Offer letter PDF is not on this application yet', {
+        description:
+          'GET …/pending-approved-mortgage has no offerLetter.pdfUrl (or contract.documentUrl). On Plata, open View current offer letter — if that works, storefront GET is missing the URL.',
+      })
       return
     }
-    triggerDownload(offerPdfName || 'mortgage-offer-letter.pdf', offerDocUrl)
-    await patch({ offerLetterDownloaded: true })
+
+    triggerDownload(name, url)
+    const ok = await patch({ offerLetterDownloaded: true })
+    if (!ok) return
     toast.success('Offer letter downloaded')
     onClose()
   }
@@ -244,13 +283,15 @@ export function MortgageWorkflowModals({
         toast.error(res.error || 'Could not book inspection. Please try again.')
         return
       }
-      // Docs: appointment_scheduled → start inspection before complete / down payment.
       const startRes = await pendingApprovedMortgageApi.startInspection(applicationId, userId)
       if (!startRes.ok) {
-        // Booking succeeded; start can be retried when confirming the visit.
-        console.warn('[mortgage] inspection/start failed:', startRes.error)
+        toast.error(startRes.error || 'Inspection booked, but start failed', {
+          description: 'POST …/inspection/start',
+        })
+        return
       }
-      await patch({ inspectionScheduled: true })
+      const ok = await patch({ inspectionScheduled: true })
+      if (!ok) return
       toast.success('Inspection booked')
       onClose()
     } finally {
@@ -265,10 +306,12 @@ export function MortgageWorkflowModals({
     }
     setBusy(true)
     try {
-      // Ensure inspection is started when confirming a prior booking.
       const startRes = await pendingApprovedMortgageApi.startInspection(applicationId, userId)
       if (!startRes.ok) {
-        console.warn('[mortgage] inspection/start failed:', startRes.error)
+        toast.error(startRes.error || 'Could not start inspection', {
+          description: 'POST …/inspection/start',
+        })
+        return
       }
       const apiOutcome = outcome === 'declined' ? 'declined_offer' : 'completed'
       const res = await pendingApprovedMortgageApi.completeInspection(applicationId, userId, apiOutcome)
@@ -277,14 +320,16 @@ export function MortgageWorkflowModals({
         return
       }
       if (outcome === 'declined') {
-        await patch({
+        const ok = await patch({
           inspectionCompleted: true,
           offerDeclined: true,
           offerAccepted: false,
         })
+        if (!ok) return
         toast.message('Inspection declined')
       } else {
-        await patch({ inspectionCompleted: true })
+        const ok = await patch({ inspectionCompleted: true })
+        if (!ok) return
         toast.success('Inspection confirmed')
       }
       onClose()
@@ -305,10 +350,11 @@ export function MortgageWorkflowModals({
         toast.error(apiRes.error || 'Could not accept offer. Please try again.')
         return
       }
-      await patch({
+      const ok = await patch({
         offerAccepted: true,
         offerDeclined: false,
       })
+      if (!ok) return
       toast.success('Mortgage offer accepted')
       onClose()
     } finally {
@@ -328,10 +374,11 @@ export function MortgageWorkflowModals({
         toast.error(apiRes.error || 'Could not decline offer. Please try again.')
         return
       }
-      await patch({
+      const ok = await patch({
         offerAccepted: false,
         offerDeclined: true,
       })
+      if (!ok) return
       toast.message('Mortgage offer declined')
       onClose()
     } finally {
@@ -352,7 +399,8 @@ export function MortgageWorkflowModals({
         toast.error(res.error || 'Could not sign contract. Please try again.')
         return
       }
-      await patch({ contractAccepted: true })
+      const ok = await patch({ contractAccepted: true })
+      if (!ok) return
       toast.success('Signed contract uploaded')
       onClose()
     } finally {
@@ -435,7 +483,8 @@ export function MortgageWorkflowModals({
 
   const handleDownloadAllocation = async () => {
     triggerDownload('mortgage-allocation.pdf', allocationDocUrl)
-    await patch({ allocationDownloaded: true })
+    const ok = await patch({ allocationDownloaded: true })
+    if (!ok) return
     toast.success('Allocation document downloaded')
     onClose()
   }

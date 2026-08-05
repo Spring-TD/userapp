@@ -47,7 +47,15 @@ export type PostApprovalFulfillment = {
   updatedAt?: string
   currentWorkflowStepId?: string
   completedWorkflowSteps?: string[]
+  /** Canonical virtual-tour completion from storefront POST …/virtual-inspection/complete */
+  virtualInspection?: {
+    completedAt?: string
+    completedByUserId?: string
+    notes?: string
+  }
+  /** @deprecated Prefer virtualInspection.completedAt */
   virtualTourCompletedAt?: string
+  /** @deprecated Prefer virtualInspection.completedAt */
   virtualInspectionCompletedAt?: string
   downPayment?: MortgageDownPaymentInfo
   bankDetails?: MortgageEquityBankDetails
@@ -82,8 +90,10 @@ export type PendingApprovedMortgageDetail = {
   application?: {
     id?: string
     productType?: string
+    status?: string
     loanWorkflowStatus?: string
     postApprovalFulfillment?: PostApprovalFulfillment
+    offerLetter?: PendingApprovedMortgageDetail["offerLetter"]
   }
   postApprovalFulfillment?: PostApprovalFulfillment
   bankDetails?: MortgageEquityBankDetails
@@ -116,6 +126,28 @@ export function extractPostApprovalFulfillment(raw: Record<string, unknown>): Po
     if (nested && typeof nested === "object") return nested as PostApprovalFulfillment
   }
   return null
+}
+
+export function normalizeWorkflowStepId(stepId: string | undefined | null): string {
+  return String(stepId || "")
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, "_")
+}
+
+/** Completed-at from POST …/virtual-inspection/complete (authoritative). */
+export function virtualInspectionCompletedAt(
+  paf: PostApprovalFulfillment | null | undefined,
+): string | undefined {
+  if (!paf) return undefined
+  const nested = paf.virtualInspection?.completedAt
+  if (typeof nested === "string" && nested.trim()) return nested.trim()
+  return undefined
+}
+
+/** True when storefront virtual inspection completed (virtualInspection.completedAt only). */
+export function isVirtualInspectionComplete(paf: PostApprovalFulfillment | null | undefined): boolean {
+  return Boolean(virtualInspectionCompletedAt(paf))
 }
 
 export function extractAvailableInspectionDates(
