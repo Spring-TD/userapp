@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { WalletService } from '../services';
 import { TransactionPinService } from '../services/transactionPinService';
 import { logger } from '../utils/logger';
-import { validateInput, createMerchantWalletSchema, createUserWalletSchema, updateWalletBalanceSchema, filterTransactionSchema, transferOutSchema, productApplicationTransferSchema, debitWalletSchema, debitTreasurySchema, billingToKycTransferSchema, kycToBillingTransferSchema, userApiCallSchema, userBankPayoutSchema, settlementBankPayoutSchema, bankNameEnquirySchema, addUserExternalBankAccountSchema } from '../utils/validation';
+import { validateInput, createMerchantWalletSchema, createUserWalletSchema, updateWalletBalanceSchema, filterTransactionSchema, transferOutSchema, productApplicationTransferSchema, debitWalletSchema, debitMerchantWalletSchema, billingToKycTransferSchema, kycToBillingTransferSchema, userApiCallSchema, userBankPayoutSchema, settlementBankPayoutSchema, bankNameEnquirySchema, addUserExternalBankAccountSchema } from '../utils/validation';
 import { UserExternalBankAccountService } from '../services/userExternalBankAccountService';
 import { normalizeMerchantWalletType } from '../utils/merchantWalletType';
 import { MerchantWalletType, TransactionType } from '../models/Wallet';
@@ -47,7 +47,7 @@ interface DebitWalletData {
   description: string;
 }
 
-interface DebitTreasuryData {
+interface DebitRepaymentData {
   merchantId: string;
   amount: number;
   description: string;
@@ -1316,8 +1316,8 @@ export class WalletController {
   }
 
   /**
-   * GET /api/v1/wallets/treasury/:merchantId/transactions
-   * Filter Treasury Wallet transactions by date range and type
+   * GET /api/v1/wallets/repayment/:merchantId/transactions
+   * Filter Repayment Wallet transactions by date range and type
    */
   static async filterRepaymentTransactions(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -1406,8 +1406,8 @@ export class WalletController {
   }
 
   /**
-   * POST /api/v1/wallets/treasury/transfer
-   * Transfer money out from Treasury Wallet to another wallet
+   * POST /api/v1/wallets/repayment/transfer
+   * Transfer money out from Repayment Wallet to another wallet
    */
   static async transferOutFromRepayment(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -1798,7 +1798,7 @@ export class WalletController {
       const appId = typeof req.query.appId === 'string' ? req.query.appId : undefined;
 
       // Validate input data
-      const { error, value } = validateInput<BillingDebitData>(debitTreasurySchema, req.body);
+      const { error, value } = validateInput<BillingDebitData>(debitMerchantWalletSchema, req.body);
       if (error) {
         res.status(400).json({
           success: false,
@@ -1863,7 +1863,7 @@ export class WalletController {
       const appId = typeof req.query.appId === 'string' ? req.query.appId : undefined;
 
       // Validate input data
-      const { error, value } = validateInput<KycDebitData>(debitTreasurySchema, req.body);
+      const { error, value } = validateInput<KycDebitData>(debitMerchantWalletSchema, req.body);
       if (error) {
         res.status(400).json({
           success: false,
@@ -1928,7 +1928,7 @@ export class WalletController {
       const appId = typeof req.query.appId === 'string' ? req.query.appId : undefined;
 
       // Validate input data
-      const { error, value } = validateInput<KycFeeData>(debitTreasurySchema, req.body);
+      const { error, value } = validateInput<KycFeeData>(debitMerchantWalletSchema, req.body);
       if (error) {
         res.status(400).json({
           success: false,
@@ -1975,7 +1975,7 @@ export class WalletController {
   }
 
   /**
-   * POST /api/v1/wallets/treasury/debit
+   * POST /api/v1/wallets/repayment/debit
    * Debit a user wallet (used for billing)
    */
   static async debitUserWallet(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -2057,8 +2057,8 @@ export class WalletController {
   }
 
   /**
-   * POST /api/v1/wallets/treasury/debit-merchant
-   * Debit the merchant's own Treasury Wallet (used for billing)
+   * POST /api/v1/wallets/repayment/debit-merchant
+   * Debit the merchant's own Repayment Wallet
    */
   static async debitRepaymentWallet(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -2074,7 +2074,7 @@ export class WalletController {
       const appId = typeof req.query.appId === 'string' ? req.query.appId : undefined;
 
       // Validate input data
-      const { error, value } = validateInput<DebitTreasuryData>(debitTreasurySchema, req.body);
+      const { error, value } = validateInput<DebitRepaymentData>(debitMerchantWalletSchema, req.body);
       if (error) {
         res.status(400).json({
           success: false,

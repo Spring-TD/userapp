@@ -12,6 +12,7 @@ import complianceBvnService from './complianceBvnService';
 import clientAuthUserService from './clientAuthUserService';
 import merchantDisplayNameService from './merchantDisplayNameService';
 import { notifySavingsPlanCreated } from './productFlowNotificationService';
+import walletService from './walletService';
 import type { CreateSavingsAccountRequest, SavingsAccountResponse } from '../types/savingsAccount';
 
 function headerValue(req: Request, name: string): string | undefined {
@@ -293,6 +294,48 @@ class SavingsAccountService {
 
       if (!upstream.upstreamApplicationId) {
         throw new ApiError(502, 'Plata did not return a savings application id');
+      }
+
+      // Spring PRODUCT wallet powers storefront savings totals and transfer-to-primary.
+      try {
+        const springWallet = await walletService.ensureProductWallet({
+          userId: resolvedInput.userId.trim(),
+          merchantId: offeringMerchantId,
+          applicationId: application._id.toString(),
+          productId: product.id,
+          productName: product.name,
+          productType: product.type,
+          appId,
+          currency: application.currency
+        });
+        const nuban = springWallet.wallet.virtualNuban;
+        if (nuban?.accountNumber || !application.productWallet?.upstreamAccount?.accountNumber) {
+          application.productWallet = {
+            walletId: springWallet.wallet.id,
+            walletPurpose: springWallet.wallet.walletPurpose || 'PRODUCT',
+            reusedUpstreamAccount: springWallet.reusedUpstreamAccount === true,
+            upstreamAccount: {
+              accountNumber: nuban?.accountNumber,
+              bankName: nuban?.bankName,
+              bankCode: nuban?.bankCode,
+              providerReference: nuban?.providerReference,
+              provisionStatus:
+                (nuban?.provisionStatus as 'active' | 'failed' | undefined) ||
+                (nuban?.accountNumber ? 'active' : 'failed'),
+              provisionError: nuban?.provisionError
+            }
+          };
+          if (nuban?.accountNumber) {
+            application.upstreamSyncError = undefined;
+          }
+        }
+      } catch (walletError) {
+        const message =
+          walletError instanceof Error ? walletError.message : 'Failed to ensure Spring product wallet';
+        console.warn('Savings Spring PRODUCT wallet ensure failed (enrollment continues):', message);
+        if (!application.upstreamSyncError) {
+          application.upstreamSyncError = message;
+        }
       }
 
       await application.save();

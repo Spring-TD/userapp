@@ -15,6 +15,7 @@ import type { UserProductTypeSummary } from '../types/productTypeSummary';
 import {
   PRODUCT_MS_SETTLEMENT_SOURCE,
   resolveLoanTransferCharge,
+  notifyProductMsApplyTransferOut,
   type LoanTransferChargeCollectionResult,
   type LoanTransferChargeContext
 } from './productMsClient';
@@ -215,16 +216,14 @@ export class WalletService {
       if (!skipAutoCreate) {
         const existingWallets = await this.getAllMerchantWallets(data.merchantId, data.appId);
         if (existingWallets.success && existingWallets.wallets) {
-          const hasSettlement = existingWallets.wallets.some(
-            w =>
-              w.merchantWalletType === MerchantWalletType.REPAYMENT || w.merchantWalletType === ('TREASURY' as MerchantWalletType)
+          const hasRepayment = existingWallets.wallets.some(
+            w => w.merchantWalletType === MerchantWalletType.REPAYMENT
           );
           const hasBilling = existingWallets.wallets.some(
-            w =>
-              w.merchantWalletType === MerchantWalletType.BILLING || w.merchantWalletType === ('OPERATION' as MerchantWalletType)
+            w => w.merchantWalletType === MerchantWalletType.BILLING
           );
           const hasKYC = existingWallets.wallets.some(w => w.merchantWalletType === MerchantWalletType.KYC);
-          if (!hasSettlement || !hasBilling || !hasKYC) {
+          if (!hasRepayment || !hasBilling || !hasKYC) {
             const autoCreateResult = await this.createAllMerchantWallets(
               data.merchantId,
               data.currency,
@@ -1082,6 +1081,29 @@ export class WalletService {
           success: false,
           error: transferResult.error || 'Failed to transfer product application balance'
         };
+      }
+
+      const productTypeForSync = String(productWallet.productType || '').toUpperCase();
+      if (productTypeForSync === 'INVESTMENT' || productTypeForSync === 'SAVINGS') {
+        const referenceId =
+          transferResult.transaction?.id ||
+          transferResult.transaction?.referenceId ||
+          `transfer-to-primary:${transferData.applicationId}:${Date.now()}`;
+        const sync = await notifyProductMsApplyTransferOut({
+          userId: transferData.userId,
+          applicationId: transferData.applicationId,
+          amount: transferData.amount,
+          referenceId,
+          description: transferData.description
+        });
+        if (!sync.success) {
+          logger.warn('Product transfer-to-primary wallet move succeeded but snapshot sync failed', {
+            userId: transferData.userId,
+            applicationId: transferData.applicationId,
+            amount: transferData.amount,
+            error: sync.error
+          });
+        }
       }
 
       return {

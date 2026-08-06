@@ -176,6 +176,14 @@ router.use(auditLog);
 // Apply service authentication middleware to allow service-to-service requests
 router.use(authenticateService);
 
+/**
+ * Public storefront branding (KYC company logo).
+ * GET /api/v1/kyc/merchants/:merchantId/branding
+ * GET /api/v1/kyc/merchant-branding?merchantId=… (or x-tenant-merchant-id)
+ */
+router.get('/merchants/:merchantId/branding', KYCController.getMerchantBranding);
+router.get('/merchant-branding', KYCController.getMerchantBranding);
+
 /** product-ms: merchant business profile enrichment for loan workflow snapshots. */
 router.get(
   '/internal/business-info/:merchantId',

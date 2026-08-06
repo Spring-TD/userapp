@@ -142,7 +142,6 @@ export class SpecialService {
       switch (walletType) {
         case 'REPAYMENT':
         case 'SETTLEMENT':
-        case 'TREASURY':
           url = `${this.WALLET_SERVICE_URL}/api/v1/wallets/repayment/${merchantId}/transactions`;
           break;
         case 'BILLING':

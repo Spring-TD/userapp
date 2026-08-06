@@ -973,6 +973,40 @@ Checks an individual or business against international sanctions lists. Uses Pre
 }
 ```
 
+### Get Merchant Branding (KYC company logo)
+**`GET /api/v1/kyc/merchants/:merchantId/branding`**
+
+Public endpoint for storefront / frontend to display the merchant’s KYC company logo (`companyLogoUrl` uploaded during business KYC).
+
+Also available as:
+- **`GET /api/v1/kyc/merchant-branding?merchantId=…`**
+- Header fallback: `x-tenant-merchant-id`
+
+**Authentication**: None (public)
+
+**Success Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "merchantId": "merchant_1774844182734_rm0g5u27l",
+    "ownerUserId": "69c9f91770dec15687e44dbf",
+    "companyName": "Example Business Ltd",
+    "companyLogoUrl": "https://cdn.example/kyc/.../logo.png",
+    "website": "https://example.com"
+  }
+}
+```
+
+**Error Response (404 Not Found):** branding / business info not submitted yet.
+
+### Get Own Business Branding
+**`GET /api/v1/kyc/business/branding`**
+
+Authenticated merchant shortcut returning the same branding payload for the logged-in merchant.
+
+**Authentication**: Requires valid JWT token for business customers
+
 ### Get Business Information
 **`GET /api/v1/kyc/business/business-info`**
 

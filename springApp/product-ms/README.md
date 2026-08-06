@@ -460,6 +460,7 @@ Resume by reading the same application through `GET /api/v1/applications/{applic
 - `GET /api/v1/applications/summary` — status counts (`total`, `pending`, `approved`, `rejected`, `blacklisted`) with the same auth and query filters as the list (except `status` is not applied to the summary).
 - `GET /api/v1/applications/pending` — pending applications, with the same admin/merchant access rules.
 - `GET /api/v1/applications/user/:userId` — applications for an end user. Optional query: `appId`, `status`, `productType` (no merchant scoping unless you also send a merchant JWT on `GET /api/v1/applications?userId=…`).
+- `GET /api/v1/applications/user/:userId/approved-amount-summary?appId=:appId` — backend-calculated totals and application counts by product type. Only applications whose canonical Spring status is `APPROVED` are included; omitted types return zero. Storefronts should use `data.summary.LOAN.totalAmount` for the Total Loan card rather than summing the application list.
 - `GET /api/v1/applications/:id` — application detail.
 
 Loan and mortgage approval/rejection is not performed locally by SpringApp. Submit completed applications upstream to Plata, then update underwriting state in Plata's loan workflow.

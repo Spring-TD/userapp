@@ -205,6 +205,7 @@ router.get('/status', KYCController.getKYCStatus);
 router.get('/documents', KYCController.getAllKYCDocuments);
 router.get('/document/:documentId', KYCController.getKYCDocument);
 router.get('/business-info', KYCController.getBusinessInfo);
+router.get('/branding', KYCController.getOwnBusinessBranding);
 router.get('/business-survey', KYCController.getBusinessSurvey);
 router.get('/business-type-options', KYCController.getBusinessTypeOptions);
 router.get('/industry-type-options', KYCController.getIndustryTypeOptions);

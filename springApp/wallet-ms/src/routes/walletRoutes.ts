@@ -13,19 +13,15 @@ router.get('/merchant/:merchantId/type/:walletType', authenticate, WalletControl
 router.get('/merchant/:merchantId/all', authenticate, WalletController.getAllMerchantWallets);
 router.put('/merchant/balance', authenticate, authorizeMerchant, WalletController.updateMerchantWalletBalance);
 
-// Repayment Wallet routes (formerly "Settlement"; legacy /settlement/* and /treasury/* aliases retained)
+// Repayment Wallet routes (legacy /settlement/* aliases retained)
 router.get('/repayment/:merchantId/transactions', authenticate, authorizeMerchant, WalletController.filterRepaymentTransactions);
 router.get('/settlement/:merchantId/transactions', authenticate, authorizeMerchant, WalletController.filterRepaymentTransactions);
-router.get('/treasury/:merchantId/transactions', authenticate, authorizeMerchant, WalletController.filterRepaymentTransactions);
 router.post('/repayment/transfer', authenticate, authorizeMerchant, WalletController.transferOutFromRepayment);
 router.post('/settlement/transfer', authenticate, authorizeMerchant, WalletController.transferOutFromRepayment);
-router.post('/treasury/transfer', authenticate, authorizeMerchant, WalletController.transferOutFromRepayment);
 router.post('/repayment/debit', authenticate, authorizeMerchant, WalletController.debitUserWallet);
 router.post('/settlement/debit', authenticate, authorizeMerchant, WalletController.debitUserWallet);
-router.post('/treasury/debit', authenticate, authorizeMerchant, WalletController.debitUserWallet);
 router.post('/repayment/debit-merchant', authenticate, authorizeMerchant, WalletController.debitRepaymentWallet);
 router.post('/settlement/debit-merchant', authenticate, authorizeMerchant, WalletController.debitRepaymentWallet);
-router.post('/treasury/debit-merchant', authenticate, authorizeMerchant, WalletController.debitRepaymentWallet);
 router.post('/repayment/payout', authenticate, authorizeMerchant, WalletController.payoutRepaymentWalletToBank);
 router.post('/settlement/payout', authenticate, authorizeMerchant, WalletController.payoutRepaymentWalletToBank);
 

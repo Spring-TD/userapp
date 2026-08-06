@@ -58,6 +58,25 @@ jest.mock('../services/merchantDisplayNameService', () => ({
   }
 }));
 
+jest.mock('../services/walletService', () => ({
+  __esModule: true,
+  default: {
+    ensureProductWallet: jest.fn().mockResolvedValue({
+      wallet: {
+        id: 'spring-product-wallet-1',
+        walletPurpose: 'PRODUCT',
+        virtualNuban: {
+          accountNumber: '7582360692',
+          bankName: 'Globus Bank',
+          bankCode: '103',
+          provisionStatus: 'active'
+        }
+      },
+      reusedUpstreamAccount: true
+    })
+  }
+}));
+
 const mockedFindById = ProductModel.findById as jest.MockedFunction<typeof ProductModel.findById>;
 const mockedFindOne = ProductApplicationModel.findOne as jest.MockedFunction<typeof ProductApplicationModel.findOne>;
 const mockedCreate = ProductApplicationModel.create as jest.MockedFunction<typeof ProductApplicationModel.create>;

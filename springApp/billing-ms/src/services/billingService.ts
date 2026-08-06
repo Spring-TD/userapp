@@ -243,7 +243,7 @@ export class BillingService {
       const walletServiceUrl = process.env.WALLET_SERVICE_URL || 'http://localhost:3004';
       
       // Debit the user's wallet
-      const response = await axios.post(`${walletServiceUrl}/api/v1/wallets/treasury/debit`, {
+      const response = await axios.post(`${walletServiceUrl}/api/v1/wallets/repayment/debit`, {
         userId,
         amount,
         description

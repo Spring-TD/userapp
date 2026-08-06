@@ -10,6 +10,7 @@ import {
   resolveLoanChargeOnProductTransfer,
   collectLoanChargeOnProductTransfer
 } from '../services/settlement/loanTransferSettlementService';
+import productTransferOutService from '../services/productTransferOutService';
 import {
   isSpacesConfigured,
   uploadToSpaces,
@@ -27,6 +28,7 @@ import type {
   UpdateProductApplicationStatusRequest
 } from '../types/productApplication';
 import type { ApplicationAuthRequest } from '../middleware/applicationAuth';
+import { getAccessTokenUser } from '../utils/gatewayUser';
 
 class ProductApplicationController {
   getPlataLoanWorkflowWebhookStatus = async (_req: Request, res: Response): Promise<void> => {
@@ -321,6 +323,69 @@ class ProductApplicationController {
     }
   };
 
+  applyProductTransferOut = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const applicationId = String(req.params.applicationId || '').trim();
+      const body = (req.body || {}) as {
+        userId?: string;
+        amount?: number;
+        referenceId?: string;
+        description?: string;
+      };
+      const userId = typeof body.userId === 'string' ? body.userId.trim() : '';
+      const amount = typeof body.amount === 'number' ? body.amount : Number(body.amount);
+      if (!applicationId || !userId) {
+        throw new ApiError(400, 'applicationId and userId are required');
+      }
+      if (!(amount > 0) || !Number.isFinite(amount)) {
+        throw new ApiError(400, 'amount must be a positive number');
+      }
+
+      const result = await productTransferOutService.applyTransferOut(applicationId, {
+        userId,
+        amount,
+        referenceId: typeof body.referenceId === 'string' ? body.referenceId : undefined,
+        description: typeof body.description === 'string' ? body.description : undefined
+      });
+
+      res.status(200).json({
+        success: true,
+        duplicate: result.duplicate,
+        data: {
+          application: result.application,
+          balance: result.balance
+        }
+      });
+    } catch (error) {
+      this.handleError(error, res, 'Error applying product transfer-out to application snapshot');
+    }
+  };
+
+  syncProductWalletBalance = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const applicationId = String(req.params.applicationId || '').trim();
+      if (!applicationId) {
+        throw new ApiError(400, 'applicationId is required');
+      }
+
+      const result = await productTransferOutService.syncProductWalletBalance(applicationId);
+
+      res.status(200).json({
+        success: true,
+        duplicate: result.duplicate,
+        data: {
+          application: result.application,
+          walletId: result.walletId,
+          ledgerBalance: result.ledgerBalance,
+          walletBalanceBefore: result.walletBalanceBefore,
+          credited: result.credited
+        }
+      });
+    } catch (error) {
+      this.handleError(error, res, 'Error syncing product wallet balance');
+    }
+  };
+
   submitApplication = async (req: Request, res: Response): Promise<void> => {
     try {
       const body = (req.validatedBody ?? req.body) as SubmitProductApplicationRequest;
@@ -435,6 +500,26 @@ class ProductApplicationController {
       });
     } catch (error) {
       this.handleError(error, res, 'Error listing user product applications');
+    }
+  };
+
+  getUserApprovedAmountSummary = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const appId =
+        typeof req.query.appId === 'string' && req.query.appId.trim()
+          ? req.query.appId.trim()
+          : undefined;
+      const summary = await productApplicationService.summarizeApprovedAmountsForUser(
+        req.params.userId,
+        appId
+      );
+
+      res.json({
+        success: true,
+        data: summary
+      });
+    } catch (error) {
+      this.handleError(error, res, 'Error summarizing approved user applications');
     }
   };
 
@@ -598,6 +683,24 @@ class ProductApplicationController {
     }
   };
 
+  completePendingMortgageVirtualInspection = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const body = req.validatedBody as { userId: string; notes?: string };
+      const data = await pendingApprovedMortgageService.completeVirtualInspection(
+        req.params.id,
+        body.userId,
+        { notes: body.notes }
+      );
+      res.status(200).json({
+        success: true,
+        message: 'Virtual inspection completed',
+        data
+      });
+    } catch (error) {
+      this.handleError(error, res, 'Error completing mortgage virtual inspection');
+    }
+  };
+
   completePendingMortgageInspection = async (req: Request, res: Response): Promise<void> => {
     try {
       const body = req.validatedBody as { userId: string; outcome: 'completed' | 'declined_offer' };
@@ -702,6 +805,26 @@ class ProductApplicationController {
     }
   };
 
+  payPendingLoanDownPayment = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const body = req.validatedBody as { userId: string; method: 'wallet' };
+      const gatewayUser = getAccessTokenUser(req);
+      if (!gatewayUser?.userId) {
+        throw new ApiError(401, 'Valid user access token is required for loan down payment');
+      }
+      if (body.userId && body.userId !== gatewayUser.userId) {
+        throw new ApiError(403, 'userId does not match the authenticated user');
+      }
+      const data = await pendingApprovedLoanService.payDownPayment(
+        req.params.id,
+        gatewayUser.userId
+      );
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      this.handleError(error, res, 'Error paying loan down payment');
+    }
+  };
+
   uploadPendingLoanSignedContract = async (req: Request & { file?: any }, res: Response): Promise<void> => {
     try {
       const userId = String(req.body?.userId ?? '').trim();
@@ -758,7 +881,8 @@ class ProductApplicationController {
     if (error instanceof ApiError) {
       res.status(error.statusCode).json({
         success: false,
-        error: error.message
+        error: error.message,
+        ...(error.data !== undefined ? { data: error.data } : {})
       });
       return;
     }

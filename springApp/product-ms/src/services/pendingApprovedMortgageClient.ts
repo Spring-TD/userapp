@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { config } from '../config/environment';
+import { ApiError } from '../middleware/errorHandler';
 
 function productMsPlataBaseUrl(): string {
   return config.plataProductServicePublicUrl.replace(/\/+$/, '');
@@ -52,9 +53,7 @@ async function postProxy<T>(
     response.data?.error ||
     response.data?.message ||
     `Plata pending-approved-mortgage proxy failed (${response.status})`;
-  const error = new Error(message) as Error & { statusCode?: number };
-  error.statusCode = response.status;
-  throw error;
+  throw new ApiError(response.status, message);
 }
 
 async function getProxy<T>(localApplicationId: string): Promise<T> {
@@ -80,9 +79,7 @@ async function getProxy<T>(localApplicationId: string): Promise<T> {
     response.data?.error ||
     response.data?.message ||
     `Plata pending-approved-mortgage fetch failed (${response.status})`;
-  const error = new Error(message) as Error & { statusCode?: number };
-  error.statusCode = response.status;
-  throw error;
+  throw new ApiError(response.status, message);
 }
 
 export type UpstreamPendingApprovedMortgage = Record<string, unknown>;
@@ -112,6 +109,13 @@ export async function proxyStartMortgageInspection(
   springUserId?: string
 ): Promise<UpstreamPendingApprovedMortgage> {
   return postProxy(localApplicationId, '/inspection/start', springUserId ? { springUserId } : {});
+}
+
+export async function proxyCompleteMortgageVirtualInspection(
+  localApplicationId: string,
+  input?: { notes?: string; springUserId?: string }
+): Promise<UpstreamPendingApprovedMortgage> {
+  return postProxy(localApplicationId, '/virtual-inspection/complete', input ?? {});
 }
 
 export async function proxyCompleteMortgageInspection(

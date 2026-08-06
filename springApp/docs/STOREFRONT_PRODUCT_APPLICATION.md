@@ -585,6 +585,18 @@ When approved with deferred disbursement:
 | Complete inspection | `POST` | `/api/v1/applications/{id}/pending-approved-mortgage/inspection/complete` |
 | Down payment | `POST` | `/api/v1/applications/{id}/pending-approved-mortgage/down-payment` |
 
+Step detail includes `bankDetails` for bank transfer UI:
+
+```json
+{
+  "accountNumber": "0123456789",
+  "bankName": "Globus Bank",
+  "bankCode": "00103",
+  "accountName": "Merchant Repayment Wallet",
+  "merchantReference": "equity-payment:{upstreamApplicationId}"
+}
+```
+
 Offer body example:
 
 ```json
@@ -592,6 +604,18 @@ Offer body example:
 ```
 
 (`decision`: `accept` | `decline`)
+
+---
+
+## 8A) Post-approval (LOAN)
+
+- `GET /api/v1/applications/{id}/pending-approved-loan?userId={userId}` returns `data.terms` with the approved amount, remaining down payment, interest rate, total repayable, repayment frequency, tenor, repayment automation, and disbursement date. Unknown unsnapshotted terms are returned as `null`; they are not guessed.
+- `POST /api/v1/applications/{id}/pending-approved-loan/down-payment` with `{ "userId": "…", "method": "wallet" }` performs one idempotent Spring wallet transfer from the user's Central Wallet to the app-scoped Repayment Wallet. The same request then records the payment on Plata and accepts the offer; retries do not debit twice.
+- If the Central Wallet is short, the endpoint returns `402`, `data.code = "INSUFFICIENT_CENTRAL_WALLET_BALANCE"`, the required amount, and available balance. Route the user to Fund Wallet, then retry the same request.
+- If no down payment is required (or it was already paid), the endpoint only completes the idempotent offer acceptance.
+- Merchant Treasury disbursement is still manual after acceptance; the storefront must not treat acceptance as disbursement.
+
+Successful down-payment responses return the refreshed pending-loan detail plus `data.payment` (`amount`, `currency`, `duplicate`, `centralWalletBalance`, and transaction IDs when available). The frontend should read `data.terms.downPaymentDue` and `data.application.postApprovalFulfillment.status` instead of calculating payment state locally.
 
 ---
 

@@ -24,6 +24,13 @@ export type SettlementCollectResult = {
   insufficientFunds?: boolean;
   error?: string;
   transactionId?: string;
+  userTransactionId?: string;
+  userWallet?: {
+    id?: string;
+    mainBalance?: number;
+    ledgerBalance?: number;
+    currency?: string;
+  };
   principalAmount?: number;
 };
 
@@ -150,6 +157,13 @@ export async function collectToSettlementWallet(
       transaction?: { id?: string };
       repaymentTransaction?: { id?: string };
       settlementTransaction?: { id?: string };
+      userTransaction?: { id?: string };
+      userWallet?: {
+        id?: string;
+        mainBalance?: number;
+        ledgerBalance?: number;
+        currency?: string;
+      };
     };
   };
 
@@ -157,12 +171,19 @@ export async function collectToSettlementWallet(
     return {
       success: true,
       duplicate: body.duplicate === true,
-      transactionId: body.data?.repaymentTransaction?.id ?? body.data?.settlementTransaction?.id ?? body.data?.transaction?.id
+      transactionId: body.data?.repaymentTransaction?.id ?? body.data?.settlementTransaction?.id ?? body.data?.transaction?.id,
+      userTransactionId: body.data?.userTransaction?.id,
+      userWallet: body.data?.userWallet
     };
   }
 
   if (response.status === 402) {
-    return { success: false, insufficientFunds: true, error: body.error || 'Insufficient user wallet balance for settlement collection' };
+    return {
+      success: false,
+      insufficientFunds: true,
+      error: body.error || 'Insufficient user wallet balance for repayment collection',
+      userWallet: body.data?.userWallet
+    };
   }
 
   return {

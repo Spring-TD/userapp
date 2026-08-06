@@ -4,7 +4,8 @@ export class ApiError extends Error {
   constructor(
     public statusCode: number,
     message: string,
-    public isOperational = true
+    public isOperational = true,
+    public data?: unknown
   ) {
     super(message);
     Object.setPrototypeOf(this, new.target.prototype);
@@ -30,6 +31,7 @@ export const errorHandler = (
   res.status(statusCode).json({
     success: false,
     error: message,
+    ...(err.data !== undefined ? { data: err.data } : {}),
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
 };

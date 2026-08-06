@@ -232,7 +232,7 @@ describe('BillingService', () => {
         expect(result.success).toBe(true);
         expect(result.transaction).toBeDefined();
         expect(mockedAxios.post).toHaveBeenCalledWith(
-          'http://localhost:3004/api/v1/wallets/treasury/debit',
+          'http://localhost:3004/api/v1/wallets/repayment/debit',
           { userId, amount, description },
           { timeout: 5000 }
         );

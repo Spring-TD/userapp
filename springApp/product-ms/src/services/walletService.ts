@@ -27,6 +27,8 @@ export interface ProductWallet {
   productType?: string;
   appId?: string;
   currency?: string;
+  mainBalance?: number;
+  balance?: number;
   virtualNuban?: {
     accountNumber?: string;
     bankName?: string;

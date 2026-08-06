@@ -79,6 +79,7 @@ export interface ProductApplication {
 export type PlataLoanWorkflowStatus = 'under_review' | 'approved' | 'declined' | 'blacklisted';
 
 export type PostApprovalMortgageStatus =
+  | 'virtual_inspection_pending'
   | 'offer_pending'
   | 'offer_declined'
   | 'offer_accepted'
@@ -91,6 +92,12 @@ export type PostApprovalMortgageStatus =
   | 'contract_issued'
   | 'contract_signed'
   | 'disbursed';
+
+export interface PostApprovalMortgageVirtualInspection {
+  startedAt?: string;
+  completedAt?: string;
+  notes?: string;
+}
 
 export interface PostApprovalMortgageOffer {
   sentAt: string;
@@ -136,6 +143,10 @@ export interface PostApprovalMortgageContract {
 
 export interface PostApprovalFulfillment {
   status: PostApprovalMortgageStatus;
+  workflowStepOrder?: string[];
+  currentWorkflowStepId?: string;
+  completedWorkflowSteps?: string[];
+  virtualInspection?: PostApprovalMortgageVirtualInspection;
   offer?: PostApprovalMortgageOffer;
   appointment?: PostApprovalMortgageAppointment;
   inspection?: PostApprovalMortgageInspection;
@@ -150,6 +161,8 @@ export interface PendingApprovedMortgageBankDetails {
   accountNumber?: string;
   bankName?: string;
   bankCode?: string;
+  /** PayOnUs / virtual-account display name (usually the merchant wallet name). */
+  accountName?: string;
   merchantReference?: string;
 }
 
@@ -179,6 +192,25 @@ export interface PendingApprovedLoanDetail {
   equityRequiredAmount?: number;
   currency?: string;
   centralWalletAvailable: boolean;
+  payment?: {
+    method: 'wallet';
+    amount: number;
+    currency: string;
+    duplicate: boolean;
+    centralWalletBalance: number | null;
+    userTransactionId?: string;
+    repaymentTransactionId?: string;
+  };
+  terms: {
+    approvedAmount: number;
+    downPaymentDue: number;
+    interestRate: number | null;
+    totalRepayable: number | null;
+    repaymentFrequency: string | null;
+    tenorMonths: number | null;
+    automaticRepayment: boolean | null;
+    estimatedDisbursementDate: string | null;
+  };
   offerLetter?: {
     html: string;
     text: string;
@@ -348,4 +380,17 @@ export interface ApplicationSummary {
   approved: number;
   rejected: number;
   blacklisted: number;
+}
+
+export interface ApprovedApplicationAmountBucket {
+  totalAmount: number;
+  applicationCount: number;
+  currency: string;
+}
+
+export interface ApprovedApplicationAmountSummary {
+  userId: string;
+  appId?: string;
+  status: 'APPROVED';
+  summary: Record<string, ApprovedApplicationAmountBucket>;
 }

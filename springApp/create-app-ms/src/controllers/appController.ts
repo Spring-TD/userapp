@@ -145,7 +145,7 @@ export class AppController {
         detail: app.subdomain ? `Default URL: ${buildDefaultAppUrl(app.subdomain)}` : ''
       });
 
-      // Create merchant internal wallets for this app (Billing, KYC, Settlement)
+      // Create merchant internal wallets for this app (Billing, KYC, Repayment)
       const merchantWalletsResult = await WalletService.createAllMerchantWallets(app.id, authHeader, app.name);
       // App creation succeeds even if wallet provisioning fails; handle retries separately.
       if (!merchantWalletsResult.success) {

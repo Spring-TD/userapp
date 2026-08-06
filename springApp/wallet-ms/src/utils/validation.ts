@@ -46,11 +46,11 @@ const descriptionSchema = Joi.string().min(1).max(500).optional().messages({
 });
 
 const merchantWalletTypeSchema = Joi.string()
-  .valid('BILLING', 'KYC', 'REPAYMENT', 'SETTLEMENT', 'TREASURY', 'OPERATION')
+  .valid('BILLING', 'KYC', 'REPAYMENT', 'SETTLEMENT', 'OPERATION')
   .optional()
   .messages({
     'any.only':
-      'Merchant wallet type must be one of BILLING, KYC, REPAYMENT (legacy: SETTLEMENT, TREASURY, OPERATION)'
+      'Merchant wallet type must be one of BILLING, KYC, REPAYMENT (legacy: SETTLEMENT, OPERATION)'
   });
 
 const dateSchema = Joi.date().iso().optional().messages({
@@ -153,7 +153,7 @@ export const getTransactionHistorySchema = Joi.object({
   walletId: walletIdSchema
 });
 
-// Treasury Wallet validation schemas
+// Wallet transaction validation schemas
 export const filterTransactionSchema = Joi.object({
   startDate: dateSchema,
   endDate: dateSchema,
@@ -178,7 +178,7 @@ export const debitWalletSchema = Joi.object({
   description: descriptionSchema
 });
 
-export const debitTreasurySchema = Joi.object({
+export const debitMerchantWalletSchema = Joi.object({
   merchantId: merchantIdSchema.required(),
   amount: amountSchema,
   description: descriptionSchema

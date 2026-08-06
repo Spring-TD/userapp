@@ -189,7 +189,7 @@
  *           type: string
  *     responses:
  *       200:
- *         description: Treasury, Operation and KYC wallets for app
+ *         description: Billing, KYC and Repayment wallets for app
  * /api/v1/apps/{id}/transactions:
  *   get:
  *     summary: Get transactions for app

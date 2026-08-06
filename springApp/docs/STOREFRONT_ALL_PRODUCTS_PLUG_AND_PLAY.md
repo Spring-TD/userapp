@@ -336,7 +336,19 @@ Poll application / notify user when workflow advances.
 | Appointment / inspection / contract | `…/appointment`, `…/inspection/start`, `…/inspection/complete`, `…/contract/sign`, `…/contract/upload-signed` |
 | Down payment | `POST …/pending-approved-mortgage/down-payment` |
 
-Down-payment / equity bank transfer uses `merchantReference` shaped like `equity-payment:{upstreamApplicationId}` (from step detail). Wallet path credits repayment collection when configured.
+Down-payment / equity bank transfer uses the merchant **REPAYMENT** virtual account from step detail:
+
+```json
+"bankDetails": {
+  "accountNumber": "0123456789",
+  "bankName": "Globus Bank",
+  "bankCode": "00103",
+  "accountName": "AG Mortgage Bank Repayment",
+  "merchantReference": "equity-payment:{upstreamApplicationId}"
+}
+```
+
+Pay the required amount into that account and use `merchantReference` as the transfer narration/reference. Wallet path credits repayment collection when configured.
 
 **Loan pending-approved**
 

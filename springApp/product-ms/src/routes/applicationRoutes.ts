@@ -16,8 +16,10 @@ import {
   submitProductApplicationRequirementsSchema,
   respondToPendingMortgageOfferSchema,
   respondToPendingLoanOfferSchema,
+  payPendingLoanDownPaymentSchema,
   schedulePendingMortgageInspectionSchema,
   completePendingMortgageInspectionSchema,
+  completePendingMortgageVirtualInspectionSchema,
   signPendingMortgageContractSchema,
   payPendingMortgageDownPaymentSchema,
   pendingApprovedMortgageUserParamSchema
@@ -68,6 +70,16 @@ router.post(
   requireWalletInternalToken,
   productApplicationController.collectLoanChargeOnProductTransfer
 );
+router.post(
+  '/internal/:applicationId/apply-transfer-out',
+  requireWalletInternalToken,
+  productApplicationController.applyProductTransferOut
+);
+router.post(
+  '/internal/:applicationId/sync-product-wallet',
+  requireWalletInternalToken,
+  productApplicationController.syncProductWalletBalance
+);
 router.get(
   '/internal/:localApplicationId/applicant-profile',
   requireVerifiedGatewayMerchant,
@@ -93,6 +105,10 @@ router.get('/webhooks/plata/loan-workflow', productApplicationController.getPlat
 router.post('/webhooks/plata/loan-workflow', productApplicationController.handlePlataLoanWorkflowWebhook);
 router.get('/webhooks/plata/guarantor-kyc', productApplicationController.getPlataGuarantorKycWebhookStatus);
 router.post('/webhooks/plata/guarantor-kyc', productApplicationController.handlePlataGuarantorKycWebhook);
+router.get(
+  '/user/:userId/approved-amount-summary',
+  productApplicationController.getUserApprovedAmountSummary
+);
 router.get('/user/:userId', productApplicationController.listUserApplications);
 router.get(
   '/user/:userId/pending-approved-mortgages',
@@ -106,6 +122,11 @@ router.post(
   '/:id/pending-approved-mortgage/offer',
   validate(respondToPendingMortgageOfferSchema),
   productApplicationController.respondToPendingMortgageOffer
+);
+router.post(
+  '/:id/pending-approved-mortgage/virtual-inspection/complete',
+  validate(completePendingMortgageVirtualInspectionSchema),
+  productApplicationController.completePendingMortgageVirtualInspection
 );
 router.post(
   '/:id/pending-approved-mortgage/appointment',
@@ -149,6 +170,11 @@ router.post(
   '/:id/pending-approved-loan/offer',
   validate(respondToPendingLoanOfferSchema),
   productApplicationController.respondToPendingLoanOffer
+);
+router.post(
+  '/:id/pending-approved-loan/down-payment',
+  validate(payPendingLoanDownPaymentSchema),
+  productApplicationController.payPendingLoanDownPayment
 );
 router.post(
   '/:id/pending-approved-loan/contract/upload-signed',

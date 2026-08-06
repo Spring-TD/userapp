@@ -371,6 +371,11 @@ export const respondToPendingMortgageOfferSchema = Joi.object({
 
 export const respondToPendingLoanOfferSchema = respondToPendingMortgageOfferSchema;
 
+export const payPendingLoanDownPaymentSchema = Joi.object({
+  userId: Joi.string().trim().required(),
+  method: Joi.string().valid('wallet').default('wallet')
+});
+
 export const schedulePendingMortgageInspectionSchema = Joi.object({
   userId: Joi.string().trim().required(),
   scheduledFor: Joi.string().isoDate().required(),
@@ -381,6 +386,11 @@ export const schedulePendingMortgageInspectionSchema = Joi.object({
 export const completePendingMortgageInspectionSchema = Joi.object({
   userId: Joi.string().trim().required(),
   outcome: Joi.string().valid('completed', 'declined_offer').required()
+});
+
+export const completePendingMortgageVirtualInspectionSchema = Joi.object({
+  userId: Joi.string().trim().required(),
+  notes: Joi.string().trim().max(500).optional()
 });
 
 export const signPendingMortgageContractSchema = Joi.object({

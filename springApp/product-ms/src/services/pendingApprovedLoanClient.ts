@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { config } from '../config/environment';
+import { ApiError } from '../middleware/errorHandler';
 
 function productMsPlataBaseUrl(): string {
   return config.plataProductServicePublicUrl.replace(/\/+$/, '');
@@ -52,9 +53,7 @@ async function postProxy<T>(
     response.data?.error ||
     response.data?.message ||
     `Plata pending-approved-loan proxy failed (${response.status})`;
-  const error = new Error(message) as Error & { statusCode?: number };
-  error.statusCode = response.status;
-  throw error;
+  throw new ApiError(response.status, message);
 }
 
 async function getProxy<T>(localApplicationId: string): Promise<T> {
@@ -80,9 +79,7 @@ async function getProxy<T>(localApplicationId: string): Promise<T> {
     response.data?.error ||
     response.data?.message ||
     `Plata pending-approved-loan fetch failed (${response.status})`;
-  const error = new Error(message) as Error & { statusCode?: number };
-  error.statusCode = response.status;
-  throw error;
+  throw new ApiError(response.status, message);
 }
 
 export type UpstreamPendingApprovedLoan = Record<string, unknown>;
@@ -98,4 +95,16 @@ export async function proxyRespondToLoanOffer(
   input: { action: 'accept' | 'decline'; acceptedTerms?: boolean; springUserId?: string }
 ): Promise<UpstreamPendingApprovedLoan> {
   return postProxy(localApplicationId, '/offer', input);
+}
+
+export async function proxyLoanDownPayment(
+  localApplicationId: string,
+  input: {
+    amount?: number;
+    providerReference?: string;
+    acceptedTerms: true;
+    springUserId?: string;
+  }
+): Promise<UpstreamPendingApprovedLoan> {
+  return postProxy(localApplicationId, '/down-payment', input);
 }

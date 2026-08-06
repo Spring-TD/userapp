@@ -24,6 +24,15 @@ import { KYCProfileModel } from '../models/KYCProfileModel';
 import { normalizeBvnTo11Digits } from '../utils/bvnNormalize';
 import { BusinessDocumentType, BUSINESS_DOCUMENT_DISPLAY_NAMES } from '../types/kycTypes';
 import { notifyRetailKycDecision } from './retailKycNotificationService';
+import { clientAuthService } from './clientAuthService';
+
+export interface MerchantBrandingPublic {
+  merchantId: string;
+  ownerUserId: string;
+  companyName: string | null;
+  companyLogoUrl: string | null;
+  website: string | null;
+}
 
 /** Map API shareholder shape to ShareholderModel document (document URLs stored in DO Spaces) */
 function shareholderToDoc(userId: string, s: any): Record<string, unknown> {
@@ -88,7 +97,6 @@ import {
 import { cacService, CACVerificationResult } from './cacService';
 import { premblyService, PremblyIndividualKYCRequest, PremblyBusinessKYCRequest } from './premblyService';
 import { fuspayModularKycService } from './fuspayModularKycService';
-import { clientAuthService } from './clientAuthService';
 import { normalizeCountryToAlpha2 } from '../utils/countryCode';
 
 // Service class for KYC operations
@@ -745,6 +753,72 @@ export class KYCService {
     } catch (error) {
       return { success: false, error: 'Error retrieving business information' };
     }
+  }
+
+  /**
+   * Public storefront branding: KYC company logo + name for a tenant merchantId.
+   * Resolves merchant owner via client-auth, then reads business_infos.companyLogoUrl.
+   */
+  async getMerchantBranding(merchantId: string): Promise<{
+    success: boolean;
+    data?: MerchantBrandingPublic;
+    error?: string;
+  }> {
+    const mid = String(merchantId || '').trim();
+    if (!mid) {
+      return { success: false, error: 'merchantId is required' };
+    }
+
+    let ownerUserId: string | undefined;
+    const ownerLookup = await clientAuthService.getMerchantOwnerUserId(mid);
+    if (ownerLookup.success && ownerLookup.userId) {
+      ownerUserId = ownerLookup.userId;
+    } else {
+      // Fallback: some callers already pass the owner userId (legacy internal shape).
+      const direct = await BusinessInfoModel.findOne({ userId: mid }).lean();
+      if (direct) {
+        ownerUserId = mid;
+      }
+    }
+
+    if (!ownerUserId) {
+      return {
+        success: false,
+        error: ownerLookup.error || 'Merchant owner not found'
+      };
+    }
+
+    const businessInfo = await BusinessInfoModel.findOne({ userId: ownerUserId }).lean();
+    if (!businessInfo) {
+      const profileResult = await this.getBusinessInfo(ownerUserId);
+      if (!profileResult.success || !profileResult.data) {
+        return {
+          success: false,
+          error: 'No business branding found for this merchant (complete KYC business info first)'
+        };
+      }
+      return {
+        success: true,
+        data: {
+          merchantId: mid,
+          ownerUserId,
+          companyName: profileResult.data.companyName?.trim() || null,
+          companyLogoUrl: profileResult.data.companyLogoUrl?.trim() || null,
+          website: profileResult.data.website?.trim() || null
+        }
+      };
+    }
+
+    return {
+      success: true,
+      data: {
+        merchantId: mid,
+        ownerUserId,
+        companyName: (businessInfo as any).companyName?.trim() || null,
+        companyLogoUrl: (businessInfo as any).companyLogoUrl?.trim() || null,
+        website: (businessInfo as any).website?.trim() || null
+      }
+    };
   }
 
   // Get business survey data for a user (from business_surveys collection)

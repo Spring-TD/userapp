@@ -6,9 +6,7 @@ const LEGACY_TO_CURRENT: Record<string, MerchantWalletType> = {
   SETTLEMENT: MerchantWalletType.REPAYMENT
 };
 
-/**
- * Normalize API / webhook input (accepts legacy TREASURY / OPERATION / SETTLEMENT).
- */
+/** Normalize current API values and unambiguous stored legacy names. */
 export function normalizeMerchantWalletType(value?: string): MerchantWalletType | undefined {
   if (!value) return undefined;
   const v = value.trim().toUpperCase();
@@ -22,17 +20,12 @@ export function normalizeMerchantWalletType(value?: string): MerchantWalletType 
 /**
  * DB lookup keys for a logical wallet type (current + legacy stored values).
  *
- * Spring apps created before the SETTLEMENT rename often store repayment as either
- * `SETTLEMENT` or (older still) `KYC` in Mongo. Unlike Backend-platter/Plata, Spring
- * keeps a distinct **KYC** merchant wallet (link fee pool) alongside BILLING + REPAYMENT,
- * so `KYC` is included here only for legacy lookup purposes — it is intentionally NOT
- * lazily rewritten to REPAYMENT (see `database.ts#getMerchantWalletByType`), to avoid
- * clobbering a real KYC fee wallet when both coexist on an app.
+ * Spring has a distinct KYC fee wallet, so KYC must never satisfy a REPAYMENT lookup.
+ * Only the unambiguous stored names OPERATION and SETTLEMENT are retained for migration.
  */
 export function merchantWalletTypesForLookup(type: MerchantWalletType): string[] {
   const legacy = Object.entries(LEGACY_TO_CURRENT)
     .filter(([, current]) => current === type)
     .map(([legacyType]) => legacyType);
-  const springLegacyRepayment = type === MerchantWalletType.REPAYMENT ? ['KYC'] : [];
-  return [...new Set([type, ...legacy, ...springLegacyRepayment])];
+  return [...new Set([type, ...legacy])];
 }

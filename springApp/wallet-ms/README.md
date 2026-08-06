@@ -49,8 +49,8 @@ db.wallets.dropIndex("merchantId_1_appId_1_merchantWalletType_1")
 - `POST /api/v1/wallets/kyc/fee` - Process KYC fee by debiting the merchant's KYC Wallet
 
 ### Repayment Wallet Operations (formerly "Settlement")
-- `GET /api/v1/wallets/repayment/:merchantId/transactions` - Get Repayment wallet transactions (legacy: `/settlement/...`, `/treasury/...`)
-- `POST /api/v1/wallets/repayment/transfer` - Transfer money from Repayment Wallet to another wallet (legacy: `/settlement/transfer`, `/treasury/transfer`)
+- `GET /api/v1/wallets/repayment/:merchantId/transactions` - Get Repayment wallet transactions (legacy: `/settlement/...`)
+- `POST /api/v1/wallets/repayment/transfer` - Transfer money from Repayment Wallet to another wallet (legacy: `/settlement/transfer`)
 - `POST /api/v1/wallets/treasury/debit` - Debit a user wallet
 - `POST /api/v1/wallets/repayment/debit-merchant` - Debit the merchant's own Repayment Wallet (legacy: `/settlement/debit-merchant`, `/treasury/debit-merchant`)
 - `POST /api/v1/wallets/repayment/payout` - Payout from Repayment wallet to external bank account (PayOnUs; requires active Repayment NUBAN) (legacy: `/settlement/payout`)
@@ -184,7 +184,7 @@ Used by **client-auth-ms** (signup) and **compliance-ms** (post–KYC, KYC link 
 
 ### Funding Callbacks
 - `POST /api/v1/wallets/funding/callback` - Webhook endpoint for funding notifications from payment providers
-  - **Supports merchant wallet funding**: Use `merchantId` + `merchantWalletType` (`BILLING`, `KYC`, or `REPAYMENT`; legacy `SETTLEMENT` / `TREASURY` / `OPERATION` accepted). For **app-scoped** merchant wallets, include **`appId`** so the correct wallet row is resolved.
+  - **Supports merchant wallet funding**: Use `merchantId` + `merchantWalletType` (`BILLING`, `KYC`, or `REPAYMENT`; unambiguous legacy `SETTLEMENT` / `OPERATION` values are normalized). `KYC` always means the distinct KYC fee wallet and never Repayment. For **app-scoped** merchant wallets, include **`appId`** so the correct wallet row is resolved.
   - **Supports user wallet funding (by walletId)**: Use `walletId`
   - **Supports user wallet funding (by user)**: Use `userId` + `merchantId`
   - **PayOnUs / virtual account**: If the body includes **`accountNumber`** or **`virtual_account_number`** and no wallet identifiers yet, the service looks up the wallet by stored Payonus NUBAN and fills `walletId`, `merchantId`, `appId` (merchant), and `merchantWalletType` as appropriate. Normalizes common PayOnUs fields (`onusReference`, `paymentStatus`, `transactionAmount`, `businessId`, etc.). Verifies the **`hash`** header (or body `hash`) when `PAYONUS_WEBHOOK_*` is configured.
@@ -193,13 +193,13 @@ Used by **client-auth-ms** (signup) and **compliance-ms** (post–KYC, KYC link 
 
 #### Funding Callback Usage Examples
 
-**Example 1: Fund Merchant Treasury Wallet**
+**Example 1: Fund Merchant Repayment Wallet**
 ```bash
 curl -X POST "https://wallet-ms.fly.dev/api/v1/wallets/funding/callback" \
   -H "Content-Type: application/json" \
   -d '{
     "merchantId": "merchant-123",
-    "merchantWalletType": "TREASURY",
+    "merchantWalletType": "REPAYMENT",
     "amount": 1000.00,
     "currency": "USD",
     "transactionId": "txn-ext-001",
@@ -218,7 +218,7 @@ Response:
   "data": {
     "walletId": "wallet_1234567890",
     "merchantId": "merchant-123",
-    "merchantWalletType": "TREASURY",
+    "merchantWalletType": "REPAYMENT",
     "newMainBalance": 1000.00,
     "newLedgerBalance": 1000.00,
     "transactionId": "txn-ext-001"
@@ -226,19 +226,19 @@ Response:
 }
 ```
 
-**Example 2: Fund Merchant Operation Wallet**
+**Example 2: Fund Merchant Billing Wallet**
 ```bash
 curl -X POST "https://wallet-ms.fly.dev/api/v1/wallets/funding/callback" \
   -H "Content-Type: application/json" \
   -d '{
     "merchantId": "merchant-123",
-    "merchantWalletType": "OPERATION",
+    "merchantWalletType": "BILLING",
     "amount": 500.00,
     "currency": "USD",
     "transactionId": "txn-ext-002",
     "paymentMethod": "CARD",
     "status": "COMPLETED",
-    "description": "Card payment for operations"
+    "description": "Card payment for billing"
   }'
 ```
 

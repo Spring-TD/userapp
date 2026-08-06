@@ -94,3 +94,65 @@ export async function resolveLoanTransferCharge(input: {
     return { error: 'Failed to contact product-ms for loan charge resolution' };
   }
 }
+
+export async function notifyProductMsApplyTransferOut(input: {
+  userId: string;
+  applicationId: string;
+  amount: number;
+  referenceId?: string;
+  description?: string;
+}): Promise<{ success: boolean; duplicate?: boolean; balance?: number; error?: string }> {
+  const base = normalizeProductBase(config.productServiceUrl);
+  const token = internalToken();
+  if (!base || !token) {
+    return { success: false, error: 'product-ms is not configured for transfer-out sync' };
+  }
+
+  const url = `${base}/api/v1/applications/internal/${encodeURIComponent(input.applicationId)}/apply-transfer-out`;
+  try {
+    const response = await axios.post(
+      url,
+      {
+        userId: input.userId,
+        amount: input.amount,
+        referenceId: input.referenceId,
+        description: input.description
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Internal-Token': token
+        },
+        timeout: parseInt(process.env.PRODUCT_SERVICE_HTTP_TIMEOUT_MS || '30000', 10),
+        validateStatus: () => true
+      }
+    );
+
+    const body = response.data as {
+      success?: boolean;
+      duplicate?: boolean;
+      error?: string;
+      data?: { balance?: number };
+    };
+
+    if (response.status >= 200 && response.status < 300 && body.success) {
+      return {
+        success: true,
+        duplicate: body.duplicate === true,
+        balance: body.data?.balance
+      };
+    }
+
+    return {
+      success: false,
+      error: body.error || `Failed to sync transfer-out to product-ms (${response.status})`
+    };
+  } catch (error) {
+    logger.error('Failed to sync product transfer-out to product-ms', {
+      error,
+      applicationId: input.applicationId,
+      userId: input.userId
+    });
+    return { success: false, error: 'Failed to contact product-ms for transfer-out sync' };
+  }
+}

@@ -42,6 +42,7 @@ import {
 import type { LoanRequirements, Product } from '../types/product';
 import type {
   ApplicationListQuery,
+  ApprovedApplicationAmountSummary,
   ProductApplicationListResult,
   ApplicationSummary,
   CreateApplicationGuarantorRequest,
@@ -57,6 +58,10 @@ import type {
   ProductRequirementSubmission,
   SubmitProductApplicationRequirementsRequest
 } from '../types/productApplication';
+import {
+  buildApprovedApplicationAmountSummary,
+  type ApprovedAmountAggregateRow
+} from '../utils/approvedApplicationAmountSummary';
 
 function applicationFilters(query: ApplicationListQuery): Record<string, string> {
   const filters: Record<string, string> = {};
@@ -535,19 +540,34 @@ export class ProductApplicationService {
       : {};
   }
 
-  private mortgageEquitySnapshotFields(product: Product): Record<string, unknown> {
-    if (String(product.type).toUpperCase() !== 'MORTGAGE') {
+  private lendingEquitySnapshotFields(product: Product): Record<string, unknown> {
+    const productType = String(product.type).toUpperCase();
+    if (productType !== 'LOAN' && productType !== 'MORTGAGE') {
       return {};
     }
 
-    const productRecord = product as Product & { calculatedConfig?: { mortgage?: Record<string, unknown> } };
+    const productRecord = product as Product & {
+      baseEquityContribution?: number;
+      merchantEquityAddition?: number;
+      calculatedConfig?: { mortgage?: Record<string, unknown> };
+    };
+    const baseEquity = Number(productRecord.baseEquityContribution);
+    const merchantEquity = Number(productRecord.merchantEquityAddition);
+    const layeredEquity =
+      Number.isFinite(baseEquity) || Number.isFinite(merchantEquity)
+        ? (Number.isFinite(baseEquity) ? baseEquity : 0) +
+          (Number.isFinite(merchantEquity) ? merchantEquity : 0)
+        : undefined;
+    const equityContribution = product.equityContribution ?? layeredEquity;
     return {
-      ...(product.equityContribution != null ? { equityContribution: product.equityContribution } : {}),
-      ...(product.propertyValue != null ? { propertyValue: product.propertyValue } : {}),
-      ...(Array.isArray(product.properties) && product.properties.length > 0
+      ...(equityContribution != null ? { equityContribution } : {}),
+      ...(productType === 'MORTGAGE' && product.propertyValue != null
+        ? { propertyValue: product.propertyValue }
+        : {}),
+      ...(productType === 'MORTGAGE' && Array.isArray(product.properties) && product.properties.length > 0
         ? { properties: product.properties }
         : {}),
-      ...(productRecord.calculatedConfig?.mortgage
+      ...(productType === 'MORTGAGE' && productRecord.calculatedConfig?.mortgage
         ? { calculatedConfig: { mortgage: productRecord.calculatedConfig.mortgage } }
         : {})
     };
@@ -770,7 +790,7 @@ export class ProductApplicationService {
         requirements: product.requirements,
         applicantName: input.applicantName?.trim() || input.userId,
         ...(resolvedOfferingMerchantName ? { offeringMerchantName: resolvedOfferingMerchantName } : {}),
-        ...this.mortgageEquitySnapshotFields(product),
+        ...this.lendingEquitySnapshotFields(product),
         ...(commoditySelection ? { commoditySelection } : {})
       },
       loanWorkflowStatus,
@@ -1836,7 +1856,7 @@ export class ProductApplicationService {
       applicantName: this.applicantNameFrom(application),
       offeringMerchantName,
       finalSubmission: localContractSnapshot.finalSubmission,
-      ...this.mortgageEquitySnapshotFields(product)
+      ...this.lendingEquitySnapshotFields(product)
     };
 
     await this.syncFinalApplicationToUpstream(
@@ -1849,6 +1869,7 @@ export class ProductApplicationService {
 
     const previousWorkflowStage = application.loanWorkflowStatus;
     application.contractSnapshot = {
+      ...upstreamContractSnapshot,
       ...localContractSnapshot,
       guarantors: this.guarantorsFrom(application)
     };
@@ -1957,6 +1978,43 @@ export class ProductApplicationService {
     }
 
     return summary;
+  }
+
+  async summarizeApprovedAmountsForUser(
+    userId: string,
+    appId?: string
+  ): Promise<ApprovedApplicationAmountSummary> {
+    const normalizedUserId = userId.trim();
+    const normalizedAppId = appId?.trim();
+    if (!normalizedUserId) {
+      throw new ApiError(400, 'userId is required');
+    }
+
+    const rows = await ProductApplicationModel.aggregate<ApprovedAmountAggregateRow>([
+      {
+        $match: {
+          userId: normalizedUserId,
+          status: 'APPROVED',
+          ...(normalizedAppId ? { appId: normalizedAppId } : {})
+        }
+      },
+      {
+        $group: {
+          _id: {
+            productType: { $toUpper: '$productType' },
+            currency: { $toUpper: '$currency' }
+          },
+          totalAmount: { $sum: '$amount' },
+          applicationCount: { $sum: 1 }
+        }
+      }
+    ]);
+
+    return buildApprovedApplicationAmountSummary(
+      normalizedUserId,
+      normalizedAppId,
+      rows
+    );
   }
 
   async applyPlataLoanWorkflowWebhook(payload: unknown): Promise<PlataLoanWorkflowWebhookResult> {

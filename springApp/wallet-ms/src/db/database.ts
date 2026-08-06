@@ -15,7 +15,10 @@ import {
   VirtualNubanAccountType,
   VirtualNubanProvisionStatus
 } from '../models/Wallet';
-import { merchantWalletTypesForLookup } from '../utils/merchantWalletType';
+import {
+  merchantWalletTypesForLookup,
+  normalizeMerchantWalletType
+} from '../utils/merchantWalletType';
 import { emitTransactionCreated } from '../events/transactionEvents';
 
 function buildVirtualNuban(raw: Record<string, unknown>): VirtualNubanDetails | undefined {
@@ -309,36 +312,16 @@ export const db = {
       ...(appId ? { appId } : {})
     } as const;
 
-    let doc: any = null;
+    const doc: any = await WalletModel.findOne({
+      ...baseFilter,
+      merchantWalletType: { $in: merchantWalletTypesForLookup(merchantWalletType) as string[] }
+    });
 
-    if (merchantWalletType === MerchantWalletType.REPAYMENT) {
-      // Prefer true REPAYMENT / legacy SETTLEMENT docs first.
-      // Only fall back to legacy KYC-as-repayment when no real repayment wallet exists.
-      doc = await WalletModel.findOne({
-        ...baseFilter,
-        merchantWalletType: { $in: [MerchantWalletType.REPAYMENT, 'SETTLEMENT'] }
-      });
-      if (!doc) {
-        doc = await WalletModel.findOne({
-          ...baseFilter,
-          merchantWalletType: 'KYC'
-        });
-      }
-    } else {
-      doc = await WalletModel.findOne({
-        ...baseFilter,
-        merchantWalletType: { $in: merchantWalletTypesForLookup(merchantWalletType) as string[] }
-      });
-    }
-    // Lazy migrate legacy SETTLEMENT -> REPAYMENT on read. Do NOT rewrite legacy KYC-as-repayment
-    // wallets: Spring keeps a separate real KYC (link fee) wallet, so a stored `KYC` doc could be
-    // either the true KYC wallet or an old settlement wallet — only SETTLEMENT is unambiguous.
-    if (
-      doc &&
-      merchantWalletType === MerchantWalletType.REPAYMENT &&
-      (doc as unknown as { merchantWalletType?: string }).merchantWalletType === 'SETTLEMENT'
-    ) {
-      doc.set('merchantWalletType', MerchantWalletType.REPAYMENT);
+    // Lazily migrate unambiguous stored names (OPERATION / SETTLEMENT).
+    const storedType = (doc as unknown as { merchantWalletType?: string } | null)?.merchantWalletType;
+    const normalizedStoredType = normalizeMerchantWalletType(storedType);
+    if (doc && storedType && normalizedStoredType && storedType !== normalizedStoredType) {
+      doc.set('merchantWalletType', normalizedStoredType);
       await doc.save();
     }
     return docToWallet(doc) as MerchantWallet | null;

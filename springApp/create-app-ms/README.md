@@ -10,7 +10,7 @@ Deployment URL: https://create-app-ms.fly.dev/
 - App status is **active** or **suspended**. Merchants can suspend or reactivate an app via `PATCH /api/v1/apps/{id}/status`.
 - Retrieve applications by ID or merchant ID
 - Retrieve all applications
-- Automatically create merchant wallets (Billing, KYC, Settlement) for each application using the Wallet Microservice, with **`appId`** scoping, **`appName`** passed for Payonus labeling, and wallet **currency** from **`MERCHANT_WALLET_CURRENCY`** (default **NGN**, aligned with Payonus NUBAN defaults in wallet-ms)
+- Automatically create merchant wallets (Billing, KYC, Repayment) for each application using the Wallet Microservice, with **`appId`** scoping, **`appName`** passed for Payonus labeling, and wallet **currency** from **`MERCHANT_WALLET_CURRENCY`** (default **NGN**, aligned with Payonus NUBAN defaults in wallet-ms)
 - Update application information
 - Delete applications
 - Associate applications with products through product keys
@@ -35,7 +35,7 @@ Deployment URL: https://create-app-ms.fly.dev/
 ```
 POST /api/v1/apps
 ```
-Creates a new application and automatically creates merchant wallets for it (Billing, KYC, Settlement) via wallet-ms using the new app’s **`id`** as **`appId`**, the app **`name`** as **`appName`**, and **`MERCHANT_WALLET_CURRENCY`** as **`currency`**. If wallet-ms has Payonus enabled and the currency matches `PAYONUS_NUBAN_CURRENCIES`, each wallet may include a **`virtualNuban`** with an account number. Requires JWT authentication; merchant ID is extracted from the authenticated user context.
+Creates a new application and automatically creates merchant wallets for it (Billing, KYC, Repayment) via wallet-ms using the new app’s **`id`** as **`appId`**, the app **`name`** as **`appName`**, and **`MERCHANT_WALLET_CURRENCY`** as **`currency`**. If wallet-ms has Payonus enabled and the currency matches `PAYONUS_NUBAN_CURRENCIES`, each wallet may include a **`virtualNuban`** with an account number. Requires JWT authentication; merchant ID is extracted from the authenticated user context.
 
 **Request Headers:**
 - `Authorization`: Bearer token obtained through authentication
@@ -936,7 +936,7 @@ Retrieves all product keys associated with an application.
 ```
 GET /api/v1/apps/{id}/wallets
 ```
-Requires JWT authentication. Retrieves merchant wallets for the specified app (`BILLING`, `KYC`, `SETTLEMENT`). Wallet objects are returned as wallet-ms defines them; when Payonus provisioning has run, each may include **`virtualNuban`** (`accountNumber`, `bankName`, `provisionStatus`, etc.).
+Requires JWT authentication. Retrieves merchant wallets for the specified app (`BILLING`, `KYC`, `REPAYMENT`). Wallet objects are returned as wallet-ms defines them; when Payonus provisioning has run, each may include **`virtualNuban`** (`accountNumber`, `bankName`, `provisionStatus`, etc.).
 
 - Merchant users can only view wallets for apps they own.
 - Admin users can view wallets for any app.
@@ -973,7 +973,7 @@ Retrieves a specific product by its ID.
 ```
 GET /api/v1/special/wallets/merchant/{merchantId}/balance/{walletType}
 ```
-Retrieves the balance of a merchant wallet (BILLING, KYC, or SETTLEMENT).
+Retrieves the balance of a merchant wallet (BILLING, KYC, or REPAYMENT).
 
 #### 6. Get Merchant Wallet History
 ```
@@ -1174,7 +1174,7 @@ Example workflow:
 The Create App Microservice automatically creates merchant wallets for each application through integration with the Wallet Microservice. When an application is created, it calls **`POST /api/v1/wallets/merchant/all`** on wallet-ms (with the caller’s **`Authorization`** header) and provisions **app-scoped** merchant wallets for:
 - `BILLING`
 - `KYC`
-- `SETTLEMENT`
+- `REPAYMENT`
 
 The request body includes **`appId`** (the new application’s id), **`appName`** (the application name, for Payonus customer labeling), and **`currency`** from **`MERCHANT_WALLET_CURRENCY`** (default **NGN**). Use **`USD`** or another ISO code only if you intentionally do not use Payonus NUBAN for those wallets or you extend `PAYONUS_NUBAN_CURRENCIES` in wallet-ms to match.
 
@@ -1211,7 +1211,7 @@ curl -X GET "http://localhost:3002/api/v1/special/apps" \
 - `ACCOUNT_SERVICE_URL`: Base URL for **account-ms** (used by the product overview route to call **`GET /api/v1/applications`** with the caller’s JWT). Default in code: `http://localhost:4008`. In deployment, set this to wherever applications are served (often the same gateway host as account-ms).
 - `PRODUCT_SERVICE_URL`: URL for **product-ms** (product config on overview). Default in code: `http://localhost:4005` for local springApp stacks; override if your product service runs elsewhere.
 - `WALLET_SERVICE_URL`: URL for the Wallet Microservice (`POST .../merchant/all` on app create; see **Integration with Wallet Microservice**)
-- `MERCHANT_WALLET_CURRENCY`: ISO currency code for new app-scoped Billing / KYC / Settlement wallets (default **`NGN`**). Should match Payonus expectations when NUBAN provisioning is enabled in wallet-ms.
+- `MERCHANT_WALLET_CURRENCY`: ISO currency code for new app-scoped Billing / KYC / Repayment wallets (default **`NGN`**). Should match Payonus expectations when NUBAN provisioning is enabled in wallet-ms.
 - `SPECIAL_API_KEY`: Special API key for authenticating special endpoints
 - `PUBLIC_KEY`: Public key for authenticating special endpoints
 - `JWT_SECRET`: Secret key for JWT token verification

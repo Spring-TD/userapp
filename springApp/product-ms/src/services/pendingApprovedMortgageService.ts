@@ -13,6 +13,7 @@ import type {
 import {
   fetchUpstreamPendingApprovedMortgage,
   proxyCompleteMortgageInspection,
+  proxyCompleteMortgageVirtualInspection,
   proxyMortgageDownPayment,
   proxyRespondToMortgageOffer,
   proxyScheduleMortgageInspection,
@@ -24,6 +25,7 @@ import { proxyUploadSignedMortgageContract } from './pendingApprovedMultipartCli
 import { buildOfferLetterForProductApplication } from './offerLetterPresentationService';
 
 const ACTIVE_STATUSES = [
+  'virtual_inspection_pending',
   'offer_pending',
   'offer_accepted',
   'appointment_scheduled',
@@ -67,6 +69,38 @@ function buildEquityPaymentReference(upstreamApplicationId?: string): string | u
   return `equity-payment:${upstreamApplicationId.trim()}`;
 }
 
+function bankDetailsFromUpstream(
+  upstream: UpstreamPendingApprovedMortgage | null | undefined,
+  fallbackUpstreamApplicationId?: string
+): PendingApprovedMortgageDetail['bankDetails'] {
+  const record = asRecord(upstream);
+  const nested = asRecord(record?.bankDetails);
+  const merchantReference =
+    (typeof nested?.merchantReference === 'string' && nested.merchantReference.trim()) ||
+    buildEquityPaymentReference(fallbackUpstreamApplicationId);
+
+  const accountNumber =
+    typeof nested?.accountNumber === 'string' && nested.accountNumber.trim()
+      ? nested.accountNumber.trim()
+      : undefined;
+  const bankName =
+    typeof nested?.bankName === 'string' && nested.bankName.trim() ? nested.bankName.trim() : undefined;
+  const bankCode =
+    typeof nested?.bankCode === 'string' && nested.bankCode.trim() ? nested.bankCode.trim() : undefined;
+  const accountName =
+    typeof nested?.accountName === 'string' && nested.accountName.trim()
+      ? nested.accountName.trim()
+      : undefined;
+
+  return {
+    ...(merchantReference ? { merchantReference } : {}),
+    ...(accountNumber ? { accountNumber } : {}),
+    ...(bankName ? { bankName } : {}),
+    ...(bankCode ? { bankCode } : {}),
+    ...(accountName ? { accountName } : {})
+  };
+}
+
 class PendingApprovedMortgageService {
   private async loadOwnedApplication(applicationId: string, userId: string): Promise<IProductApplicationDocument> {
     if (!mongoose.isValidObjectId(applicationId)) {
@@ -105,6 +139,16 @@ class PendingApprovedMortgageService {
 
   async getDetail(applicationId: string, userId: string): Promise<PendingApprovedMortgageDetail> {
     const application = await this.loadOwnedApplication(applicationId, userId);
+    let upstream: UpstreamPendingApprovedMortgage | null = null;
+    if (application.upstreamApplicationId) {
+      try {
+        upstream = await fetchUpstreamPendingApprovedMortgage(application._id.toString());
+        syncFulfillmentFromUpstream(application, upstream);
+        await application.save();
+      } catch {
+        // Use the locally mirrored fulfillment if Plata is temporarily unavailable.
+      }
+    }
     const fulfillment = application.postApprovalFulfillment;
     const requiredAmount = fulfillment?.downPayment?.requiredAmount;
     const currency = fulfillment?.downPayment?.currency ?? application.currency;
@@ -125,15 +169,13 @@ class PendingApprovedMortgageService {
       requiredAmount,
       currency,
       centralWalletAvailable: true,
-      bankDetails: {
-        merchantReference: buildEquityPaymentReference(application.upstreamApplicationId)
-      },
+      bankDetails: bankDetailsFromUpstream(upstream, application.upstreamApplicationId),
       offerLetter: {
         html: offerLetter.html,
         text: offerLetter.text,
         reference: offerLetter.content.reference,
         offerValidUntil: offerLetter.content.offerValidUntil,
-        ...(merchantContract?.documentSource === 'merchant_upload' && merchantContract.documentUrl
+        ...(merchantContract?.documentUrl
           ? {
               pdfUrl: merchantContract.documentUrl,
               pdfFileName: merchantContract.documentFileName
@@ -199,6 +241,21 @@ class PendingApprovedMortgageService {
     return this.loadOwnedApplication(applicationId, userId).then((application) =>
       this.proxyAndMirror(application, userId, () =>
         proxyStartMortgageInspection(application._id.toString(), userId)
+      )
+    );
+  }
+
+  completeVirtualInspection(
+    applicationId: string,
+    userId: string,
+    input?: { notes?: string }
+  ): Promise<ProductApplication> {
+    return this.loadOwnedApplication(applicationId, userId).then((application) =>
+      this.proxyAndMirror(application, userId, () =>
+        proxyCompleteMortgageVirtualInspection(application._id.toString(), {
+          notes: input?.notes,
+          springUserId: userId
+        })
       )
     );
   }

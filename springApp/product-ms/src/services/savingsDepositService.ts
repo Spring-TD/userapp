@@ -21,6 +21,7 @@ import {
   notifySavingsContribution,
   notifySavingsGoalMilestone
 } from './productFlowNotificationService';
+import walletService from './walletService';
 import type {
   SavingsDepositDetailsResponse,
   SavingsDepositRequest,
@@ -154,6 +155,64 @@ class SavingsDepositService {
       milestone: `${hit}%`,
       goalAmount: formatMoney(goalAmount, currency)
     });
+  }
+
+  /**
+   * Keep Spring PRODUCT wallet in sync so transfer-to-primary and product-type-summary work
+   * (same pattern as investment deposits).
+   */
+  private async creditProductWalletAfterDeposit(
+    application: IProductApplicationDocument,
+    product: Product,
+    amount: number,
+    currency: string,
+    referenceId: string,
+    options?: { throwOnFailure?: boolean }
+  ): Promise<void> {
+    try {
+      const credited = await walletService.applyProductApplicationApproval({
+        userId: application.userId,
+        applicationId: application._id.toString(),
+        merchantId: application.merchantId!,
+        productId: application.productId,
+        productName: application.productName,
+        productType: product.type,
+        appId: application.appId,
+        amount,
+        currency,
+        referenceId,
+        description: `Savings deposit (${amount} ${currency})`,
+        metadata: {
+          source: 'savings-deposit',
+          productType: 'SAVINGS'
+        }
+      });
+      const nuban = credited.wallet.virtualNuban;
+      if (nuban?.accountNumber) {
+        application.productWallet = {
+          walletId: credited.wallet.id,
+          walletPurpose: credited.wallet.walletPurpose || 'PRODUCT',
+          reusedUpstreamAccount: true,
+          upstreamAccount: {
+            accountNumber: nuban.accountNumber,
+            bankName: nuban.bankName,
+            bankCode: nuban.bankCode,
+            providerReference: nuban.providerReference,
+            provisionStatus: (nuban.provisionStatus as 'active' | 'failed' | undefined) || 'active',
+            provisionError: nuban.provisionError
+          }
+        };
+        application.upstreamSyncError = undefined;
+        await application.save();
+      }
+    } catch (walletError) {
+      const message =
+        walletError instanceof Error ? walletError.message : 'Failed to credit Spring product wallet';
+      console.warn('Savings PRODUCT wallet credit failed after settlement:', message);
+      if (options?.throwOnFailure !== false) {
+        throw new ApiError(502, `Savings settled, but product wallet credit failed: ${message}`);
+      }
+    }
   }
 
   private async loadOwnedSavingsApplication(
@@ -323,6 +382,18 @@ class SavingsDepositService {
     }
 
     if (settlementDuplicate) {
+      try {
+        await this.creditProductWalletAfterDeposit(
+          application,
+          product,
+          input.amount,
+          currency,
+          referenceId,
+          { throwOnFailure: false }
+        );
+      } catch {
+        // duplicate settlement — wallet credit is best-effort
+      }
       return {
         deposit: toDepositResponse(application, referenceId),
         duplicate: true
@@ -337,6 +408,8 @@ class SavingsDepositService {
     application.contractSnapshot = nextSnapshot;
     application.amount = savingsBalanceFrom(application);
     await application.save();
+
+    await this.creditProductWalletAfterDeposit(application, product, input.amount, currency, referenceId);
 
     try {
       await this.syncSnapshotToPlata(application, product, nextSnapshot);
@@ -385,6 +458,18 @@ class SavingsDepositService {
     }
 
     if (settlementDuplicate) {
+      try {
+        await this.creditProductWalletAfterDeposit(
+          application,
+          product,
+          input.amount,
+          currency,
+          referenceId,
+          { throwOnFailure: false }
+        );
+      } catch {
+        // duplicate settlement — wallet credit is best-effort
+      }
       return {
         deposit: toDepositResponse(application, referenceId),
         duplicate: true
@@ -399,6 +484,8 @@ class SavingsDepositService {
     application.contractSnapshot = nextSnapshot;
     application.amount = savingsBalanceFrom(application);
     await application.save();
+
+    await this.creditProductWalletAfterDeposit(application, product, input.amount, currency, referenceId);
 
     await this.syncSnapshotToPlata(application, product, nextSnapshot);
 

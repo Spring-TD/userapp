@@ -1179,6 +1179,83 @@ export class KYCController {
     }
   }
 
+  /**
+   * Public: storefront / merchant UI — KYC company logo for a tenant merchantId.
+   * GET /api/v1/kyc/merchants/:merchantId/branding
+   * Also accepts x-tenant-merchant-id when path param is omitted via /merchant-branding.
+   */
+  static async getMerchantBranding(req: Request, res: Response, next: NextFunction) {
+    try {
+      const merchantId =
+        String(req.params.merchantId || '').trim() ||
+        String(req.query.merchantId || '').trim() ||
+        String(req.headers['x-tenant-merchant-id'] || '').trim();
+
+      if (!merchantId) {
+        return res.status(400).json({
+          success: false,
+          error: 'merchantId is required (path, query, or x-tenant-merchant-id header)'
+        });
+      }
+
+      const result = await kycService.getMerchantBranding(merchantId);
+      if (!result.success || !result.data) {
+        return res.status(404).json({
+          success: false,
+          error: result.error || 'Merchant branding not found'
+        });
+      }
+
+      return res.status(200).json({ success: true, data: result.data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Authenticated merchant: own KYC branding (logo) for dashboard display.
+   * GET /api/v1/kyc/business/branding
+   */
+  static async getOwnBusinessBranding(req: Request, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        return res.status(401).json({ success: false, error: 'Authentication required' });
+      }
+
+      const merchantId =
+        String(req.user?.userMerchantId || '').trim() ||
+        String(req.headers['x-tenant-merchant-id'] || '').trim() ||
+        userId;
+
+      const result = await kycService.getMerchantBranding(merchantId);
+      if (!result.success || !result.data) {
+        // Fall back to direct business info by owner userId (JWT subject).
+        const own = await kycService.getBusinessInfo(userId);
+        if (!own.success || !own.data) {
+          return res.status(404).json({
+            success: false,
+            error: result.error || own.error || 'Business branding not found'
+          });
+        }
+        return res.status(200).json({
+          success: true,
+          data: {
+            merchantId,
+            ownerUserId: userId,
+            companyName: own.data.companyName?.trim() || null,
+            companyLogoUrl: own.data.companyLogoUrl?.trim() || null,
+            website: own.data.website?.trim() || null
+          }
+        });
+      }
+
+      return res.status(200).json({ success: true, data: result.data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // Get business survey data for a user
   static async getBusinessSurvey(req: Request, res: Response, next: NextFunction) {
     try {
