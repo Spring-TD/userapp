@@ -268,7 +268,7 @@ export default function HomePage() {
                 {walletLoading && !wallet ? (
                     <WalletBalanceCardSkeleton />
                 ) : (
-                <div className="relative isolate w-full h-[220px] rounded-[30px] overflow-hidden bg-[var(--sf-button,#1E40AF)] shadow-xl shadow-blue-900/10">
+                <div className="relative isolate w-full h-[220px] rounded-[30px] overflow-hidden bg-[var(--sf-button,#1E40AF)] shadow-xl">
                     <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/10" />
 
                     <div className="relative z-10 flex flex-col items-center justify-center h-full text-white pt-4">
@@ -292,17 +292,17 @@ export default function HomePage() {
                             </div>
                         </div>
 
-                        <span className="text-sm font-medium text-blue-100 mb-1">{balanceCardLabel}</span>
+                        <span className="text-sm font-medium text-white/70 mb-1">{balanceCardLabel}</span>
                         <h2 className="text-4xl font-bold mb-2 min-h-[2.5rem] flex items-center justify-center gap-2">
                             {walletLoading ? (
                                 <Skeleton className="h-10 w-40 max-w-[70vw] rounded-lg bg-white/25" aria-label="Loading balance" />
                             ) : walletError ? (
-                                <span className="text-lg font-semibold text-blue-100">—</span>
+                                <span className="text-lg font-semibold text-white/70">—</span>
                             ) : (
                                 formattedBalance
                             )}
                         </h2>
-                        <p className="text-[11px] text-blue-200/90 px-2 text-center max-w-[280px]">
+                        <p className="text-[11px] text-white/70 px-2 text-center max-w-[280px]">
                             {balanceCardHint}
                         </p>
                     </div>
@@ -388,7 +388,7 @@ export default function HomePage() {
             <div className="px-6 mb-5">
                 <Link
                     href="/mobile-v2/transactions"
-                    className="w-full min-h-[72px] bg-[var(--sf-button,#1E40AF)] rounded-[16px] flex items-center px-3.5 relative overflow-hidden shadow-lg shadow-blue-900/5"
+                    className="w-full min-h-[72px] bg-[var(--sf-button,#1E40AF)] rounded-[16px] flex items-center px-3.5 relative overflow-hidden shadow-lg"
                 >
                     <div className="w-10 h-10 rounded-[10px] bg-[var(--sf-ink,#1E1B4B)]/30 flex items-center justify-center text-white mr-3 shadow-inner">
                         <PieChart className="w-5 h-5" />
@@ -398,13 +398,13 @@ export default function HomePage() {
                         {transactionsLoading ? (
                             <Skeleton className="mt-1 h-3 w-40 rounded-full bg-white/25" />
                         ) : lastTransaction ? (
-                            <p className="mt-1 truncate text-[11px] text-blue-100">
+                            <p className="mt-1 truncate text-[11px] text-white/70">
                                 <span className="font-semibold text-white">{formatWalletBalance(lastTransaction.amount)}</span>{' '}
                                 {lastTransaction.type === 'CREDIT' ? 'credit from' : 'debit to'}{' '}
                                 <span className="font-semibold text-white">{walletTransactionTitle(lastTransaction)}</span>
                             </p>
                         ) : (
-                            <p className="mt-1 text-[11px] text-blue-100">No wallet activity yet</p>
+                            <p className="mt-1 text-[11px] text-white/70">No wallet activity yet</p>
                         )}
                     </div>
                     <div className="ml-3 w-9 h-9 rounded-full bg-white flex items-center justify-center text-[var(--sf-button,#1E40AF)] shadow-sm">

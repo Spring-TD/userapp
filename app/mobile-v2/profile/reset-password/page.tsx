@@ -81,7 +81,7 @@ export default function ResetPasswordPage() {
       </div>
 
       <div className="flex w-full flex-col items-start px-6 text-left">
-        <div className="mb-6 flex h-14 w-14 items-center justify-center self-start rounded-2xl bg-blue-50 text-[var(--sf-primary,#2563EB)]">
+        <div className="mb-6 flex h-14 w-14 items-center justify-center self-start rounded-2xl sf-accent-soft sf-text-primary">
           <Lock className="h-7 w-7" />
         </div>
 
@@ -127,7 +127,7 @@ export default function ResetPasswordPage() {
           type="button"
           disabled={submitting}
           onClick={() => void handleContinue()}
-          className="mb-8 mt-8 h-14 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-base font-semibold text-white shadow-lg shadow-blue-900/20 hover:bg-[var(--sf-button-hover,#1e3a8a)]"
+          className="sf-btn mb-8 mt-8 h-14 w-full rounded-full text-base font-semibold shadow-lg"
         >
           {submitting ? (
             <span className="inline-flex items-center gap-2">

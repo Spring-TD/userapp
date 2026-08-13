@@ -1827,25 +1827,25 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
                 </div>
               ) : null}
 
-              <SectionTitle>Occupation</SectionTitle>
+              <SectionTitle>Occupation <span className="font-normal text-gray-400">(optional)</span></SectionTitle>
               <div className="space-y-3">
                 <InputPill
-                  placeholder="Occupation"
+                  placeholder="Occupation (optional)"
                   value={employmentDraft.occupation}
                   onChange={(occupation) => setEmploymentDraft((draft) => ({ ...draft, occupation }))}
                 />
                 <InputPill
-                  placeholder="Place of Work"
+                  placeholder="Place of Work (optional)"
                   value={employmentDraft.placeOfWork}
                   onChange={(placeOfWork) => setEmploymentDraft((draft) => ({ ...draft, placeOfWork }))}
                 />
                 <InputPill
-                  placeholder="Name of HR"
+                  placeholder="Name of HR (optional)"
                   value={employmentDraft.hrName}
                   onChange={(hrName) => setEmploymentDraft((draft) => ({ ...draft, hrName }))}
                 />
                 <InputPill
-                  placeholder="HR's Email"
+                  placeholder="HR's Email (optional)"
                   type="email"
                   value={employmentDraft.hrEmail}
                   onChange={(hrEmail) => setEmploymentDraft((draft) => ({ ...draft, hrEmail }))}

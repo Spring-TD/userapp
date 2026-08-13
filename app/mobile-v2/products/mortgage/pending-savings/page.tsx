@@ -24,7 +24,7 @@ function statusTone(status: MortgageSavingsApplication['status']): string {
     case 'declined':
       return 'bg-red-100 text-red-700'
     default:
-      return 'bg-blue-100 text-blue-700'
+      return 'sf-accent-soft sf-text-button'
   }
 }
 

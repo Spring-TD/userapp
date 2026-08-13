@@ -6,10 +6,26 @@ import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 import { buildStorefrontBrandCssVars } from '@/lib/storefrontBranding'
 import { pickManifestIconUrl } from '@/lib/webAppManifest'
 
+function upsertLink(id: string, rel: string, href: string, extra?: Record<string, string>) {
+  document.getElementById(id)?.remove()
+  const link = document.createElement('link')
+  link.id = id
+  link.rel = rel
+  link.href = href
+  if (extra) {
+    for (const [k, v] of Object.entries(extra)) link.setAttribute(k, v)
+  }
+  document.head.appendChild(link)
+  return () => {
+    document.getElementById(id)?.remove()
+  }
+}
+
 export function MobileV2ThemedChrome({ children }: { children: ReactNode }) {
-  const { pwaManifest, displayName } = useMobileV2Tenant()
+  const { appId, pwaManifest, displayName } = useMobileV2Tenant()
 
   const brandVars = buildStorefrontBrandCssVars(pwaManifest) as CSSProperties
+  const iconHref = pickManifestIconUrl(pwaManifest)
 
   useEffect(() => {
     const tc = pwaManifest?.theme_color?.trim()
@@ -37,20 +53,25 @@ export function MobileV2ThemedChrome({ children }: { children: ReactNode }) {
     }
   }, [displayName])
 
+  // Favicon + apple-touch from merchant manifest icons (splash / home screen feel).
   useEffect(() => {
-    const href = pickManifestIconUrl(pwaManifest)
-    if (!href || typeof document === 'undefined') return
-    const id = 'storefront-apple-touch-icon'
-    document.getElementById(id)?.remove()
-    const link = document.createElement('link')
-    link.id = id
-    link.rel = 'apple-touch-icon'
-    link.href = href
-    document.head.appendChild(link)
+    if (!iconHref || typeof document === 'undefined') return
+    const cleanups = [
+      upsertLink('storefront-favicon', 'icon', iconHref),
+      upsertLink('storefront-apple-touch-icon', 'apple-touch-icon', iconHref),
+      upsertLink('storefront-shortcut-icon', 'shortcut icon', iconHref),
+    ]
     return () => {
-      document.getElementById(id)?.remove()
+      cleanups.forEach((fn) => fn())
     }
-  }, [pwaManifest])
+  }, [iconHref])
+
+  // Keep PWA manifest linked for the whole storefront session (not only splash).
+  useEffect(() => {
+    if (!appId || typeof document === 'undefined') return
+    const href = `/api/apps/${encodeURIComponent(appId)}/pwa/manifest.webmanifest`
+    return upsertLink('storefront-pwa-manifest-link', 'manifest', href)
+  }, [appId])
 
   return (
     <div

@@ -78,8 +78,8 @@ function EmptyAccountState({ activeFilter }: { activeFilter: AccountFilter }) {
     const createAccountHref = productRoute(activeFilter);
 
     return (
-        <div className="rounded-[28px] border border-dashed border-blue-200 bg-white px-5 py-8 text-center shadow-sm">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--sf-tint,#E0E7FF)] text-[var(--sf-primary,#2563EB)]">
+        <div className="rounded-[28px] border border-dashed sf-border-brand bg-white px-5 py-8 text-center shadow-sm">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full sf-icon-tile-bg">
                 <Wallet className="h-7 w-7" />
             </div>
             <h3 className="text-base font-bold text-[var(--sf-ink,#1E1B4B)]">
@@ -90,7 +90,7 @@ function EmptyAccountState({ activeFilter }: { activeFilter: AccountFilter }) {
             </p>
             <Link
                 href={createAccountHref}
-                className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[var(--sf-button,#1E40AF)] px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-900/10"
+                className="sf-btn mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold shadow-lg"
             >
                 <Plus className="h-4 w-4" />
                 Create Account
@@ -140,7 +140,7 @@ function provisionStatusTone(status?: string | null): string {
 
     // Merchant-approved application (not the same stage as Active)
     if (normalized.includes('approved')) {
-        return 'bg-blue-600 text-white'
+        return 'bg-[var(--sf-button,#1E40AF)] text-white'
     }
 
     if (
@@ -640,23 +640,23 @@ export default function AccountsPage() {
                     {isSummaryBusy && !approvedSummary ? (
                         <WalletBalanceCardSkeleton />
                     ) : (
-                        <div className="relative isolate w-full h-[220px] rounded-[30px] overflow-hidden bg-[var(--sf-button,#1E40AF)] shadow-xl shadow-blue-900/10">
+                        <div className="relative isolate w-full h-[220px] rounded-[30px] overflow-hidden bg-[var(--sf-button,#1E40AF)] shadow-xl">
                             <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/10" />
                             <div className="relative z-10 flex flex-col items-center justify-center h-full text-white pt-4 px-4">
                                 <div className="w-12 h-12 rounded-full border-2 border-green-400/30 p-0.5 mb-3 bg-white/10 backdrop-blur-sm flex items-center justify-center">
                                     <Wallet className="w-6 h-6 text-white/90" />
                                 </div>
-                                <span className="text-sm font-medium text-blue-100 mb-1">{totalLabel}</span>
+                                <span className="text-sm font-medium text-white/70 mb-1">{totalLabel}</span>
                                 <h2 className="text-4xl font-bold mb-2 min-h-[2.5rem] flex items-center justify-center">
                                     {isSummaryBusy ? (
                                         <Skeleton className="h-10 w-40 rounded-lg bg-white/25" />
                                     ) : walletError || summaryError ? (
-                                        <span className="text-lg font-semibold text-blue-100">—</span>
+                                        <span className="text-lg font-semibold text-white/70">—</span>
                                     ) : (
                                         activeFormattedBalance
                                     )}
                                 </h2>
-                                <p className="text-[11px] text-blue-200/90 text-center max-w-[280px]">
+                                <p className="text-[11px] text-white/70 text-center max-w-[280px]">
                                     {walletError || summaryError || applicationsError || `Your ${activeFilter.toLowerCase()} account total`}
                                 </p>
                             </div>

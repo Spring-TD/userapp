@@ -63,7 +63,7 @@ function statusBadgeTone(status?: string | null): string {
     return 'bg-orange-100 text-orange-700'
   }
   if (s.includes('active')) return 'bg-emerald-600 text-white'
-  if (s.includes('approved')) return 'bg-blue-600 text-white'
+  if (s.includes('approved')) return 'bg-[var(--sf-button,#1E40AF)] text-white'
   if (s.includes('disburs') || s.includes('complete')) return 'bg-teal-600 text-white'
   if (s.includes('reject') || s.includes('cancel')) return 'bg-red-100 text-red-700'
   return 'bg-slate-100 text-slate-700'

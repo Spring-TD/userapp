@@ -339,6 +339,31 @@ export function isApplicationAlreadySubmitted(status?: string | null): boolean {
   ].includes(s)
 }
 
+export function doesApplicationMatchProduct(
+  application: StorefrontApplication | null | undefined,
+  productId: string,
+): boolean {
+  const normalizedProductId = sanitizeProductId(productId)
+  if (!normalizedProductId || !application) return false
+  return [
+    application.productId,
+    application.localProductId,
+    application.springProductId,
+    application.upstreamProductId,
+    application.product?.id,
+    application.product?.productId,
+    application.product?.upstreamProductId,
+  ]
+    .map((value) => sanitizeProductId(String(value ?? "")))
+    .some((value) => value === normalizedProductId)
+}
+
+export function blocksAnotherApplication(application: StorefrontApplication | null | undefined): boolean {
+  if (!application) return false
+  const status = String(application.status || "").trim().toUpperCase()
+  return !["", "CANCELLED", "CANCELED", "FAILED"].includes(status)
+}
+
 function normalizeWorkflowStatus(status?: string | null): string {
   return String(status || "")
     .trim()
@@ -625,26 +650,58 @@ export async function uploadApplicationFile(file: File, userId?: string) {
   form.append("file", file)
   if (resolvedUserId) form.append("userId", resolvedUserId)
 
-  const res = await apiClient.post<ApiEnvelope<unknown>, FormData>("/v1/applications/upload", form, {
-    includeAuth: true,
-    timeout: 120_000,
-  })
+  try {
+    const res = await apiClient.post<ApiEnvelope<unknown>, FormData>("/v1/applications/upload", form, {
+      includeAuth: true,
+      timeout: 120_000,
+    })
 
-  const data = res.data
-  if (data?.success === false || res.status >= 400) {
-    throw new Error(parseApiError(data, res.status))
-  }
+    const body = res.data as Record<string, unknown> | null | undefined
+    if (body?.success === false || res.status >= 400) {
+      throw new Error(parseApiError(body, res.status))
+    }
 
-  if (!data?.url) {
-    throw new Error("Upload succeeded but no file URL was returned.")
-  }
+    // Upstream may return flat `{ url }` or nested `{ data: { url | fileUrl } }`.
+    const inner =
+      body?.data && typeof body.data === "object" && !Array.isArray(body.data)
+        ? (body.data as Record<string, unknown>)
+        : null
+    const url =
+      (typeof body?.url === "string" && body.url) ||
+      (typeof body?.fileUrl === "string" && body.fileUrl) ||
+      (typeof inner?.url === "string" && inner.url) ||
+      (typeof inner?.fileUrl === "string" && inner.fileUrl) ||
+      ""
 
-  return {
-    fileUrl: data.url,
-    fileName: data.fileName || file.name,
-    fileType: data.fileType || file.type,
-    fileSize: data.fileSize ?? file.size,
-    key: data.key,
+    if (!url) {
+      throw new Error("Upload succeeded but no file URL was returned.")
+    }
+
+    return {
+      fileUrl: url,
+      fileName:
+        (typeof body?.fileName === "string" && body.fileName) ||
+        (typeof inner?.fileName === "string" && inner.fileName) ||
+        file.name,
+      fileType:
+        (typeof body?.fileType === "string" && body.fileType) ||
+        (typeof inner?.fileType === "string" && inner.fileType) ||
+        file.type,
+      fileSize:
+        (typeof body?.fileSize === "number" && body.fileSize) ||
+        (typeof inner?.fileSize === "number" && inner.fileSize) ||
+        file.size,
+      key:
+        (typeof body?.key === "string" && body.key) ||
+        (typeof inner?.key === "string" && inner.key) ||
+        undefined,
+    }
+  } catch (error: unknown) {
+    // Preserve errors we already turned into user-facing messages.
+    if (error instanceof Error && !("response" in error)) {
+      throw error
+    }
+    throw new Error(axiosApplicationError(error, "Could not upload your document. Try again."))
   }
 }
 

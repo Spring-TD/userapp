@@ -83,8 +83,8 @@ export function MobileV2NotificationsSheet({
             <Loader2 className="h-8 w-8 animate-spin text-[var(--sf-button,#1E40AF)]" />
           </div>
         ) : notifications.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-blue-200 bg-[#F8FAFF] px-5 py-10 text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--sf-tint,#E0E7FF)] text-[var(--sf-primary,#2563EB)]">
+          <div className="rounded-2xl border border-dashed sf-border-brand sf-page-bg-tint px-5 py-10 text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full sf-icon-tile-bg">
               <Bell className="h-6 w-6" />
             </div>
             <p className="text-sm font-semibold text-[var(--sf-ink,#1E293B)]">No notifications yet</p>

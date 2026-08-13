@@ -100,7 +100,7 @@ function VerifyOtpContent() {
         <div className="w-8" />
       </div>
 
-      <div className="mb-6 self-start rounded-2xl bg-blue-50 p-3.5 text-[var(--sf-primary,#2563EB)]">
+      <div className="mb-6 self-start rounded-2xl sf-accent-soft p-3.5 sf-text-primary">
         <MessageSquare className="h-7 w-7 fill-current" />
       </div>
 
@@ -148,7 +148,7 @@ function VerifyOtpContent() {
       <div className="mt-auto">
         <Button
           type="button"
-          className="h-14 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-base font-medium text-white shadow-lg shadow-blue-900/20 hover:bg-[var(--sf-button-hover,#1e3a8a)]"
+          className="sf-btn h-14 w-full rounded-full text-base font-medium shadow-lg"
           disabled={loading || code.length !== 6}
           onClick={handleConfirm}
         >
