@@ -117,8 +117,8 @@ export default function NotificationsPage() {
           ) : error ? (
             <div className="rounded-2xl bg-red-50 px-4 py-6 text-center text-sm text-red-600">{error}</div>
           ) : notifications.length === 0 ? (
-            <div className="rounded-[28px] border border-dashed border-blue-200 bg-white px-6 py-12 text-center shadow-sm">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--sf-tint,#E0E7FF)] text-[var(--sf-primary,#2563EB)]">
+            <div className="rounded-[28px] border border-dashed sf-border-brand bg-white px-6 py-12 text-center shadow-sm">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full sf-icon-tile-bg">
                 <Bell className="h-7 w-7" />
               </div>
               <h2 className="text-base font-bold text-[var(--sf-ink,#1E1B4B)]">No notifications yet</h2>

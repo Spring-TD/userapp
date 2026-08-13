@@ -13,6 +13,8 @@ import { AuthRouteSkeleton } from '@/components/mobile-v2/data-skeletons';
 import { showAuthError } from '@/lib/showAuthError';
 import { resolvePostLoginPath } from '@/lib/userKycRouting';
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
+import { StorefrontMerchantLogo } from '@/components/mobile-v2/StorefrontMerchantLogo';
+import { pickManifestIconUrl } from '@/lib/webAppManifest';
 
 const DEFAULT_POST_LOGIN = '/mobile-v2/home';
 
@@ -23,6 +25,7 @@ function LoginPageInner() {
   const { loading, error } = useAppSelector((s) => s.auth);
   const mobileErr = useAppSelector((s) => s.mobileClientAuth.error);
   const tenant = useMobileV2Tenant();
+  const manifestIconUrl = pickManifestIconUrl(tenant.pwaManifest);
 
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
@@ -110,6 +113,13 @@ function LoginPageInner() {
       </div>
 
       <div className="mb-10 text-center">
+        <div className="mb-4">
+          <StorefrontMerchantLogo
+            companyLogoUrl={tenant.branding?.companyLogoUrl}
+            manifestIconUrl={manifestIconUrl}
+            companyName={tenant.branding?.companyName ?? tenant.displayName}
+          />
+        </div>
         <h2 className="mb-2 text-[28px] font-bold tracking-tight text-[var(--sf-ink,#1E1B4B)]">Welcome back</h2>
         <p className="px-4 text-[15px] leading-normal text-gray-500">
           {verifiedEmail

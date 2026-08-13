@@ -7,6 +7,7 @@ import { getApiBaseUrl } from "@/lib/apiBaseUrl"
 import { forwardStorefrontHeaders } from "@/lib/server/forwardStorefrontHeaders"
 
 const UPSTREAM_TIMEOUT_MS = 60_000
+const UPSTREAM_UPLOAD_TIMEOUT_MS = 120_000
 const UPSTREAM_RETRIES = 2
 
 const httpsAgent = new https.Agent({
@@ -69,6 +70,7 @@ export async function proxyAccountMsApplicationsRequest(
   const method = request.method.toUpperCase()
   const headers = forwardApplicationHeaders(request)
   const isMultipart = (headers["Content-Type"] || "").includes("multipart/form-data")
+  const timeoutMs = isMultipart || path[0] === "upload" ? UPSTREAM_UPLOAD_TIMEOUT_MS : UPSTREAM_TIMEOUT_MS
 
   let body: Buffer | undefined
   if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
@@ -81,6 +83,8 @@ export async function proxyAccountMsApplicationsRequest(
     console.log("[applications proxy] → upstream", {
       method,
       url,
+      isMultipart,
+      timeoutMs,
       body: previewJsonBody(body, isMultipart),
     })
   }
@@ -94,7 +98,7 @@ export async function proxyAccountMsApplicationsRequest(
       headers,
       data: body,
       httpsAgent,
-      timeout: UPSTREAM_TIMEOUT_MS,
+      timeout: timeoutMs,
       validateStatus: () => true,
       maxRedirects: 0,
       maxBodyLength: Infinity,
@@ -143,7 +147,7 @@ export async function proxyAccountMsApplicationsRequest(
     {
       success: false,
       error: timeout
-        ? `Could not reach the application service (timed out after ${UPSTREAM_TIMEOUT_MS}ms). Check your connection and try again.`
+        ? `Could not reach the application service (timed out after ${timeoutMs}ms). Check your connection and try again.`
         : msg === "fetch failed"
           ? "Could not reach the application service. Check your connection and try again."
           : msg,

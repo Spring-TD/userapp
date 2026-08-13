@@ -22,15 +22,26 @@ function LoadingScreen() {
  * Splash / onboarding: resolve returns `pwaManifest` (colors, name, icons); merged into shell config here.
  */
 function MobileV2Content() {
-    const { appId, pwaManifest, displayName, error: resolveNote, ready: tenantReady } = useMobileV2Tenant();
+    const { appId, pwaManifest, displayName, branding, error: resolveNote, ready: tenantReady } = useMobileV2Tenant();
 
     const effectiveAppId = appId ?? undefined;
     const { config, loading: configLoading } = useMobileConfig({ appId: effectiveAppId });
 
     const mergedConfig = useMemo(() => {
         if (!config) return null;
-        return applyManifestToMobileAppConfig(config, pwaManifest, displayName);
-    }, [config, pwaManifest, displayName]);
+        const base = applyManifestToMobileAppConfig(config, pwaManifest, displayName);
+        const kycLogo = branding?.companyLogoUrl?.trim();
+        const kycName = branding?.companyName?.trim();
+        // Prefer KYC logo when present; otherwise keep manifest icon from applyManifestToMobileAppConfig.
+        return {
+            ...base,
+            splash: {
+                ...base.splash,
+                ...(kycLogo ? { logo: kycLogo } : {}),
+            },
+            appName: kycName || base.appName,
+        };
+    }, [config, pwaManifest, displayName, branding]);
 
     if (!tenantReady || configLoading || !mergedConfig) {
         return <LoadingScreen />;

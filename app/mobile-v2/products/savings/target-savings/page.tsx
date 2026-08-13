@@ -55,7 +55,7 @@ function TargetSavingsContent() {
 
                     {/* Balance Card */}
                     <div className="bg-[var(--sf-button,#1E40AF)] rounded-[24px] p-6 text-center text-white relative overflow-hidden">
-                        <p className="text-sm font-medium mb-1 text-blue-100">Target Saving Balance</p>
+                        <p className="text-sm font-medium mb-1 text-white/80">Target Saving Balance</p>
                         <h2 className="text-3xl font-bold mb-6">₦500,039.12</h2>
 
                         <div className="flex justify-center items-center gap-4">

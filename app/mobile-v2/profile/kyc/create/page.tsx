@@ -23,8 +23,8 @@ function KycHero() {
     <div className="flex flex-col items-center px-2 text-center">
       <div className="relative mb-6">
         <div className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[color-mix(in_srgb,var(--sf-button,#1E40AF)_18%,white)] blur-2xl" />
-        <div className="relative flex h-[72px] w-[72px] items-center justify-center rounded-[22px] bg-gradient-to-br from-white to-blue-50 shadow-[0_8px_30px_rgba(30,64,175,0.12)] ring-1 ring-blue-100">
-          <ScanFace className="h-9 w-9 text-[var(--sf-button,#1E40AF)]" strokeWidth={1.75} />
+        <div className="relative flex h-[72px] w-[72px] items-center justify-center rounded-[22px] bg-gradient-to-br from-white to-[var(--sf-accent-soft,#eff6ff)] shadow-[0_8px_30px_color-mix(in_srgb,var(--sf-button,#1E40AF)_12%,transparent)] ring-1 ring-[var(--sf-border,#dbeafe)]">
+          <ScanFace className="h-9 w-9 sf-text-button" strokeWidth={1.75} />
         </div>
         <div className="absolute -right-1 -top-1 flex h-7 w-7 items-center justify-center rounded-full bg-[var(--sf-button,#1E40AF)] text-white shadow-md">
           <Sparkles className="h-3.5 w-3.5" />

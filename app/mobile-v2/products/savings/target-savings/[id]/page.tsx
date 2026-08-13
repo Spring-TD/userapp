@@ -32,7 +32,7 @@ export default function TargetDetailPage({ params }: { params: { id: string } })
                     <div className="bg-[var(--sf-primary,#2563EB)] rounded-[24px] p-8 text-center text-white shadow-lg shadow-blue-500/20">
                         <h2 className="text-3xl font-bold mb-2">₦30,000,000.00</h2>
                         <p className="text-base font-semibold mb-1">Save to Buy a Building</p>
-                        <p className="text-[10px] text-blue-100 mb-6">Saving plan towards a 2 bedroom duplex</p>
+                        <p className="text-[10px] text-white/80 mb-6">Saving plan towards a 2 bedroom duplex</p>
 
                         <Button
                             onClick={() => setShowJoinModal(true)}

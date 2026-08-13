@@ -44,13 +44,11 @@ export function collateralNeedsUpload(requirement: CollateralRequirement): boole
   )
 }
 
+/** Employment / occupation fields are optional on apply. */
 export function validateEmploymentDraft(employment: EmploymentDraft): string | null {
-  if (!employment.occupation.trim()) return 'Enter your occupation.'
-  if (!employment.placeOfWork.trim()) return 'Enter your place of work.'
-  if (!employment.hrName.trim()) return "Enter your HR contact's name."
-  if (!employment.hrEmail.trim()) return "Enter your HR contact's email."
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(employment.hrEmail.trim())) {
-    return 'Enter a valid HR email address.'
+  const email = employment.hrEmail.trim()
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return 'Enter a valid HR email address, or leave it blank.'
   }
   return null
 }

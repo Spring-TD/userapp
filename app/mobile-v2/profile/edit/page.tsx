@@ -129,7 +129,7 @@ export default function EditProfilePage() {
                                     </div>
                                 )}
                             </div>
-                            <button className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-white shadow-md flex items-center justify-center text-blue-600 border border-gray-100">
+                            <button className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-white shadow-md flex items-center justify-center sf-text-button border border-gray-100">
                                 <Pencil className="w-4 h-4 fill-current" />
                             </button>
                         </div>

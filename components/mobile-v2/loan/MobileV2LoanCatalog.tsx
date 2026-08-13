@@ -15,19 +15,13 @@ import { loanProductApplyDetailHref } from '@/lib/loanApplyRoutes'
 
 function FeaturedLoanCard({ item }: { item: LoanCatalogItem }) {
   return (
-    <div
-      className="relative overflow-hidden rounded-[24px] p-5 text-white shadow-lg"
-      style={{
-        background: 'linear-gradient(145deg, #1E1B4B 0%, #312e81 45%, #1e3a8a 100%)',
-        minHeight: 220,
-      }}
-    >
+    <div className="relative overflow-hidden rounded-[24px] bg-[var(--sf-ink,#1E1B4B)] p-5 text-white shadow-lg min-h-[220px]">
       <div className="flex flex-col h-full justify-between gap-4">
         <div>
           <h3 className="mb-3 text-base font-bold leading-snug text-white">
             {item.title}
           </h3>
-          <span className="text-[10px] font-medium text-blue-200/90 block mb-1">
+          <span className="text-[10px] font-medium text-white/70 block mb-1">
             {item.loanAmountLabel || 'Loan Amount'}
           </span>
           <p className="text-[28px] font-bold leading-tight tracking-tight">
@@ -37,26 +31,26 @@ function FeaturedLoanCard({ item }: { item: LoanCatalogItem }) {
           <div className="flex gap-4 mt-4">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
-                <Calendar className="w-4 h-4 text-blue-200" />
+                <Calendar className="w-4 h-4 text-white/70" />
               </div>
               <div className="leading-tight">
-                <span className="text-[9px] text-blue-300 block">Duration</span>
+                <span className="text-[9px] text-white/60 block">Duration</span>
                 <span className="text-[11px] font-bold">{item.duration}</span>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
-                <Percent className="w-4 h-4 text-blue-200" />
+                <Percent className="w-4 h-4 text-white/70" />
               </div>
               <div className="leading-tight">
-                <span className="text-[9px] text-blue-300 block">Interest</span>
+                <span className="text-[9px] text-white/60 block">Interest</span>
                 <span className="text-[11px] font-bold">{item.interestRate}</span>
               </div>
             </div>
           </div>
 
           {item.description ? (
-            <p className="text-[11px] text-blue-100/95 leading-relaxed mt-4 pr-2 font-light">
+            <p className="text-[11px] text-white/70 leading-relaxed mt-4 pr-2 font-light">
               {item.description}
             </p>
           ) : null}
@@ -77,7 +71,7 @@ function FeaturedLoanCard({ item }: { item: LoanCatalogItem }) {
             <span className="text-[11px] font-semibold truncate">{item.providerName}</span>
           </div>
           <Link href={loanProductApplyDetailHref(item.id)}>
-            <Button className="h-9 shrink-0 rounded-xl bg-[var(--sf-primary,#2563EB)] hover:bg-[var(--sf-primary,#2563EB)] text-white text-[11px] font-semibold px-4 shadow-lg shadow-blue-500/30">
+            <Button className="sf-btn h-9 shrink-0 rounded-xl text-[11px] font-semibold px-4 shadow-lg">
               Apply for Loan
             </Button>
           </Link>

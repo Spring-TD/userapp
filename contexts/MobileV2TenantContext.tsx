@@ -20,6 +20,7 @@ import {
 } from "@/lib/mobileTenant/storageKeys"
 import type { StorefrontPwaInstallPayload } from "@/lib/storefrontPwaTypes"
 import { parseWebAppManifestBranding, storefrontDisplayName, type WebAppManifestBranding } from "@/lib/webAppManifest"
+import { fetchMerchantBranding, type MerchantBranding } from "@/lib/merchantBrandingApi"
 
 interface MobileV2TenantState {
   appId: string | null
@@ -27,6 +28,8 @@ interface MobileV2TenantState {
   tenantSubdomain: string | null
   pwaInstall: StorefrontPwaInstallPayload | null
   pwaManifest: WebAppManifestBranding | null
+  /** KYC branding for storefront logo (`companyLogoUrl`). */
+  branding: MerchantBranding | null
   displayName: string | null
   ready: boolean
   error: string | null
@@ -207,6 +210,7 @@ export function MobileV2TenantProvider({ children }: { children: ReactNode }) {
   const [tenantSubdomain, setTenantSubdomain] = useState<string | null>(null)
   const [pwaInstall, setPwaInstall] = useState<StorefrontPwaInstallPayload | null>(null)
   const [pwaManifest, setPwaManifest] = useState<WebAppManifestBranding | null>(null)
+  const [branding, setBranding] = useState<MerchantBranding | null>(null)
   const [ready, setReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -224,6 +228,7 @@ export function MobileV2TenantProvider({ children }: { children: ReactNode }) {
     setTenantSubdomain(null)
     setPwaInstall(null)
     setPwaManifest(null)
+    setBranding(null)
     setError(null)
   }, [])
 
@@ -242,6 +247,13 @@ export function MobileV2TenantProvider({ children }: { children: ReactNode }) {
         setPwaInstall(r.pwaInstall)
         setPwaManifest(r.pwaManifest)
         setError(r.error)
+
+        if (r.merchantId) {
+          const b = await fetchMerchantBranding(r.merchantId)
+          if (!cancelled) setBranding(b)
+        } else if (!cancelled) {
+          setBranding(null)
+        }
       } finally {
         if (!cancelled) setReady(true)
       }
@@ -260,12 +272,16 @@ export function MobileV2TenantProvider({ children }: { children: ReactNode }) {
       tenantSubdomain,
       pwaInstall,
       pwaManifest,
-      displayName: storefrontDisplayName(pwaManifest) || displayNameFromSubdomain(tenantSubdomain),
+      branding,
+      displayName:
+        branding?.companyName ||
+        storefrontDisplayName(pwaManifest) ||
+        displayNameFromSubdomain(tenantSubdomain),
       ready,
       error,
       clearTenant,
     }),
-    [appId, merchantId, tenantSubdomain, pwaInstall, pwaManifest, ready, error, clearTenant],
+    [appId, merchantId, tenantSubdomain, pwaInstall, pwaManifest, branding, ready, error, clearTenant],
   )
 
   return <MobileV2TenantContext.Provider value={value}>{children}</MobileV2TenantContext.Provider>

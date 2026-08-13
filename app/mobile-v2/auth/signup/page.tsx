@@ -27,7 +27,9 @@ import {
 import type { MobileClientAuthReject } from '@/store/mobileClientAuthSlice';
 import { AuthRouteSkeleton } from '@/components/mobile-v2/data-skeletons';
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
+import { StorefrontMerchantLogo } from '@/components/mobile-v2/StorefrontMerchantLogo';
 import { readTenantFromSession } from '@/lib/mobileTenant/readTenantFromSession';
+import { pickManifestIconUrl } from '@/lib/webAppManifest';
 import { showAuthError } from '@/lib/showAuthError';
 import {
   isMobileAuthDebugEnabled,
@@ -59,6 +61,7 @@ function SignupForm() {
   const tenantReady = t.ready;
   const tenantError = t.error;
   const displayName = t.displayName;
+  const manifestIconUrl = pickManifestIconUrl(tenant.pwaManifest);
   const appId = t.appId;
   const merchantId = t.merchantId;
   const resolvedSubdomain = t.subdomain;
@@ -248,6 +251,13 @@ function SignupForm() {
       </div>
 
       <div className="mb-8 text-center">
+        <div className="mb-4">
+          <StorefrontMerchantLogo
+            companyLogoUrl={tenant.branding?.companyLogoUrl}
+            manifestIconUrl={manifestIconUrl}
+            companyName={tenant.branding?.companyName ?? displayName}
+          />
+        </div>
         <h2 className="mb-2 text-[28px] font-bold tracking-tight text-[var(--sf-ink,#1E1B4B)]">
           Welcome to {displayName ?? 'your store'}
         </h2>

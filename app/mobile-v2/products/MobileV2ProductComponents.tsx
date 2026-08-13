@@ -11,6 +11,12 @@ import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeleto
 import { loanApplyStartHref, loanProductApplyDetailHref } from '@/lib/loanApplyRoutes';
 import { mortgageProductApplyDetailHref } from '@/lib/mortgageApplyRoutes';
 import { amountRange, formatNgn, poweredBy, rateLabel } from '@/lib/mobileProductDetailDisplay';
+import {
+    blocksAnotherApplication,
+    doesApplicationMatchProduct,
+    fetchUserApplications,
+    type StorefrontApplication,
+} from '@/lib/storefrontApplicationClient';
 
 // ─── Tab bar shared across all V2 product pages ───────────────────────────────
 const ALL_TABS = ['Mortgage', 'Loan', 'Savings', 'Invest', 'Commodity'] as const;
@@ -60,10 +66,10 @@ function EmptyState({
 }) {
     return (
         <div className="flex flex-col items-center justify-center py-16 text-center px-4">
-            <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4">
-                <PackageOpen className="w-8 h-8 text-blue-400" />
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full sf-icon-tile-bg">
+                <PackageOpen className="h-8 w-8 sf-icon-tile" />
             </div>
-            <h3 className="text-base font-bold text-[#1E293B] mb-2">No {type} products yet</h3>
+            <h3 className="mb-2 text-base font-bold text-[var(--sf-ink,#1E293B)]">No {type} products yet</h3>
             <p className="text-sm text-gray-500 leading-relaxed max-w-[280px]">
                 We couldn&apos;t find any active {type.toLowerCase()} products for this storefront. If you expect to see
                 products, confirm your Spring app has published products and that you&apos;re scoped to the right app.
@@ -101,7 +107,7 @@ function LoadingState() {
 }
 
 // ─── Loan Product Card ────────────────────────────────────────────────────────
-export function LoanProductCard({ product }: { product: MobileProduct }) {
+export function LoanProductCard({ product, disabled }: { product: MobileProduct; disabled?: boolean }) {
     const detailRoute = loanProductApplyDetailHref(product.id);
     const amount = amountRange(product);
     const rate = rateLabel(product);
@@ -109,28 +115,28 @@ export function LoanProductCard({ product }: { product: MobileProduct }) {
     return (
         <div className="bg-[var(--sf-ink,#1E1B4B)] rounded-[24px] p-5 text-white shadow-lg relative overflow-hidden flex flex-col justify-between min-h-[220px]">
             <div className="flex flex-col mb-4">
-                <span className="text-[10px] text-blue-200 mb-1 font-medium block">Loan Amount</span>
+                <span className="mb-1 block text-[10px] font-medium text-white/70">Loan Amount</span>
                 <h2 className="text-xl font-bold tracking-tight">{amount}</h2>
-                <p className="mt-1 line-clamp-1 text-xs font-semibold text-blue-100">{product.name}</p>
+                <p className="mt-1 line-clamp-1 text-xs font-semibold text-white/80">{product.name}</p>
 
                 <div className="flex gap-4">
                     {product.duration && (
                         <div className="flex items-center gap-1.5">
-                            <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
-                                <Calendar className="w-3.5 h-3.5 text-blue-200" />
+                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/10">
+                                <Calendar className="h-3.5 w-3.5 text-white/80" />
                             </div>
                             <div className="flex flex-col leading-none">
-                                <span className="text-[9px] text-blue-300 mb-0.5">Duration</span>
+                                <span className="mb-0.5 text-[9px] text-white/60">Duration</span>
                                 <span className="text-[11px] font-bold">{product.duration}</span>
                             </div>
                         </div>
                     )}
                     <div className="flex items-center gap-1.5">
-                        <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
-                            <Percent className="w-3.5 h-3.5 text-blue-200" />
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/10">
+                            <Percent className="h-3.5 w-3.5 text-white/80" />
                         </div>
                         <div className="flex flex-col leading-none">
-                            <span className="text-[9px] text-blue-300 mb-0.5">Interest</span>
+                            <span className="mb-0.5 text-[9px] text-white/60">Interest</span>
                             <span className="text-[11px] font-bold">{rate}</span>
                         </div>
                     </div>
@@ -138,15 +144,20 @@ export function LoanProductCard({ product }: { product: MobileProduct }) {
             </div>
 
             {product.description && (
-                <p className="text-[11px] text-blue-100 mb-4 leading-relaxed font-light opacity-90 pr-2 line-clamp-2">
+                <p className="text-[11px] text-white/70 mb-4 leading-relaxed font-light opacity-90 pr-2 line-clamp-2">
                     {product.description}
                 </p>
             )}
 
-            <div className="flex items-center justify-end mt-auto">
+            <div className="mt-auto flex items-center justify-end">
                 <Link href={detailRoute}>
-                    <Button className="h-9 rounded-xl bg-[var(--sf-primary,#2563EB)] hover:bg-[var(--sf-primary,#2563EB)] text-white text-[11px] font-semibold px-4 shadow-lg shadow-blue-500/20">
-                        Apply for Loan
+                    <Button className={cn(
+                        'h-9 rounded-xl text-[11px] font-semibold px-4 shadow-lg',
+                        disabled
+                            ? 'bg-gray-400 text-white hover:bg-gray-400'
+                            : 'sf-btn',
+                    )}>
+                        {disabled ? 'Already Applied' : 'Apply for Loan'}
                     </Button>
                 </Link>
             </div>
@@ -155,7 +166,7 @@ export function LoanProductCard({ product }: { product: MobileProduct }) {
 }
 
 // ─── Featured loan ───────────────────────────────────────────────────────────
-export function FeaturedLoanProductCard({ product }: { product: MobileProduct }) {
+export function FeaturedLoanProductCard({ product, disabled }: { product: MobileProduct; disabled?: boolean }) {
     const detailHref = loanProductApplyDetailHref(product.id);
     const { displayName } = useMobileV2Tenant();
     const [slide, setSlide] = React.useState(0);
@@ -212,8 +223,13 @@ export function FeaturedLoanProductCard({ product }: { product: MobileProduct })
                         <p className="truncate text-sm font-bold text-white">{provider}</p>
                     </div>
                     <Link href={detailHref}>
-                        <Button className="h-10 rounded-lg bg-[var(--sf-button,#1E40AF)] px-5 text-xs font-semibold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]">
-                            Apply for Loan
+                        <Button className={cn(
+                            'h-10 rounded-lg px-5 text-xs font-semibold text-white',
+                            disabled
+                                ? 'bg-gray-400 hover:bg-gray-400'
+                                : 'bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)]',
+                        )}>
+                            {disabled ? 'Already Applied' : 'Apply for Loan'}
                         </Button>
                     </Link>
                 </div>
@@ -234,7 +250,7 @@ export function FeaturedLoanProductCard({ product }: { product: MobileProduct })
 }
 
 // ─── Loan Product Card ───────────────────────────────────────────────────────
-export function HotLoanProductCard({ product, compact }: { product: MobileProduct; compact?: boolean }) {
+export function HotLoanProductCard({ product, compact, disabled }: { product: MobileProduct; compact?: boolean; disabled?: boolean }) {
     const detailHref = loanProductApplyDetailHref(product.id);
     const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?q=80&w=2070&auto=format&fit=crop';
     const imgH = compact ? 'h-[100px]' : 'h-[140px]';
@@ -257,11 +273,14 @@ export function HotLoanProductCard({ product, compact }: { product: MobileProduc
                 <Link href={detailHref}>
                     <Button
                         className={cn(
-                            'mt-1 w-full rounded-full bg-[var(--sf-button,#1E40AF)] font-semibold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]',
+                            'mt-1 w-full rounded-full font-semibold text-white',
+                            disabled
+                                ? 'bg-gray-400 hover:bg-gray-400'
+                                : 'bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)]',
                             compact ? 'h-9 text-[10px]' : 'h-10 text-xs',
                         )}
                     >
-                        {compact ? 'View' : 'Get Started'}
+                        {disabled ? 'Already Applied' : compact ? 'View' : 'Get Started'}
                     </Button>
                 </Link>
             </div>
@@ -270,7 +289,7 @@ export function HotLoanProductCard({ product, compact }: { product: MobileProduc
 }
 
 // ─── Featured mortgage (carousel dots + Get Started → detail) ───────────────
-export function FeaturedMortgageCard({ product }: { product: MobileProduct }) {
+export function FeaturedMortgageCard({ product, disabled }: { product: MobileProduct; disabled?: boolean }) {
     const detailHref = mortgageProductApplyDetailHref(product.id);
     const { displayName } = useMobileV2Tenant();
     const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=2070&auto=format&fit=crop';
@@ -311,8 +330,13 @@ export function FeaturedMortgageCard({ product }: { product: MobileProduct }) {
                     </div>
                 </div>
                 <Link href={detailHref}>
-                    <Button className="h-11 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-sm font-semibold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]">
-                        Get Started
+                    <Button className={cn(
+                        'h-11 w-full rounded-full text-sm font-semibold text-white',
+                        disabled
+                            ? 'bg-gray-400 hover:bg-gray-400'
+                            : 'bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)]',
+                    )}>
+                        {disabled ? 'Already Applied' : 'Get Started'}
                     </Button>
                 </Link>
                 <div className="mt-3 flex justify-center gap-1">
@@ -332,7 +356,7 @@ export function FeaturedMortgageCard({ product }: { product: MobileProduct }) {
 }
 
 // ─── Mortgage Product Card ─────────────────────────────────────────────────────
-export function MortgageProductCard({ product, compact }: { product: MobileProduct; compact?: boolean }) {
+export function MortgageProductCard({ product, compact, disabled }: { product: MobileProduct; compact?: boolean; disabled?: boolean }) {
     const detailHref = mortgageProductApplyDetailHref(product.id);
     const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=2070&auto=format&fit=crop';
     const imgH = compact ? 'h-[100px]' : 'h-[140px]';
@@ -355,11 +379,14 @@ export function MortgageProductCard({ product, compact }: { product: MobileProdu
                 <Link href={detailHref}>
                     <Button
                         className={cn(
-                            'mt-1 w-full rounded-full bg-[var(--sf-button,#1E40AF)] font-semibold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]',
+                            'mt-1 w-full rounded-full font-semibold text-white',
+                            disabled
+                                ? 'bg-gray-400 hover:bg-gray-400'
+                                : 'bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)]',
                             compact ? 'h-9 text-[10px]' : 'h-10 text-xs',
                         )}
                     >
-                        {compact ? 'View' : 'Get Started'}
+                        {disabled ? 'Already Applied' : compact ? 'View' : 'Get Started'}
                     </Button>
                 </Link>
             </div>
@@ -368,27 +395,28 @@ export function MortgageProductCard({ product, compact }: { product: MobileProdu
 }
 
 // ─── Savings Product Card ──────────────────────────────────────────────────────
-const SAVINGS_COLORS = [
-    { bg: 'bg-purple-50', title: 'text-purple-700', btn: 'bg-purple-600 hover:bg-purple-700' },
-    { bg: 'bg-blue-50', title: 'text-blue-700', btn: 'bg-blue-600 hover:bg-blue-700' },
-    { bg: 'bg-green-50', title: 'text-green-700', btn: 'bg-green-600 hover:bg-green-700' },
-    { bg: 'bg-orange-50', title: 'text-orange-700', btn: 'bg-orange-500 hover:bg-orange-600' },
+/** Brand-tinted savings cards (no hardcoded rainbow palette). */
+const SAVINGS_TONES = [
+    { bg: 'sf-accent-soft', title: 'sf-text-button' },
+    { bg: 'sf-bg-tint', title: 'sf-text-primary' },
+    { bg: 'sf-page-bg-tint', title: 'sf-text-ink' },
+    { bg: 'sf-accent-soft', title: 'sf-text-button' },
 ];
 
 export function SavingsProductCard({ product, index }: { product: MobileProduct; index: number }) {
-    const color = SAVINGS_COLORS[index % SAVINGS_COLORS.length];
+    const tone = SAVINGS_TONES[index % SAVINGS_TONES.length];
     const detailHref = `/mobile-v2/products/savings/flex-naira?productId=${encodeURIComponent(product.id)}`;
 
     return (
-        <div className={`${color.bg} flex min-w-0 flex-col gap-3 overflow-hidden rounded-[24px] p-5`}>
-            <h3 className={`line-clamp-2 break-words text-sm font-bold leading-tight ${color.title}`}>{product.name}</h3>
+        <div className={`${tone.bg} flex min-w-0 flex-col gap-3 overflow-hidden rounded-[24px] p-5`}>
+            <h3 className={`line-clamp-2 break-words text-sm font-bold leading-tight ${tone.title}`}>{product.name}</h3>
             <p className="line-clamp-3 flex-1 break-words text-xs leading-relaxed text-gray-500">{product.description}</p>
             <span className="text-xs font-bold text-gray-800">{amountRange(product)}</span>
             <span className="text-[11px] font-semibold text-gray-600">
                 {rateLabel(product)}{product.duration ? ` · ${product.duration}` : ''}
             </span>
             <Link href={detailHref}>
-                <Button className={`w-full h-9 rounded-full text-white text-xs font-semibold ${color.btn}`}>
+                <Button className="sf-btn h-9 w-full rounded-full text-xs font-semibold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]">
                     Start Saving
                 </Button>
             </Link>
@@ -470,10 +498,35 @@ export function MobileV2ProductList({ productType }: MobileV2ProductListProps) {
         autoFetch: true,
         tenantReady,
     });
+    const [applications, setApplications] = React.useState<StorefrontApplication[]>([]);
+
+    React.useEffect(() => {
+        if (!tenantReady || !['Loan', 'Mortgage'].includes(productType)) {
+            setApplications([]);
+            return;
+        }
+        let cancelled = false;
+        void fetchUserApplications(undefined, {
+            productType: productType.toUpperCase(),
+            fetchAllPages: true,
+        }).then((result) => {
+            if (cancelled) return;
+            setApplications(result.ok ? result.applications : []);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [productType, tenantReady]);
 
     const filteredProducts = getProductsByType(productType).sort(
         (a, b) => Number(b.isFeatured) - Number(a.isFeatured),
     );
+    const isBlocked = (productId: string) =>
+        applications.some(
+            (application) =>
+                doesApplicationMatchProduct(application, productId) &&
+                blocksAnotherApplication(application),
+        );
 
     if (!tenantReady) return <LoadingState />;
     if (loading) return <LoadingState />;
@@ -490,18 +543,25 @@ export function MobileV2ProductList({ productType }: MobileV2ProductListProps) {
     if (productType === 'Loan') {
         const featured = filteredProducts.find((product) => product.isFeatured) ?? filteredProducts[0];
         const hot = filteredProducts.filter((product) => product.id !== featured?.id);
+        const featuredCtaProduct = filteredProducts.find((product) => !isBlocked(product.id)) ?? null;
         return (
             <div className="space-y-6">
                 <div className="flex items-center justify-between">
                     <h2 className="font-bold text-[#1E293B]">Feature</h2>
-                    <Link
-                        href={featured ? loanApplyStartHref(featured.id) : '/mobile-v2/products/loan/apply/start'}
-                        className="rounded-lg bg-[var(--sf-button,#1E40AF)] px-3 py-1.5 text-[10px] font-bold uppercase text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]"
-                    >
-                        Check Eligibility
-                    </Link>
+                    {featuredCtaProduct ? (
+                        <Link
+                            href={loanApplyStartHref(featuredCtaProduct.id)}
+                            className="rounded-lg bg-[var(--sf-button,#1E40AF)] px-3 py-1.5 text-[10px] font-bold uppercase text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]"
+                        >
+                            Check Eligibility
+                        </Link>
+                    ) : (
+                        <span className="rounded-lg bg-gray-200 px-3 py-1.5 text-[10px] font-bold uppercase text-gray-500">
+                            Already Applied
+                        </span>
+                    )}
                 </div>
-                {featured ? <FeaturedLoanProductCard product={featured} /> : null}
+                {featured ? <FeaturedLoanProductCard product={featured} disabled={isBlocked(featured.id)} /> : null}
 
                 {hot.length > 0 ? (
                     <div>
@@ -509,7 +569,7 @@ export function MobileV2ProductList({ productType }: MobileV2ProductListProps) {
                         <div className="grid grid-cols-2 gap-2">
                             {hot.map((p) => (
                                 <div key={p.id} className="min-w-0">
-                                    <HotLoanProductCard product={p} compact />
+                                    <HotLoanProductCard product={p} compact disabled={isBlocked(p.id)} />
                                 </div>
                             ))}
                         </div>
@@ -533,7 +593,7 @@ export function MobileV2ProductList({ productType }: MobileV2ProductListProps) {
                         Check Eligibility
                     </Link>
                 </div>
-                {featured ? <FeaturedMortgageCard product={featured} /> : null}
+                {featured ? <FeaturedMortgageCard product={featured} disabled={isBlocked(featured.id)} /> : null}
 
                 {hot.length > 0 ? (
                     <div>
@@ -541,7 +601,7 @@ export function MobileV2ProductList({ productType }: MobileV2ProductListProps) {
                         <div className="grid grid-cols-2 gap-2">
                             {hot.map((p) => (
                                 <div key={p.id} className="min-w-0">
-                                    <MortgageProductCard product={p} compact />
+                                    <MortgageProductCard product={p} compact disabled={isBlocked(p.id)} />
                                 </div>
                             ))}
                         </div>

@@ -8,6 +8,8 @@ import { Calendar, ChevronLeft, Filter, Percent, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
+  blocksAnotherApplication,
+  doesApplicationMatchProduct,
   fetchUserApplications,
   readInitializedApplication,
   type StorefrontApplication,
@@ -64,6 +66,8 @@ type ProductDetailsScreenProps = {
   primaryActionHref?: string
   detailRows?: Array<{ label: string; value: React.ReactNode }>
   propertyRows?: Array<{ label: string; value: React.ReactNode }>
+  applicationBlocked?: boolean
+  applicationBlockedNote?: string
 }
 
 function NairaAmount({ children }: { children: React.ReactNode }) {
@@ -278,6 +282,8 @@ function ProductPanel({
   primaryActionHref,
   detailRows,
   propertyRows,
+  applicationBlocked,
+  applicationBlockedNote,
 }: ProductDetailsScreenProps) {
   const actionHref = primaryActionHref ?? applyHref
   const actionLabel = primaryActionLabel ?? 'Apply'
@@ -411,11 +417,27 @@ function ProductPanel({
         </>
       )}
 
-      <Link href={actionHref} className="block pt-2">
-        <Button className="h-12 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-sm font-semibold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]">
-          {actionLabel}
-        </Button>
-      </Link>
+      <div className="pt-2">
+        {applicationBlocked ? (
+          <>
+            <Button
+              disabled
+              className="h-12 w-full rounded-full bg-gray-300 text-sm font-semibold text-white hover:bg-gray-300"
+            >
+              Already applied
+            </Button>
+            <p className="mt-2 text-center text-[11px] text-gray-500">
+              {applicationBlockedNote || 'You already have an application for this product.'}
+            </p>
+          </>
+        ) : (
+          <Link href={actionHref} className="block">
+            <Button className="h-12 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-sm font-semibold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]">
+              {actionLabel}
+            </Button>
+          </Link>
+        )}
+      </div>
     </div>
   )
 }
@@ -439,7 +461,6 @@ export function ProductDetailsScreen(props: ProductDetailsScreenProps) {
   }, [kind, productId, resolvedInitialTab])
 
   useEffect(() => {
-    if (detailsOnly) return
     let cancelled = false
     setApplicationsLoading(true)
     setApplicationsError(null)
@@ -466,7 +487,7 @@ export function ProductDetailsScreen(props: ProductDetailsScreenProps) {
     return () => {
       cancelled = true
     }
-  }, [detailsOnly, productId])
+  }, [productId])
 
   const labels: Record<DetailTab, string> = {
     history: 'History',
@@ -478,13 +499,17 @@ export function ProductDetailsScreen(props: ProductDetailsScreenProps) {
   const initializedApplication = readInitializedApplication()
   const matchingApplications = applications.filter((application) => {
     const applicationProductId = String(application.productId ?? '').trim()
-    if (applicationProductId === productId) return true
+    if (doesApplicationMatchProduct(application, productId)) return true
     const productType = String(application.productType ?? '').toLowerCase()
     return !applicationProductId && productType.includes(kind)
   })
+  const initializedMatchesProduct = doesApplicationMatchProduct(initializedApplication, productId)
   const latestApplication =
     matchingApplications[0] ||
-    (initializedApplication?.productId === productId ? initializedApplication : null)
+    (initializedMatchesProduct ? initializedApplication : null)
+  const applicationBlocked =
+    matchingApplications.some((application) => blocksAnotherApplication(application)) ||
+    (initializedMatchesProduct && blocksAnotherApplication(initializedApplication))
   const historyRows: ApplicationHistoryRow[] = matchingApplications.map((application, index) => {
     const status = String(application.status ?? 'Pending')
     return {
@@ -511,7 +536,11 @@ export function ProductDetailsScreen(props: ProductDetailsScreenProps) {
         </div>
 
         {detailsOnly ? (
-          <ProductPanel {...props} />
+          <ProductPanel
+            {...props}
+            applicationBlocked={applicationBlocked}
+            applicationBlockedNote="You already have an application for this product. Open your pending application to continue."
+          />
         ) : (
           <>
             <AccountSummaryCard
@@ -572,7 +601,13 @@ export function ProductDetailsScreen(props: ProductDetailsScreenProps) {
                 </div>
               </div>
             ) : null}
-            {activeTab === 'product' ? <ProductPanel {...props} /> : null}
+            {activeTab === 'product' ? (
+              <ProductPanel
+                {...props}
+                applicationBlocked={applicationBlocked}
+                applicationBlockedNote="You already have an application for this product. Open your pending application to continue."
+              />
+            ) : null}
           </>
         )}
       </div>

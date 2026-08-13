@@ -122,7 +122,7 @@ export function WalletBalanceCardSkeleton({ className }: { className?: string })
   return (
     <div
       className={cn(
-        'relative w-full h-[220px] rounded-[30px] overflow-hidden shadow-xl shadow-blue-900/10',
+        'relative w-full h-[220px] rounded-[30px] overflow-hidden shadow-xl shadow-black/10',
         className,
       )}
       aria-busy="true"
