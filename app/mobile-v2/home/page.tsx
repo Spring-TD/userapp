@@ -41,8 +41,8 @@ import { useMobileProducts } from '@/hooks/useMobileProducts';
 import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
 import { MobileV2NotificationBell } from '@/components/mobile-v2/MobileV2NotificationBell';
 import {
-    getDisplayProductType,
     storefrontProductTypeRoute,
+    availableStorefrontProductTypes,
     type StorefrontProductType,
 } from '@/lib/storefrontProducts';
 import type { WalletTransaction } from '@/types/userWallet';
@@ -100,7 +100,8 @@ const PRODUCT_QUICK_ACTIONS: {
     { type: 'Loan', icon: <Briefcase className="w-6 h-6" />, label: 'Loan' },
     { type: 'Mortgage', icon: <Home className="w-6 h-6" />, label: 'Mortgage' },
     { type: 'Savings', icon: <Landmark className="w-6 h-6" />, label: 'Saving' },
-    { type: 'Commodity', icon: <ShoppingCart className="w-6 h-6" />, label: 'Shop' },
+    { type: 'Invest', icon: <PieChart className="w-6 h-6" />, label: 'Invest' },
+    { type: 'Commodity', icon: <ShoppingCart className="w-6 h-6" />, label: 'Commodity' },
 ];
 
 export default function HomePage() {
@@ -114,14 +115,18 @@ export default function HomePage() {
         springAppId: appId ?? undefined,
         tenantReady,
     });
-    const enabledTypes = new Set(appProducts.map((p) => getDisplayProductType(p)));
-    const productQuickLinks: QuickActionItem[] = PRODUCT_QUICK_ACTIONS.filter(
-        (a) => appProducts.length === 0 || enabledTypes.has(a.type),
-    ).map((a) => ({
-        icon: a.icon,
-        label: a.label,
-        link: storefrontProductTypeRoute(a.type),
-    }));
+    const enabledTypes = useMemo(
+        () => new Set(availableStorefrontProductTypes(appProducts)),
+        [appProducts],
+    );
+    const productQuickLinks: QuickActionItem[] = useMemo(() => {
+        if (productsLoading) return [];
+        return PRODUCT_QUICK_ACTIONS.filter((a) => enabledTypes.has(a.type)).map((a) => ({
+            icon: a.icon,
+            label: a.label,
+            link: storefrontProductTypeRoute(a.type),
+        }));
+    }, [productsLoading, enabledTypes]);
 
     const [activeModal, setActiveModal] = useState<'none' | 'fund_options' | 'fund_bank'>('none');
     const { user: profile, loading: profileLoading, kycApproved } = useAuthUserProfile();

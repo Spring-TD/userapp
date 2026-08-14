@@ -105,6 +105,22 @@ export function productMatchesTab(
   return getDisplayProductType(product) === tab
 }
 
+export const STOREFRONT_PRODUCT_TYPE_ORDER: StorefrontProductType[] = [
+  "Mortgage",
+  "Loan",
+  "Savings",
+  "Invest",
+  "Commodity",
+]
+
+/** Tabs / quick actions to show — only types that have at least one active product. */
+export function availableStorefrontProductTypes(
+  products: Pick<MobileProduct, "type" | "name">[],
+): StorefrontProductType[] {
+  const present = new Set(products.map((p) => getDisplayProductType(p)))
+  return STOREFRONT_PRODUCT_TYPE_ORDER.filter((type) => present.has(type))
+}
+
 function formatAboutDuration(about: Record<string, unknown>): string | undefined {
   if (typeof about.duration === "string" && about.duration.trim()) {
     return about.duration.trim()

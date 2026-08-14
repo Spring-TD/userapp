@@ -12,7 +12,8 @@ interface SplashScreenProps extends SplashScreenConfig {
 
 export function V2SplashScreen({
   logo,
-  appName = 'Airpay',
+  image,
+  appName = '',
   backgroundColor = '#2563EB',
   textColor = '#FFFFFF',
   showDecorations = true,
@@ -29,6 +30,8 @@ export function V2SplashScreen({
     }
   }, [autoAdvance, onComplete, duration]);
 
+  const mark = logo || image;
+
   return (
     <motion.div
       className="relative w-full h-full flex items-center justify-center overflow-hidden"
@@ -36,33 +39,36 @@ export function V2SplashScreen({
       exit={{ opacity: 0 }}
       transition={{ duration: 0.5 }}
     >
-      {/* Decorative Circles */}
-      {showDecorations && (
+      {showDecorations ? (
         <>
           <div className="absolute top-[-50px] right-[-100px] w-[300px] h-[300px] rounded-full border border-white/10" />
           <div className="absolute top-[50px] right-[-50px] w-[200px] h-[200px] rounded-full border border-white/10" />
           <div className="absolute bottom-[-50px] left-[-100px] w-[300px] h-[300px] rounded-full border border-white/10" />
           <div className="absolute bottom-[50px] left-[-50px] w-[200px] h-[200px] rounded-full border border-white/10" />
         </>
-      )}
+      ) : null}
 
-      {/* Logo or App Name */}
       <motion.div
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.8, ease: 'easeOut' }}
-        className="flex flex-col items-center"
+        className="relative z-10 flex flex-col items-center gap-4 px-8"
       >
-        {logo ? (
-          <img src={logo} alt={appName} className="w-24 h-24 object-contain" />
-        ) : (
-          <h1
-            className="text-4xl font-bold tracking-wide"
+        {mark ? (
+          <img
+            src={mark}
+            alt={appName || 'App'}
+            className="h-28 w-28 rounded-2xl object-contain shadow-lg"
+          />
+        ) : null}
+        {appName ? (
+          <p
+            className={mark ? 'text-center text-lg font-semibold tracking-wide' : 'text-center text-4xl font-bold tracking-wide'}
             style={{ color: textColor }}
           >
             {appName}
-          </h1>
-        )}
+          </p>
+        ) : null}
       </motion.div>
     </motion.div>
   );

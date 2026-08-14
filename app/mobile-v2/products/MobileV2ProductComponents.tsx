@@ -17,27 +17,37 @@ import {
     fetchUserApplications,
     type StorefrontApplication,
 } from '@/lib/storefrontApplicationClient';
-
-// ─── Tab bar shared across all V2 product pages ───────────────────────────────
-const ALL_TABS = ['Mortgage', 'Loan', 'Savings', 'Invest', 'Commodity'] as const;
-type ProductTab = typeof ALL_TABS[number];
-
-const TAB_ROUTES: Record<ProductTab, string> = {
-    Mortgage: '/mobile-v2/products/mortgage',
-    Loan: '/mobile-v2/products/loan',
-    Savings: '/mobile-v2/products/savings',
-    Invest: '/mobile-v2/products/invest',
-    Commodity: '/mobile-v2/products/commodity',
-};
+import {
+    availableStorefrontProductTypes,
+    storefrontProductTypeRoute,
+    type StorefrontProductType,
+} from '@/lib/storefrontProducts';
 
 // ─── Tab Bar ──────────────────────────────────────────────────────────────────
-export function MobileV2TabBar({ activeTab }: { activeTab: ProductTab }) {
+export function MobileV2TabBar({ activeTab }: { activeTab: StorefrontProductType }) {
+    const { appId: tenantAppId, ready: tenantReady } = useMobileV2Tenant();
+    const { products, loading } = useMobileProducts({
+        springAppId: tenantAppId ?? undefined,
+        autoFetch: true,
+        tenantReady,
+    });
+    const tabs = React.useMemo(
+        () => availableStorefrontProductTypes(products),
+        [products],
+    );
+
+    if (!tenantReady || loading) {
+        return <div className="h-11 w-full animate-pulse rounded-full bg-[#F3F4F6]" />;
+    }
+
+    if (tabs.length === 0) return null;
+
     return (
         <div className="w-full bg-[#F3F4F6] p-1.5 rounded-full flex items-center justify-between overflow-x-auto no-scrollbar">
-            {ALL_TABS.map((tab) => (
+            {tabs.map((tab) => (
                 <Link
                     key={tab}
-                    href={TAB_ROUTES[tab]}
+                    href={storefrontProductTypeRoute(tab)}
                     className={cn(
                         'flex-1 text-center py-2.5 px-4 rounded-full text-xs font-semibold transition-all whitespace-nowrap',
                         tab === activeTab

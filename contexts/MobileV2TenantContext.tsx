@@ -43,7 +43,10 @@ const MobileV2TenantContext = createContext<MobileV2TenantContextValue | undefin
 
 /** Proxies `GET /api/v1/apps/resolve/{subdomain}` — includes `pwaManifest` + optional `pwaInstall`. */
 async function resolveSubdomain(slug: string) {
-  const res = await fetch(`/api/v1/apps/resolve/${encodeURIComponent(slug)}`)
+  const res = await fetch(`/api/v1/apps/resolve/${encodeURIComponent(slug)}`, {
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+  })
   const json = (await res.json()) as {
     success?: boolean
     data?: {
@@ -67,6 +70,21 @@ async function resolveSubdomain(slug: string) {
     subdomain: data.subdomain?.trim().toLowerCase() || slug,
     pwaInstall: data.pwaInstall && typeof data.pwaInstall === "object" ? data.pwaInstall : null,
     pwaManifest: parseWebAppManifestBranding(data.pwaManifest),
+    rawManifest: data.pwaManifest ?? null,
+  }
+}
+
+async function fetchManifestForAppId(appId: string): Promise<WebAppManifestBranding | null> {
+  try {
+    const res = await fetch(`/api/apps/${encodeURIComponent(appId)}/pwa/manifest.webmanifest`, {
+      cache: "no-store",
+      headers: { Accept: "application/manifest+json, application/json" },
+    })
+    if (!res.ok) return null
+    const json = (await res.json()) as unknown
+    return parseWebAppManifestBranding(json)
+  } catch {
+    return null
   }
 }
 
@@ -102,6 +120,7 @@ function persist(
   merchantId: string | null,
   subdomain: string | null,
   pwaManifest: WebAppManifestBranding | null,
+  rawManifest?: unknown,
 ) {
   try {
     if (appId) sessionStorage.setItem(TENANT_APP_ID_STORAGE_KEY, appId)
@@ -122,11 +141,35 @@ function persist(
     /* ignore */
   }
   try {
-    if (pwaManifest) sessionStorage.setItem(TENANT_PWA_MANIFEST_STORAGE_KEY, JSON.stringify(pwaManifest))
+    const toStore = rawManifest ?? pwaManifest
+    if (toStore) sessionStorage.setItem(TENANT_PWA_MANIFEST_STORAGE_KEY, JSON.stringify(toStore))
     else sessionStorage.removeItem(TENANT_PWA_MANIFEST_STORAGE_KEY)
   } catch {
     /* ignore */
   }
+}
+
+function clearPersistedTenant() {
+  try {
+    sessionStorage.removeItem(TENANT_APP_ID_STORAGE_KEY)
+    sessionStorage.removeItem(TENANT_MERCHANT_ID_STORAGE_KEY)
+    sessionStorage.removeItem(TENANT_SUBDOMAIN_STORAGE_KEY)
+    sessionStorage.removeItem(TENANT_PWA_MANIFEST_STORAGE_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+function mobileRootDomain(): string | null {
+  const fromEnv =
+    (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_MOBILE_ROOT_DOMAIN) ||
+    "tryspring.io"
+  const cleaned = String(fromEnv || "")
+    .trim()
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/+$/, "")
+    .replace(/^www\./i, "")
+  return cleaned || null
 }
 
 async function loadTenantFromNavigation(search: string) {
@@ -144,13 +187,19 @@ async function loadTenantFromNavigation(search: string) {
   }
 
   const hostSub =
-    typeof window !== "undefined" ? getTenantSubdomainFromHost(window.location.hostname, null) : null
+    typeof window !== "undefined"
+      ? getTenantSubdomainFromHost(window.location.hostname, mobileRootDomain())
+      : null
+
+  // Live URL always wins over a previous session's tenant.
+  const liveSlug = subdomainParam || hostSub
 
   let appId: string | null = null
   let merchantId: string | null = merchantFromQuery
   let tenantSubdomain: string | null = null
   let pwaInstall: StorefrontPwaInstallPayload | null = null
   let pwaManifest: WebAppManifestBranding | null = null
+  let rawManifest: unknown = null
   let error: string | null = null
 
   const readMerchant = () => {
@@ -169,33 +218,50 @@ async function loadTenantFromNavigation(search: string) {
   }
 
   try {
-    if (appIdParam) {
-      appId = appIdParam
-      if (!merchantId) merchantId = readMerchant()
-      pwaManifest = readCachedManifest()
-    } else if (subdomainParam || hostSub || storedSubdomain) {
-      const slug = subdomainParam || hostSub || storedSubdomain!
-      tenantSubdomain = slug
-      const t = await resolveSubdomain(slug)
+    if (liveSlug) {
+      if (storedSubdomain && storedSubdomain !== liveSlug) {
+        clearPersistedTenant()
+        storedApp = null
+      }
+      tenantSubdomain = liveSlug
+      const t = await resolveSubdomain(liveSlug)
       appId = t.appId
       merchantId = merchantId || t.merchantId
       pwaInstall = t.pwaInstall
       pwaManifest = t.pwaManifest
+      rawManifest = t.rawManifest
+    } else if (appIdParam) {
+      if (storedApp && storedApp !== appIdParam) {
+        clearPersistedTenant()
+      }
+      appId = appIdParam
+      if (!merchantId) merchantId = readMerchant()
+      pwaManifest = (await fetchManifestForAppId(appIdParam)) || readCachedManifest()
+    } else if (storedSubdomain) {
+      tenantSubdomain = storedSubdomain
+      const t = await resolveSubdomain(storedSubdomain)
+      appId = t.appId
+      merchantId = merchantId || t.merchantId
+      pwaInstall = t.pwaInstall
+      pwaManifest = t.pwaManifest
+      rawManifest = t.rawManifest
     } else if (storedApp) {
       appId = storedApp
       if (!merchantId) merchantId = readMerchant()
-      pwaManifest = readCachedManifest()
+      pwaManifest = (await fetchManifestForAppId(storedApp)) || readCachedManifest()
     }
   } catch (e) {
     error = e instanceof Error ? e.message : "Tenant resolution failed"
-    appId = appIdParam || storedApp || readApp()
-    merchantId = merchantId || readMerchant()
-    tenantSubdomain = subdomainParam || hostSub || null
+    const cacheSub = readCachedSubdomain()
+    const cacheMatchesLive = !liveSlug || cacheSub === liveSlug
+    appId = appIdParam || (cacheMatchesLive ? storedApp || readApp() : null)
+    merchantId = merchantId || (cacheMatchesLive ? readMerchant() : null)
+    tenantSubdomain = liveSlug || (cacheMatchesLive ? storedSubdomain : null)
     pwaInstall = null
-    pwaManifest = readCachedManifest()
+    pwaManifest = cacheMatchesLive ? readCachedManifest() : null
   }
 
-  persist(appId, merchantId, tenantSubdomain, pwaManifest)
+  persist(appId, merchantId, tenantSubdomain, pwaManifest, rawManifest)
 
   return { appId, merchantId, tenantSubdomain, pwaInstall, pwaManifest, error }
 }
@@ -204,6 +270,7 @@ export function MobileV2TenantProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const searchKey = searchParams?.toString() ?? ""
+  const hostKey = typeof window !== "undefined" ? window.location.hostname : ""
 
   const [appId, setAppId] = useState<string | null>(null)
   const [merchantId, setMerchantId] = useState<string | null>(null)
@@ -263,7 +330,7 @@ export function MobileV2TenantProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [pathname, searchKey])
+  }, [pathname, searchKey, hostKey])
 
   const value = useMemo(
     () => ({

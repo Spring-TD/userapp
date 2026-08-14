@@ -2,14 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { getApiUpstreamBase } from '@/lib/server/apiUpstreamBase';
 import { fetchUpstream } from '@/lib/server/upstreamFetch';
+import {
+    applyManifestToMobileAppConfig,
+    emptyMobileShellConfig,
+    parseWebAppManifestBranding,
+} from '@/lib/webAppManifest';
 
 const API_UPSTREAM_BASE = getApiUpstreamBase();
 
-
 /**
- * Public endpoint for mobile apps to fetch their configuration
- * No authentication required - uses appId to fetch public config
- * 
+ * Legacy public mobile config.
+ * Storefront splash/onboarding should use resolve `pwaManifest`.
+ * This route now maps the same PWA/app_builder payload instead of dummy mortgage copy.
+ *
  * GET /api/apps/[id]/configuration/public
  */
 export async function GET(
@@ -18,34 +23,15 @@ export async function GET(
 ) {
     try {
         const { id: appId } = await params;
+        const shell = emptyMobileShellConfig(appId);
 
-        // Fetch active configuration from upstream app API (see getApiUpstreamBase)
-        const response = await fetchUpstream(`${API_UPSTREAM_BASE}/api/v1/apps/${appId}/configuration`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        });
+        const [legacyConfig, pwaManifest] = await Promise.all([
+            fetchLegacyConfiguration(appId),
+            fetchPwaManifest(appId),
+        ]);
 
-        const data = await response.json();
-
-        if (!response.ok) {
-            // Return default configuration if no config exists
-            if (response.status === 404) {
-                return NextResponse.json({
-                    success: true,
-                    data: getDefaultMobileConfig(),
-                });
-            }
-            
-            return NextResponse.json(
-                { success: false, error: data.error || 'Failed to fetch configuration' },
-                { status: response.status }
-            );
-        }
-
-        // Transform to mobile-friendly format
-        const mobileConfig = transformToMobileConfig(data.data || data);
+        const fromLegacy = legacyConfig ? transformToMobileConfig(appId, legacyConfig) : shell;
+        const mobileConfig = applyManifestToMobileAppConfig(fromLegacy, pwaManifest, null);
 
         return NextResponse.json({
             success: true,
@@ -53,127 +39,110 @@ export async function GET(
         });
     } catch (error) {
         console.error('Error fetching public configuration:', error);
-        // Return default config on error
         return NextResponse.json({
             success: true,
-            data: getDefaultMobileConfig(),
+            data: emptyMobileShellConfig(null),
         });
     }
 }
 
-/**
- * Transform backend config to mobile-friendly format
- */
-function transformToMobileConfig(config: any) {
-    const appElements = config.appElements || {};
-    const onboarding = config.onboarding || {};
-
-    return {
-        // App info
-        appId: config.appId,
-        appName: config.name || 'App',
-        
-        // Splash screen
-        splash: {
-            logo: appElements.logo,
-            backgroundColor: onboarding.backgroundColors?.primary || appElements.buttons?.primaryColor || '#2563EB',
-            textColor: onboarding.textColors?.primary || '#FFFFFF',
-        },
-        
-        // Onboarding screens
-        onboarding: {
-            backgroundColor: onboarding.backgroundColors?.primary || '#2563EB',
-            secondaryBackgroundColor: onboarding.backgroundColors?.secondary || '#1d4ed8',
-            textColor: onboarding.textColors?.primary || '#1e293b',
-            secondaryTextColor: onboarding.textColors?.secondary || '#6b7280',
-            buttonColor: appElements.buttons?.primaryColor || '#2563EB',
-            buttonTextColor: '#FFFFFF',
-            fontFamily: onboarding.fontFamily || 'Inter',
-            steps: [
-                {
-                    id: 'step-1',
-                    title: onboarding.splash1?.title || 'Welcome to Your App',
-                    description: onboarding.splash1?.subtitle || 'Discover amazing features and possibilities',
-                    image: onboarding.splash1?.image || '/onboarding-chart-original.png',
-                },
-                {
-                    id: 'step-2',
-                    title: onboarding.splash2?.title || 'Track Your Progress',
-                    description: onboarding.splash2?.subtitle || 'Monitor your activities and achieve your goals',
-                    image: onboarding.splash2?.image || '/onboarding-chart-original.png',
-                },
-                {
-                    id: 'step-3',
-                    title: onboarding.splash3?.title || 'Get Started Today',
-                    description: onboarding.splash3?.subtitle || 'Join thousands of happy users',
-                    image: onboarding.splash3?.image || '/onboarding-chart-original.png',
-                },
-            ],
-        },
-        
-        // Theme colors
-        theme: {
-            primaryColor: appElements.buttons?.primaryColor || '#2563EB',
-            secondaryColor: appElements.buttons?.secondaryColor || '#E5E7EB',
-            headerBackgroundColor: appElements.header?.backgroundColor || '#FFFFFF',
-            headerTextColor: appElements.header?.textColor || '#1F2937',
-            bodyBackgroundColor: appElements.body?.backgroundColor || '#F9FAFB',
-            bodyTextColor: appElements.body?.textColor || '#374151',
-        },
-    };
+async function fetchLegacyConfiguration(appId: string): Promise<Record<string, unknown> | null> {
+    try {
+        const response = await fetchUpstream(`${API_UPSTREAM_BASE}/api/v1/apps/${appId}/configuration`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+        });
+        if (!response.ok) return null;
+        const data = await response.json();
+        const payload = data?.data || data;
+        return payload && typeof payload === 'object' ? payload : null;
+    } catch {
+        return null;
+    }
 }
 
-/**
- * Default mobile config when no configuration exists
- */
-function getDefaultMobileConfig() {
+async function fetchPwaManifest(appId: string) {
+    try {
+        const response = await fetchUpstream(
+            `${API_UPSTREAM_BASE}/api/v1/apps/${encodeURIComponent(appId)}/pwa/manifest.webmanifest`,
+            {
+                method: 'GET',
+                headers: { Accept: 'application/manifest+json, application/json, */*' },
+            },
+        );
+        if (!response.ok) return null;
+        const json = await response.json();
+        return parseWebAppManifestBranding(json);
+    } catch {
+        return null;
+    }
+}
+
+function asRecord(v: unknown): Record<string, unknown> | null {
+    return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+}
+
+function asString(v: unknown): string | undefined {
+    return typeof v === 'string' && v.trim() ? v.trim() : undefined;
+}
+
+/** Old appElements / onboarding.splashN shape — only used if present. */
+function transformToMobileConfig(appId: string, config: Record<string, unknown>) {
+    const appElements = asRecord(config.appElements) || {};
+    const onboarding = asRecord(config.onboarding) || {};
+    const bg = asRecord(onboarding.backgroundColors) || {};
+    const text = asRecord(onboarding.textColors) || {};
+    const buttons = asRecord(appElements.buttons) || {};
+    const header = asRecord(appElements.header) || {};
+    const body = asRecord(appElements.body) || {};
+    const splash1 = asRecord(onboarding.splash1);
+    const splash2 = asRecord(onboarding.splash2);
+    const splash3 = asRecord(onboarding.splash3);
+
+    const steps = [splash1, splash2, splash3]
+        .map((s, i) => {
+            if (!s) return null;
+            const title = asString(s.title);
+            const description = asString(s.subtitle) || asString(s.description);
+            const image = asString(s.image);
+            if (!title && !description && !image) return null;
+            return {
+                id: `step-${i + 1}`,
+                title: title || `Step ${i + 1}`,
+                description: description || '',
+                image,
+            };
+        })
+        .filter(Boolean);
+
+    const base = emptyMobileShellConfig(asString(config.appId) || appId);
     return {
-        appId: null,
-        appName: 'Airpay',
-        
+        ...base,
+        appName: asString(config.name) || base.appName,
         splash: {
-            logo: null,
-            backgroundColor: '#2563EB',
-            textColor: '#FFFFFF',
+            ...base.splash,
+            logo: asString(appElements.logo),
+            backgroundColor: asString(bg.primary) || asString(buttons.primaryColor) || base.splash.backgroundColor,
+            textColor: asString(text.primary) || base.splash.textColor,
         },
-        
         onboarding: {
-            backgroundColor: '#2563EB',
-            secondaryBackgroundColor: '#1d4ed8',
-            textColor: '#1e293b',
-            secondaryTextColor: '#6b7280',
-            buttonColor: '#2563EB',
-            buttonTextColor: '#FFFFFF',
-            fontFamily: 'Inter',
-            steps: [
-                {
-                    id: 'step-1',
-                    title: 'You ought to know how mortgage works',
-                    description: 'Get an overview of how you are performing and motivate yourself to achieve even more.',
-                    image: '/onboarding-chart-original.png',
-                },
-                {
-                    id: 'step-2',
-                    title: 'Track your expenses and save money',
-                    description: 'Keep track of your spending habits and find new ways to save efficiently.',
-                    image: '/onboarding-chart-original.png',
-                },
-                {
-                    id: 'step-3',
-                    title: 'Secure your future with smart investments',
-                    description: 'Invest wisely and watch your wealth grow with our advanced analytics tools.',
-                    image: '/onboarding-chart-original.png',
-                },
-            ],
+            ...base.onboarding,
+            backgroundColor: asString(bg.primary) || base.onboarding.backgroundColor,
+            secondaryBackgroundColor: asString(bg.secondary) || base.onboarding.secondaryBackgroundColor,
+            textColor: asString(text.primary) || base.onboarding.textColor,
+            secondaryTextColor: asString(text.secondary) || base.onboarding.secondaryTextColor,
+            buttonColor: asString(buttons.primaryColor) || base.onboarding.buttonColor,
+            fontFamily: asString(onboarding.fontFamily) || base.onboarding.fontFamily,
+            steps: steps as NonNullable<typeof steps[number]>[],
         },
-        
         theme: {
-            primaryColor: '#2563EB',
-            secondaryColor: '#E5E7EB',
-            headerBackgroundColor: '#FFFFFF',
-            headerTextColor: '#1F2937',
-            bodyBackgroundColor: '#F9FAFB',
-            bodyTextColor: '#374151',
+            ...base.theme,
+            primaryColor: asString(buttons.primaryColor) || base.theme.primaryColor,
+            secondaryColor: asString(buttons.secondaryColor) || base.theme.secondaryColor,
+            headerBackgroundColor: asString(header.backgroundColor) || base.theme.headerBackgroundColor,
+            headerTextColor: asString(header.textColor) || base.theme.headerTextColor,
+            bodyBackgroundColor: asString(body.backgroundColor) || base.theme.bodyBackgroundColor,
+            bodyTextColor: asString(body.textColor) || base.theme.bodyTextColor,
         },
     };
 }

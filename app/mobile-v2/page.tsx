@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation';
 import { AnimatePresence } from 'framer-motion';
 import { V2SplashScreen, V2OnboardingView } from '@/components/mobile-templates';
 import { StorefrontPwaInstall } from '@/components/mobile-v2/StorefrontPwaInstall';
-import { useMobileConfig, type MobileAppConfig } from '@/hooks/useMobileConfig';
+import type { MobileAppConfig } from '@/hooks/useMobileConfig';
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
-import { applyManifestToMobileAppConfig } from '@/lib/webAppManifest';
+import { applyManifestToMobileAppConfig, emptyMobileShellConfig } from '@/lib/webAppManifest';
 import { Loader2 } from 'lucide-react';
 
 function LoadingScreen() {
@@ -19,31 +19,33 @@ function LoadingScreen() {
 }
 
 /**
- * Splash / onboarding: resolve returns `pwaManifest` (colors, name, icons); merged into shell config here.
+ * Splash / onboarding come only from resolve `pwaManifest` (app_builder + W3C).
+ * Do not fetch `/api/apps/.../configuration/public` — that route is a dummy fallback.
  */
 function MobileV2Content() {
-    const { appId, pwaManifest, displayName, branding, error: resolveNote, ready: tenantReady } = useMobileV2Tenant();
+    const { appId, pwaManifest, branding, error: resolveNote, ready: tenantReady } = useMobileV2Tenant();
 
     const effectiveAppId = appId ?? undefined;
-    const { config, loading: configLoading } = useMobileConfig({ appId: effectiveAppId });
 
     const mergedConfig = useMemo(() => {
-        if (!config) return null;
-        const base = applyManifestToMobileAppConfig(config, pwaManifest, displayName);
+        const base = applyManifestToMobileAppConfig(
+            emptyMobileShellConfig(appId),
+            pwaManifest,
+            null,
+        );
         const kycLogo = branding?.companyLogoUrl?.trim();
         const kycName = branding?.companyName?.trim();
-        // Prefer KYC logo when present; otherwise keep manifest icon from applyManifestToMobileAppConfig.
         return {
             ...base,
             splash: {
                 ...base.splash,
-                ...(kycLogo ? { logo: kycLogo } : {}),
+                logo: base.splash.logo || kycLogo,
             },
-            appName: kycName || base.appName,
+            appName: base.appName || kycName || "",
         };
-    }, [config, pwaManifest, displayName, branding]);
+    }, [appId, pwaManifest, branding]);
 
-    if (!tenantReady || configLoading || !mergedConfig) {
+    if (!tenantReady) {
         return <LoadingScreen />;
     }
 
@@ -87,6 +89,7 @@ function MobileV2Configured({
                 {showSplash && (
                     <V2SplashScreen
                         logo={config.splash.logo}
+                        image={config.splash.image}
                         appName={config.appName}
                         backgroundColor={config.splash.backgroundColor}
                         textColor={config.splash.textColor}
@@ -99,6 +102,8 @@ function MobileV2Configured({
             {!showSplash && (
                 <V2OnboardingView
                     steps={config.onboarding.steps}
+                    logo={config.splash.logo || config.splash.image}
+                    appName={config.appName}
                     backgroundColor={config.onboarding.backgroundColor}
                     textColor={config.onboarding.textColor}
                     secondaryTextColor={config.onboarding.secondaryTextColor}

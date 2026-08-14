@@ -9,6 +9,7 @@ export interface OnboardingStep {
 
 export interface SplashScreenConfig {
   logo?: string;
+  image?: string;
   appName?: string;
   backgroundColor?: string;
   textColor?: string;
