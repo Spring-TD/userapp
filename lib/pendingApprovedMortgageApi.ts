@@ -185,20 +185,26 @@ export async function respondToMortgageOffer(
   )
 }
 
-/** POST …/appointment — `scheduledFor` must match a merchant-configured slot. */
+/**
+ * POST `/api/v1/applications/{id}/pending-approved-mortgage/appointment`
+ * Valid only when fulfillment is `inspection_booking` / `offer_accepted`.
+ * `scheduledFor` must match `availableInspectionDates[].scheduledFor`.
+ */
 export async function scheduleMortgageInspection(
   applicationId: string,
   userId: string,
-  scheduledFor?: string,
+  scheduledFor: string,
   extras?: { location?: string; notes?: string },
 ) {
+  const location = extras?.location?.trim().slice(0, 300)
+  const notes = extras?.notes?.trim().slice(0, 500)
   return postApplication(
     `/v1/applications/${encodeURIComponent(applicationId)}/pending-approved-mortgage/appointment`,
     {
       userId,
-      ...(scheduledFor ? { scheduledFor } : {}),
-      ...(extras?.location ? { location: extras.location } : {}),
-      ...(extras?.notes ? { notes: extras.notes } : {}),
+      scheduledFor,
+      ...(location ? { location } : {}),
+      ...(notes ? { notes } : {}),
     },
   )
 }

@@ -16,6 +16,7 @@ import {
   mortgageDownPaymentDue,
   mortgageEquityBankDetails,
   mortgageFulfillmentStatus,
+  normalizeWorkflowStepId,
   type MortgageInspectionDateSlot,
   type PendingApprovedMortgageDetail,
 } from '@/lib/postApprovalMortgage'
@@ -50,6 +51,24 @@ function triggerDownload(filename: string, url?: string) {
   document.body.appendChild(anchor)
   anchor.click()
   document.body.removeChild(anchor)
+}
+
+function inspectionBookingNotes(slot: MortgageInspectionDateSlot): string | undefined {
+  const existing = slot.notes?.trim()
+  if (existing) return existing.slice(0, 500)
+  const when = new Date(slot.scheduledFor)
+  if (Number.isNaN(when.getTime())) return undefined
+  const weekday = when.toLocaleDateString('en-GB', {
+    weekday: 'short',
+    timeZone: 'Africa/Lagos',
+  })
+  const time = when.toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Africa/Lagos',
+  })
+  return `${weekday} ${time} Lagos`.slice(0, 500)
 }
 
 function formatMerchantInspectionSlot(slot: MortgageInspectionDateSlot): string {
@@ -255,7 +274,14 @@ export function MortgageWorkflowModals({
   }
 
   const localWorkflow = readMortgageWorkflow(applicationId)
-  const inspectionAlreadyBooked = Boolean(localWorkflow?.inspectionScheduled)
+  const fulfillmentStep = normalizeWorkflowStepId(detail?.postApprovalFulfillment?.currentWorkflowStepId)
+  const inspectionAlreadyBooked = Boolean(
+    localWorkflow?.inspectionScheduled ||
+      fulfillmentStatus === 'appointment_scheduled' ||
+      fulfillmentStatus === 'inspection_in_progress' ||
+      fulfillmentStep === 'inspection_outcome' ||
+      fulfillmentStep === 'physical_inspection',
+  )
 
   const handleBookInspection = async () => {
     if (!selectedSlot) {
@@ -277,22 +303,17 @@ export function MortgageWorkflowModals({
         applicationId,
         userId,
         slot.scheduledFor,
-        { location: slot.location, notes: slot.notes },
+        {
+          location: slot.location,
+          notes: inspectionBookingNotes(slot),
+        },
       )
-      if (!res.ok) {
+      if (!res.ok && res.status !== 409) {
         toast.error(res.error || 'Could not book inspection. Please try again.')
         return
       }
-      const startRes = await pendingApprovedMortgageApi.startInspection(applicationId, userId)
-      if (!startRes.ok) {
-        toast.error(startRes.error || 'Inspection booked, but start failed', {
-          description: 'POST …/inspection/start',
-        })
-        return
-      }
-      const ok = await patch({ inspectionScheduled: true })
-      if (!ok) return
-      toast.success('Inspection booked')
+      await patch({ inspectionScheduled: true })
+      toast.success(res.ok ? 'Inspection booked' : 'Inspection already booked')
       onClose()
     } finally {
       setBusy(false)
@@ -307,7 +328,7 @@ export function MortgageWorkflowModals({
     setBusy(true)
     try {
       const startRes = await pendingApprovedMortgageApi.startInspection(applicationId, userId)
-      if (!startRes.ok) {
+      if (!startRes.ok && startRes.status !== 409) {
         toast.error(startRes.error || 'Could not start inspection', {
           description: 'POST …/inspection/start',
         })
@@ -320,16 +341,14 @@ export function MortgageWorkflowModals({
         return
       }
       if (outcome === 'declined') {
-        const ok = await patch({
+        await patch({
           inspectionCompleted: true,
           offerDeclined: true,
           offerAccepted: false,
         })
-        if (!ok) return
         toast.message('Inspection declined')
       } else {
-        const ok = await patch({ inspectionCompleted: true })
-        if (!ok) return
+        await patch({ inspectionCompleted: true })
         toast.success('Inspection confirmed')
       }
       onClose()

@@ -22,17 +22,29 @@ export function buildStorefrontBrandCssVars(
   const themed = manifestHasBrandColors(manifest)
 
   const primary =
-    themed && manifest?.theme_color?.trim() ? manifest.theme_color.trim() : SF_BRAND_DEFAULTS.primary
+    themed &&
+    (manifest?.elementPrimaryColor?.trim() ||
+      manifest?.splashPrimaryColor?.trim() ||
+      manifest?.theme_color?.trim())
+      ? (manifest?.elementPrimaryColor?.trim() ||
+          manifest?.splashPrimaryColor?.trim() ||
+          manifest?.theme_color?.trim())!
+      : SF_BRAND_DEFAULTS.primary
 
   const shell =
-    themed && manifest?.background_color?.trim()
-      ? manifest.background_color.trim()
-      : themed && manifest?.theme_color?.trim()
-        ? manifest.theme_color.trim()
-        : SF_BRAND_DEFAULTS.shell
+    themed &&
+    (manifest?.splashPrimaryColor?.trim() ||
+      manifest?.theme_color?.trim() ||
+      manifest?.background_color?.trim())
+      ? (manifest?.splashPrimaryColor?.trim() ||
+          manifest?.theme_color?.trim() ||
+          manifest?.background_color?.trim())!
+      : SF_BRAND_DEFAULTS.shell
 
   const button =
-    themed && manifest?.theme_color?.trim() ? manifest.theme_color.trim() : SF_BRAND_DEFAULTS.button
+    themed && (manifest?.elementPrimaryColor?.trim() || manifest?.theme_color?.trim())
+      ? (manifest?.elementPrimaryColor?.trim() || manifest?.theme_color?.trim())!
+      : SF_BRAND_DEFAULTS.button
 
   const pageBg = themed
     ? `color-mix(in srgb, ${shell} 5%, white)`

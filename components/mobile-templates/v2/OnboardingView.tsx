@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import type { OnboardingStep } from '../types';
@@ -15,6 +14,9 @@ interface OnboardingViewProps {
   buttonColor?: string;
   buttonTextColor?: string;
   cardBackgroundColor?: string;
+  /** App logo — centered in the colored top area when a step has no illustration. */
+  logo?: string;
+  appName?: string;
   onComplete?: () => void;
   onSignIn?: () => void;
   onSkip?: () => void;
@@ -33,6 +35,8 @@ export function V2OnboardingView({
   buttonColor = '#2563EB',
   buttonTextColor = '#FFFFFF',
   cardBackgroundColor = '#FFFFFF',
+  logo,
+  appName,
   onComplete,
   onSignIn,
   onSkip,
@@ -68,6 +72,8 @@ export function V2OnboardingView({
   }
 
   const currentStepData = steps[currentStep];
+  const stepArt = currentStepData?.image?.trim();
+  const topMark = stepArt && stepArt !== logo ? stepArt : logo || stepArt;
 
   return (
     <motion.div
@@ -94,28 +100,24 @@ export function V2OnboardingView({
           )}
         </div>
 
-        {/* Image Area */}
+        {/* Centered logo / step art — never a full-bleed background */}
         <div className="flex-1 flex items-center justify-center p-6 w-full relative">
           <AnimatePresence mode="wait">
             <motion.div
-              key={currentStep}
+              key={`${currentStep}-${topMark || 'empty'}`}
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: -20, opacity: 0 }}
               transition={{ duration: 0.4 }}
-              className="relative w-full h-[60%] flex items-center justify-center"
+              className="flex items-center justify-center"
             >
-              {currentStepData?.image && (
-                <div className="relative w-[280px] h-[280px]">
-                  <Image
-                    src={currentStepData.image}
-                    alt="Onboarding Illustration"
-                    fill
-                    className="object-contain drop-shadow-2xl"
-                    priority
-                  />
-                </div>
-              )}
+              {topMark ? (
+                <img
+                  src={topMark}
+                  alt={appName || currentStepData?.title || 'App'}
+                  className="h-28 w-28 rounded-2xl object-contain shadow-lg"
+                />
+              ) : null}
             </motion.div>
           </AnimatePresence>
         </div>

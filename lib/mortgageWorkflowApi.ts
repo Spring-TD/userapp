@@ -83,12 +83,14 @@ export async function patchMortgageWorkflowProgress(
   }
 }
 
+/**
+ * Storefront post-approval steps use dedicated `POST /api/v1/applications/.../pending-approved-mortgage/*`
+ * endpoints. `PATCH .../products/applications/.../loan-workflow` is not a storefront route (404).
+ */
 export async function syncMortgageWorkflowPatchToApi(
-  applicationId: string,
-  patch: Partial<MortgageWorkflowLocalState>,
-  stateAfterPatch?: MortgageWorkflowLocalState,
+  _applicationId: string,
+  _patch: Partial<MortgageWorkflowLocalState>,
+  _stateAfterPatch?: MortgageWorkflowLocalState,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const progress = localPatchToApiProgress(patch, stateAfterPatch)
-  if (!progress) return { ok: true }
-  return patchMortgageWorkflowProgress(applicationId, progress)
+  return { ok: true }
 }

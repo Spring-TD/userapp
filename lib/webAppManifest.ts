@@ -8,6 +8,17 @@ export interface WebAppManifestBranding {
   theme_color?: string
   background_color?: string
   icons?: { src?: string; sizes?: string; type?: string; purpose?: string }[]
+  /** From app_builder.config.splash / asset — in-app splash (not only PWA chrome). */
+  splashPrimaryColor?: string
+  splashSecondaryColor?: string
+  splashImageUrl?: string
+  logoUrl?: string
+  onboardingScreens?: { title?: string; description?: string; image?: string }[]
+  elementPrimaryColor?: string
+  elementSecondaryColor?: string
+  profileBgPrimary?: string
+  profileBgSecondary?: string
+  fontFamily?: string
   policyTerms?: {
     privacyPolicy?: ManifestDocument
     termsOfService?: ManifestDocument
@@ -121,12 +132,55 @@ export function parseWebAppManifestBranding(raw: unknown): WebAppManifestBrandin
         .filter((i) => i.src)
     : undefined
 
-  const name = asTrimmedString(o.name)
-  const short_name = asTrimmedString(o.short_name)
-  const description = asTrimmedString(o.description)
-  const theme_color = asTrimmedString(o.theme_color)
-  const background_color = asTrimmedString(o.background_color)
-  const config = asRecord(o.config)
+  const appBuilder = asRecord(o.app_builder) || asRecord(o.appBuilder)
+  const builderApp = asRecord(appBuilder?.app)
+  const builderConfig = asRecord(appBuilder?.config) || asRecord(o.config)
+  const asset = asRecord(builderConfig?.asset)
+  const splashCfg = asRecord(builderConfig?.splash)
+  const onboardingDoc = asRecord(builderConfig?.onboarding)
+  const appProfile = asRecord(builderConfig?.appProfile)
+  const textColors = asRecord(appProfile?.textColors)
+  const elementColors = asRecord(appProfile?.elementColors)
+  const backgroundColors = asRecord(appProfile?.backgroundColors)
+
+  const screensRaw = Array.isArray(onboardingDoc?.screens) ? onboardingDoc!.screens : []
+  const onboardingScreens = screensRaw
+    .map((row) => {
+      const s = asRecord(row)
+      if (!s) return null
+      const title = asTrimmedString(s.title)
+      const description = asTrimmedString(s.description) || asTrimmedString(s.subtitle)
+      const image = asTrimmedString(s.screenImageUrl) || asTrimmedString(s.image)
+      if (!title && !description && !image) return null
+      return { ...(title ? { title } : {}), ...(description ? { description } : {}), ...(image ? { image } : {}) }
+    })
+    .filter(Boolean) as { title?: string; description?: string; image?: string }[]
+
+  const name =
+    asTrimmedString(o.name) || asTrimmedString(builderApp?.name) || asTrimmedString(builderApp?.alias)
+  const short_name =
+    asTrimmedString(o.short_name) || asTrimmedString(builderApp?.alias) || asTrimmedString(builderApp?.name)
+  const description =
+    asTrimmedString(o.description) || asTrimmedString(asset?.siteDescription)
+  const theme_color =
+    asTrimmedString(o.theme_color) ||
+    asTrimmedString(splashCfg?.primaryColor) ||
+    asTrimmedString(elementColors?.primary)
+  const background_color =
+    asTrimmedString(o.background_color) ||
+    asTrimmedString(splashCfg?.secondaryColor) ||
+    asTrimmedString(backgroundColors?.primary)
+  const splashPrimaryColor = asTrimmedString(splashCfg?.primaryColor) || theme_color
+  const splashSecondaryColor = asTrimmedString(splashCfg?.secondaryColor) || background_color
+  const splashImageUrl = asTrimmedString(asset?.splashImageUrl)
+  const logoUrl = asTrimmedString(asset?.logoUrl)
+  const elementPrimaryColor = asTrimmedString(elementColors?.primary)
+  const elementSecondaryColor = asTrimmedString(elementColors?.secondary)
+  const profileBgPrimary = asTrimmedString(backgroundColors?.primary)
+  const profileBgSecondary = asTrimmedString(backgroundColors?.secondary)
+  const fontFamily = asTrimmedString(appProfile?.fontFamily)
+
+  const config = builderConfig
   const policyTermsRaw = asRecord(o.policyTerms) || asRecord(config?.policyTerms)
   const privacyPolicy = parseDocument(policyTermsRaw?.privacyPolicy)
   const termsOfService = parseDocument(policyTermsRaw?.termsOfService)
@@ -148,6 +202,9 @@ export function parseWebAppManifestBranding(raw: unknown): WebAppManifestBrandin
     !theme_color &&
     !background_color &&
     (!icons || icons.length === 0) &&
+    !splashImageUrl &&
+    !logoUrl &&
+    !onboardingScreens.length &&
     !policyTerms &&
     !support
   ) {
@@ -161,6 +218,16 @@ export function parseWebAppManifestBranding(raw: unknown): WebAppManifestBrandin
     ...(theme_color ? { theme_color } : {}),
     ...(background_color ? { background_color } : {}),
     ...(icons && icons.length ? { icons } : {}),
+    ...(splashPrimaryColor ? { splashPrimaryColor } : {}),
+    ...(splashSecondaryColor ? { splashSecondaryColor } : {}),
+    ...(splashImageUrl ? { splashImageUrl } : {}),
+    ...(logoUrl ? { logoUrl } : {}),
+    ...(onboardingScreens.length ? { onboardingScreens } : {}),
+    ...(elementPrimaryColor ? { elementPrimaryColor } : {}),
+    ...(elementSecondaryColor ? { elementSecondaryColor } : {}),
+    ...(profileBgPrimary ? { profileBgPrimary } : {}),
+    ...(profileBgSecondary ? { profileBgSecondary } : {}),
+    ...(fontFamily ? { fontFamily } : {}),
     ...(policyTerms ? { policyTerms } : {}),
     ...(support ? { support } : {}),
   }
@@ -175,8 +242,10 @@ export function storefrontDisplayName(m: WebAppManifestBranding | null): string 
   return m.short_name?.trim() || m.name?.trim() || null
 }
 
-/** Prefer largest manifest icon for splash / chrome. */
+/** Prefer logoUrl from app builder, else largest manifest icon. */
 export function pickManifestIconUrl(manifest: WebAppManifestBranding | null): string | undefined {
+  const fromAsset = manifest?.logoUrl?.trim()
+  if (fromAsset) return fromAsset
   const icons = manifest?.icons
   if (!icons?.length) return undefined
   const sorted = [...icons].sort((a, b) => {
@@ -188,10 +257,47 @@ export function pickManifestIconUrl(manifest: WebAppManifestBranding | null): st
 }
 
 export function manifestHasBrandColors(manifest: WebAppManifestBranding | null): boolean {
-  return Boolean(manifest?.theme_color?.trim() || manifest?.background_color?.trim())
+  return Boolean(
+    manifest?.theme_color?.trim() ||
+      manifest?.background_color?.trim() ||
+      manifest?.splashPrimaryColor?.trim() ||
+      manifest?.elementPrimaryColor?.trim(),
+  )
 }
 
-/** Apply manifest JSON (theme_color, background_color, names, icons) onto the default mobile shell config. */
+/** Neutral shell — no dummy Airpay/mortgage copy. Manifest fills name, colors, logo, steps. */
+export function emptyMobileShellConfig(appId: string | null = null): MobileAppConfig {
+  return {
+    appId,
+    appName: "",
+    splash: {
+      logo: undefined,
+      image: undefined,
+      backgroundColor: "#2563EB",
+      textColor: "#FFFFFF",
+    },
+    onboarding: {
+      backgroundColor: "#2563EB",
+      secondaryBackgroundColor: "#1d4ed8",
+      textColor: "#1e293b",
+      secondaryTextColor: "#6b7280",
+      buttonColor: "#2563EB",
+      buttonTextColor: "#FFFFFF",
+      fontFamily: "Inter",
+      steps: [],
+    },
+    theme: {
+      primaryColor: "#2563EB",
+      secondaryColor: "#E5E7EB",
+      headerBackgroundColor: "#FFFFFF",
+      headerTextColor: "#1F2937",
+      bodyBackgroundColor: "#F9FAFB",
+      bodyTextColor: "#374151",
+    },
+  }
+}
+
+/** Apply live manifest.json (incl. app_builder) onto the mobile splash/onboarding shell. */
 export function applyManifestToMobileAppConfig(
   base: MobileAppConfig,
   manifest: WebAppManifestBranding | null,
@@ -199,14 +305,35 @@ export function applyManifestToMobileAppConfig(
 ): MobileAppConfig {
   const name = displayNameOverride?.trim() || storefrontDisplayName(manifest) || base.appName
   const themed = manifestHasBrandColors(manifest)
-  const primary = themed && manifest?.theme_color?.trim() ? manifest.theme_color.trim() : base.theme.primaryColor
-  const shell =
-    themed && manifest?.background_color?.trim()
-      ? manifest.background_color.trim()
-      : themed && manifest?.theme_color?.trim()
-        ? manifest.theme_color.trim()
-        : base.onboarding.backgroundColor
+  const primary =
+    (themed &&
+      (manifest?.elementPrimaryColor?.trim() ||
+        manifest?.splashPrimaryColor?.trim() ||
+        manifest?.theme_color?.trim())) ||
+    base.theme.primaryColor
+  const splashBg =
+    (themed &&
+      (manifest?.splashPrimaryColor?.trim() ||
+        manifest?.theme_color?.trim() ||
+        manifest?.background_color?.trim())) ||
+    base.splash.backgroundColor
+  const onboardingBg =
+    (themed &&
+      (manifest?.splashSecondaryColor?.trim() ||
+        manifest?.background_color?.trim() ||
+        manifest?.profileBgPrimary?.trim())) ||
+    base.onboarding.backgroundColor
   const logo = pickManifestIconUrl(manifest) || base.splash.logo
+  const splashImage = manifest?.splashImageUrl?.trim() || undefined
+
+  const builderSteps = (manifest?.onboardingScreens || [])
+    .map((s, i) => ({
+      id: `step-${i + 1}`,
+      title: s.title?.trim() || `Step ${i + 1}`,
+      description: s.description?.trim() || "",
+      image: s.image,
+    }))
+    .filter((s) => s.title || s.description || s.image)
 
   return {
     ...base,
@@ -214,18 +341,23 @@ export function applyManifestToMobileAppConfig(
     splash: {
       ...base.splash,
       logo,
-      backgroundColor: themed ? shell : base.splash.backgroundColor,
+      image: splashImage,
+      backgroundColor: splashBg,
     },
     onboarding: {
       ...base.onboarding,
-      backgroundColor: themed ? shell : base.onboarding.backgroundColor,
+      backgroundColor: onboardingBg,
       secondaryBackgroundColor: themed ? primary : base.onboarding.secondaryBackgroundColor,
       buttonColor: themed ? primary : base.onboarding.buttonColor,
+      fontFamily: manifest?.fontFamily?.trim() || base.onboarding.fontFamily,
+      steps: builderSteps.length ? builderSteps : base.onboarding.steps,
     },
     theme: {
       ...base.theme,
       primaryColor: themed ? primary : base.theme.primaryColor,
-      secondaryColor: themed ? primary : base.theme.secondaryColor,
+      secondaryColor: themed
+        ? manifest?.elementSecondaryColor?.trim() || primary
+        : base.theme.secondaryColor,
     },
   }
 }
