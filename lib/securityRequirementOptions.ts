@@ -3,6 +3,94 @@ export const EXTRA_SECURITY_REQUIREMENT_OPTIONS = ["Cheque", "Bank Guarantee", "
 
 export const OTHER_SECURITY_CANONICAL_LABEL = "Other"
 
+export type SecurityCollateralRequirement = {
+  requirementId?: string
+  id?: string
+  requirementType?: string
+  label?: string
+  contentType?: string
+  description?: string
+  templateFileUrl?: string
+  templateFileName?: string
+  fileUrl?: string
+  fileName?: string
+  uploadRequired?: boolean
+  required?: boolean
+}
+
+function truthySecurityFlag(value: unknown): boolean {
+  return value === true || value === "true" || value === 1 || value === "1"
+}
+
+const SECURITY_COLLATERAL_FLAGS: Array<{ flag: string; label: string }> = [
+  { flag: "realEstateProperties", label: "Collateral" },
+  { flag: "acceptCheque", label: "Cheque" },
+  { flag: "bankGuarantee", label: "Bank Guarantee" },
+  { flag: "savingsAccount", label: "Savings Account" },
+  { flag: "otherProperties", label: "Other" },
+]
+
+/** Build apply-flow collateral rows from Product MS `requirements.security` booleans. */
+export function collateralRequirementsFromSecurity(
+  security: Record<string, unknown> | undefined | null,
+  options?: {
+    otherSpecification?: string
+    securitySelection?: Record<string, unknown> | null
+  },
+): SecurityCollateralRequirement[] {
+  const sec = security && typeof security === "object" ? security : {}
+  const items: SecurityCollateralRequirement[] = []
+
+  for (const row of SECURITY_COLLATERAL_FLAGS) {
+    if (!truthySecurityFlag(sec[row.flag])) continue
+    items.push({
+      requirementId: `security:${row.flag}`,
+      requirementType: row.label,
+      label: row.label,
+      contentType: "acknowledgement",
+      description:
+        row.flag === "otherProperties" ? options?.otherSpecification?.trim() || undefined : undefined,
+    })
+  }
+
+  const selection = options?.securitySelection
+  if (
+    !items.some((item) => item.requirementType === "Collateral") &&
+    selection &&
+    truthySecurityFlag(selection.collateral)
+  ) {
+    items.unshift({
+      requirementId: "security:collateral",
+      requirementType: "Collateral",
+      label: "Collateral",
+      contentType: "acknowledgement",
+    })
+  }
+
+  return items
+}
+
+/** Security booleans first; custom `otherRequirements` rows fill in uploads without duplicating labels. */
+export function mergeCollateralRequirements(
+  security: Record<string, unknown> | undefined | null,
+  otherRequirements: SecurityCollateralRequirement[] | undefined | null,
+  options?: {
+    otherSpecification?: string
+    securitySelection?: Record<string, unknown> | null
+  },
+): SecurityCollateralRequirement[] {
+  const fromSecurity = collateralRequirementsFromSecurity(security, options)
+  const others = Array.isArray(otherRequirements) ? otherRequirements : []
+  const securityLabels = new Set(
+    fromSecurity.map((row) => (row.label || row.requirementType || "").trim().toLowerCase()).filter(Boolean),
+  )
+  const dedupedOthers = others.filter((row) => {
+    const key = (row.label || row.requirementType || "").trim().toLowerCase()
+    return key ? !securityLabels.has(key) : true
+  })
+  return [...fromSecurity, ...dedupedOthers]
+}
+
 export function mergeSecurityRequirementDisplayOptions(apiLabels: string[]): string[] {
   const seen = new Set<string>()
   const out: string[] = []

@@ -124,6 +124,17 @@ function resolveAddress(
   return ''
 }
 
+export function resolveMortgagePropertyHeroImage(
+  product: MobileProduct | null | undefined,
+  application?: StorefrontApplication | null,
+): string | null {
+  const tour = buildPropertyTourData(
+    product ?? null,
+    (application ?? {}) as StorefrontApplication,
+  )
+  return tour.images[0]?.trim() || product?.image?.trim() || null
+}
+
 export function buildPropertyTourData(
   product: MobileProduct | null,
   application: StorefrontApplication,

@@ -1,5 +1,5 @@
 import { poweredBy } from "@/lib/mobileProductDetailDisplay"
-import type { MobileProduct } from "@/lib/storefrontProducts"
+import { resolveProductDisplayImage, type MobileProduct } from "@/lib/storefrontProducts"
 import type { LoanCatalogItem } from "@/types/loanCatalog"
 
 function formatNgnAmount(value: number | undefined): string {
@@ -45,11 +45,12 @@ export function mapMobileProductToLoanCatalog(
   providerName = poweredBy(),
 ): LoanCatalogItem {
   const amount = amountRange(product)
+  const imageUrl = resolveProductDisplayImage(product)
   return {
     id: product.id,
     providerName,
-    providerLogoUrl: product.image,
-    imageUrl: product.image,
+    providerLogoUrl: imageUrl,
+    imageUrl,
     title: product.name,
     amountDisplay: amount.formatted,
     loanAmountDisplay: amount.plain,

@@ -1,3 +1,8 @@
+import {
+  mergeCollateralRequirements,
+  type SecurityCollateralRequirement,
+} from "@/lib/securityRequirementOptions"
+
 export interface MobileProduct {
   id: string
   upstreamProductId?: string
@@ -234,10 +239,20 @@ function mapProperties(value: unknown): ProductProperty[] {
   })
 }
 
+function mediaUrlFromUnknown(value: unknown): string | undefined {
+  if (typeof value === "string" && value.trim()) return value.trim()
+  const rec = asRecord(value)
+  const nested =
+    rec.url ?? rec.fileUrl ?? rec.src ?? rec.previewUrl ?? rec.imageUrl ?? rec.previewAssetUrl
+  if (typeof nested === "string" && nested.trim()) return nested.trim()
+  return undefined
+}
+
 function collectPropertyImageUrls(row: Record<string, unknown>): string[] {
   const urls: string[] = []
   const push = (value: unknown) => {
-    if (typeof value === "string" && value.trim()) urls.push(value.trim())
+    const url = mediaUrlFromUnknown(value)
+    if (url) urls.push(url)
   }
 
   if (Array.isArray(row.imageUrls)) {
@@ -245,21 +260,54 @@ function collectPropertyImageUrls(row: Record<string, unknown>): string[] {
   }
 
   if (Array.isArray(row.previewImages)) {
-    for (const entry of row.previewImages) {
-      if (typeof entry === "string") {
-        push(entry)
-        continue
-      }
-      const media = asRecord(entry)
-      push(media.url ?? media.fileUrl ?? media.src)
-    }
+    for (const entry of row.previewImages) push(entry)
   }
 
-  const previewImage = asRecord(row.previewImage)
-  push(previewImage.url ?? previewImage.fileUrl ?? previewImage.src)
+  if (Array.isArray(row.images)) {
+    for (const entry of row.images) push(entry)
+  }
+
+  push(row.previewImage)
   push(row.imageUrl ?? row.image)
 
   return Array.from(new Set(urls))
+}
+
+function collectProductHeroImage(
+  row: Record<string, unknown>,
+  about: Record<string, unknown>,
+  properties: ProductProperty[],
+): string | undefined {
+  return (
+    mediaUrlFromUnknown(about.previewAssetUrl) ||
+    mediaUrlFromUnknown(about.previewImage) ||
+    mediaUrlFromUnknown(row.previewAssetUrl) ||
+    mediaUrlFromUnknown(row.previewImage) ||
+    mediaUrlFromUnknown(row.image) ||
+    mediaUrlFromUnknown(row.imageUrl) ||
+    properties.find((p) => p.imageUrls?.[0])?.imageUrls?.[0]
+  )
+}
+
+/** Backend product/property image only — never a stock/dummy fallback. */
+export function resolveProductDisplayImage(
+  product: Pick<MobileProduct, "image" | "properties"> | null | undefined,
+): string | undefined {
+  const fromProduct = product?.image?.trim()
+  if (fromProduct) return fromProduct
+  return product?.properties?.find((p) => p.imageUrls?.[0]?.trim())?.imageUrls?.[0]?.trim()
+}
+
+export function productImageBackgroundStyle(
+  url?: string | null,
+): { backgroundImage: string; backgroundSize: "cover"; backgroundPosition: "center" } | undefined {
+  const src = String(url || "").trim()
+  if (!src) return undefined
+  return {
+    backgroundImage: `url(${JSON.stringify(src)})`,
+    backgroundSize: "cover",
+    backgroundPosition: "center",
+  }
 }
 
 function formatPercent(value: unknown): string | undefined {
@@ -315,12 +363,10 @@ export function mapApiProductToMobileProduct(row: Record<string, unknown>): Mobi
     interestRate = `${returnsOnInvestment}%`
   }
 
-  const previewAssetUrl =
-    typeof about.previewAssetUrl === "string" && about.previewAssetUrl.trim()
-      ? about.previewAssetUrl.trim()
-      : typeof row.image === "string"
-        ? row.image
-        : undefined
+  const mappedProperties = mapProperties(
+    row.properties ?? asRecord(row.calculatedConfig).properties ?? asRecord(row.config).properties,
+  )
+  const previewAssetUrl = collectProductHeroImage(row, about, mappedProperties)
 
   const duration = formatAboutDuration(about)
   const typeDetails =
@@ -395,11 +441,20 @@ export function mapApiProductToMobileProduct(row: Record<string, unknown>): Mobi
       asString(structure.investmentTermsAndCondition) ??
       asString(structure.commodityTermsAndCondition),
     fees: allFees,
-    requirements: mapRequirements(requirementsPayload.otherRequirements),
-    documentsToDownload: mapDocuments(requirementsPayload.documentsToDownload),
-    properties: mapProperties(
-      row.properties ?? asRecord(row.calculatedConfig).properties ?? asRecord(row.config).properties,
+    requirements: mapRequirements(
+      mergeCollateralRequirements(
+        asRecord(requirementsPayload.security),
+        Array.isArray(requirementsPayload.otherRequirements)
+          ? (requirementsPayload.otherRequirements as SecurityCollateralRequirement[])
+          : [],
+        {
+          otherSpecification: asString(asRecord(row.metadata).securityOtherSpecification),
+          securitySelection: asRecord(asRecord(row.metadata).securitySelection),
+        },
+      ),
     ),
+    documentsToDownload: mapDocuments(requirementsPayload.documentsToDownload),
+    properties: mappedProperties,
     createdAt: String(row.createdAt ?? ""),
     updatedAt: String(row.updatedAt ?? ""),
     ...(loanAmount.max != null ? { propertyValue: loanAmount.max } : {}),
