@@ -8,6 +8,7 @@ import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 import { MortgageDetailSkeleton } from '@/components/mobile-v2/data-skeletons'
 import { Skeleton } from '@/components/ui/skeleton'
+import { resolveMortgagePropertyHeroImage } from '@/lib/mortgagePropertyTour'
 import { mortgageApplyChoosePaymentHref } from '@/lib/mortgageApplyRoutes'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
 import { ProductDetailsScreen } from '@/components/mobile-v2/application/ProductDetailsScreen'
@@ -33,9 +34,7 @@ function MortgageDetailInner() {
   }, [detailProduct, productId])
 
   const lender = poweredBy(displayName || undefined)
-  const imageUrl =
-    product?.image ||
-    'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1200&auto=format&fit=crop'
+  const imageUrl = resolveMortgagePropertyHeroImage(product) || undefined
 
   if (!tenantReady || loading) {
     return (

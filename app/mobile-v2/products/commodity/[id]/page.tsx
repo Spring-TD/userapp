@@ -38,6 +38,7 @@ import {
   type CommodityPurchaseContext,
 } from '@/lib/commodityApi'
 import { formatNgn, formatNaira, poweredBy } from '@/lib/mobileProductDetailDisplay'
+import { productImageBackgroundStyle, resolveProductDisplayImage } from '@/lib/storefrontProducts'
 import { formatWalletBalance, isVirtualNubanActive } from '@/lib/userWallet'
 import { walletSpendableBalance } from '@/lib/userWallet'
 import { YesNoField, PepSearchNotice } from '@/components/mobile-v2/application/ApplicantProfileFields'
@@ -414,7 +415,7 @@ export default function CommodityDetailPage() {
         <div className="px-6 pt-8">
           <div
             className="relative h-[190px] overflow-hidden rounded-[18px] bg-gray-100 bg-cover bg-center"
-            style={{ backgroundImage: `url(${product.image})` }}
+            style={productImageBackgroundStyle(resolveProductDisplayImage(product))}
           >
             <span className="absolute left-3 top-3 rounded-full bg-white/95 px-4 py-1.5 text-[10px] font-medium text-gray-700 shadow-sm">
               By {providerName}

@@ -9,6 +9,7 @@ import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeleto
 import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 import { mapMobileProductToLoanCatalog } from '@/lib/mapProductToLoanCatalog'
+import { resolveProductDisplayImage } from '@/lib/storefrontProducts'
 import { poweredBy } from '@/lib/mobileProductDetailDisplay'
 import { loanApplyStartHref } from '@/lib/loanApplyRoutes'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
@@ -61,9 +62,7 @@ function LoanDetailInner() {
     )
   }
 
-  const imageUrl =
-    loan.imageUrl ||
-    'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?q=80&w=1200&auto=format&fit=crop'
+  const imageUrl = resolveProductDisplayImage(product) || loan.imageUrl
 
   return (
     <div className="flex h-full min-h-0 flex-col">

@@ -1,4 +1,4 @@
-import type { MobileProduct } from "@/lib/storefrontProducts"
+import { resolveProductDisplayImage, type MobileProduct } from "@/lib/storefrontProducts"
 
 export type CommodityCatalogProduct = MobileProduct & {
   minPurchase: number
@@ -24,6 +24,7 @@ export function asCommodityCatalogProduct(product: MobileProduct): CommodityCata
     ...product,
     price: amount,
     propertyValue: amount,
+    image: resolveProductDisplayImage(product),
     duration: product.duration || "Not specified",
     interestRate: roi,
     minPurchase,

@@ -19,6 +19,8 @@ import {
 } from '@/lib/storefrontApplicationClient';
 import {
     availableStorefrontProductTypes,
+    productImageBackgroundStyle,
+    resolveProductDisplayImage,
     storefrontProductTypeRoute,
     type StorefrontProductType,
 } from '@/lib/storefrontProducts';
@@ -262,14 +264,14 @@ export function FeaturedLoanProductCard({ product, disabled }: { product: Mobile
 // ─── Loan Product Card ───────────────────────────────────────────────────────
 export function HotLoanProductCard({ product, compact, disabled }: { product: MobileProduct; compact?: boolean; disabled?: boolean }) {
     const detailHref = loanProductApplyDetailHref(product.id);
-    const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?q=80&w=2070&auto=format&fit=crop';
+    const imageStyle = productImageBackgroundStyle(resolveProductDisplayImage(product));
     const imgH = compact ? 'h-[100px]' : 'h-[140px]';
 
     return (
         <div className={cn('min-w-0 overflow-hidden border border-gray-100 bg-white shadow-sm', compact ? 'rounded-[18px] p-2.5' : 'rounded-[20px] p-3')}>
             <div
                 className={cn('relative mb-3 w-full overflow-hidden rounded-[18px] bg-gray-100', imgH)}
-                style={{ backgroundImage: `url(${product.image || DEFAULT_IMAGE})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+                style={imageStyle}
             />
             <div className="min-w-0 space-y-1.5 px-0.5">
                 <h3 className={cn('break-words font-bold text-[var(--sf-ink,#1E1B4B)]', compact ? 'line-clamp-2 text-xs' : 'line-clamp-2 text-sm')}>{product.name}</h3>
@@ -302,7 +304,7 @@ export function HotLoanProductCard({ product, compact, disabled }: { product: Mo
 export function FeaturedMortgageCard({ product, disabled }: { product: MobileProduct; disabled?: boolean }) {
     const detailHref = mortgageProductApplyDetailHref(product.id);
     const { displayName } = useMobileV2Tenant();
-    const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=2070&auto=format&fit=crop';
+    const imageStyle = productImageBackgroundStyle(resolveProductDisplayImage(product));
     const [slide, setSlide] = React.useState(0);
     const price = amountRange(product);
     const provider = poweredBy(displayName || undefined);
@@ -311,11 +313,7 @@ export function FeaturedMortgageCard({ product, disabled }: { product: MobilePro
         <div className="overflow-hidden rounded-[24px] bg-white shadow-md border border-gray-100">
             <div
                 className="relative h-[200px] w-full bg-gray-100"
-                style={{
-                    backgroundImage: `url(${product.image || DEFAULT_IMAGE})`,
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
-                }}
+                style={imageStyle}
             >
                 <span className="absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-[var(--sf-button,#1E40AF)] shadow-sm">
                     By {provider}
@@ -368,14 +366,14 @@ export function FeaturedMortgageCard({ product, disabled }: { product: MobilePro
 // ─── Mortgage Product Card ─────────────────────────────────────────────────────
 export function MortgageProductCard({ product, compact, disabled }: { product: MobileProduct; compact?: boolean; disabled?: boolean }) {
     const detailHref = mortgageProductApplyDetailHref(product.id);
-    const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=2070&auto=format&fit=crop';
+    const imageStyle = productImageBackgroundStyle(resolveProductDisplayImage(product));
     const imgH = compact ? 'h-[100px]' : 'h-[140px]';
 
     return (
         <div className={cn('min-w-0 overflow-hidden border border-gray-100 bg-white shadow-sm', compact ? 'rounded-[18px] p-2.5' : 'rounded-[20px] p-3')}>
             <div
                 className={cn('relative mb-3 w-full overflow-hidden rounded-[18px] bg-gray-100', imgH)}
-                style={{ backgroundImage: `url(${product.image || DEFAULT_IMAGE})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+                style={imageStyle}
             />
             <div className="min-w-0 space-y-1.5 px-0.5">
                 <h3 className={cn('break-words font-bold text-[var(--sf-ink,#1E1B4B)]', compact ? 'line-clamp-2 text-xs' : 'line-clamp-2 text-sm')}>{product.name}</h3>
@@ -437,13 +435,13 @@ export function SavingsProductCard({ product, index }: { product: MobileProduct;
 // ─── Invest Product Card ───────────────────────────────────────────────────────
 export function InvestProductCard({ product }: { product: MobileProduct }) {
     const detailHref = `/mobile-v2/products/invest/${encodeURIComponent(product.id)}`;
-    const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?q=80&w=2070&auto=format&fit=crop';
+    const imageStyle = productImageBackgroundStyle(resolveProductDisplayImage(product));
 
     return (
         <div className="min-w-0 overflow-hidden rounded-[18px] border border-gray-100 bg-white p-2.5 shadow-sm">
             <div
                 className="relative mb-2 h-[76px] w-full overflow-hidden rounded-[14px] bg-gray-100"
-                style={{ backgroundImage: `url(${product.image || DEFAULT_IMAGE})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+                style={imageStyle}
             />
             <div className="min-w-0 space-y-1.5 px-0.5">
                 <h3 className="line-clamp-2 break-words text-[12px] font-bold leading-snug text-[var(--sf-ink,#1E1B4B)]">{product.name}</h3>
@@ -466,13 +464,13 @@ export function InvestProductCard({ product }: { product: MobileProduct }) {
 // ─── Commodity Product Card ────────────────────────────────────────────────────
 export function CommodityProductCard({ product }: { product: MobileProduct }) {
     const detailRoute = `/mobile-v2/products/commodity/${encodeURIComponent(product.id)}`;
-    const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1551754655-cd27e38d2076?q=80&w=2070&auto=format&fit=crop';
+    const imageStyle = productImageBackgroundStyle(resolveProductDisplayImage(product));
 
     return (
         <div className="bg-white rounded-[18px] p-2.5 shadow-sm border border-gray-100">
             <div
                 className="relative mb-2 h-[76px] w-full overflow-hidden rounded-[14px] bg-gray-100"
-                style={{ backgroundImage: `url(${product.image || DEFAULT_IMAGE})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+                style={imageStyle}
             />
             <div className="min-w-0 space-y-1.5 px-0.5">
                 <h3 className="line-clamp-2 break-words text-[12px] font-bold leading-snug text-[var(--sf-ink,#1E1B4B)]">{product.name}</h3>

@@ -13,6 +13,7 @@ import {
 } from '@/lib/commodityCatalog'
 import { commodityDetailHref } from '@/lib/commodityApplyRoutes'
 import { formatNgn, poweredBy } from '@/lib/mobileProductDetailDisplay'
+import { productImageBackgroundStyle } from '@/lib/storefrontProducts'
 import { cn } from '@/lib/utils'
 
 function FeaturedCommodityCard({ product, providerName }: { product: CommodityCatalogProduct; providerName: string }) {
@@ -24,7 +25,7 @@ function FeaturedCommodityCard({ product, providerName }: { product: CommodityCa
         <div className="overflow-hidden rounded-[22px] bg-transparent">
           <div
             className="relative h-[185px] w-full overflow-hidden rounded-[18px] bg-gray-100 bg-cover bg-center"
-            style={{ backgroundImage: `url(${product.image})` }}
+            style={productImageBackgroundStyle(product.image)}
           >
             <span className="absolute left-3 top-3 rounded-full bg-white/95 px-4 py-1.5 text-[10px] font-medium text-gray-700 shadow-sm">
               By {providerName}
@@ -82,7 +83,7 @@ function CommodityGridCard({ product, providerName }: { product: CommodityCatalo
       <Link href={commodityDetailHref(product.id)} className="block">
         <div
           className="mb-3 aspect-square w-full rounded-[10px] bg-gray-100 bg-cover bg-center"
-          style={{ backgroundImage: `url(${product.image})` }}
+          style={productImageBackgroundStyle(product.image)}
         />
       </Link>
       <h3 className="line-clamp-2 break-words text-sm font-medium text-[#1E293B]">{product.name}</h3>

@@ -74,7 +74,9 @@ import { resolveWalletUserId } from '@/lib/resolveWalletUserId'
 import { buildLoanApplicationDetails } from '@/lib/loanApplicationDetails'
 import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
 import { poweredBy } from '@/lib/mobileProductDetailDisplay'
-import type { MobileProduct } from '@/lib/storefrontProducts'
+import { resolveMortgagePropertyHeroImage } from '@/lib/mortgagePropertyTour'
+import { mergeCollateralRequirements } from '@/lib/securityRequirementOptions'
+import { resolveProductDisplayImage, type MobileProduct } from '@/lib/storefrontProducts'
 
 type ProductKind = 'loan' | 'mortgage'
 type StepId = 'requirement' | 'file' | 'property' | 'product'
@@ -757,6 +759,11 @@ function ProductSummary({
         )
       : null
 
+  const heroImageUrl =
+    kind === 'mortgage'
+      ? resolveMortgagePropertyHeroImage(catalogProduct, application)
+      : resolveProductDisplayImage(catalogProduct)
+
   const summaryRows = loanDetails
     ? [
         ['Status', loanDetails.status],
@@ -785,13 +792,12 @@ function ProductSummary({
   return (
     <div className="space-y-5">
       <div
-        className="h-[155px] rounded-2xl bg-cover bg-center"
-        style={{
-          backgroundImage:
-            kind === 'mortgage'
-              ? "url('/mortgage-feature.png')"
-              : "url('https://images.unsplash.com/photo-1560518883-ce09059eeffa?q=80&w=1000&auto=format&fit=crop')",
-        }}
+        className="h-[155px] rounded-2xl bg-gray-100 bg-cover bg-center"
+        style={
+          heroImageUrl
+            ? { backgroundImage: `url(${JSON.stringify(heroImageUrl)})` }
+            : undefined
+        }
       />
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -913,7 +919,25 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
   const userId = initializedApplication?.userId || ''
   const requirements = initializedApplication?.requirementsSnapshot
   const documentsToDownload = requirements?.documentsToDownload ?? []
-  const otherRequirements = requirements?.otherRequirements ?? []
+  const appMetadata = initializedApplication?.metadata
+  const collateralRequirements = useMemo(
+    () =>
+      mergeCollateralRequirements(
+        requirements?.security as Record<string, unknown> | undefined,
+        requirements?.otherRequirements,
+        {
+          otherSpecification:
+            typeof appMetadata?.securityOtherSpecification === 'string'
+              ? appMetadata.securityOtherSpecification
+              : undefined,
+          securitySelection:
+            appMetadata?.securitySelection && typeof appMetadata.securitySelection === 'object'
+              ? (appMetadata.securitySelection as Record<string, unknown>)
+              : undefined,
+        },
+      ),
+    [requirements?.security, requirements?.otherRequirements, appMetadata],
+  )
   const requiresGuarantor = requirements?.security?.guarantor === true
   const applicationProgress = initializedApplication?.applicationProgress
   const applicationProgressKey = applicationProgress ? JSON.stringify(applicationProgress) : ''
@@ -1051,7 +1075,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         amountMax: catalogProduct?.amountMax,
         platformFields,
         employment: employmentDraft,
-        otherRequirements,
+        otherRequirements: collateralRequirements,
         requirementSubmissions,
         requiresGuarantor,
         guarantorsCount: guarantors.length,
@@ -1286,7 +1310,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       amountMax: catalogProduct?.amountMax,
       platformFields,
       employment: employmentDraft,
-      otherRequirements,
+      otherRequirements: collateralRequirements,
       requirementSubmissions,
       requiresGuarantor,
       guarantorsCount: guarantors.length,
@@ -1891,8 +1915,8 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
 
               <div className="space-y-4">
                 <SectionTitle>Collateral</SectionTitle>
-                {otherRequirements.length > 0 ? (
-                  otherRequirements.map((requirement, index) => {
+                {collateralRequirements.length > 0 ? (
+                  collateralRequirements.map((requirement, index) => {
                     const requirementKey = collateralRequirementKey(requirement)
                     const submission = requirementSubmissions.find(
                       (item) =>

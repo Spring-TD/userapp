@@ -59,7 +59,7 @@ type ProductDetailsScreenProps = {
   duration: string
   rate: string
   provider: string
-  imageUrl: string
+  imageUrl?: string
   applyHref: string
   backHref: string
   primaryActionLabel?: string
@@ -68,6 +68,12 @@ type ProductDetailsScreenProps = {
   propertyRows?: Array<{ label: string; value: React.ReactNode }>
   applicationBlocked?: boolean
   applicationBlockedNote?: string
+}
+
+function productHeroStyle(imageUrl?: string) {
+  const src = String(imageUrl || '').trim()
+  if (!src) return undefined
+  return { backgroundImage: `url(${JSON.stringify(src)})` }
 }
 
 function NairaAmount({ children }: { children: React.ReactNode }) {
@@ -153,10 +159,8 @@ function AccountSummaryCard({
         </div>
 
         <div
-          className="h-16 w-20 rounded-xl bg-cover bg-center"
-          style={{
-            backgroundImage: `url(${imageUrl})`,
-          }}
+          className="h-16 w-20 rounded-xl bg-gray-200 bg-cover bg-center"
+          style={imageUrl ? { backgroundImage: `url(${JSON.stringify(imageUrl)})` } : undefined}
         />
       </div>
       <div className="flex items-end gap-2">
@@ -319,7 +323,7 @@ function ProductPanel({
         <div className="space-y-5">
           <div
             className="h-[170px] rounded-2xl bg-gray-200 bg-cover bg-center"
-            style={{ backgroundImage: `url(${imageUrl})` }}
+            style={productHeroStyle(imageUrl)}
           />
           <div>
             <h2 className={`mb-4 text-sm font-bold uppercase tracking-wide ${BRAND_INK}`}>
@@ -361,7 +365,7 @@ function ProductPanel({
             <>
               <div
                 className="h-[170px] rounded-2xl bg-gray-200 bg-cover bg-center"
-                style={{ backgroundImage: `url(${imageUrl})` }}
+                style={productHeroStyle(imageUrl)}
               />
               <div className="flex justify-center gap-1.5">
                 <span className="h-1.5 w-5 rounded-full bg-gray-600" />
@@ -592,7 +596,7 @@ export function ProductDetailsScreen(props: ProductDetailsScreenProps) {
               <div className="space-y-4">
                 <div
                   className="h-[112px] rounded-xl bg-gray-300 bg-cover bg-center"
-                  style={{ backgroundImage: `url(${imageUrl})` }}
+                  style={productHeroStyle(imageUrl)}
                 />
                 <div className="flex justify-center gap-1.5">
                   <span className="h-1.5 w-5 rounded-full bg-gray-600" />
