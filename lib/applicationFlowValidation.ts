@@ -65,8 +65,8 @@ export function validateCollateralRequirements(
     )
     const done = Boolean(submission?.fileUrl)
     if (!done) {
-      const label = requirement.label || requirement.requirementType || 'collateral document'
-      return `Upload the required collateral document: ${label}.`
+      const label = requirement.label || requirement.requirementType || 'required document'
+      return `Upload the required document: ${label}.`
     }
   }
   return null
