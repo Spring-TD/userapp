@@ -58,6 +58,22 @@ export type StorefrontApplication = {
   metadata?: Record<string, unknown>
   mortgageSelection?: Record<string, unknown>
   product?: Record<string, unknown>
+  contractSnapshot?: {
+    requirements?: {
+      security?: Record<string, unknown>
+      documentsToDownload?: Array<{ name?: string; fileUrl?: string }>
+      otherRequirements?: Array<{
+        requirementId?: string
+        id?: string
+        requirementType?: string
+        label?: string
+        contentType?: string
+        description?: string
+        uploadRequired?: boolean
+        required?: boolean
+      }>
+    }
+  }
   /** Present on pending-approved mortgage list/detail responses. */
   postApprovalFulfillment?: {
     status?: string
@@ -475,6 +491,34 @@ export async function initializeProductApplication(
     return {
       ok: false as const,
       error: axiosApplicationError(error, "Could not initialize your application."),
+    }
+  }
+}
+
+export async function fetchApplicationById(applicationId: string) {
+  const id = String(applicationId || "").trim()
+  if (!id) {
+    return { ok: false as const, error: "Missing application id.", application: null as StorefrontApplication | null }
+  }
+
+  try {
+    const res = await apiClient.get<ApiEnvelope<StorefrontApplication>>(
+      `/v1/applications/${encodeURIComponent(id)}`,
+      { includeAuth: true, timeout: 30_000 },
+    )
+
+    if (res.data?.success === false || res.status >= 400) {
+      return { ok: false as const, error: parseApiError(res.data, res.status), application: null as StorefrontApplication | null }
+    }
+
+    const application = res.data?.data ?? null
+    if (application) saveInitializedApplication(application)
+    return { ok: true as const, application }
+  } catch (error: unknown) {
+    return {
+      ok: false as const,
+      error: axiosApplicationError(error, "Could not load your application."),
+      application: null as StorefrontApplication | null,
     }
   }
 }

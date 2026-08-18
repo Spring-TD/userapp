@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useSearchParams } from 'next/navigation'
@@ -23,6 +23,7 @@ import { toast } from 'sonner'
 import {
   addApplicationGuarantor,
   canShowPendingPage,
+  fetchApplicationById,
   initializeProductApplication,
   needsFinalApplicationSubmit,
   readInitializedApplication,
@@ -51,6 +52,7 @@ import {
 } from '@/lib/applicationAmount'
 import {
   collectRequirementStepIssues,
+  validateCollateralRequirements,
   validateFileUploadStep,
   type EmploymentDraft,
 } from '@/lib/applicationFlowValidation'
@@ -75,11 +77,10 @@ import { buildLoanApplicationDetails } from '@/lib/loanApplicationDetails'
 import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
 import { poweredBy } from '@/lib/mobileProductDetailDisplay'
 import { resolveMortgagePropertyHeroImage } from '@/lib/mortgagePropertyTour'
-import { mergeCollateralRequirements } from '@/lib/securityRequirementOptions'
 import { resolveProductDisplayImage, type MobileProduct } from '@/lib/storefrontProducts'
 
 type ProductKind = 'loan' | 'mortgage'
-type StepId = 'requirement' | 'file' | 'property' | 'product'
+type StepId = 'requirement' | 'file' | 'guarantor' | 'property' | 'product'
 
 type Guarantor = {
   name: string
@@ -105,7 +106,7 @@ type ApplicationDraft = {
   updatedAt: string
 }
 
-type ProgressTab = 'requirement' | 'fileUpload' | 'loan' | 'pep_and_reason'
+type ProgressTab = 'requirement' | 'fileUpload' | 'guarantor' | 'loan' | 'pep_and_reason'
 
 const PRIMARY = 'bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white'
 const BRAND_INK = 'text-[var(--sf-ink,#1E293B)]'
@@ -158,6 +159,7 @@ function clearApplicationDraft(key: string) {
 
 function progressTabForStep(step: StepId): ProgressTab {
   if (step === 'file') return 'fileUpload'
+  if (step === 'guarantor') return 'guarantor'
   if (step === 'property' || step === 'product') return 'loan'
   if (step === 'requirement') return 'pep_and_reason'
   return 'requirement'
@@ -165,6 +167,7 @@ function progressTabForStep(step: StepId): ProgressTab {
 
 function stepForProgressTab(tab?: string): StepId {
   if (tab === 'fileUpload') return 'file'
+  if (tab === 'guarantor') return 'guarantor'
   if (tab === 'loan') return 'product'
   if (tab === 'pep_and_reason') return 'requirement'
   return 'requirement'
@@ -677,10 +680,11 @@ function ProgressTabs({
   productLabel: string
 }) {
   const labels: Record<StepId, string> = {
-    requirement: 'Requirement',
-    file: 'File Upload',
+    requirement: 'Questions',
+    file: 'Requirements',
+    guarantor: 'Guarantor',
     property: 'Property',
-    product: productLabel,
+    product: 'Review',
   }
 
   return (
@@ -849,10 +853,6 @@ function ProductSummary({
 
 export function ProductApplicationFlow({ kind, productId: productIdProp }: { kind: ProductKind; productId?: string }) {
   const searchParams = useSearchParams()
-  const steps = useMemo<StepId[]>(
-    () => (kind === 'loan' ? ['requirement', 'file', 'product'] : ['requirement', 'file', 'property', 'product']),
-    [kind],
-  )
   const [activeStep, setActiveStep] = useState<StepId>('requirement')
   const [accepted, setAccepted] = useState(false)
   const [sheet, setSheet] = useState<
@@ -917,28 +917,18 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
   const applicationId = searchParams.get('applicationId') || initializedApplication?.id || initializedApplication?._id || ''
   const currentDraftKey = draftStorageKey(kind, productId, applicationId)
   const userId = initializedApplication?.userId || ''
-  const requirements = initializedApplication?.requirementsSnapshot
+  const requirements =
+    initializedApplication?.requirementsSnapshot ?? initializedApplication?.contractSnapshot?.requirements
   const documentsToDownload = requirements?.documentsToDownload ?? []
-  const appMetadata = initializedApplication?.metadata
-  const collateralRequirements = useMemo(
-    () =>
-      mergeCollateralRequirements(
-        requirements?.security as Record<string, unknown> | undefined,
-        requirements?.otherRequirements,
-        {
-          otherSpecification:
-            typeof appMetadata?.securityOtherSpecification === 'string'
-              ? appMetadata.securityOtherSpecification
-              : undefined,
-          securitySelection:
-            appMetadata?.securitySelection && typeof appMetadata.securitySelection === 'object'
-              ? (appMetadata.securitySelection as Record<string, unknown>)
-              : undefined,
-        },
-      ),
-    [requirements?.security, requirements?.otherRequirements, appMetadata],
-  )
+  const requirementRows = requirements?.otherRequirements ?? []
   const requiresGuarantor = requirements?.security?.guarantor === true
+  const steps = useMemo<StepId[]>(
+    () =>
+      kind === 'loan'
+        ? ['requirement', 'file', ...(requiresGuarantor ? (['guarantor'] as StepId[]) : []), 'product']
+        : ['requirement', 'file', ...(requiresGuarantor ? (['guarantor'] as StepId[]) : []), 'property', 'product'],
+    [kind, requiresGuarantor],
+  )
   const applicationProgress = initializedApplication?.applicationProgress
   const applicationProgressKey = applicationProgress ? JSON.stringify(applicationProgress) : ''
   const { product: catalogProduct } = useMobileProductDetail({
@@ -961,6 +951,16 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         ? '/mobile-v2/products/mortgage/pending'
         : goBackHref
   const activeIndex = steps.indexOf(activeStep)
+
+  const refreshApplicationSnapshot = useCallback(async () => {
+    if (!applicationId) return null
+    const result = await fetchApplicationById(applicationId)
+    if (result.ok && result.application) {
+      setApplicationRevision((value) => value + 1)
+      return result.application
+    }
+    return null
+  }, [applicationId])
 
   const buildRequirementDrafts = (
     employment: EmploymentDraft,
@@ -996,6 +996,11 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       setEmploymentDraft(employmentDraftFromSubmission(employmentSubmission))
     }
   }
+
+  useEffect(() => {
+    if (!applicationId) return
+    void refreshApplicationSnapshot()
+  }, [applicationId, refreshApplicationSnapshot])
 
   useEffect(() => {
     if (draftHydrated) return
@@ -1075,9 +1080,9 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         amountMax: catalogProduct?.amountMax,
         platformFields,
         employment: employmentDraft,
-        otherRequirements: collateralRequirements,
+        otherRequirements: [],
         requirementSubmissions,
-        requiresGuarantor,
+        requiresGuarantor: false,
         guarantorsCount: guarantors.length,
         spouseRequired: platformFields.repayingWithSpouse === true && triggersSpouseKyc,
         spouseVerified: Boolean(spouse?.verificationUrl),
@@ -1085,8 +1090,17 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       })
     }
     if (step === 'file') {
+      const issues: string[] = []
+      const requirementError = validateCollateralRequirements(requirementRows, requirementSubmissions)
+      if (requirementError) issues.push(requirementError)
       const fileError = validateFileUploadStep(documentsToDownload, requirementSubmissions)
-      return fileError ? [fileError] : []
+      if (fileError) issues.push(fileError)
+      return issues
+    }
+    if (step === 'guarantor') {
+      return requiresGuarantor && guarantors.length === 0
+        ? ['Add at least one guarantor before continuing.']
+        : []
     }
     if (step === 'product') {
       return accepted ? [] : ['Accept the terms and conditions before submitting.']
@@ -1219,6 +1233,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     // Existing application (with or without account) — never re-call /init.
     // Re-init throws/fails for APPROVED/PENDING apps and blocks Next silently.
     if (applicationId) {
+      await refreshApplicationSnapshot()
       return true
     }
 
@@ -1229,6 +1244,11 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       if (existing.hasAccount && existing.application) {
         saveInitializedApplication(existing.application)
         setApplicationRevision((value) => value + 1)
+        const existingId = String(existing.application.id ?? existing.application._id ?? '')
+        if (existingId) {
+          await fetchApplicationById(existingId)
+          setApplicationRevision((value) => value + 1)
+        }
         return true
       }
     }
@@ -1244,6 +1264,11 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         if (existing?.application) {
           saveInitializedApplication(existing.application)
           setApplicationRevision((value) => value + 1)
+          const existingId = String(existing.application.id ?? existing.application._id ?? '')
+          if (existingId) {
+            await fetchApplicationById(existingId)
+            setApplicationRevision((value) => value + 1)
+          }
         }
         // Account already exists for this product — allow continuing with local draft
         return true
@@ -1255,6 +1280,10 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     }
 
     setApplicationRevision((value) => value + 1)
+    if (result.applicationId) {
+      await fetchApplicationById(result.applicationId)
+      setApplicationRevision((value) => value + 1)
+    }
     return true
   }
 
@@ -1310,7 +1339,7 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
       amountMax: catalogProduct?.amountMax,
       platformFields,
       employment: employmentDraft,
-      otherRequirements: collateralRequirements,
+        otherRequirements: requirementRows,
       requirementSubmissions,
       requiresGuarantor,
       guarantorsCount: guarantors.length,
@@ -1704,6 +1733,10 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         const existing = await resolveProductApplicationAccount(userIdForResolve, productId)
         if (existing.hasAccount && existing.application) {
           saveInitializedApplication(existing.application)
+          const existingId = String(existing.application.id ?? existing.application._id ?? '')
+          if (existingId) {
+            await fetchApplicationById(existingId)
+          }
           toast.success(`${productName} account already exists. Continue your application.`)
           setApplicationRevision((value) => value + 1)
           setActiveStep('requirement')
@@ -1723,6 +1756,10 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
             : null
           if (resolved?.application) {
             saveInitializedApplication(resolved.application)
+            const resolvedId = String(resolved.application.id ?? resolved.application._id ?? '')
+            if (resolvedId) {
+              await fetchApplicationById(resolvedId)
+            }
             toast.success(`${productName} account already exists. Continue your application.`)
             setApplicationRevision((value) => value + 1)
             setActiveStep('requirement')
@@ -1736,6 +1773,9 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         return
       }
       toast.success(`${productName} account created successfully.`)
+      if (result.applicationId) {
+        await fetchApplicationById(result.applicationId)
+      }
       setApplicationRevision((value) => value + 1)
       setActiveStep('requirement')
       setSheet(null)
@@ -1851,72 +1891,14 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
                 </div>
               ) : null}
 
-              <SectionTitle>Occupation <span className="font-normal text-gray-400">(optional)</span></SectionTitle>
-              <div className="space-y-3">
-                <InputPill
-                  placeholder="Occupation (optional)"
-                  value={employmentDraft.occupation}
-                  onChange={(occupation) => setEmploymentDraft((draft) => ({ ...draft, occupation }))}
-                />
-                <InputPill
-                  placeholder="Place of Work (optional)"
-                  value={employmentDraft.placeOfWork}
-                  onChange={(placeOfWork) => setEmploymentDraft((draft) => ({ ...draft, placeOfWork }))}
-                />
-                <InputPill
-                  placeholder="Name of HR (optional)"
-                  value={employmentDraft.hrName}
-                  onChange={(hrName) => setEmploymentDraft((draft) => ({ ...draft, hrName }))}
-                />
-                <InputPill
-                  placeholder="HR's Email (optional)"
-                  type="email"
-                  value={employmentDraft.hrEmail}
-                  onChange={(hrEmail) => setEmploymentDraft((draft) => ({ ...draft, hrEmail }))}
-                />
-              </div>
+            </div>
+          )}
 
-              {requiresGuarantor ? (
-              <div className="space-y-3">
-                <SectionTitle>Guarantor</SectionTitle>
-                {guarantors.length > 0 ? (
-                  <div className="relative rounded-2xl bg-gray-100 p-4 pr-10">
-                    <p className={`text-sm font-bold ${BRAND_INK}`}>{guarantors[0].name}</p>
-                    <p className="mt-1 text-[10px] text-gray-500">
-                      {guarantors[0].phone} | {guarantors[0].email}
-                    </p>
-                    {guarantors[0].verificationUrl ? (
-                      <button
-                        type="button"
-                        onClick={() => void copyVerificationUrl(guarantors[0].verificationUrl, 'Guarantor KYC link copied.')}
-                        className={`mt-3 inline-flex items-center gap-1 text-xs font-bold ${BRAND_INK}`}
-                      >
-                        <Copy className="h-3 w-3" />
-                        Copy KYC URL
-                      </button>
-                    ) : null}
-                    <span className="absolute right-4 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-[var(--sf-button,#1E40AF)] text-white">
-                      <Check className="h-3 w-3" />
-                    </span>
-                  </div>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setGuarantorSubmitError(null)
-                    setSheet(guarantors.length > 0 ? 'guarantor_added' : 'guarantor_form')
-                  }}
-                  className={`inline-flex items-center gap-1 rounded-xl bg-gray-100 px-3 py-2 text-sm font-bold ${BRAND_INK}`}
-                >
-                  <Plus className="h-3 w-3" /> Add a Guarantor
-                </button>
-              </div>
-              ) : null}
-
-              <div className="space-y-4">
-                <SectionTitle>Collateral</SectionTitle>
-                {collateralRequirements.length > 0 ? (
-                  collateralRequirements.map((requirement, index) => {
+          {activeStep === 'file' && (
+            <div className="space-y-7">
+              <SectionTitle>Product requirements</SectionTitle>
+              {requirementRows.length > 0 ? (
+                requirementRows.map((requirement, index) => {
                     const requirementKey = collateralRequirementKey(requirement)
                     const submission = requirementSubmissions.find(
                       (item) =>
@@ -1925,29 +1907,24 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
                     const isDone = collateralNeedsUpload(requirement)
                       ? Boolean(submission?.fileUrl)
                       : Boolean(submission)
-                    return (
-                      <CollateralRequirementRow
-                        key={requirementKey || index}
-                        requirement={requirement}
-                        userId={userId}
-                        onUploaded={upsertSubmission}
-                        onCleared={clearSubmission}
-                        done={isDone}
-                        submission={submission}
-                      />
-                    )
-                  })
-                ) : (
-                  <p className="rounded-2xl bg-gray-50 p-4 text-xs text-gray-500">
-                    No extra collateral requirements configured for this product.
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
+                  return (
+                    <CollateralRequirementRow
+                      key={requirementKey || index}
+                      requirement={requirement}
+                      userId={userId}
+                      onUploaded={upsertSubmission}
+                      onCleared={clearSubmission}
+                      done={isDone}
+                      submission={submission}
+                    />
+                  )
+                })
+              ) : (
+                <p className="rounded-2xl bg-gray-50 p-4 text-xs text-gray-500">
+                  No product-specific upload requirements were configured for this application.
+                </p>
+              )}
 
-          {activeStep === 'file' && (
-            <div className="space-y-7">
               <SectionTitle>Bank Form to fill & Submit</SectionTitle>
               {documentsToDownload.length > 0 ? (
                 documentsToDownload.map((document, index) => {
@@ -1974,6 +1951,43 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
               )}
             </div>
           )}
+
+          {activeStep === 'guarantor' && requiresGuarantor ? (
+            <div className="space-y-3">
+              <SectionTitle>Guarantor</SectionTitle>
+              {guarantors.length > 0 ? (
+                <div className="relative rounded-2xl bg-gray-100 p-4 pr-10">
+                  <p className={`text-sm font-bold ${BRAND_INK}`}>{guarantors[0].name}</p>
+                  <p className="mt-1 text-[10px] text-gray-500">
+                    {guarantors[0].phone} | {guarantors[0].email}
+                  </p>
+                  {guarantors[0].verificationUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => void copyVerificationUrl(guarantors[0].verificationUrl, 'Guarantor KYC link copied.')}
+                      className={`mt-3 inline-flex items-center gap-1 text-xs font-bold ${BRAND_INK}`}
+                    >
+                      <Copy className="h-3 w-3" />
+                      Copy KYC URL
+                    </button>
+                  ) : null}
+                  <span className="absolute right-4 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-[var(--sf-button,#1E40AF)] text-white">
+                    <Check className="h-3 w-3" />
+                  </span>
+                </div>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => {
+                  setGuarantorSubmitError(null)
+                  setSheet(guarantors.length > 0 ? 'guarantor_added' : 'guarantor_form')
+                }}
+                className={`inline-flex items-center gap-1 rounded-xl bg-gray-100 px-3 py-2 text-sm font-bold ${BRAND_INK}`}
+              >
+                <Plus className="h-3 w-3" /> Add a Guarantor
+              </button>
+            </div>
+          ) : null}
 
           {activeStep === 'property' && (
             <ProductSummary
