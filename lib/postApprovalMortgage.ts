@@ -3,6 +3,7 @@
  */
 
 export type PostApprovalMortgageStatus =
+  | "virtual_inspection_pending"
   | "offer_pending"
   | "offer_accepted"
   | "appointment_scheduled"
@@ -47,11 +48,17 @@ export type PostApprovalFulfillment = {
   updatedAt?: string
   currentWorkflowStepId?: string
   completedWorkflowSteps?: string[]
+  workflowStepOrder?: string[]
   /** Canonical virtual-tour completion from storefront POST …/virtual-inspection/complete */
   virtualInspection?: {
     completedAt?: string
     completedByUserId?: string
     notes?: string
+  }
+  inspection?: {
+    startedAt?: string
+    completedAt?: string
+    outcome?: "completed" | "declined_offer"
   }
   /** @deprecated Prefer virtualInspection.completedAt */
   virtualTourCompletedAt?: string
@@ -66,10 +73,13 @@ export type PostApprovalFulfillment = {
     uploadedAt?: string
     uploadedByMerchantId?: string
     issuedAt?: string
+    signedAt?: string
+    signedDocumentUrl?: string
   }
   offer?: {
     sentAt?: string
     acceptedAt?: string
+    declinedAt?: string
   }
   appointment?: {
     scheduledAt?: string
