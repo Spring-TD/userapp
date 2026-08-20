@@ -8,13 +8,17 @@ import { Button } from '@/components/ui/button'
 import { LoanWorkflowModals } from '@/components/mobile-v2/loan/LoanWorkflowModals'
 import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
-import type { StorefrontApplication } from '@/lib/storefrontApplicationClient'
+import { useUserWallet } from '@/hooks/useUserWallet'
+import {
+  fetchApplicationById,
+  type StorefrontApplication,
+} from '@/lib/storefrontApplicationClient'
+import { pendingApprovedLoanApi } from '@/lib/pendingApprovedLoanApi'
 import {
   buildLoanThread,
   loanStepCta,
   loanStepToModal,
-  patchLoanWorkflow,
-  readLoanWorkflow,
+  preferLoanWorkflowStatus,
   resolveLoanWorkflowStep,
   type LoanThreadItem,
   type LoanWorkflowModal,
@@ -104,21 +108,70 @@ export function LoanPendingThreadScreen({
   const router = useRouter()
   const searchParams = useSearchParams()
   const { displayName } = useMobileV2Tenant()
+  const { wallet } = useUserWallet()
   const applicationId = String(application.id ?? application._id ?? '')
   const productId = String(application.productId ?? '')
   const [workflowVersion, setWorkflowVersion] = useState(0)
   const [activeModal, setActiveModal] = useState<LoanWorkflowModal | null>(null)
+  const [liveApplication, setLiveApplication] = useState<StorefrontApplication>(application)
+
+  useEffect(() => {
+    setLiveApplication(application)
+  }, [application])
 
   const { product } = useMobileProductDetail({
     productId,
     enabled: Boolean(productId),
   })
 
-  const local = readLoanWorkflow(applicationId)
-  const currentStep = resolveLoanWorkflowStep(application, local)
-  const thread = buildLoanThread(currentStep, {
-    workflowComplete: currentStep === 'loan_disbursed' && Boolean(local?.disbursementSeen),
-  })
+  useEffect(() => {
+    const userId = wallet?.userId || String(application.userId || '').trim()
+    if (!applicationId || !userId) return
+
+    let cancelled = false
+
+    const refreshLive = async () => {
+      const [detailRes, byIdRes] = await Promise.all([
+        pendingApprovedLoanApi.getDetail(applicationId, userId),
+        fetchApplicationById(applicationId),
+      ])
+      if (cancelled) return
+
+      const fromId = byIdRes.ok ? byIdRes.application : null
+      const detail = detailRes.ok ? detailRes.data : null
+      const paf = detail?.postApprovalFulfillment || fromId?.postApprovalFulfillment
+
+      setLiveApplication((prev) => {
+        const base = fromId || prev
+        const next: StorefrontApplication = {
+          ...base,
+          ...(fromId || {}),
+          loanWorkflowStatus: preferLoanWorkflowStatus(
+            detail?.loanWorkflowStatus,
+            fromId?.loanWorkflowStatus,
+            base.loanWorkflowStatus,
+          ),
+          status: fromId?.status || detail?.status || base.status,
+          postApprovalFulfillment: (paf ||
+            base.postApprovalFulfillment) as StorefrontApplication['postApprovalFulfillment'],
+          productWallet: fromId?.productWallet || base.productWallet,
+        }
+        return next
+      })
+    }
+
+    void refreshLive()
+    const timer = window.setInterval(() => {
+      void refreshLive()
+    }, 5000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [applicationId, application.userId, wallet?.userId, workflowVersion])
+
+  const currentStep = resolveLoanWorkflowStep(liveApplication)
+  const thread = buildLoanThread(currentStep)
   const cta = applicationId ? loanStepCta(currentStep, applicationId) : null
 
   const refreshWorkflow = useCallback(() => {
@@ -128,15 +181,13 @@ export function LoanPendingThreadScreen({
   const openStepModal = useCallback(
     (step: LoanWorkflowStep = currentStep) => {
       if (step === 'loan_disbursed') {
-        patchLoanWorkflow(applicationId, { disbursementSeen: true })
-        refreshWorkflow()
-        router.push('/mobile-v2/accounts')
+        router.push(`/mobile-v2/accounts/${encodeURIComponent(applicationId)}/product`)
         return
       }
       const modal = loanStepToModal(step)
       if (modal) setActiveModal(modal)
     },
-    [applicationId, currentStep, refreshWorkflow, router],
+    [applicationId, currentStep, router],
   )
 
   useEffect(() => {
@@ -197,7 +248,7 @@ export function LoanPendingThreadScreen({
         <LoanWorkflowModals
           active={activeModal}
           onClose={() => setActiveModal(null)}
-          application={application}
+          application={liveApplication}
           applicationId={applicationId}
           product={product}
           providerName={displayName || undefined}
@@ -224,11 +275,11 @@ export function LoanPendingThreadScreen({
         <div className="mb-4 rounded-2xl bg-white px-4 py-4 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Application</p>
           <h2 className="mt-1 text-base font-bold text-[var(--sf-ink,#1E293B)]">
-            {application.productName || product?.name || 'Loan application'}
+            {liveApplication.productName || product?.name || 'Loan application'}
           </h2>
-          <p className="mt-2 text-lg font-bold text-[var(--sf-button,#1E40AF)]">{formatAmount(application)}</p>
+          <p className="mt-2 text-lg font-bold text-[var(--sf-button,#1E40AF)]">{formatAmount(liveApplication)}</p>
           <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-orange-500">
-            {String(application.status || application.loanWorkflowStatus || 'Pending').replace(/_/g, ' ')}
+            {String(liveApplication.status || liveApplication.loanWorkflowStatus || 'Pending').replace(/_/g, ' ')}
           </p>
         </div>
 
@@ -249,7 +300,7 @@ export function LoanPendingThreadScreen({
       <LoanWorkflowModals
         active={activeModal}
         onClose={() => setActiveModal(null)}
-        application={application}
+        application={liveApplication}
         applicationId={applicationId}
         product={product}
         providerName={displayName || undefined}

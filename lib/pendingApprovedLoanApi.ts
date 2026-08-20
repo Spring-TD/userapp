@@ -36,6 +36,8 @@ export type PendingApprovedLoanDetail = {
   offerLetter?: OfferLetterPayload
   postApprovalFulfillment?: {
     status?: string
+    currentWorkflowStepId?: string
+    disbursedAt?: string
     contract?: {
       documentUrl?: string
       documentFileName?: string

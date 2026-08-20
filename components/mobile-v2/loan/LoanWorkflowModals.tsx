@@ -10,7 +10,7 @@ import { useAuthUserProfile } from '@/hooks/useAuthUserProfile'
 import { useUserWallet } from '@/hooks/useUserWallet'
 import { getAccessToken } from '@/lib/cookieAuth'
 import { buildLoanApplicationDetails } from '@/lib/loanApplicationDetails'
-import { patchLoanWorkflow, type LoanWorkflowModal } from '@/lib/loanWorkflow'
+import { type LoanWorkflowModal } from '@/lib/loanWorkflow'
 import { extractOfferLetterFromRecord } from '@/lib/offerLetter'
 import {
   formatLoanTermValue,
@@ -239,16 +239,10 @@ export function LoanWorkflowModals({
   if (!active) return null
 
   const markOfferAccepted = () => {
-    patchLoanWorkflow(applicationId, {
-      approvalAcknowledged: true,
-      offerAccepted: true,
-      offerDeclined: false,
-    })
     onStepAdvanced()
   }
 
   const acknowledgeApproval = () => {
-    patchLoanWorkflow(applicationId, { approvalAcknowledged: true })
     onStepAdvanced()
     toast.success('Approval reviewed')
     onClose()
@@ -407,10 +401,6 @@ export function LoanWorkflowModals({
         toast.error(apiRes.error || 'Could not decline offer. Please try again.')
         return
       }
-      patchLoanWorkflow(applicationId, {
-        offerAccepted: false,
-        offerDeclined: true,
-      })
       onStepAdvanced()
       toast.message('Loan offer declined')
       onClose()

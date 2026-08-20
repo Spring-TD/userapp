@@ -74,11 +74,16 @@ export type StorefrontApplication = {
       }>
     }
   }
-  /** Present on pending-approved mortgage list/detail responses. */
+  /** Present on pending-approved loan/mortgage list/detail responses. */
   postApprovalFulfillment?: {
     status?: string
     currentWorkflowStepId?: string
     completedWorkflowSteps?: string[]
+    disbursedAt?: string
+    offer?: {
+      sentAt?: string
+      acceptedAt?: string
+    }
     virtualInspection?: {
       completedAt?: string
       completedByUserId?: string
@@ -134,12 +139,18 @@ export type StorefrontApplication = {
       bankName?: string
       bankCode?: string
       balance?: number
+      mainBalance?: number
       currency?: string
       status?: string
       providerReference?: string
       provisionStatus?: string
     }
+    balance?: number
+    mainBalance?: number
   }
+  amortizationSchedule?: Record<string, unknown>
+  customerName?: string
+  applicantName?: string
 }
 
 export type ProductApplicationInitStatus = {

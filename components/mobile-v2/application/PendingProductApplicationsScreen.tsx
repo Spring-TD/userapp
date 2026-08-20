@@ -8,13 +8,11 @@ import { fetchUserApplications, needsFinalApplicationSubmit, canShowPendingPage,
 import {
   buildMortgageThread,
   mortgageStepCta,
-  readMortgageWorkflow,
   resolveMortgageWorkflowStep,
 } from '@/lib/mortgageWorkflow'
 import {
   loanNextStepLabel,
   loanStepCta,
-  readLoanWorkflow,
   resolveLoanWorkflowStep,
 } from '@/lib/loanWorkflow'
 import { mortgageApplyHref, mortgagePendingDetailHref } from '@/lib/mortgageApplyRoutes'
@@ -46,21 +44,18 @@ function applicationPendingKind(application: StorefrontApplication): PendingKind
 function isPendingApplication(application: StorefrontApplication, kind: PendingKind) {
   const status = String(application.status || '').toLowerCase()
   const workflowStatus = String(application.loanWorkflowStatus || '').toLowerCase()
-  const applicationId = String(application.id ?? application._id ?? '')
 
   if (kind === 'mortgage') {
-    const local = readMortgageWorkflow(applicationId)
-    const step = resolveMortgageWorkflowStep(application, local)
-    if (local?.allocationDownloaded) return false
-    if (step !== 'mortgage_allocation' && step !== 'declined') return true
+    const step = resolveMortgageWorkflowStep(application)
+    if (step === 'declined') return false
+    if (step === 'mortgage_allocation') return false
+    if (step !== 'application_submission') return true
   }
 
   if (kind === 'loan') {
-    const local = readLoanWorkflow(applicationId)
-    const step = resolveLoanWorkflowStep(application, local)
-    if (local?.offerDeclined) return false
-    if (step === 'loan_disbursed' && local?.disbursementSeen) return false
-    if (step !== 'declined') return true
+    const step = resolveLoanWorkflowStep(application)
+    if (step === 'declined' || step === 'loan_disbursed') return false
+    return true
   }
 
   return status === 'pending' || PENDING_WORKFLOW_STATUSES.has(workflowStatus)
@@ -95,9 +90,7 @@ function mortgageNextStepLabel(application: StorefrontApplication) {
   if (isMortgageDownPaymentPending(application as unknown as Record<string, unknown>)) {
     return 'Pay down payment'
   }
-  const applicationId = String(application.id ?? application._id ?? '')
-  const local = readMortgageWorkflow(applicationId)
-  const step = resolveMortgageWorkflowStep(application, local)
+  const step = resolveMortgageWorkflowStep(application)
   const thread = buildMortgageThread(step)
   const current = thread.find((item) => item.status === 'current')
   return current?.title ?? 'In progress'
@@ -230,11 +223,9 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreen
                 const awaitingSubmit = needsFinalApplicationSubmit(application)
                 const pendingReady = canShowPendingPage(application)
                 const resumeApplyHref = awaitingSubmit ? continueApplyHref(application, appKind) : null
-                const mortgageLocal = readMortgageWorkflow(applicationId)
-                const loanLocal = readLoanWorkflow(applicationId)
                 const mortgageStep =
-                  appKind === 'mortgage' ? resolveMortgageWorkflowStep(application, mortgageLocal) : null
-                const loanStep = appKind === 'loan' ? resolveLoanWorkflowStep(application, loanLocal) : null
+                  appKind === 'mortgage' ? resolveMortgageWorkflowStep(application) : null
+                const loanStep = appKind === 'loan' ? resolveLoanWorkflowStep(application) : null
                 const mortgageCta =
                   pendingReady && appKind === 'mortgage' && productId && applicationId && mortgageStep
                     ? isMortgageDownPaymentPending(application as unknown as Record<string, unknown>)

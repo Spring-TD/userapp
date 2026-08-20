@@ -7,7 +7,6 @@ import { Check, ChevronLeft, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { MortgageSheet, MORTGAGE_PRIMARY } from '@/components/mobile-v2/mortgage/MortgageSheet'
 import { mortgagePendingDetailHref } from '@/lib/mortgageApplyRoutes'
-import { patchMortgageWorkflowAsync } from '@/lib/mortgageWorkflow'
 import { extractOfferLetterFromRecord } from '@/lib/offerLetter'
 import { pendingApprovedMortgageApi } from '@/lib/pendingApprovedMortgageApi'
 import { useUserWallet } from '@/hooks/useUserWallet'
@@ -73,20 +72,6 @@ function AcceptOfferContent() {
         toast.error(apiRes.error || 'Could not accept offer. Please try again.')
         return
       }
-      const local = await patchMortgageWorkflowAsync(applicationId, {
-        offerAccepted: true,
-        offerDeclined: false,
-      })
-      if (!local) {
-        toast.error('Could not save workflow progress.')
-        return
-      }
-      if (!local.synced) {
-        toast.error(local.syncError || 'Workflow sync failed', {
-          description: 'PATCH …/loan-workflow (mortgageWorkflow)',
-        })
-        return
-      }
       toast.success('Mortgage offer accepted')
       setSheetOpen(false)
       router.replace(pendingHref)
@@ -105,20 +90,6 @@ function AcceptOfferContent() {
       const apiRes = await pendingApprovedMortgageApi.respondToOffer(applicationId, userId, false)
       if (!apiRes.ok) {
         toast.error(apiRes.error || 'Could not decline offer. Please try again.')
-        return
-      }
-      const local = await patchMortgageWorkflowAsync(applicationId, {
-        offerDeclined: true,
-        offerAccepted: false,
-      })
-      if (!local) {
-        toast.error('Could not save workflow progress.')
-        return
-      }
-      if (!local.synced) {
-        toast.error(local.syncError || 'Workflow sync failed', {
-          description: 'PATCH …/loan-workflow (mortgageWorkflow)',
-        })
         return
       }
       toast.message('Offer declined')
