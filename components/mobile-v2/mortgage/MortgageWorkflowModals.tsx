@@ -28,7 +28,10 @@ import { cn } from '@/lib/utils'
 import type { MobileProduct } from '@/lib/storefrontProducts'
 
 /** Sheet modals only — virtual tour uses VirtualTourSheet instead. */
-export type WorkflowModalKind = Exclude<MortgageWorkflowModal, 'virtual_tour'>
+export type WorkflowModalKind = Exclude<
+  MortgageWorkflowModal,
+  'virtual_tour' | 'virtual_inspection'
+>
 
 type MortgageWorkflowModalsProps = {
   active: WorkflowModalKind | null
@@ -148,13 +151,15 @@ export function MortgageWorkflowModals({
       active !== 'offer_letter' &&
       active !== 'accept_offer' &&
       active !== 'book_inspection' &&
+      active !== 'inspection_booking' &&
+      active !== 'inspection_outcome' &&
       active !== 'down_payment'
     ) {
       return
     }
 
     let cancelled = false
-    if (active === 'book_inspection') {
+    if (active === 'book_inspection' || active === 'inspection_booking' || active === 'inspection_outcome') {
       setSlotsLoading(true)
       setSlotsError(null)
     }
@@ -168,7 +173,7 @@ export function MortgageWorkflowModals({
     void pendingApprovedMortgageApi.getDetail(applicationId, userId).then((res) => {
       if (cancelled) return
       if (!res.ok) {
-        if (active === 'book_inspection') {
+        if (active === 'book_inspection' || active === 'inspection_booking' || active === 'inspection_outcome') {
           setSlotsError(res.error || 'Could not load inspection dates.')
           setSlotsLoading(false)
         }
@@ -184,7 +189,7 @@ export function MortgageWorkflowModals({
         setOfferPdfUrl(letter.pdfUrl)
         setOfferPdfName(letter.pdfFileName || null)
       }
-      if (active === 'book_inspection') {
+      if (active === 'book_inspection' || active === 'inspection_booking' || active === 'inspection_outcome') {
         const slots = extractAvailableInspectionDates(res.data)
         setMerchantSlots(slots)
         setSlotsError(
@@ -235,22 +240,18 @@ export function MortgageWorkflowModals({
   }
 
   const handleDownloadOffer = async () => {
-    let url = offerDocUrl
-    let name = offerPdfName || 'mortgage-offer-letter.pdf'
-
-    // Letter may land shortly after virtual-tour auto-send — refresh before failing.
-    if (!url && userId) {
+    let latest = detail
+    if (userId) {
       setBusy(true)
       try {
         const res = await pendingApprovedMortgageApi.getDetail(applicationId, userId)
         if (res.ok) {
+          latest = res.data
           setDetail(res.data)
           const letter = extractOfferLetterFromRecord(res.data as unknown as Record<string, unknown>)
           if (letter?.pdfUrl) {
             setOfferPdfUrl(letter.pdfUrl)
             setOfferPdfName(letter.pdfFileName || null)
-            url = letter.pdfUrl
-            name = letter.pdfFileName || name
           }
         }
       } finally {
@@ -258,6 +259,17 @@ export function MortgageWorkflowModals({
       }
     }
 
+    const sentAt = latest?.postApprovalFulfillment?.offer?.sentAt
+    if (!sentAt) {
+      toast.error('The merchant has not sent the offer letter yet.')
+      return
+    }
+
+    const letter = latest
+      ? extractOfferLetterFromRecord(latest as unknown as Record<string, unknown>)
+      : null
+    const url = letter?.pdfUrl || offerPdfUrl
+    const name = letter?.pdfFileName || offerPdfName || 'mortgage-offer-letter.pdf'
     if (!url) {
       toast.error('Offer letter PDF is not on this application yet', {
         description:
@@ -550,9 +562,12 @@ export function MortgageWorkflowModals({
         </div>
       </MortgageSheet>
 
-      <MortgageSheet open={active === 'book_inspection'} onClose={onClose}>
+      <MortgageSheet
+        open={active === 'book_inspection' || active === 'inspection_booking' || active === 'inspection_outcome'}
+        onClose={onClose}
+      >
         <div className="px-1 pb-2 pt-2">
-          {inspectionAlreadyBooked ? (
+          {inspectionAlreadyBooked || active === 'inspection_outcome' ? (
             <>
               <h2 className="text-center text-lg font-bold text-[var(--sf-ink,#1E293B)]">Confirm Inspection</h2>
               <p className="mx-auto mt-3 max-w-xs text-center text-sm text-gray-500">
@@ -933,7 +948,20 @@ export function MortgageWorkflowModals({
         </div>
       </MortgageSheet>
 
-      <MortgageSheet open={active === 'contract_signing'} onClose={onClose}>
+      <MortgageSheet open={active === 'contract_issued'} onClose={onClose}>
+        <div className="px-1 pb-2 pt-2">
+          <h2 className="text-center text-lg font-bold text-[var(--sf-ink,#1E293B)]">Contract Issued</h2>
+          <p className="mx-auto mt-3 max-w-xs text-center text-sm text-gray-500">
+            The merchant confirms your down payment, then the contract is issued automatically. This screen
+            refreshes when it is ready to sign.
+          </p>
+          <Button className={cn('mt-8 h-12 w-full rounded-full text-sm font-semibold', MORTGAGE_PRIMARY)} onClick={onClose}>
+            OK
+          </Button>
+        </div>
+      </MortgageSheet>
+
+      <MortgageSheet open={active === 'contract_signing' || active === 'contract_signed'} onClose={onClose}>
         <div className="px-1 pb-2 pt-2">
           <h2 className="text-center text-lg font-bold text-[var(--sf-ink,#1E293B)]">Contract Signing</h2>
           <p className="mx-auto mt-3 max-w-xs text-center text-sm text-gray-500">
@@ -959,9 +987,9 @@ export function MortgageWorkflowModals({
         </div>
       </MortgageSheet>
 
-      <MortgageSheet open={active === 'mortgage_allocation'} onClose={onClose}>
+      <MortgageSheet open={active === 'mortgage_allocation' || active === 'loan_disbursement'} onClose={onClose}>
         <div className="px-1 pb-2 pt-2">
-          <h2 className="text-center text-lg font-bold text-[var(--sf-ink,#1E293B)]">Mortgage Allocation</h2>
+          <h2 className="text-center text-lg font-bold text-[var(--sf-ink,#1E293B)]">Loan Disbursement</h2>
           <p className="mx-auto mt-3 max-w-xs text-center text-sm text-gray-500">
             Your mortgage has been allocated. Download your final allocation document.
           </p>
