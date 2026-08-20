@@ -59,6 +59,14 @@ function pickBoolean(...vals: unknown[]): boolean | undefined {
   return undefined
 }
 
+function pickRate(...vals: unknown[]): number | string | undefined {
+  for (const v of vals) {
+    if (typeof v === 'number' && Number.isFinite(v)) return v
+    if (typeof v === 'string' && v.trim()) return v.trim()
+  }
+  return undefined
+}
+
 function normalizePeriod(raw: unknown, index: number): AmortizationPeriod {
   const row = asRecord(raw) ?? {}
   return {
@@ -96,8 +104,8 @@ export function normalizeAmortizationSchedule(raw: unknown): AmortizationSchedul
     totalInterest: pickNumber(nested.totalInterest, nested.interestTotal),
     totalRepayment: pickNumber(nested.totalRepayment, nested.totalPayable, nested.totalAmount),
     periodCount: pickNumber(nested.periodCount, nested.periodsCount, nested.paymentCount) ?? periods.length,
-    interestRate: nested.interestRate ?? nested.rate ?? nested.annualRate,
-    rate: nested.rate ?? nested.interestRate,
+    interestRate: pickRate(nested.interestRate, nested.rate, nested.annualRate),
+    rate: pickRate(nested.rate, nested.interestRate),
     interestMethod: pickString(nested.interestMethod, nested.method),
     currency: pickString(nested.currency) || 'NGN',
     periods,
