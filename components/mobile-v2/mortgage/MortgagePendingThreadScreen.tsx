@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Check, ChevronLeft } from 'lucide-react'
+import { Check, ChevronLeft, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { MortgageWorkflowModals } from '@/components/mobile-v2/mortgage/MortgageWorkflowModals'
@@ -65,12 +65,20 @@ function ThreadRow({
             'flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-[10px] font-bold',
             item.status === 'done'
               ? 'border-green-500 bg-green-500 text-white'
+              : item.status === 'rejected'
+                ? 'border-red-500 bg-red-500 text-white'
               : item.status === 'current'
                 ? 'border-[var(--sf-button,#1E40AF)] bg-[var(--sf-button,#1E40AF)] text-white'
                 : 'border-gray-200 bg-white text-gray-400',
           )}
         >
-          {item.status === 'done' ? <Check className="h-3.5 w-3.5" /> : item.stepNumber}
+          {item.status === 'done' ? (
+            <Check className="h-3.5 w-3.5" />
+          ) : item.status === 'rejected' ? (
+            <X className="h-3.5 w-3.5" />
+          ) : (
+            item.stepNumber
+          )}
         </div>
         <div className="mt-1 w-px flex-1 bg-gray-200 last:hidden" />
       </div>
@@ -78,7 +86,11 @@ function ThreadRow({
         <p
           className={cn(
             'text-sm font-semibold',
-            item.status === 'current' ? 'text-[var(--sf-button,#1E40AF)]' : 'text-[var(--sf-ink,#1E293B)]',
+            item.status === 'current'
+              ? 'text-[var(--sf-button,#1E40AF)]'
+              : item.status === 'rejected'
+                ? 'text-red-600'
+                : 'text-[var(--sf-ink,#1E293B)]',
           )}
         >
           {item.title}
@@ -219,10 +231,14 @@ export function MortgagePendingThreadScreen({
 
   const product = springTourProduct ?? catalogProduct
 
+  void workflowVersion
   const currentStep = resolveMortgageWorkflowStep(liveApplication)
-  const thread = buildMortgageThread(currentStep)
+  const thread = buildMortgageThread(liveApplication)
+  const workflowComplete = thread.every((item) => item.status === 'done' || item.status === 'rejected')
   const cta =
-    productId && applicationId ? mortgageStepCta(currentStep, productId, applicationId) : null
+    productId && applicationId && !workflowComplete
+      ? mortgageStepCta(currentStep, productId, applicationId, liveApplication)
+      : null
 
   const tourData = useMemo(
     () => buildPropertyTourData(springTourProduct ?? product, liveApplication),
@@ -235,14 +251,14 @@ export function MortgagePendingThreadScreen({
 
   const openStepModal = useCallback(
     (step = currentStep) => {
-      if (step === 'virtual_tour') {
+      if (step === 'virtual_tour' || step === 'virtual_inspection') {
         console.log('[VirtualTour][SpringProduct] opening virtual tour — refetching Spring product')
         void refetchSpringTourProduct()
         setVirtualTourOpen(true)
         return
       }
       const modal = mortgageStepToModal(step)
-      if (modal && modal !== 'virtual_tour') {
+      if (modal && modal !== 'virtual_tour' && modal !== 'virtual_inspection') {
         setActiveModal(modal)
       }
     },
@@ -257,7 +273,7 @@ export function MortgagePendingThreadScreen({
     if (embedded) return
     const action = searchParams.get('action') as MortgageWorkflowModal | null
     if (!action) return
-    if (action === 'virtual_tour') {
+    if (action === 'virtual_tour' || action === 'virtual_inspection') {
       setVirtualTourOpen(true)
     } else {
       setActiveModal(action)
@@ -304,6 +320,7 @@ export function MortgagePendingThreadScreen({
           stepId !== 'virtual_tour' &&
           stepId !== 'virtual_inspection' &&
           stepId !== 'application_submission' &&
+          stepId !== 'merchant_decision' &&
           stepId !== 'review_approval')
 
       if (!alreadyPastTour) {
@@ -425,9 +442,9 @@ export function MortgagePendingThreadScreen({
             {liveApplication.productName || product?.name || 'Mortgage application'}
           </h2>
           <p className="mt-2 text-lg font-bold text-[var(--sf-button,#1E40AF)]">{formatAmount(liveApplication)}</p>
-          {currentStep === 'application_submission' ? (
+          {currentStep === 'merchant_decision' ? (
             <p className="mt-2 text-xs text-amber-700">
-              Waiting for the bank to approve — this screen refreshes automatically.
+              Waiting for the merchant to approve or reject — this screen refreshes automatically.
             </p>
           ) : null}
         </div>
