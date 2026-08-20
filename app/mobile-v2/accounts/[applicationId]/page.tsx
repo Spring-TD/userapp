@@ -10,28 +10,18 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { MobileFlowShell } from '@/components/mobile-v2/MobileFlowShell'
 import { TransferToPrimaryDrawer } from '@/components/mobile-v2/TransferToPrimaryDrawer'
 import { useUserWallet } from '@/hooks/useUserWallet'
+import {
+  canTransferProductWalletToPrimary,
+  productWalletAvailableBalance,
+  withZeroProductWallet,
+} from '@/lib/productWalletTransfer'
 import { resolveUserProductApplication } from '@/lib/services/productApplicationApi'
+import { fetchApplicationById } from '@/lib/storefrontApplicationClient'
 import { formatWalletBalance } from '@/lib/userWallet'
 import type { ProductApplication } from '@/types/productApplication'
 
 function accountNumberFor(application: ProductApplication | null): string {
   return application?.productWallet?.upstreamAccount?.accountNumber?.trim() || ''
-}
-
-function productWalletAvailableBalance(application: ProductApplication): number {
-  const wallet = application.productWallet
-  const upstream = wallet?.upstreamAccount
-  const candidates = [
-    wallet?.mainBalance,
-    wallet?.balance,
-    upstream?.mainBalance,
-    upstream?.balance,
-    application.amount,
-  ]
-  for (const value of candidates) {
-    if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value
-  }
-  return 0
 }
 
 function normalizeStatus(status?: string | null): string {
@@ -70,19 +60,26 @@ function statusBadgeTone(status?: string | null): string {
 }
 
 function canTransferApplication(application: ProductApplication): boolean {
+  return canTransferProductWalletToPrimary(application)
+}
+
+function wouldAllowTransferIfFunded(application: ProductApplication): boolean {
   const type = String(application.productType || '').toUpperCase()
   if (type === 'COMMODITY') return false
   const status = normalizeStatus(application.status)
-  if (status.includes('reject') || status.includes('cancel') || status.includes('pending')) return false
-  if (type === 'LOAN' || type === 'MORTGAGE') {
-    return (
-      status.includes('approv') ||
-      status.includes('disburs') ||
-      status.includes('active') ||
-      productWalletAvailableBalance(application) > 0
-    )
+  if (status.includes('reject') || status.includes('cancel') || status.includes('pending') || status.includes('draft')) {
+    return false
   }
-  return productWalletAvailableBalance(application) > 0
+  return (
+    status.includes('approv') ||
+    status.includes('disburs') ||
+    status.includes('active') ||
+    status.includes('complete') ||
+    type === 'SAVINGS' ||
+    type === 'INVESTMENT' ||
+    type === 'LOAN' ||
+    type === 'MORTGAGE'
+  )
 }
 
 function applicationUpdatedAt(application: ProductApplication): number {
@@ -108,13 +105,32 @@ export default function AccountDetailPage() {
   const reload = useCallback(() => {
     const userId = wallet?.userId
     if (!userId || !applicationId) return
-    void resolveUserProductApplication(userId, applicationId).then((result) => {
-      setSelectedApplication(result.application)
-      setApplications(result.applications)
-      setError(result.application ? null : result.error || 'Account record not found.')
+    void Promise.all([
+      resolveUserProductApplication(userId, applicationId),
+      fetchApplicationById(applicationId),
+    ]).then(([resolved, byId]) => {
+      let application = resolved.application
+      if (application && byId.ok && byId.application?.productWallet) {
+        application = { ...application, productWallet: byId.application.productWallet }
+      }
+      setSelectedApplication(application)
+      setApplications(resolved.applications)
+      setError(application ? null : resolved.error || 'Account record not found.')
     })
     void refetchWallet()
   }, [applicationId, wallet?.userId, refetchWallet])
+
+  const handleTransferSuccess = useCallback(
+    (applicationIdTransferred: string) => {
+      setSelectedApplication((prev) =>
+        prev ? withZeroProductWallet(prev, applicationIdTransferred) : prev,
+      )
+      setApplications((prev) => prev.map((app) => withZeroProductWallet(app, applicationIdTransferred)))
+      setTransferTarget(null)
+      reload()
+    },
+    [reload],
+  )
 
   useEffect(() => {
     if (walletLoading) {
@@ -274,8 +290,13 @@ export default function AccountDetailPage() {
           ) : null}
           <div className="space-y-3">
             {relatedApplications.map((application) => {
-              const transferable = Boolean(wallet?.userId && canTransferApplication(application))
               const balance = productWalletAvailableBalance(application)
+              const transferable = Boolean(wallet?.userId && canTransferApplication(application))
+              const showTransferredState =
+                Boolean(wallet?.userId) &&
+                wouldAllowTransferIfFunded(application) &&
+                !transferable &&
+                balance <= 0
               const statusLabel = formatStatusLabel(application.status)
               return (
                 <div key={application.id} className="rounded-2xl border sf-border-subtle px-4 py-4">
@@ -310,18 +331,26 @@ export default function AccountDetailPage() {
                     </Link>
                   </div>
                   {transferable ? (
+                    <>
+                      <Button
+                        type="button"
+                        onClick={() => setTransferTarget(application)}
+                        className="mt-3 h-10 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-sm font-semibold text-white"
+                      >
+                        Transfer to primary wallet
+                      </Button>
+                      <p className="mt-2 text-center text-[11px] text-gray-500">
+                        Available: {formatWalletBalance(balance, application.currency || wallet?.currency)}
+                      </p>
+                    </>
+                  ) : showTransferredState ? (
                     <Button
                       type="button"
-                      onClick={() => setTransferTarget(application)}
-                      className="mt-3 h-10 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-sm font-semibold text-white"
+                      disabled
+                      className="mt-3 h-10 w-full cursor-not-allowed rounded-full bg-gray-100 text-sm font-semibold text-gray-400"
                     >
-                      Transfer to primary wallet
+                      Transferred to primary wallet
                     </Button>
-                  ) : null}
-                  {transferable && balance > 0 ? (
-                    <p className="mt-2 text-center text-[11px] text-gray-500">
-                      Available: {formatWalletBalance(balance, application.currency || wallet?.currency)}
-                    </p>
                   ) : null}
                 </div>
               )
@@ -341,8 +370,7 @@ export default function AccountDetailPage() {
               availableBalance={productWalletAvailableBalance(transferTarget)}
               currency={transferTarget.currency || wallet.currency || 'NGN'}
               onSuccess={() => {
-                setTransferTarget(null)
-                reload()
+                handleTransferSuccess(transferTarget.id)
               }}
             />
           ) : null}

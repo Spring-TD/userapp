@@ -28,6 +28,12 @@ import {
     canWithdrawCommodity,
     withdrawCommodity,
 } from '@/lib/commodityApi';
+import {
+    canTransferProductWalletToPrimary,
+    productWalletAvailableBalance,
+    withZeroProductWallet,
+} from '@/lib/productWalletTransfer';
+import { fetchApplicationById } from '@/lib/storefrontApplicationClient';
 import { formatWalletBalance } from '@/lib/userWallet';
 import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
 import { MobileV2NotificationBell } from '@/components/mobile-v2/MobileV2NotificationBell';
@@ -228,42 +234,12 @@ function formatApprovedTotal(amount: number, currency: string): string {
  * Never pair an "Approved" badge with a "Pending provisioning" subtitle.
  */
 /** Spendable balance sitting on the product application wallet (not PRIMARY). */
-function productWalletAvailableBalance(application: ProductApplication): number {
-    const wallet = application.productWallet
-    const upstream = wallet?.upstreamAccount
-    const candidates = [
-        wallet?.mainBalance,
-        wallet?.balance,
-        upstream?.mainBalance,
-        upstream?.balance,
-        application.amount,
-    ]
-    for (const value of candidates) {
-        if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value
-    }
-    return 0
-}
-
 function canTransferProductToPrimary(
     application: ProductApplication,
     activeFilter: AccountFilter,
 ): boolean {
     if (activeFilter === 'Commodity') return false
-    if (!application.id) return false
-    const statusLabel = getProductAccountDisplayStatus(application).toLowerCase()
-    if (statusLabel.includes('pending') || statusLabel === 'rejected' || statusLabel === 'cancelled') {
-        return false
-    }
-    // Loan / mortgage disbursements are the primary use-case; also allow savings/invest when funded.
-    if (activeFilter === 'Loan' || activeFilter === 'Mortgage') {
-        return (
-            statusLabel === 'approved' ||
-            statusLabel === 'disbursed' ||
-            statusLabel === 'active' ||
-            productWalletAvailableBalance(application) > 0
-        )
-    }
-    return productWalletAvailableBalance(application) > 0
+    return canTransferProductWalletToPrimary(application)
 }
 
 function getProductAccountDisplayStatus(application: ProductApplication): string {
@@ -316,12 +292,14 @@ function ProductAccountCard({
     userId,
     currency,
     onWithdrawComplete,
+    onTransferSuccess,
 }: {
     application: ProductApplication;
     activeFilter: AccountFilter;
     userId?: string;
     currency?: string;
     onWithdrawComplete?: () => void;
+    onTransferSuccess?: (applicationId: string) => void;
 }) {
     const [withdrawing, setWithdrawing] = useState(false);
     const [withdrawError, setWithdrawError] = useState<string | null>(null);
@@ -439,6 +417,23 @@ function ProductAccountCard({
                     >
                         Transfer to primary wallet
                     </Button>
+                    {productBalance > 0 ? (
+                        <p className="mt-2 text-center text-[11px] text-gray-500">
+                            Available: {formatWalletBalance(productBalance, application.currency || currency)}
+                        </p>
+                    ) : null}
+                </div>
+            ) : (activeFilter === 'Loan' || activeFilter === 'Mortgage') &&
+              productBalance <= 0 &&
+              !statusLabel.toLowerCase().includes('pending') ? (
+                <div className="mt-4" onClick={(event) => event.preventDefault()}>
+                    <Button
+                        type="button"
+                        disabled
+                        className="h-10 w-full cursor-not-allowed rounded-full bg-gray-100 text-sm font-semibold text-gray-400"
+                    >
+                        Transferred to primary wallet
+                    </Button>
                 </div>
             ) : null}
         </div>
@@ -459,7 +454,7 @@ function ProductAccountCard({
                     productType={application.productType || activeFilter}
                     availableBalance={productBalance}
                     currency={application.currency || currency || 'NGN'}
-                    onSuccess={onWithdrawComplete}
+                    onSuccess={() => onTransferSuccess?.(application.id)}
                 />
             ) : null}
         </div>
@@ -576,6 +571,26 @@ export default function AccountsPage() {
         void refetchWallet();
     }, [wallet?.userId, appId, approvedListParams, refetchWallet]);
 
+    const handleTransferSuccess = useCallback(
+        (transferredApplicationId: string) => {
+            setApplications((prev) =>
+                prev.map((app) => withZeroProductWallet(app, transferredApplicationId)),
+            );
+            void fetchApplicationById(transferredApplicationId).then((byId) => {
+                if (!byId.ok || !byId.application?.productWallet) return;
+                setApplications((prev) =>
+                    prev.map((app) =>
+                        app.id === transferredApplicationId
+                            ? { ...app, productWallet: byId.application!.productWallet }
+                            : app,
+                    ),
+                );
+            });
+            reloadApplications();
+        },
+        [reloadApplications],
+    );
+
     const displayName = useMemo(() => displayNameFromProfile(profile), [profile]);
     const totalLabel = ACCOUNT_TOTAL_LABELS[activeFilter];
     const activeBucket: ApprovedAmountBucket =
@@ -687,6 +702,7 @@ export default function AccountsPage() {
                                 userId={wallet?.userId}
                                 currency={wallet?.currency}
                                 onWithdrawComplete={reloadApplications}
+                                onTransferSuccess={handleTransferSuccess}
                             />
                         ))
                     ) : (

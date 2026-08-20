@@ -39,10 +39,6 @@ import {
 } from '@/lib/storefrontApplicationClient'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
 import { mortgagePendingDetailHref } from '@/lib/mortgageApplyRoutes'
-import {
-  initMortgageWorkflowSubmitted,
-  type MortgageDownPaymentMethod,
-} from '@/lib/mortgageWorkflow'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 import {
   defaultApplicationAmountValue,
@@ -1297,13 +1293,6 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     }
 
     const finishMortgageSuccess = (resolvedId: string) => {
-      const methodKey = `mortgage_down_payment_method_${productId}`
-      const storedMethod = typeof window !== 'undefined' ? sessionStorage.getItem(methodKey) : null
-      const downPaymentMethod: MortgageDownPaymentMethod | undefined =
-        storedMethod === 'savings_plan' || storedMethod === 'equity_contribution'
-          ? storedMethod
-          : 'equity_contribution'
-      initMortgageWorkflowSubmitted(resolvedId, productId, downPaymentMethod)
       setSubmittedApplicationId(resolvedId)
       clearApplicationDraft(currentDraftKey)
       setSheet('success')

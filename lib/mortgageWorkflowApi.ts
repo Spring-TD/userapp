@@ -1,5 +1,4 @@
 import { apiClient } from "@/lib/api"
-import type { MortgageWorkflowLocalState } from "@/lib/mortgageWorkflow"
 
 export type MortgageWorkflowApiProgress = {
   offerAcceptedAt?: string
@@ -25,28 +24,6 @@ function parseApiError(data: unknown, status: number): string {
     if (d.message) return d.message
   }
   return status >= 500 ? "Server error" : "Request failed"
-}
-
-/** Map a local workflow patch to API timestamp fields (only fields changed in this patch). */
-export function localPatchToApiProgress(
-  patch: Partial<MortgageWorkflowLocalState>,
-  stateAfterPatch?: MortgageWorkflowLocalState,
-): MortgageWorkflowApiProgress | null {
-  const now = new Date().toISOString()
-  const progress: MortgageWorkflowApiProgress = {}
-
-  // Virtual tour is synced only via POST …/virtual-inspection/complete — never loan-workflow.
-  if (patch.offerAccepted === true) progress.offerAcceptedAt = now
-  if (patch.offerDeclined === true || patch.cancelled === true) {
-    progress.offerDeclinedAt = now
-    if (stateAfterPatch?.inspectionScheduled) progress.inspectionDeclined = true
-  }
-  if (patch.inspectionScheduled === true) progress.inspectionBookedAt = now
-  if (patch.inspectionCompleted === true) progress.inspectionCompletedAt = now
-  if (patch.downPaymentConfirmed === true) progress.downPaymentMadeAt = now
-  if (patch.contractAccepted === true) progress.contractSignedAt = now
-
-  return Object.keys(progress).length > 0 ? progress : null
 }
 
 export async function patchMortgageWorkflowProgress(
@@ -81,16 +58,4 @@ export async function patchMortgageWorkflowProgress(
           : "Failed to sync mortgage workflow"
     return { ok: false, error: message }
   }
-}
-
-/**
- * Storefront post-approval steps use dedicated `POST /api/v1/applications/.../pending-approved-mortgage/*`
- * endpoints. `PATCH .../products/applications/.../loan-workflow` is not a storefront route (404).
- */
-export async function syncMortgageWorkflowPatchToApi(
-  _applicationId: string,
-  _patch: Partial<MortgageWorkflowLocalState>,
-  _stateAfterPatch?: MortgageWorkflowLocalState,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  return { ok: true }
 }
