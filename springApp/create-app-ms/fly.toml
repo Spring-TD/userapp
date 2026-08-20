@@ -6,6 +6,9 @@
 app = 'create-app-ms'
 primary_region = 'fra'
 
+[env]
+  CLIENT_AUTH_SERVICE_URL = 'https://client-auth-ms.fly.dev'
+
 [build]
 
 [http_service]

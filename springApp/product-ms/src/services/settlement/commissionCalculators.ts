@@ -68,7 +68,7 @@ export function calculateAccountMaintenanceCharge(): number {
   return Number.isFinite(raw) && raw > 0 ? roundMoney(raw) : 100;
 }
 
-/** Investment: merchant % taken from principal (e.g. ₦1,000 @ 1% → ₦10 commission, ₦990 to creator). */
+/** Investment: merchant fee on top of principal (e.g. ₦1,000 @ 1% → ₦10 fee; creator receives full ₦1,000). */
 export function calculateInvestmentCharge(principal: number, merchantExtraRatePercent: number): number {
   if (!Number.isFinite(principal) || principal <= 0) return 0;
   return roundMoney(principal * (merchantExtraRatePercent / 100));
@@ -80,12 +80,16 @@ export function calculateInvestmentSettlementSplit(
 ): {
   principalAmount: number;
   commissionAmount: number;
+  /** Full principal credited to Plata product creator (not reduced by commission). */
   creatorPrincipalAmount: number;
+  /** Total debited from storefront user Central Wallet (principal + commission). */
+  totalUserDebit: number;
 } {
   const principalAmount = roundMoney(principal);
   const commissionAmount = calculateInvestmentCharge(principalAmount, merchantRatePercent);
-  const creatorPrincipalAmount = roundMoney(Math.max(0, principalAmount - commissionAmount));
-  return { principalAmount, commissionAmount, creatorPrincipalAmount };
+  const creatorPrincipalAmount = principalAmount;
+  const totalUserDebit = roundMoney(principalAmount + commissionAmount);
+  return { principalAmount, commissionAmount, creatorPrincipalAmount, totalUserDebit };
 }
 
 export type TransactionChargeInput = {

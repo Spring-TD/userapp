@@ -26,9 +26,16 @@ interface SessionConfig {
   idleTimeoutMs: number;
 }
 
+interface RateLimitConfig {
+  enabled: boolean;
+  windowMs: number;
+  loginMaxRequests: number;
+}
+
 interface EnvironmentConfig {
   port: number;
   nodeEnv: string;
+  rateLimit: RateLimitConfig;
   serviceAuthUrl: string;
   serviceAuthInternalToken: string;
   /** Axios timeout (ms) for calls to service-auth-ms (bootstrap, etc.). */
@@ -64,11 +71,28 @@ interface EnvironmentConfig {
   session: SessionConfig;
 }
 
-const idleTimeoutMinutes = parseInt(process.env.SESSION_IDLE_TIMEOUT_MINUTES || '15', 10);
+function envInt(name: string, fallback: number): number {
+  const n = parseInt(process.env[name] || '', 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function envBool(name: string, fallback: boolean): boolean {
+  const v = (process.env[name] || '').trim().toLowerCase();
+  if (v === 'true' || v === '1' || v === 'yes') return true;
+  if (v === 'false' || v === '0' || v === 'no') return false;
+  return fallback;
+}
+
+const idleTimeoutMinutes = parseInt(process.env.SESSION_IDLE_TIMEOUT_MINUTES || '480', 10);
 
 export const config: EnvironmentConfig = {
   port: parseInt(process.env.PORT || '3001', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
+  rateLimit: {
+    enabled: envBool('RATE_LIMIT_ENABLED', true),
+    windowMs: envInt('RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000),
+    loginMaxRequests: envInt('AUTH_RATE_LIMIT_MAX_REQUESTS', 20),
+  },
   serviceAuthUrl: process.env.SERVICE_AUTH_URL || 'http://localhost:4000',
   serviceAuthInternalToken: process.env.SERVICE_AUTH_INTERNAL_TOKEN || 'internal-dev-token',
   serviceAuthHttpTimeoutMs: parseInt(process.env.SERVICE_AUTH_HTTP_TIMEOUT_MS || '90000', 10),

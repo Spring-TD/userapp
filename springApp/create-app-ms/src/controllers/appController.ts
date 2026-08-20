@@ -13,6 +13,7 @@ import {
   sendAppReactivatedNotification
 } from '../services/notificationHelper';
 import { buildProductOverview } from '../services/productOverviewService';
+import { AppAnalyticsService } from '../services/appAnalyticsService';
 import {
   listCustomerApplicationsForApp,
   summarizeCustomerApplicationsForApp
@@ -836,6 +837,51 @@ export class AppController {
       }
       
       console.error('Error in getTransactionStats controller:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error'
+      });
+    }
+  };
+
+  /**
+   * GET /api/v1/apps/:id/analytics
+   * Merchant transaction overview for one app (volume, pending, success, by product, weekly).
+   * Query: range=7d|30d|90d (default 30d), productType=ALL|LOAN|MORTGAGE|SAVINGS|INVESTMENT|COMMODITY
+   */
+  getAppAnalytics = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      if (!id?.trim()) {
+        throw new ApiError(400, 'App ID is required');
+      }
+
+      const app = await this.appService.getAppById(id.trim());
+      if (!app) {
+        throw new ApiError(404, 'App not found');
+      }
+      this.assertMerchantOwnsApp(req, app);
+
+      const data = await AppAnalyticsService.buildForApp({
+        app,
+        range: req.query.range ?? req.query.timeframe,
+        productType: req.query.productType ?? req.query.product
+      });
+
+      res.json({
+        success: true,
+        data
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+        return;
+      }
+
+      console.error('Error in getAppAnalytics controller:', error);
       res.status(500).json({
         success: false,
         error: 'Internal server error'

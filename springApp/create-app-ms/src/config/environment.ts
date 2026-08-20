@@ -7,6 +7,8 @@ interface Config {
   port: number;
   nodeEnv: string;
   serviceAuthUrl: string;
+  /** client-auth-ms base URL for internal customer analytics (falls back to serviceAuthUrl). */
+  clientAuthServiceUrl: string;
   /** springApp account-ms (gateway local routes); used for merchant-scoped applications listing */
   accountServiceUrl: string;
   productServiceUrl: string;
@@ -14,6 +16,8 @@ interface Config {
   specialApiKey: string;
   publicKey: string;
   jwtSecret: string;
+  /** Shared with client-auth-ms as X-Internal-Token (JWT_SECRET). */
+  internalServiceToken: string;
   mongoUri: string;
   /** DigitalOcean Spaces (S3-compatible) for PWA template assets (logo, splash images). */
   doSpaces: {
@@ -52,12 +56,19 @@ export const config: Config = {
   port: parseInt(process.env.PORT || '3002', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
   serviceAuthUrl: process.env.SERVICE_AUTH_URL || 'http://localhost:3000',
+  clientAuthServiceUrl: (
+    process.env.CLIENT_AUTH_SERVICE_URL ||
+    process.env.SERVICE_AUTH_URL ||
+    'http://localhost:4001'
+  ).replace(/\/+$/, ''),
   accountServiceUrl: process.env.ACCOUNT_SERVICE_URL || 'http://localhost:4008',
   productServiceUrl: process.env.PRODUCT_SERVICE_URL || 'http://localhost:4005',
   walletServiceUrl: process.env.WALLET_SERVICE_URL || 'http://localhost:3004',
   specialApiKey: process.env.SPECIAL_API_KEY || 'default-special-key',
   publicKey: process.env.PUBLIC_KEY || 'default-public-key',
   jwtSecret: process.env.JWT_SECRET || 'fallback-secret-key-for-development-purposes-only',
+  internalServiceToken:
+    process.env.JWT_SECRET || 'fallback-secret-key-for-development-purposes-only',
   mongoUri: process.env.MONGODB_URI || 'mongodb://localhost:27017/create-app-ms',
   doSpaces: {
     region: process.env.DO_SPACES_REGION || '',

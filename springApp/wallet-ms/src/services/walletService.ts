@@ -9,7 +9,7 @@ import { AppTransactionMirrorService } from './appTransactionMirrorService';
 import { UserExternalBankAccountService } from './userExternalBankAccountService';
 import { notifyWalletBankPayout } from './walletPayoutNotificationService';
 import { notifyTransactionReceipt } from './transactionReceiptService';
-import { fetchRetailUserProfile, formatPersonName } from './authProfileClient';
+import { fetchMerchantOwner, fetchRetailUserProfile, formatPersonName } from './authProfileClient';
 import { buildUserProductTypeSummary } from '../utils/productTypeSummary';
 import type { UserProductTypeSummary } from '../types/productTypeSummary';
 import {
@@ -99,6 +99,34 @@ export interface FilterTransactionData {
   startDate?: Date;
   endDate?: Date;
   type?: TransactionType;
+  /** Page size (default 20, max 100). */
+  limit?: number;
+  /** Rows to skip (default 0). */
+  skip?: number;
+}
+
+export interface TransactionPagination {
+  total: number;
+  limit: number;
+  skip: number;
+  hasMore: boolean;
+}
+
+const DEFAULT_TX_LIMIT = 20;
+const MAX_TX_LIMIT = 100;
+
+export function normalizeTransactionPagination(filterData: FilterTransactionData): {
+  limit: number;
+  skip: number;
+} {
+  const rawLimit = Number(filterData.limit);
+  const rawSkip = Number(filterData.skip);
+  const limit =
+    Number.isFinite(rawLimit) && rawLimit > 0
+      ? Math.min(Math.floor(rawLimit), MAX_TX_LIMIT)
+      : DEFAULT_TX_LIMIT;
+  const skip = Number.isFinite(rawSkip) && rawSkip > 0 ? Math.floor(rawSkip) : 0;
+  return { limit, skip };
 }
 
 export interface TransferOutData {
@@ -149,6 +177,118 @@ export function mapPayoutProviderStatus(status?: string): PayoutLifecycleStatus 
 }
 
 export class WalletService {
+  private static async enrichWalletContact<T extends Wallet>(wallet: T): Promise<T> {
+    if (wallet.walletType === 'MERCHANT') {
+      const [enriched] = await this.enrichMerchantWalletContacts([wallet as MerchantWallet]);
+      return enriched as T;
+    }
+    const [enriched] = await this.enrichUserWalletContacts([wallet as UserWallet]);
+    return enriched as T;
+  }
+
+  private static async enrichMerchantWalletContacts(wallets: MerchantWallet[]): Promise<MerchantWallet[]> {
+    const ownerByMerchantId = new Map<string, Awaited<ReturnType<typeof fetchMerchantOwner>>>();
+    await Promise.all(
+      [...new Set(wallets.map((wallet) => wallet.merchantId).filter(Boolean))].map(async (merchantId) => {
+        ownerByMerchantId.set(merchantId, await fetchMerchantOwner(merchantId));
+      })
+    );
+    return wallets.map((wallet) => {
+      const owner = ownerByMerchantId.get(wallet.merchantId);
+      return owner
+        ? {
+            ...wallet,
+            contactName: formatPersonName(owner.firstName, owner.lastName, wallet.name),
+            email: owner.email,
+            phone: owner.phone
+          }
+        : wallet;
+    });
+  }
+
+  private static async enrichUserWalletContacts(wallets: UserWallet[]): Promise<UserWallet[]> {
+    const profileByUserId = new Map<string, Awaited<ReturnType<typeof fetchRetailUserProfile>>>();
+    await Promise.all(
+      [...new Set(wallets.map((wallet) => wallet.userId).filter(Boolean))].map(async (userId) => {
+        profileByUserId.set(userId, await fetchRetailUserProfile(userId));
+      })
+    );
+    return wallets.map((wallet) => {
+      const profile = profileByUserId.get(wallet.userId);
+      return profile
+        ? {
+            ...wallet,
+            contactName: formatPersonName(profile.firstName, profile.lastName, wallet.name),
+            email: profile.email,
+            phone: profile.phone
+          }
+        : wallet;
+    });
+  }
+
+  private static async enrichTransactionContacts(transactions: Transaction[]): Promise<Transaction[]> {
+    const userIds = new Set<string>();
+    const merchantIds = new Set<string>();
+
+    for (const tx of transactions) {
+      const metadata = tx.metadata as Record<string, unknown> | undefined;
+      const userId = typeof metadata?.userId === 'string' ? metadata.userId.trim() : '';
+      const merchantId =
+        typeof metadata?.merchantId === 'string'
+          ? metadata.merchantId.trim()
+          : typeof metadata?.offeringMerchantId === 'string'
+            ? metadata.offeringMerchantId.trim()
+            : '';
+      if (userId) userIds.add(userId);
+      else if (merchantId) merchantIds.add(merchantId);
+    }
+
+    const userProfiles = new Map<string, Awaited<ReturnType<typeof fetchRetailUserProfile>>>();
+    const merchantOwners = new Map<string, Awaited<ReturnType<typeof fetchMerchantOwner>>>();
+
+    await Promise.all([
+      ...[...userIds].map(async (userId) => userProfiles.set(userId, await fetchRetailUserProfile(userId))),
+      ...[...merchantIds].map(async (merchantId) => merchantOwners.set(merchantId, await fetchMerchantOwner(merchantId)))
+    ]);
+
+    return transactions.map((tx) => {
+      const metadata = tx.metadata as Record<string, unknown> | undefined;
+      const userId = typeof metadata?.userId === 'string' ? metadata.userId.trim() : '';
+      const merchantId =
+        typeof metadata?.merchantId === 'string'
+          ? metadata.merchantId.trim()
+          : typeof metadata?.offeringMerchantId === 'string'
+            ? metadata.offeringMerchantId.trim()
+            : '';
+
+      if (userId) {
+        const profile = userProfiles.get(userId);
+        if (profile) {
+          return {
+            ...tx,
+            contactName: formatPersonName(profile.firstName, profile.lastName, tx.description),
+            email: profile.email,
+            phone: profile.phone
+          };
+        }
+      }
+
+      if (merchantId) {
+        const owner = merchantOwners.get(merchantId);
+        if (owner) {
+          return {
+            ...tx,
+            contactName: formatPersonName(owner.firstName, owner.lastName, tx.description),
+            email: owner.email,
+            phone: owner.phone
+          };
+        }
+      }
+
+      return tx;
+    });
+  }
+
   private static parseProvisionedAt(value: string | Date | undefined): Date | undefined {
     if (!value) return undefined;
     if (value instanceof Date) return Number.isNaN(value.getTime()) ? undefined : value;
@@ -254,7 +394,7 @@ export class WalletService {
 
       return {
         success: true,
-        wallet: walletWithNuban
+        wallet: await this.enrichWalletContact(walletWithNuban)
       };
     } catch (error) {
       logger.error('Error creating merchant wallet', { error });
@@ -270,7 +410,7 @@ export class WalletService {
    */
   static async createAllMerchantWallets(
     merchantId: string,
-    currency: string = 'USD',
+    currency: string = 'NGN',
     skipAutoCreate: boolean = false,
     appId?: string,
     appName?: string,
@@ -283,6 +423,7 @@ export class WalletService {
   }> {
     try {
       const wallets: MerchantWallet[] = [];
+      // Spring merchant wallets: Billing, KYC, Repayment only (no Treasury — that is Plata-only).
       const walletTypes = [
         { type: MerchantWalletType.BILLING, name: 'Billing Wallet' },
         { type: MerchantWalletType.KYC, name: 'KYC Wallet' },
@@ -366,7 +507,11 @@ export class WalletService {
   }> {
     try {
       const wallets = await db.getAllMerchantWallets(merchantId, appId);
-      return { success: true, wallets };
+      // Spring does not use Treasury; hide legacy TREASURY rows from API responses.
+      const springWallets = (wallets || []).filter(
+        (w) => String(w.merchantWalletType || '').toUpperCase() !== 'TREASURY'
+      );
+      return { success: true, wallets: await this.enrichMerchantWalletContacts(springWallets) };
     } catch (error) {
       logger.error('Error retrieving merchant wallets', { error });
       return { success: false, error: 'Failed to retrieve merchant wallets' };
@@ -395,7 +540,7 @@ export class WalletService {
       });
       logger.info('User wallet created', { walletId: newWallet.id, userId: data.userId, merchantId: data.merchantId });
       // PayOnUs fixed VA is provisioned after Fuspay KYC completes (compliance-ms webhook → internal provision API).
-      return { success: true, wallet: newWallet };
+      return { success: true, wallet: await this.enrichWalletContact(newWallet) };
     } catch (error) {
       logger.error('Error creating user wallet', { error });
       const mongo = error as { code?: number; keyPattern?: Record<string, unknown>; message?: string };
@@ -680,7 +825,10 @@ export class WalletService {
   }> {
     try {
       const wallet = await db.getUserWallet(userId);
-      if (wallet) return { success: true, wallet };
+      if (wallet) {
+        const [enriched] = await this.enrichUserWalletContacts([wallet]);
+        return { success: true, wallet: enriched };
+      }
       return { success: false, error: 'User wallet not found' };
     } catch (error) {
       logger.error('Error retrieving user wallet', { error });
@@ -698,7 +846,7 @@ export class WalletService {
   }> {
     try {
       const wallets = await db.getUserWalletsByMerchant(merchantId);
-      return { success: true, wallets };
+      return { success: true, wallets: await this.enrichUserWalletContacts(wallets) };
     } catch (error) {
       logger.error('Error retrieving user wallets by merchant', { error });
       return { success: false, error: 'Failed to retrieve user wallets' };
@@ -812,7 +960,7 @@ export class WalletService {
     try {
       const wallet = await db.getWalletById(walletId);
       if (!wallet) return { success: false, error: 'Wallet not found' };
-      return { success: true, wallet };
+      return { success: true, wallet: await this.enrichWalletContact(wallet) };
     } catch (error) {
       logger.error('Error retrieving wallet', { error });
       return { success: false, error: 'Failed to retrieve wallet' };
@@ -827,7 +975,7 @@ export class WalletService {
     try {
       const wallet = await db.getWalletByPayonusAccountNumber(accountNumber);
       if (!wallet) return { success: false, error: 'Wallet not found for account number' };
-      return { success: true, wallet };
+      return { success: true, wallet: await this.enrichWalletContact(wallet) };
     } catch (error) {
       logger.error('Error retrieving wallet by Payonus account number', { error });
       return { success: false, error: 'Failed to retrieve wallet' };
@@ -839,19 +987,32 @@ export class WalletService {
    */
   static async filterWalletTransactions(walletId: string, filterData: FilterTransactionData): Promise<{ 
     success: boolean; 
-    transactions?: Transaction[]; 
+    transactions?: Transaction[];
+    pagination?: TransactionPagination;
     error?: string 
   }> {
     try {
       const wallet = await db.getWalletById(walletId);
       if (!wallet) return { success: false, error: 'Wallet not found' };
 
-      const transactions = await db.getTransactionsByWalletId(walletId, {
+      const { limit, skip } = normalizeTransactionPagination(filterData);
+      const { transactions, total } = await db.getTransactionsByWalletId(walletId, {
         startDate: filterData.startDate,
         endDate: filterData.endDate,
-        type: filterData.type
+        type: filterData.type,
+        limit,
+        skip
       });
-      return { success: true, transactions };
+      return {
+        success: true,
+        transactions: await this.enrichTransactionContacts(transactions),
+        pagination: {
+          total,
+          limit,
+          skip,
+          hasMore: skip + transactions.length < total
+        }
+      };
     } catch (error) {
       logger.error('Error filtering wallet transactions', { error });
       return { success: false, error: 'Failed to filter wallet transactions' };
@@ -863,7 +1024,8 @@ export class WalletService {
    */
   static async filterUserTransactions(userId: string, filterData: FilterTransactionData): Promise<{ 
     success: boolean; 
-    transactions?: Transaction[]; 
+    transactions?: Transaction[];
+    pagination?: TransactionPagination;
     error?: string 
   }> {
     try {
@@ -898,7 +1060,8 @@ export class WalletService {
     appId?: string
   ): Promise<{ 
     success: boolean; 
-    transactions?: Transaction[]; 
+    transactions?: Transaction[];
+    pagination?: TransactionPagination;
     error?: string 
   }> {
     try {
@@ -933,7 +1096,8 @@ export class WalletService {
     appId?: string
   ): Promise<{ 
     success: boolean; 
-    transactions?: Transaction[]; 
+    transactions?: Transaction[];
+    pagination?: TransactionPagination;
     error?: string 
   }> {
     try {
@@ -3402,41 +3566,37 @@ export class WalletService {
   }
 
   /**
-   * Investment apply: debit user PRIMARY for full principal; credit offering SETTLEMENT (commission);
-   * credit integrator SETTLEMENT (creator principal hold for Plata product creator settlement).
+   * Investment apply: debit user PRIMARY for principal + merchant fee; credit offering REPAYMENT (commission).
+   * Full principal is settled on Plata creator Repayment via product-ms gateway (no integrator hold).
    */
   static async collectInvestmentPurchase(data: InvestmentPurchaseCollectInput): Promise<{
     success: boolean;
     duplicate?: boolean;
     insufficientFunds?: boolean;
     principalAmount?: number;
+    totalUserDebit?: number;
     userWallet?: UserWallet;
     offeringSettlementWallet?: MerchantWallet;
-    integratorSettlementWallet?: MerchantWallet;
     userTransaction?: Transaction;
     commissionTransaction?: Transaction;
-    principalHoldTransaction?: Transaction;
     error?: string;
   }> {
     try {
       const userId = data.userId.trim();
       const offeringMerchantId = data.offeringMerchantId.trim();
       const offeringAppId = data.offeringAppId.trim();
-      const integratorMerchantId = data.integratorMerchantId.trim();
-      const integratorAppId = data.integratorAppId?.trim() || undefined;
       const referenceId = data.referenceId.trim();
       const productId = data.productId.trim();
       const principalAmount = Number(data.principalAmount);
       const commissionAmount = Number(data.commissionAmount);
-      const creatorPrincipalAmount = Number(data.creatorPrincipalAmount);
+      const totalUserDebit = Math.round((principalAmount + commissionAmount) * 100) / 100;
       const source = INVESTMENT_PURCHASE_SOURCE;
       const currency = data.currency?.trim().toUpperCase() || 'NGN';
 
-      if (!userId || !offeringMerchantId || !offeringAppId || !integratorMerchantId || !referenceId || !productId) {
+      if (!userId || !offeringMerchantId || !offeringAppId || !referenceId || !productId) {
         return {
           success: false,
-          error:
-            'userId, offeringMerchantId, offeringAppId, integratorMerchantId, referenceId, and productId are required'
+          error: 'userId, offeringMerchantId, offeringAppId, referenceId, and productId are required'
         };
       }
       if (!Number.isFinite(principalAmount) || principalAmount <= 0) {
@@ -3445,23 +3605,13 @@ export class WalletService {
       if (!Number.isFinite(commissionAmount) || commissionAmount < 0) {
         return { success: false, error: 'commissionAmount must be zero or a positive number' };
       }
-      if (!Number.isFinite(creatorPrincipalAmount) || creatorPrincipalAmount < 0) {
-        return { success: false, error: 'creatorPrincipalAmount must be zero or a positive number' };
-      }
-      const expectedCreatorPrincipal = Math.round((principalAmount - commissionAmount) * 100) / 100;
-      if (Math.abs(expectedCreatorPrincipal - creatorPrincipalAmount) > 0.01) {
-        return {
-          success: false,
-          error: 'creatorPrincipalAmount must equal principalAmount minus commissionAmount'
-        };
-      }
-      if (commissionAmount + creatorPrincipalAmount > principalAmount + 0.01) {
-        return { success: false, error: 'commission and creator principal cannot exceed investment principal' };
+      if (totalUserDebit <= 0) {
+        return { success: false, error: 'total user debit must be positive' };
       }
 
       const existingTx = await db.findTransactionByExternalReferenceAndSource(referenceId, source);
       if (existingTx) {
-        return { success: true, duplicate: true, principalAmount };
+        return { success: true, duplicate: true, principalAmount, totalUserDebit };
       }
 
       const userWallet = await db.getUserWalletForMerchant(userId, offeringMerchantId);
@@ -3474,7 +3624,7 @@ export class WalletService {
       if (userWallet.currency !== currency) {
         return { success: false, error: `User wallet currency ${userWallet.currency} does not match ${currency}` };
       }
-      if (userWallet.mainBalance < principalAmount) {
+      if (userWallet.mainBalance < totalUserDebit) {
         return {
           success: false,
           insufficientFunds: true,
@@ -3498,34 +3648,14 @@ export class WalletService {
         };
       }
 
-      const integratorSettlementResult = await this.getSettlementWallet(integratorMerchantId, integratorAppId);
-      if (!integratorSettlementResult.success || !integratorSettlementResult.wallet) {
-        return {
-          success: false,
-          error: integratorSettlementResult.error || 'Integrator settlement wallet not found for principal hold'
-        };
-      }
-      const integratorSettlement = integratorSettlementResult.wallet;
-      if (integratorSettlement.status !== WalletStatus.ACTIVE) {
-        return { success: false, error: 'Integrator settlement wallet is not active' };
-      }
-      if (integratorSettlement.currency !== currency) {
-        return {
-          success: false,
-          error: `Integrator settlement currency ${integratorSettlement.currency} does not match ${currency}`
-        };
-      }
-
       const userBalanceBefore = userWallet.mainBalance;
-      const userBalanceAfter = userBalanceBefore - principalAmount;
+      const userBalanceAfter = userBalanceBefore - totalUserDebit;
       const offeringBalanceBefore = offeringSettlement.mainBalance;
       const offeringBalanceAfter = offeringBalanceBefore + commissionAmount;
-      const integratorBalanceBefore = integratorSettlement.mainBalance;
-      const integratorBalanceAfter = integratorBalanceBefore + creatorPrincipalAmount;
 
       await db.updateWalletBalance(userWallet.id, {
         mainBalance: userBalanceAfter,
-        ledgerBalance: userWallet.ledgerBalance - principalAmount
+        ledgerBalance: userWallet.ledgerBalance - totalUserDebit
       });
 
       if (commissionAmount > 0) {
@@ -3535,36 +3665,27 @@ export class WalletService {
         });
       }
 
-      if (creatorPrincipalAmount > 0) {
-        await db.updateWalletBalance(integratorSettlement.id, {
-          mainBalance: integratorBalanceAfter,
-          ledgerBalance: integratorSettlement.ledgerBalance + creatorPrincipalAmount
-        });
-      }
-
       const sharedMetadata = {
         productId,
         productType: 'INVESTMENT',
         applicationId: data.applicationId,
         offeringMerchantId,
         offeringAppId,
-        integratorMerchantId,
-        integratorAppId,
         creatorMerchantId: data.creatorMerchantId,
         creatorAppId: data.creatorAppId,
         principalAmount,
         commissionAmount,
-        creatorPrincipalAmount,
+        totalUserDebit,
         currency,
         ...(data.metadata ?? {})
       };
 
       const userTransaction = await db.createTransaction({
         walletId: userWallet.id,
-        amount: -principalAmount,
+        amount: -totalUserDebit,
         type: TransactionType.DEBIT,
         status: TransactionStatus.COMPLETED,
-        description: `Investment principal (${principalAmount} ${currency})`,
+        description: `Investment deposit (${principalAmount} ${currency} + ${commissionAmount} ${currency} fee)`,
         referenceId,
         balanceBefore: userBalanceBefore,
         balanceAfter: userBalanceAfter,
@@ -3599,36 +3720,9 @@ export class WalletService {
         });
       }
 
-      let principalHoldTransaction: Transaction | undefined;
-      if (creatorPrincipalAmount > 0) {
-        principalHoldTransaction = await db.createTransaction({
-          walletId: integratorSettlement.id,
-          amount: creatorPrincipalAmount,
-          type: TransactionType.CREDIT,
-          status: TransactionStatus.COMPLETED,
-          description: `Investment principal hold for Plata creator (${creatorPrincipalAmount} ${currency})`,
-          referenceId: `${referenceId}:principal-hold`,
-          balanceBefore: integratorBalanceBefore,
-          balanceAfter: integratorBalanceAfter,
-          category: 'INVESTMENT_DEPOSIT',
-          source,
-          externalReference: referenceId,
-          metadata: {
-            ...sharedMetadata,
-            userId,
-            userWalletId: userWallet.id,
-            userTransactionId: userTransaction.id,
-            principalSettlementPending: true
-          },
-          tags: ['investment-purchase', 'settlement-credit', 'investment_deposit', 'principal-hold']
-        });
-      }
-
       const updatedUser = await db.getWalletById(userWallet.id);
       const updatedOffering =
         commissionAmount > 0 ? await db.getWalletById(offeringSettlement.id) : offeringSettlement;
-      const updatedIntegrator =
-        creatorPrincipalAmount > 0 ? await db.getWalletById(integratorSettlement.id) : integratorSettlement;
 
       logger.info('Investment purchase collected on Spring wallet', {
         userId,
@@ -3636,19 +3730,18 @@ export class WalletService {
         referenceId,
         principalAmount,
         commissionAmount,
-        creatorPrincipalAmount
+        totalUserDebit
       });
 
       return {
         success: true,
         duplicate: false,
         principalAmount,
+        totalUserDebit,
         userWallet: updatedUser as UserWallet,
         offeringSettlementWallet: updatedOffering as MerchantWallet,
-        integratorSettlementWallet: updatedIntegrator as MerchantWallet,
         userTransaction,
-        commissionTransaction,
-        principalHoldTransaction
+        commissionTransaction
       };
     } catch (error) {
       logger.error('Error collecting investment purchase', { error, referenceId: data.referenceId });
@@ -3671,34 +3764,27 @@ export class WalletService {
       const userId = data.userId.trim();
       const offeringMerchantId = data.offeringMerchantId.trim();
       const offeringAppId = data.offeringAppId.trim();
-      const integratorMerchantId = data.integratorMerchantId.trim();
-      const integratorAppId = data.integratorAppId?.trim() || undefined;
       const principalAmount = Number(data.principalAmount);
-      const commissionAmount = Number(data.commissionAmount);
-      const creatorPrincipalAmount = Number(data.creatorPrincipalAmount);
+      const commissionAmount = Number(data.commissionAmount ?? 0);
+      const totalUserDebit = Math.round((principalAmount + commissionAmount) * 100) / 100;
       const currency = data.currency?.trim().toUpperCase() || 'NGN';
 
       const userWallet = await db.getUserWalletForMerchant(userId, offeringMerchantId);
       const offeringSettlementResult = await this.getSettlementWallet(offeringMerchantId, offeringAppId);
-      const integratorSettlementResult = await this.getSettlementWallet(integratorMerchantId, integratorAppId);
 
-      if (!userWallet || !offeringSettlementResult.wallet || !integratorSettlementResult.wallet) {
+      if (!userWallet || !offeringSettlementResult.wallet) {
         return { success: false, error: 'Wallets not found for investment purchase reversal' };
       }
 
       const offeringSettlement = offeringSettlementResult.wallet;
-      const integratorSettlement = integratorSettlementResult.wallet;
 
       if (commissionAmount > 0 && offeringSettlement.mainBalance < commissionAmount) {
         return { success: false, error: 'Insufficient offering settlement balance for reversal' };
       }
-      if (creatorPrincipalAmount > 0 && integratorSettlement.mainBalance < creatorPrincipalAmount) {
-        return { success: false, error: 'Insufficient integrator settlement balance for reversal' };
-      }
 
       await db.updateWalletBalance(userWallet.id, {
-        mainBalance: userWallet.mainBalance + principalAmount,
-        ledgerBalance: userWallet.ledgerBalance + principalAmount
+        mainBalance: userWallet.mainBalance + totalUserDebit,
+        ledgerBalance: userWallet.ledgerBalance + totalUserDebit
       });
 
       if (commissionAmount > 0) {
@@ -3708,26 +3794,19 @@ export class WalletService {
         });
       }
 
-      if (creatorPrincipalAmount > 0) {
-        await db.updateWalletBalance(integratorSettlement.id, {
-          mainBalance: integratorSettlement.mainBalance - creatorPrincipalAmount,
-          ledgerBalance: integratorSettlement.ledgerBalance - creatorPrincipalAmount
-        });
-      }
-
       await db.createTransaction({
         walletId: userWallet.id,
-        amount: principalAmount,
+        amount: totalUserDebit,
         type: TransactionType.CREDIT,
         status: TransactionStatus.COMPLETED,
-        description: `Investment purchase reversal (${principalAmount} ${currency})`,
+        description: `Investment purchase reversal (${totalUserDebit} ${currency})`,
         referenceId: `${referenceId}:reversal`,
         balanceBefore: userWallet.mainBalance,
-        balanceAfter: userWallet.mainBalance + principalAmount,
+        balanceAfter: userWallet.mainBalance + totalUserDebit,
         category: 'INVESTMENT_PURCHASE_REVERSAL',
         source: `${source}-reversal`,
         externalReference: `${referenceId}:reversal`,
-        metadata: { reversedReferenceId: referenceId },
+        metadata: { reversedReferenceId: referenceId, principalAmount, commissionAmount },
         tags: ['investment-purchase-reversal']
       });
 
@@ -3740,7 +3819,7 @@ export class WalletService {
   }
 
   /**
-   * Savings deposit: debit user PRIMARY for full amount; credit integrator SETTLEMENT (0% commission v1).
+   * Savings deposit: debit user PRIMARY for principal; Plata creator credited via product-ms gateway.
    */
   static async collectSavingsPurchase(data: SavingsPurchaseCollectInput): Promise<{
     success: boolean;
@@ -3748,28 +3827,23 @@ export class WalletService {
     insufficientFunds?: boolean;
     principalAmount?: number;
     userWallet?: UserWallet;
-    integratorSettlementWallet?: MerchantWallet;
     userTransaction?: Transaction;
-    principalHoldTransaction?: Transaction;
     error?: string;
   }> {
     try {
       const userId = data.userId.trim();
       const offeringMerchantId = data.offeringMerchantId.trim();
       const offeringAppId = data.offeringAppId.trim();
-      const integratorMerchantId = data.integratorMerchantId.trim();
-      const integratorAppId = data.integratorAppId?.trim() || undefined;
       const referenceId = data.referenceId.trim();
       const productId = data.productId.trim();
       const principalAmount = Number(data.principalAmount);
       const source = SAVINGS_PURCHASE_SOURCE;
       const currency = data.currency?.trim().toUpperCase() || 'NGN';
 
-      if (!userId || !offeringMerchantId || !offeringAppId || !integratorMerchantId || !referenceId || !productId) {
+      if (!userId || !offeringMerchantId || !offeringAppId || !referenceId || !productId) {
         return {
           success: false,
-          error:
-            'userId, offeringMerchantId, offeringAppId, integratorMerchantId, referenceId, and productId are required'
+          error: 'userId, offeringMerchantId, offeringAppId, referenceId, and productId are required'
         };
       }
       if (!Number.isFinite(principalAmount) || principalAmount <= 0) {
@@ -3800,36 +3874,12 @@ export class WalletService {
         };
       }
 
-      const integratorSettlementResult = await this.getSettlementWallet(integratorMerchantId, integratorAppId);
-      if (!integratorSettlementResult.success || !integratorSettlementResult.wallet) {
-        return {
-          success: false,
-          error: integratorSettlementResult.error || 'Integrator settlement wallet not found for principal hold'
-        };
-      }
-      const integratorSettlement = integratorSettlementResult.wallet;
-      if (integratorSettlement.status !== WalletStatus.ACTIVE) {
-        return { success: false, error: 'Integrator settlement wallet is not active' };
-      }
-      if (integratorSettlement.currency !== currency) {
-        return {
-          success: false,
-          error: `Integrator settlement currency ${integratorSettlement.currency} does not match ${currency}`
-        };
-      }
-
       const userBalanceBefore = userWallet.mainBalance;
       const userBalanceAfter = userBalanceBefore - principalAmount;
-      const integratorBalanceBefore = integratorSettlement.mainBalance;
-      const integratorBalanceAfter = integratorBalanceBefore + principalAmount;
 
       await db.updateWalletBalance(userWallet.id, {
         mainBalance: userBalanceAfter,
         ledgerBalance: userWallet.ledgerBalance - principalAmount
-      });
-      await db.updateWalletBalance(integratorSettlement.id, {
-        mainBalance: integratorBalanceAfter,
-        ledgerBalance: integratorSettlement.ledgerBalance + principalAmount
       });
 
       const sharedMetadata = {
@@ -3838,8 +3888,6 @@ export class WalletService {
         applicationId: data.applicationId,
         offeringMerchantId,
         offeringAppId,
-        integratorMerchantId,
-        integratorAppId,
         creatorMerchantId: data.creatorMerchantId,
         creatorAppId: data.creatorAppId,
         principalAmount,
@@ -3863,30 +3911,7 @@ export class WalletService {
         tags: ['savings-deposit', 'user-wallet-debit']
       });
 
-      const principalHoldTransaction = await db.createTransaction({
-        walletId: integratorSettlement.id,
-        amount: principalAmount,
-        type: TransactionType.CREDIT,
-        status: TransactionStatus.COMPLETED,
-        description: `Savings principal hold for Plata creator (${principalAmount} ${currency})`,
-        referenceId: `${referenceId}:principal-hold`,
-        balanceBefore: integratorBalanceBefore,
-        balanceAfter: integratorBalanceAfter,
-        category: 'SAVINGS_DEPOSIT',
-        source,
-        externalReference: referenceId,
-        metadata: {
-          ...sharedMetadata,
-          userId,
-          userWalletId: userWallet.id,
-          userTransactionId: userTransaction.id,
-          principalSettlementPending: true
-        },
-        tags: ['savings-deposit', 'settlement-credit', 'principal-hold']
-      });
-
       const updatedUser = await db.getWalletById(userWallet.id);
-      const updatedIntegrator = await db.getWalletById(integratorSettlement.id);
 
       logger.info('Savings deposit collected on Spring wallet', {
         userId,
@@ -3900,9 +3925,7 @@ export class WalletService {
         duplicate: false,
         principalAmount,
         userWallet: updatedUser as UserWallet,
-        integratorSettlementWallet: updatedIntegrator as MerchantWallet,
-        userTransaction,
-        principalHoldTransaction
+        userTransaction
       };
     } catch (error) {
       logger.error('Error collecting savings purchase', { error, referenceId: data.referenceId });
@@ -3924,30 +3947,18 @@ export class WalletService {
 
       const userId = data.userId.trim();
       const offeringMerchantId = data.offeringMerchantId.trim();
-      const integratorMerchantId = data.integratorMerchantId.trim();
-      const integratorAppId = data.integratorAppId?.trim() || undefined;
       const principalAmount = Number(data.principalAmount);
       const currency = data.currency?.trim().toUpperCase() || 'NGN';
 
       const userWallet = await db.getUserWalletForMerchant(userId, offeringMerchantId);
-      const integratorSettlementResult = await this.getSettlementWallet(integratorMerchantId, integratorAppId);
 
-      if (!userWallet || !integratorSettlementResult.wallet) {
-        return { success: false, error: 'Wallets not found for savings deposit reversal' };
-      }
-
-      const integratorSettlement = integratorSettlementResult.wallet;
-      if (integratorSettlement.mainBalance < principalAmount) {
-        return { success: false, error: 'Insufficient integrator settlement balance for reversal' };
+      if (!userWallet) {
+        return { success: false, error: 'User wallet not found for savings deposit reversal' };
       }
 
       await db.updateWalletBalance(userWallet.id, {
         mainBalance: userWallet.mainBalance + principalAmount,
         ledgerBalance: userWallet.ledgerBalance + principalAmount
-      });
-      await db.updateWalletBalance(integratorSettlement.id, {
-        mainBalance: integratorSettlement.mainBalance - principalAmount,
-        ledgerBalance: integratorSettlement.ledgerBalance - principalAmount
       });
 
       await db.createTransaction({

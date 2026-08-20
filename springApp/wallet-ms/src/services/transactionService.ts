@@ -39,7 +39,7 @@ export class TransactionService {
     error?: string 
   }> {
     try {
-      const transactions = await db.getTransactionsByWalletId(walletId);
+      const { transactions } = await db.getTransactionsByWalletId(walletId, { limit: 100, skip: 0 });
       return { success: true, transactions };
     } catch (error) {
       logger.error('Error retrieving transaction history', { error });

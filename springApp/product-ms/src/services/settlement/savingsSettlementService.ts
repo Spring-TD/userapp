@@ -1,14 +1,11 @@
-import { config as envConfig } from '../../config/environment';
 import type { Product } from '../../types/product';
 import {
   collectSavingsPrincipalViaPlataGateway,
   fetchPlataCatalogProductById,
-  isPlataGatewayConfigured,
-  resolvePlataIntegratorContext
+  isPlataGatewayConfigured
 } from './plataGatewayClient';
 import {
   collectSavingsPurchaseOnSpringWallet,
-  collectToSettlementWallet,
   isSettlementWalletConfigured,
   reverseSavingsPurchaseOnSpringWallet,
   type SavingsPurchaseCollectRequest
@@ -128,23 +125,11 @@ export async function executeSavingsDepositSettlement(
   }
 
   const { creatorMerchantId, creatorAppId } = await resolveCreatorContext(input.product);
-  const integratorContext = await resolvePlataIntegratorContext();
-  if (!integratorContext.success || !integratorContext.data?.merchantId) {
-    throw new SavingsDepositSettlementError(
-      integratorContext.error || 'Failed to resolve Plata integrator merchant',
-      'CONFIG_ERROR'
-    );
-  }
-
   const referenceId = input.referenceId.trim();
-  const integratorAppId =
-    (envConfig.plataIntegratorAppId || '').trim() || input.offeringAppId;
   const purchaseRequest: SavingsPurchaseCollectRequest = {
     userId: input.userId,
     offeringMerchantId: input.offeringMerchantId,
     offeringAppId: input.offeringAppId,
-    integratorMerchantId: integratorContext.data.merchantId,
-    integratorAppId,
     principalAmount,
     referenceId,
     productId: input.productId,
@@ -226,45 +211,28 @@ export async function executeExternalSavingsDepositSettlement(
   }
 
   const { creatorMerchantId, creatorAppId } = await resolveCreatorContext(input.product);
-  const integratorContext = await resolvePlataIntegratorContext();
-  if (!integratorContext.success || !integratorContext.data?.merchantId) {
-    throw new SavingsDepositSettlementError(
-      integratorContext.error || 'Failed to resolve Plata integrator merchant',
-      'CONFIG_ERROR'
-    );
-  }
-
   const referenceId = input.referenceId.trim();
-  const integratorMerchantId = integratorContext.data.merchantId;
 
-  const springCollect = await collectToSettlementWallet({
-    merchantId: integratorMerchantId,
-    appId: integratorContext.data.merchantId,
+  const plataCredit = await collectSavingsPrincipalViaPlataGateway({
+    creatorMerchantId,
+    creatorAppId,
     amount: principalAmount,
     referenceId,
-    source: 'product-savings-external',
-    category: 'SAVINGS_DEPOSIT',
-    description: `External savings deposit (${principalAmount} ${input.currency})`,
-    applicationId: input.applicationId,
-    productId: input.productId,
-    productType: 'SAVINGS',
     currency: input.currency,
-    debitUserWallet: false,
+    productId: input.product.upstreamProductId || input.product.id,
+    productType: 'SAVINGS',
+    applicationId: input.upstreamApplicationId,
+    description: `External savings deposit settlement (${principalAmount} ${input.currency})`,
     metadata: {
-      upstreamApplicationId: input.upstreamApplicationId,
-      providerReference: input.providerReference,
-      channel: 'external'
+      offeringMerchantId: input.offeringMerchantId,
+      offeringAppId: input.offeringAppId,
+      localApplicationId: input.applicationId,
+      channel: 'external',
+      providerReference: input.providerReference
     }
   });
 
-  if (!springCollect.success) {
-    throw new SavingsDepositSettlementError(
-      springCollect.error || 'Failed to record external savings deposit on integrator settlement',
-      'SETTLEMENT_FAILED'
-    );
-  }
-
-  if (springCollect.duplicate) {
+  if (plataCredit.duplicate) {
     return {
       referenceId,
       principalAmount,
@@ -274,22 +242,12 @@ export async function executeExternalSavingsDepositSettlement(
     };
   }
 
-  await creditPlataCreator({
-    creatorMerchantId,
-    creatorAppId,
-    amount: principalAmount,
-    referenceId,
-    currency: input.currency,
-    product: input.product,
-    applicationId: input.applicationId,
-    upstreamApplicationId: input.upstreamApplicationId,
-    offeringMerchantId: input.offeringMerchantId,
-    offeringAppId: input.offeringAppId,
-    metadata: {
-      channel: 'external',
-      providerReference: input.providerReference
-    }
-  });
+  if (!plataCredit.success && !plataCredit.skipped) {
+    throw new SavingsDepositSettlementError(
+      plataCredit.error || 'Failed to credit Plata creator settlement wallet',
+      'SETTLEMENT_FAILED'
+    );
+  }
 
   return {
     referenceId,

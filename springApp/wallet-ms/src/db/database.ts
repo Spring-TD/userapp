@@ -535,8 +535,14 @@ export const db = {
 
   async getTransactionsByWalletId(
     walletId: string,
-    filter?: { startDate?: Date; endDate?: Date; type?: TransactionType }
-  ): Promise<Transaction[]> {
+    filter?: {
+      startDate?: Date;
+      endDate?: Date;
+      type?: TransactionType;
+      limit?: number;
+      skip?: number;
+    }
+  ): Promise<{ transactions: Transaction[]; total: number }> {
     const query: Record<string, unknown> = { walletId };
     if (filter?.startDate || filter?.endDate) {
       query.createdAt = {};
@@ -544,8 +550,22 @@ export const db = {
       if (filter.endDate) (query.createdAt as Record<string, Date>).$lte = filter.endDate;
     }
     if (filter?.type) query.type = filter.type;
-    const docs = await TransactionModel.find(query).sort({ createdAt: -1 });
-    return docs.map((d) => docToTransaction(d)!).filter(Boolean);
+
+    const rawLimit = Number(filter?.limit);
+    const rawSkip = Number(filter?.skip);
+    const limit =
+      Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(Math.floor(rawLimit), 100) : 20;
+    const skip = Number.isFinite(rawSkip) && rawSkip > 0 ? Math.floor(rawSkip) : 0;
+
+    const [total, docs] = await Promise.all([
+      TransactionModel.countDocuments(query),
+      TransactionModel.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit)
+    ]);
+
+    return {
+      total,
+      transactions: docs.map((d) => docToTransaction(d)!).filter(Boolean)
+    };
   },
 
   async countActiveUserExternalBankAccounts(userId: string): Promise<number> {

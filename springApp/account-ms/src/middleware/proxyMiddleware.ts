@@ -14,6 +14,13 @@ export type ProxySetupResult = {
   notificationsProxy: ProxyRequestHandler;
 };
 
+function forwardClientIp(proxyReq: ClientRequest, req: Request): void {
+  const clientIp = req.ip?.trim();
+  if (clientIp) {
+    proxyReq.setHeader('X-Forwarded-For', clientIp);
+  }
+}
+
 function forwardGatewayMerchantHeaders(proxyReq: ClientRequest, req: Request): void {
   if (req.gatewayMerchantAuth) {
     proxyReq.setHeader('X-Merchant-Id', req.gatewayMerchantAuth.merchantId);
@@ -37,6 +44,7 @@ export const setupProxies = (app: Express, options: ProxySetupOptions = {}): Pro
             : {},
         on: {
             proxyReq: (proxyReq, req) => {
+                forwardClientIp(proxyReq, req as Request);
                 const tenant = (req as TenantRequest).tenant;
                 if (tenant) {
                     proxyReq.setHeader('x-tenant-app-id', tenant.appId);
@@ -90,6 +98,7 @@ export const setupProxies = (app: Express, options: ProxySetupOptions = {}): Pro
             pathRewrite: (path) => path.replace(/\/guarantor-kyc$/, '/guarantors'),
             on: {
                 proxyReq: (proxyReq, req) => {
+                    forwardClientIp(proxyReq, req as Request);
                     const tenant = (req as TenantRequest).tenant;
                     if (tenant) {
                         proxyReq.setHeader('x-tenant-app-id', tenant.appId);

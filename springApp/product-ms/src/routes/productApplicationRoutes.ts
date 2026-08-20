@@ -53,6 +53,7 @@ router.post(
   validate(submitInitializedProductApplicationSchema),
   productApplicationController.submitApplication
 );
+router.get('/:id/amortization-schedule', productApplicationController.getAmortizationSchedule);
 router.get('/:id', productApplicationController.getApplicationById);
 router.put('/:id/status', validate(blacklistProductApplicationSchema), productApplicationController.updateApplicationStatus);
 

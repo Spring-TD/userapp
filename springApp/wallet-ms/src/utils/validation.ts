@@ -157,7 +157,11 @@ export const getTransactionHistorySchema = Joi.object({
 export const filterTransactionSchema = Joi.object({
   startDate: dateSchema,
   endDate: dateSchema,
-  type: transactionTypeSchema
+  type: transactionTypeSchema,
+  /** Page size (default 20, max 100). */
+  limit: Joi.number().integer().min(1).max(100).default(20),
+  /** Number of rows to skip (default 0). */
+  skip: Joi.number().integer().min(0).default(0)
 });
 
 export const transferOutSchema = Joi.object({

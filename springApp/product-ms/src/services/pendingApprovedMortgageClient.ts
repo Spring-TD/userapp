@@ -127,7 +127,7 @@ export async function proxyCompleteMortgageInspection(
 
 export async function proxyMortgageDownPayment(
   localApplicationId: string,
-  input?: { amount?: number; springUserId?: string }
+  input?: { amount?: number; springUserId?: string; providerReference?: string }
 ): Promise<UpstreamPendingApprovedMortgage> {
   return postProxy(localApplicationId, '/down-payment', input ?? {});
 }

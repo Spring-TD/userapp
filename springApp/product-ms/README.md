@@ -140,11 +140,11 @@ Each application stores:
 - `amount`, `currency`, optional `email`
 - `status`: `PENDING`, `APPROVED`, `REJECTED`, or `BLACKLISTED`
 - `appId` and optional `merchantId`
-- `requirementsSnapshot`: the product `requirements` at the time the user applied
+- `requirementsSnapshot`: the product `requirements` copied when the user started applying, then refreshed on in-progress drafts when Plata updates the catalog product
 - `applicationProgress`: resumable storefront draft state saved before final requirements submission
 - `requirementSubmissions`: user-submitted answers/files for those requirements
 
-`requirementsSnapshot` is intentionally persisted so later product configuration edits do not change the requirements attached to an already-submitted application.
+`requirementsSnapshot` (and the product-derived fields on `contractSnapshot`) stay frozen after the applicant **submits** (`loanWorkflowStatus` becomes `under_review` or later, or `contractSnapshot.finalSubmission` is set). While the application is still an unfinished storefront draft (`PENDING` without `finalSubmission`, including `requested`, `account_requested`, `account_created`, and `requirements_submitted`), Plata `product.updated` catalog sync also rewrites those snapshots so the storefront resume UI matches the latest clone.
 
 `POST /api/v1/applications/init` is idempotent for initialized lending applications. If the same user starts the same product again and there is already a `PENDING` application for that product, merchant, and app with a provisioned upstream account number, the endpoint returns the existing application with `200` instead of creating another one.
 
@@ -338,7 +338,7 @@ Configure the callback with:
 - `LOAN_WORKFLOW_CALLBACK_URL` — full public gateway URL sent to Plata. Defaults locally to `http://localhost:4005/api/v1/applications/webhooks/plata/loan-workflow`; production should set a reachable gateway URL such as `https://account-ms.fly.dev/api/v1/applications/webhooks/plata/loan-workflow`.
 - `ACCOUNT_SERVICE_PUBLIC_URL` — optional account-ms gateway base URL fallback when `LOAN_WORKFLOW_CALLBACK_URL` is not set. `PRODUCT_SERVICE_PUBLIC_URL` is still accepted for direct product-ms deployments.
 - `PLATA_LOAN_WORKFLOW_WEBHOOK_SECRET` — optional shared secret. When set, `POST /api/v1/applications/webhooks/plata/loan-workflow` and `POST /api/v1/products/webhooks/plata/product-updated` verify `X-Plata-Signature` as an HMAC-SHA256 signature over the raw JSON body (`sha256=<digest>` or the digest alone).
-- Plata product catalog sync: when a Plata creator updates a product, Plata posts `product.updated` to Spring `POST /api/v1/products/webhooks/plata/product-updated` (via account-ms). Spring refreshes **all local clones** with that `upstreamProductId` while preserving merchant interest/equity overlays, `isActive`, and `isFeatured`. Existing applications’ contract snapshots are not rewritten.
+- Plata product catalog sync: when a Plata creator updates a product, Plata posts `product.updated` to Spring `POST /api/v1/products/webhooks/plata/product-updated` (via account-ms). Spring refreshes **all local clones** with that `upstreamProductId` while preserving merchant interest/equity overlays, `isActive`, and `isFeatured`. Unfinished storefront drafts (`PENDING` without `finalSubmission`, including `requested`, `account_requested`, `account_created`, and `requirements_submitted`) then get their `requirementsSnapshot` and product-derived `contractSnapshot` fields rewritten from that clone; submitted, under-review, and approved applications stay frozen.
 - Catalog reconcile cron (safety net): enabled in production by default (`PRODUCT_CATALOG_SYNC_ENABLED`, interval `PRODUCT_CATALOG_SYNC_INTERVAL_MS` default 15m). Compares each local clone’s `metadata.upstreamCatalogUpdatedAt` to Plata `updatedAt` and re-syncs on drift. Ops: `GET /api/v1/products/internal/catalog-sync/status`, `POST /api/v1/products/internal/catalog-sync/reconcile` with `X-Internal-Token` (optional body `{ "force": true }`).
 
 Plata posts `loan_workflow_status.updated` to the callback when the product creator changes the upstream status to `under_review`, `approved`, `declined`, or `blacklisted`. The webhook is idempotent by event id and current status, returns 2xx quickly, and updates SpringApp's read model from the upstream workflow (`declined` maps to local `REJECTED`).

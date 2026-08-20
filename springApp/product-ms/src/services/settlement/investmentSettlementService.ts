@@ -1,4 +1,3 @@
-import { config as envConfig } from '../../config/environment';
 import { db } from '../../db/database';
 import type { Product } from '../../types/product';
 import {
@@ -8,8 +7,7 @@ import {
 import {
   collectInvestmentPrincipalViaPlataGateway,
   fetchPlataCatalogProductById,
-  isPlataGatewayConfigured,
-  resolvePlataIntegratorContext
+  isPlataGatewayConfigured
 } from './plataGatewayClient';
 import {
   collectInvestmentPurchaseOnSpringWallet,
@@ -90,29 +88,13 @@ export async function executeInvestmentSettlement(
     );
   }
 
-  const integratorContext = await resolvePlataIntegratorContext();
-  if (!integratorContext.success || !integratorContext.data?.merchantId) {
-    throw new InvestmentSettlementError(
-      integratorContext.error || 'Failed to resolve Plata integrator merchant',
-      'CONFIG_ERROR'
-    );
-  }
-
   const referenceId =
     input.referenceId?.trim() || `investment-purchase:${input.userId}:${input.productId}:${input.applicationId}`;
-
-  // Principal hold uses the Spring integrator REPAYMENT wallet (app-scoped).
-  // Never pass merchantId as appId — wallet-ms looks up by appId and returns
-  // "REPAYMENT wallet not found for merchant app". Prefer dedicated env, else offering app.
-  const integratorAppId =
-    (envConfig.plataIntegratorAppId || '').trim() || input.offeringAppId;
 
   const purchaseRequest: InvestmentPurchaseCollectRequest = {
     userId: input.userId,
     offeringMerchantId: input.offeringMerchantId,
     offeringAppId: input.offeringAppId,
-    integratorMerchantId: integratorContext.data.merchantId,
-    integratorAppId,
     principalAmount: split.principalAmount,
     commissionAmount: split.commissionAmount,
     creatorPrincipalAmount: split.creatorPrincipalAmount,
@@ -155,17 +137,17 @@ export async function executeInvestmentSettlement(
     };
   }
 
-  if (split.creatorPrincipalAmount > 0) {
+  if (split.principalAmount > 0) {
     const plataCredit = await collectInvestmentPrincipalViaPlataGateway({
       creatorMerchantId,
       creatorAppId,
-      amount: split.creatorPrincipalAmount,
+      amount: split.principalAmount,
       referenceId,
       currency: input.currency,
       productId: input.product.upstreamProductId || input.productId,
       productType: 'INVESTMENT',
       applicationId: input.applicationId,
-      description: `Investment principal settlement (${split.creatorPrincipalAmount} ${input.currency})`,
+      description: `Investment principal settlement (${split.principalAmount} ${input.currency})`,
       metadata: {
         offeringMerchantId: input.offeringMerchantId,
         offeringAppId: input.offeringAppId,

@@ -32,6 +32,8 @@ interface FilterTransactionData {
   startDate?: string;
   endDate?: string;
   type?: TransactionType;
+  limit?: string | number;
+  skip?: string | number;
 }
 
 interface TransferOutData {
@@ -193,7 +195,7 @@ export class WalletController {
         appName,
         payonusSubaccountCode,
         name: name || `${normalizedType} Wallet`,
-        currency: currency || 'USD',
+        currency: currency || 'NGN',
         merchantWalletType: normalizedType
       });
 
@@ -244,7 +246,7 @@ export class WalletController {
 
       const result = await WalletService.createAllMerchantWallets(
         merchantId,
-        currency || 'USD',
+        currency || 'NGN',
         false,
         appId,
         appName,
@@ -514,7 +516,7 @@ export class WalletController {
         merchantId,
         complianceShareholderUserId: req.user.userId,
         name: name || `Personal Wallet`,
-        currency: currency || 'USD'
+        currency: currency || 'NGN'
       });
 
       if (!result.success) {
@@ -774,7 +776,7 @@ export class WalletController {
   static async filterUserTransactions(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { userId } = req.params;
-      const { startDate, endDate, type } = req.query;
+      const { startDate, endDate, type, limit, skip } = req.query;
 
       if (!req.user) {
         res.status(401).json({
@@ -794,7 +796,13 @@ export class WalletController {
       }
 
       // Validate input data
-      const { error, value } = validateInput<FilterTransactionData>(filterTransactionSchema, { startDate, endDate, type });
+      const { error } = validateInput<FilterTransactionData>(filterTransactionSchema, {
+        startDate,
+        endDate,
+        type,
+        limit,
+        skip
+      });
       if (error) {
         res.status(400).json({
           success: false,
@@ -808,7 +816,9 @@ export class WalletController {
       const filterData = {
         startDate: startDate ? new Date(startDate as string) : undefined,
         endDate: endDate ? new Date(endDate as string) : undefined,
-        type: type as TransactionType
+        type: type as TransactionType,
+        limit: limit !== undefined ? Number(limit) : undefined,
+        skip: skip !== undefined ? Number(skip) : undefined
       };
 
       const result = await WalletService.filterUserTransactions(userId, filterData);
@@ -823,13 +833,15 @@ export class WalletController {
 
       logger.info('User wallet transactions filtered', {
         userId,
-        transactionCount: result.transactions?.length
+        transactionCount: result.transactions?.length,
+        pagination: result.pagination
       });
 
       res.status(200).json({
         success: true,
         data: {
-          transactions: result.transactions
+          transactions: result.transactions,
+          pagination: result.pagination
         }
       });
     } catch (error) {
@@ -1322,7 +1334,7 @@ export class WalletController {
   static async filterRepaymentTransactions(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { merchantId } = req.params;
-      const { startDate, endDate, type, appId } = req.query;
+      const { startDate, endDate, type, appId, limit, skip } = req.query;
 
       if (!req.user) {
         res.status(401).json({
@@ -1342,7 +1354,13 @@ export class WalletController {
       }
 
       // Validate input data
-      const { error, value } = validateInput<FilterTransactionData>(filterTransactionSchema, { startDate, endDate, type });
+      const { error } = validateInput<FilterTransactionData>(filterTransactionSchema, {
+        startDate,
+        endDate,
+        type,
+        limit,
+        skip
+      });
       if (error) {
         res.status(400).json({
           success: false,
@@ -1369,7 +1387,9 @@ export class WalletController {
       const filterData = {
         startDate: startDate ? new Date(startDate as string) : undefined,
         endDate: endDate ? new Date(endDate as string) : undefined,
-        type: type as TransactionType
+        type: type as TransactionType,
+        limit: limit !== undefined ? Number(limit) : undefined,
+        skip: skip !== undefined ? Number(skip) : undefined
       };
 
       const result = await WalletService.filterWalletTransactions(repaymentResult.wallet.id, filterData);
@@ -1385,13 +1405,15 @@ export class WalletController {
       logger.info('Repayment wallet transactions filtered', {
         merchantId,
         appId,
-        transactionCount: result.transactions?.length
+        transactionCount: result.transactions?.length,
+        pagination: result.pagination
       });
 
       res.status(200).json({
         success: true,
         data: {
-          transactions: result.transactions
+          transactions: result.transactions,
+          pagination: result.pagination
         }
       });
     } catch (error) {
@@ -1635,7 +1657,7 @@ export class WalletController {
   static async filterBillingTransactions(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { merchantId } = req.params;
-      const { startDate, endDate, type, appId } = req.query;
+      const { startDate, endDate, type, appId, limit, skip } = req.query;
 
       if (!req.user) {
         res.status(401).json({
@@ -1655,7 +1677,13 @@ export class WalletController {
       }
 
       // Validate input data
-      const { error, value } = validateInput<FilterTransactionData>(filterTransactionSchema, { startDate, endDate, type });
+      const { error } = validateInput<FilterTransactionData>(filterTransactionSchema, {
+        startDate,
+        endDate,
+        type,
+        limit,
+        skip
+      });
       if (error) {
         res.status(400).json({
           success: false,
@@ -1669,7 +1697,9 @@ export class WalletController {
       const filterData = {
         startDate: startDate ? new Date(startDate as string) : undefined,
         endDate: endDate ? new Date(endDate as string) : undefined,
-        type: type as TransactionType
+        type: type as TransactionType,
+        limit: limit !== undefined ? Number(limit) : undefined,
+        skip: skip !== undefined ? Number(skip) : undefined
       };
 
       const result = await WalletService.filterBillingTransactions(
@@ -1689,13 +1719,15 @@ export class WalletController {
       logger.info('Billing wallet transactions filtered', {
         merchantId,
         appId,
-        transactionCount: result.transactions?.length
+        transactionCount: result.transactions?.length,
+        pagination: result.pagination
       });
 
       res.status(200).json({
         success: true,
         data: {
-          transactions: result.transactions
+          transactions: result.transactions,
+          pagination: result.pagination
         }
       });
     } catch (error) {
@@ -1711,7 +1743,7 @@ export class WalletController {
   static async filterKycTransactions(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { merchantId } = req.params;
-      const { startDate, endDate, type, appId } = req.query;
+      const { startDate, endDate, type, appId, limit, skip } = req.query;
 
       if (!req.user) {
         res.status(401).json({
@@ -1731,7 +1763,13 @@ export class WalletController {
       }
 
       // Validate input data
-      const { error, value } = validateInput<FilterTransactionData>(filterTransactionSchema, { startDate, endDate, type });
+      const { error } = validateInput<FilterTransactionData>(filterTransactionSchema, {
+        startDate,
+        endDate,
+        type,
+        limit,
+        skip
+      });
       if (error) {
         res.status(400).json({
           success: false,
@@ -1745,7 +1783,9 @@ export class WalletController {
       const filterData = {
         startDate: startDate ? new Date(startDate as string) : undefined,
         endDate: endDate ? new Date(endDate as string) : undefined,
-        type: type as TransactionType
+        type: type as TransactionType,
+        limit: limit !== undefined ? Number(limit) : undefined,
+        skip: skip !== undefined ? Number(skip) : undefined
       };
 
       const result = await WalletService.filterKycTransactions(
@@ -1765,13 +1805,15 @@ export class WalletController {
       logger.info('KYC wallet transactions filtered', {
         merchantId,
         appId,
-        transactionCount: result.transactions?.length
+        transactionCount: result.transactions?.length,
+        pagination: result.pagination
       });
 
       res.status(200).json({
         success: true,
         data: {
-          transactions: result.transactions
+          transactions: result.transactions,
+          pagination: result.pagination
         }
       });
     } catch (error) {

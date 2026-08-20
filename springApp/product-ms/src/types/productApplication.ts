@@ -1,4 +1,5 @@
 import type { LoanRequirements } from './product';
+import type { AmortizationScheduleView } from './amortizationSchedule';
 import type {
   PlatformApplicationFieldInput,
   ValidatedPlatformApplicationFields
@@ -64,6 +65,8 @@ export interface ProductApplication {
   postApprovalFulfillment?: PostApprovalFulfillment;
   /** True when mortgage approval deferred treasury disburse until fulfillment completes. */
   disbursementDeferred?: boolean;
+  /** Storefront amortization table (webhook snapshot; GET overlays live Plata statuses). */
+  amortizationSchedule?: AmortizationScheduleView;
   /** Latest guarantor report that the applicant is unknown to the guarantor. */
   applicantGuarantorReport?: {
     guarantorId: string;
@@ -173,6 +176,15 @@ export interface PendingApprovedMortgageDetail {
   currency?: string;
   centralWalletAvailable: boolean;
   bankDetails?: PendingApprovedMortgageBankDetails;
+  payment?: {
+    method: 'wallet';
+    amount: number;
+    currency: string;
+    duplicate: boolean;
+    centralWalletBalance: number | null;
+    userTransactionId?: string;
+    repaymentTransactionId?: string;
+  };
   offerLetter?: {
     html: string;
     text: string;
@@ -233,6 +245,9 @@ export interface ProductApplicationWallet {
   walletId: string;
   walletPurpose?: string;
   reusedUpstreamAccount?: boolean;
+  /** Live product-wallet balances from wallet-ms when available on GET. */
+  balance?: number;
+  mainBalance?: number;
   upstreamAccount?: {
     accountNumber?: string;
     bankName?: string;
@@ -250,6 +265,9 @@ export interface ProductApplicationInitStatus {
   merchantId?: string;
   hasInitializedApplication: boolean;
   hasUpstreamAccount: boolean;
+  canApply: boolean;
+  applyDisabledReason?: string;
+  blockingApplicationId?: string;
   application?: ProductApplication;
   upstreamAccount?: ProductApplicationWallet['upstreamAccount'];
   loanWorkflowStatus?: string;

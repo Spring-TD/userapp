@@ -6,6 +6,18 @@ function trimTrailingSlash(url: string): string {
   return url.replace(/\/+$/, '');
 }
 
+function envInt(name: string, fallback: number): number {
+  const n = parseInt(process.env[name] || '', 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function envBool(name: string, fallback: boolean): boolean {
+  const v = (process.env[name] || '').trim().toLowerCase();
+  if (v === 'true' || v === '1' || v === 'yes') return true;
+  if (v === 'false' || v === '0' || v === 'no') return false;
+  return fallback;
+}
+
 /**
  * Plata account-ms gateway base URL (same pattern as product-ms catalog).
  * Prefer PLATA_ACCOUNT_SERVICE_URL; if Plata API keys are set but no URL, default to production gateway.
@@ -23,12 +35,20 @@ function resolvePlataAccountServiceUrl(): string {
   return '';
 }
 
+interface RateLimitConfig {
+  enabled: boolean;
+  windowMs: number;
+  maxRequests: number;
+  authMaxRequests: number;
+}
+
 interface EnvironmentConfig {
   port: number;
   nodeEnv: string;
   mongoUri: string;
   corsOrigins: string[];
   logLevel: string;
+  rateLimit: RateLimitConfig;
   complianceServiceUrl: string;
   billingServiceUrl: string;
   walletServiceUrl: string;
@@ -63,6 +83,12 @@ export const config: EnvironmentConfig = {
     'http://localhost:3000'
   ],
   logLevel: process.env.LOG_LEVEL || 'info',
+  rateLimit: {
+    enabled: envBool('RATE_LIMIT_ENABLED', true),
+    windowMs: envInt('RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000),
+    maxRequests: envInt('RATE_LIMIT_MAX_REQUESTS', 2000),
+    authMaxRequests: envInt('AUTH_RATE_LIMIT_MAX_REQUESTS', 20),
+  },
   complianceServiceUrl: process.env.COMPLIANCE_SERVICE_URL || 'http://localhost:4003',
   billingServiceUrl: process.env.BILLING_SERVICE_URL || 'http://localhost:4006',
   walletServiceUrl: process.env.WALLET_SERVICE_URL || 'http://localhost:4004',

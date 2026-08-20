@@ -22,6 +22,11 @@ describe('mortgage property catalog fields', () => {
           propertyDescription: '4 bed',
           facilities: ['pool'],
           customFacilities: ['cinema'],
+          propertyDocumentation: [
+            {
+              documentType: 'certificate_of_occupancy'
+            }
+          ],
           imageUrls: ['https://cdn.example/a.jpg'],
           videoUrl: 'https://cdn.example/tour.mp4',
           previewAssetUrl: 'https://cdn.example/preview.jpg'
@@ -45,7 +50,12 @@ describe('mortgage property catalog fields', () => {
       videoUrl: 'https://cdn.example/tour.mp4',
       propertyDescription: '4 bed',
       facilities: ['pool'],
-      customFacilities: ['cinema']
+      customFacilities: ['cinema'],
+      propertyDocumentation: [
+        {
+          documentType: 'certificate_of_occupancy'
+        }
+      ]
     });
   });
 });

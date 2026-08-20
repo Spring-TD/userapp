@@ -17,6 +17,7 @@ import {
   buildServiceWorkerScript
 } from '../utils/pwaServiceWorkerBuilder';
 import { validatePwaPublishReadiness } from '../utils/pwaPublishValidation';
+import { coerceAppPwaTemplateConfig } from '../utils/pwaTemplateConfig';
 
 function trimSlash(url: string): string {
   return url.replace(/\/+$/, '');
@@ -209,7 +210,15 @@ export class AppPwaPublishService {
     if (!latest || latest.status !== 'published') {
       return { pwaManifest: null, pwaInstall: null };
     }
-    const pwaManifest = latest.manifest;
+    // Re-coerce so empty App Builder sections survive older minimized Mongo docs.
+    const stored = latest.manifest;
+    const pwaManifest: RuntimeManifest = {
+      ...stored,
+      app_builder: {
+        ...stored.app_builder,
+        config: coerceAppPwaTemplateConfig(stored.app_builder?.config)
+      }
+    };
     const trimmed = typeof apiBaseUrl === 'string' ? apiBaseUrl.trim() : '';
     if (!trimmed) {
       return { pwaManifest, pwaInstall: null };

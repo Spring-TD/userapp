@@ -181,6 +181,7 @@ router.post(
   upload.single('file'),
   productApplicationController.uploadPendingLoanSignedContract
 );
+router.get('/:id/amortization-schedule', productApplicationController.getAmortizationSchedule);
 router.get('/:id', productApplicationController.getApplicationById);
 
 export { router as applicationRoutes };

@@ -7,6 +7,7 @@ type InternalAuthProfile = {
   email: string;
   firstName: string;
   lastName: string;
+  phone?: string;
 };
 
 type MerchantOwner = {
@@ -14,6 +15,7 @@ type MerchantOwner = {
   email: string;
   firstName: string;
   lastName: string;
+  phone?: string;
 };
 
 function internalToken(): string {

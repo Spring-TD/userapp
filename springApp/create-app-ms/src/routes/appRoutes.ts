@@ -552,6 +552,7 @@ router.delete(
 // Transaction endpoints
 router.get('/:id/transactions', authenticate, merchantOnly, appController.getTransactions);
 router.get('/:id/transaction-stats', authenticate, merchantOnly, appController.getTransactionStats);
+router.get('/:id/analytics', authenticate, merchantOnly, appController.getAppAnalytics);
 
 // Drive endpoints
 router.post('/:id/drive/documents', authenticate, merchantOnly, appController.uploadDocument);

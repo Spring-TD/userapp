@@ -123,6 +123,12 @@ interface EnvironmentConfig {
   complianceWalletInternalToken: string;
   /** Timeout for compliance-ms BVN lookup requests. */
   complianceBvnTimeoutMs: number;
+  /**
+   * Product-creator merchant IDs that must NOT get last-3 BVN randomization on upstream
+   * account init (BankOne / Charis and any future FI rails that require the real BVN).
+   * Comma-separated. Default includes Charis Plata merchantId.
+   */
+  upstreamBvnMutationSkipMerchantIds: string[];
   walletServiceHttpTimeoutMs: number;
   /** create-app-ms origin used for canonical transaction stats */
   createAppServiceUrl: string;
@@ -199,6 +205,12 @@ export const config: EnvironmentConfig = {
   complianceServiceToken: (process.env.COMPLIANCE_SERVICE_TOKEN || 'sams_account_service_token').trim(),
   complianceWalletInternalToken: (process.env.COMPLIANCE_WALLET_INTERNAL_TOKEN || '').trim(),
   complianceBvnTimeoutMs: Math.max(1000, parseInt(process.env.COMPLIANCE_BVN_TIMEOUT_MS || '10000', 10)),
+  upstreamBvnMutationSkipMerchantIds: (
+    process.env.UPSTREAM_BVN_MUTATION_SKIP_MERCHANT_IDS || 'merchant_1786008898151_5791w97s6'
+  )
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean),
   walletServiceHttpTimeoutMs: parseInt(process.env.WALLET_SERVICE_HTTP_TIMEOUT_MS || '15000', 10),
   createAppServiceUrl: process.env.CREATE_APP_SERVICE_URL || 'http://localhost:3002',
   requestBodyLimit: process.env.REQUEST_BODY_LIMIT || '10mb',

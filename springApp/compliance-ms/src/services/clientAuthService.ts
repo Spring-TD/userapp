@@ -41,6 +41,18 @@ function stripSurroundingQuotes(s: string): string {
   return t;
 }
 
+/** Ensure base URL includes `/api/v1` (Fly secrets sometimes set host-only). */
+function normalizeClientAuthBaseUrl(raw: string): string {
+  const trimmed = stripSurroundingQuotes(raw).replace(/\/+$/, '');
+  if (!trimmed) {
+    return 'http://localhost:3001/api/v1';
+  }
+  if (/\/api\/v1$/i.test(trimmed)) {
+    return trimmed;
+  }
+  return `${trimmed}/api/v1`;
+}
+
 function resolveInternalToken(): string {
   return (
     stripSurroundingQuotes(process.env.CLIENT_AUTH_INTERNAL_TOKEN || '') ||
@@ -53,7 +65,9 @@ export class ClientAuthService {
   private readonly baseUrl: string;
 
   constructor() {
-    this.baseUrl = process.env.CLIENT_AUTH_BASE_URL || 'http://localhost:3001/api/v1';
+    this.baseUrl = normalizeClientAuthBaseUrl(
+      process.env.CLIENT_AUTH_BASE_URL || 'http://localhost:3001/api/v1'
+    );
     this.axiosInstance = axios.create({
       baseURL: this.baseUrl,
       timeout: 15000,

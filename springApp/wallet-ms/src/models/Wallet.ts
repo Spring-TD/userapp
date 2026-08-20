@@ -48,6 +48,9 @@ export interface MerchantWallet extends BaseWallet {
   walletType: 'MERCHANT';
   merchantWalletType: MerchantWalletType; // Specific type for merchant wallets
   name: string;
+  contactName?: string;
+  email?: string;
+  phone?: string;
 }
 
 export interface UserWallet extends BaseWallet {
@@ -62,6 +65,9 @@ export interface UserWallet extends BaseWallet {
   productType?: string;
   appId?: string;
   name: string;
+  contactName?: string;
+  email?: string;
+  phone?: string;
 }
 
 export type Wallet = MerchantWallet | UserWallet;
@@ -79,6 +85,9 @@ export interface Transaction {
   category?: string;
   source?: string;
   metadata?: Record<string, any>;
+  contactName?: string;
+  email?: string;
+  phone?: string;
   senderDetails?: {
     name?: string;
     accountNumber?: string;

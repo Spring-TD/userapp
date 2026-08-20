@@ -94,6 +94,10 @@ type UpstreamExternalApplicationBody = {
     spousePhone?: string;
     spouseOccupation?: string;
     spouseCountry?: string;
+    occupation?: string;
+    placeOfWork?: string;
+    hrName?: string;
+    hrEmail?: string;
     applicantProfileSnapshot?: Record<string, unknown>;
   };
 };

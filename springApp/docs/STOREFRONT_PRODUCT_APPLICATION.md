@@ -69,7 +69,7 @@ Storefront base URL: `https://account-ms.fly.dev` (Bearer auth optional for thes
 Product detail
   → Init bank account (POST /applications/init)
   → Platform questions (PEP, income, marital, repayment source, loan reason, spouse?)
-  → Product requirements (uploads / forms from requirementsSnapshot)
+  → Product requirements (uploads / forms from requirementsSnapshot, including Collateral / Insurance document rows when those flags are on)
   → Guarantor(s) if required
   → Terms + submit (POST /applications/:id/submit)
   → Track status / post-approval (mortgage workflows)
@@ -453,7 +453,37 @@ Render from `requirementsSnapshot` returned by init (or GET application).
 
 ---
 
-## 5) Guarantors (when product requires it)
+## 5) Security documents (when product requires them)
+
+If `requirementsSnapshot.security.realEstateProperties === true` (Plata **Collateral** or **Property collateral**), render a **Collateral document** label and file upload from `requirementsSnapshot.otherRequirements[]`:
+
+```json
+{
+  "requirementType": "Collateral document",
+  "description": "Collateral document",
+  "contentType": "document_upload",
+  "uploadRequired": true
+}
+```
+
+Upload the file with `POST /api/v1/applications/upload`, then include it in `requirementSubmissions` / requirements PATCH with `requirementType` or `label` = `Collateral document` and `fileUrl`. Submit fails with `400` if that file is missing.
+
+If `requirementsSnapshot.security.insurance === true`, render an **Insurance document** label and file upload from `requirementsSnapshot.otherRequirements[]`:
+
+```json
+{
+  "requirementType": "Insurance document",
+  "description": "Insurance document",
+  "contentType": "document_upload",
+  "uploadRequired": true
+}
+```
+
+Upload the file with `POST /api/v1/applications/upload`, then include it in `requirementSubmissions` / requirements PATCH with `requirementType` or `label` = `Insurance document` and `fileUrl`. Submit fails with `400` if that file is missing.
+
+---
+
+## 5b) Guarantors (when product requires it)
 
 If `requirementsSnapshot.security.guarantor === true`:
 
@@ -585,6 +615,13 @@ When approved with deferred disbursement:
 | Complete inspection | `POST` | `/api/v1/applications/{id}/pending-approved-mortgage/inspection/complete` |
 | Down payment | `POST` | `/api/v1/applications/{id}/pending-approved-mortgage/down-payment` |
 
+Mortgage wallet down payment (Central Wallet):
+
+- Debits the applicant's Spring Central Wallet under the storefront app
+- Credits the **Plata product-creator** app-scoped Repayment wallet (via gateway principal settlement)
+- Records the payment on Plata with `providerReference` (no second Plata user-wallet debit)
+- On insufficient funds returns `402` with `data.code = "INSUFFICIENT_CENTRAL_WALLET_BALANCE"`
+
 Step detail includes `bankDetails` for bank transfer UI:
 
 ```json
@@ -610,7 +647,7 @@ Offer body example:
 ## 8A) Post-approval (LOAN)
 
 - `GET /api/v1/applications/{id}/pending-approved-loan?userId={userId}` returns `data.terms` with the approved amount, remaining down payment, interest rate, total repayable, repayment frequency, tenor, repayment automation, and disbursement date. Unknown unsnapshotted terms are returned as `null`; they are not guessed.
-- `POST /api/v1/applications/{id}/pending-approved-loan/down-payment` with `{ "userId": "…", "method": "wallet" }` performs one idempotent Spring wallet transfer from the user's Central Wallet to the app-scoped Repayment Wallet. The same request then records the payment on Plata and accepts the offer; retries do not debit twice.
+- `POST /api/v1/applications/{id}/pending-approved-loan/down-payment` with `{ "userId": "…", "method": "wallet" }` performs one idempotent Spring Central Wallet debit, credits the **Plata product-creator** app-scoped Repayment wallet, then records the payment on Plata and accepts the offer; retries do not debit twice.
 - If the Central Wallet is short, the endpoint returns `402`, `data.code = "INSUFFICIENT_CENTRAL_WALLET_BALANCE"`, the required amount, and available balance. Route the user to Fund Wallet, then retry the same request.
 - If no down payment is required (or it was already paid), the endpoint only completes the idempotent offer acceptance.
 - Merchant Treasury disbursement is still manual after acceptance; the storefront must not treat acceptance as disbursement.

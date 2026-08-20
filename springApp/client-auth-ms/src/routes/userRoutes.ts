@@ -214,6 +214,12 @@ router.get(
   InternalUserController.listAppRetailCustomers
 );
 
+router.post(
+  '/internal/contacts',
+  internalServiceAuth,
+  InternalUserController.getUserContactsBatch
+);
+
 // User profile management routes
 router.get('/list', authenticate, UserController.listUsers);
 router.get('/profile', authenticate, UserController.getProfile);

@@ -50,11 +50,12 @@ describe('settlement commissionCalculators', () => {
     expect(calculateInvestmentCharge(1000, 1)).toBe(10);
   });
 
-  it('splits investment principal into merchant commission and creator principal', () => {
+  it('splits investment into full creator principal and fee-on-top commission', () => {
     expect(calculateInvestmentSettlementSplit(1000, 1)).toEqual({
       principalAmount: 1000,
       commissionAmount: 10,
-      creatorPrincipalAmount: 990
+      creatorPrincipalAmount: 1000,
+      totalUserDebit: 1010
     });
   });
 

@@ -68,6 +68,38 @@ function validateOtherField(
   return otherValue?.trim() || undefined;
 }
 
+function optionalTrimmedText(
+  value: unknown,
+  fieldName: string,
+  max: number
+): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== 'string') {
+    throw new ApiError(400, `${fieldName} must be a string`);
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  if (trimmed.length > max) {
+    throw new ApiError(400, `${fieldName} cannot exceed ${max} characters`);
+  }
+  return trimmed;
+}
+
+function optionalEmail(value: unknown, fieldName: string): string | undefined {
+  const trimmed = optionalTrimmedText(value, fieldName, 320);
+  if (!trimmed) {
+    return undefined;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    throw new ApiError(400, `${fieldName} must be a valid email`);
+  }
+  return trimmed;
+}
+
 export function validatePoliticallyExposedPerson(
   value: boolean | undefined,
   status: PlatformApplicationSubmitStatus | undefined,
@@ -242,6 +274,25 @@ export function validatePlatformApplicationFields(
   }
   if (spouseCountry !== undefined) {
     result.spouseCountry = spouseCountry;
+  }
+
+  if (lending) {
+    const occupation = optionalTrimmedText(input.occupation, 'occupation', 120);
+    const placeOfWork = optionalTrimmedText(input.placeOfWork, 'placeOfWork', 200);
+    const hrName = optionalTrimmedText(input.hrName, 'hrName', 200);
+    const hrEmail = optionalEmail(input.hrEmail, 'hrEmail');
+    if (occupation !== undefined) {
+      result.occupation = occupation;
+    }
+    if (placeOfWork !== undefined) {
+      result.placeOfWork = placeOfWork;
+    }
+    if (hrName !== undefined) {
+      result.hrName = hrName;
+    }
+    if (hrEmail !== undefined) {
+      result.hrEmail = hrEmail;
+    }
   }
 
   return result;

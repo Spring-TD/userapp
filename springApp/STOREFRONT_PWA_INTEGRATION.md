@@ -476,6 +476,10 @@ Every `requirements.documentsToDownload[]` item must have a completed uploaded f
 
 Any `requirements.otherRequirements[]` item with `uploadRequired: true` or `required: true` must have a matching submission. Matching is by `requirementId`, `requirementType`, or `label`. Upload-style items with `contentType: "document"` or `contentType: "document_upload"` must include `fileUrl`.
 
+If `data.requirementsSnapshot.security.realEstateProperties === true` (Plata **Collateral** or **Property collateral**), show a **Collateral document** name plus file upload. The snapshot includes `otherRequirements[]` with `requirementType: "Collateral document"`, `contentType: "document_upload"`, and `uploadRequired: true`. Upload via `/api/v1/applications/upload` and submit `requirementType` or `label` = `Collateral document` with `fileUrl`.
+
+If `data.requirementsSnapshot.security.insurance === true`, show an **Insurance document** name plus file upload. The snapshot includes `otherRequirements[]` with `requirementType: "Insurance document"`, `contentType: "document_upload"`, and `uploadRequired: true`. Upload via `/api/v1/applications/upload` and submit `requirementType` or `label` = `Insurance document` with `fileUrl`.
+
 If `data.requirementsSnapshot.security.guarantor === true`, show **+ Add a Guarantor**. When the user fills the guarantor form and taps **Generate KYC link**, call:
 
 ```http

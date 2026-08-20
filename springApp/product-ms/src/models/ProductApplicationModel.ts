@@ -8,6 +8,7 @@ import type {
 import type { LoanRequirements } from '../types/product';
 import type { ValidatedPlatformApplicationFields } from '../types/platformApplicationFields';
 import { platformFieldsFromApplication } from '../utils/platformApplicationFieldInput';
+import { applyCollateralRequirement } from '../utils/collateralRequirement';
 
 export interface IProductApplicationDocument
   extends Omit<
@@ -44,6 +45,8 @@ const productApplicationWalletSchema = new Schema(
     walletId: { type: String, required: true },
     walletPurpose: { type: String },
     reusedUpstreamAccount: { type: Boolean },
+    balance: { type: Number },
+    mainBalance: { type: Number },
     upstreamAccount: {
       accountNumber: { type: String },
       bankName: { type: String },
@@ -100,6 +103,7 @@ const productApplicationSchema = new Schema<IProductApplicationDocument>(
     loanWorkflowLastEventAt: { type: Date },
     postApprovalFulfillment: { type: Schema.Types.Mixed },
     disbursementDeferred: { type: Boolean },
+    amortizationSchedule: { type: Schema.Types.Mixed },
     applicantGuarantorReport: {
       guarantorId: { type: String },
       guarantorName: { type: String },
@@ -118,7 +122,11 @@ const productApplicationSchema = new Schema<IProductApplicationDocument>(
     spouseEmail: { type: String },
     spousePhone: { type: String },
     spouseOccupation: { type: String },
-    spouseCountry: { type: String }
+    spouseCountry: { type: String },
+    occupation: { type: String },
+    placeOfWork: { type: String },
+    hrName: { type: String },
+    hrEmail: { type: String }
   },
   {
     collection: 'product_applications',
@@ -162,6 +170,22 @@ function applicantNameFrom(doc: IProductApplicationDocument): string {
 export function toProductApplication(doc: IProductApplicationDocument): ProductApplication {
   const applicantName = applicantNameFrom(doc);
   const platformFields = platformFieldsFromApplication(doc);
+  const requirementsSnapshot = applyCollateralRequirement({
+    requirements: doc.requirementsSnapshot as LoanRequirements | undefined
+  });
+  const existingContract =
+    doc.contractSnapshot && typeof doc.contractSnapshot === 'object'
+      ? (doc.contractSnapshot as Record<string, unknown>)
+      : undefined;
+  const contractRequirements = applyCollateralRequirement({
+    requirements: (existingContract?.requirements as LoanRequirements | undefined) ?? requirementsSnapshot
+  });
+  const contractSnapshot = existingContract
+    ? {
+        ...existingContract,
+        ...(contractRequirements !== undefined ? { requirements: contractRequirements } : {})
+      }
+    : existingContract;
 
   return {
     id: doc._id.toString(),
@@ -179,8 +203,8 @@ export function toProductApplication(doc: IProductApplicationDocument): ProductA
     blacklistReason: doc.blacklistReason,
     appId: doc.appId,
     merchantId: doc.merchantId,
-    requirementsSnapshot: doc.requirementsSnapshot as LoanRequirements | undefined,
-    contractSnapshot: doc.contractSnapshot as Record<string, unknown> | undefined,
+    requirementsSnapshot,
+    contractSnapshot,
     loanWorkflowStatus: doc.loanWorkflowStatus,
     applicationProgress: progressFrom(doc.applicationProgress),
     requirementSubmissions: doc.requirementSubmissions as ProductRequirementSubmission[],
@@ -191,6 +215,7 @@ export function toProductApplication(doc: IProductApplicationDocument): ProductA
     loanWorkflowLastEventAt: doc.loanWorkflowLastEventAt?.toISOString(),
     postApprovalFulfillment: doc.postApprovalFulfillment as PostApprovalFulfillment | undefined,
     disbursementDeferred: doc.disbursementDeferred,
+    amortizationSchedule: doc.amortizationSchedule,
     applicantGuarantorReport: doc.applicantGuarantorReport
       ? {
           guarantorId: doc.applicantGuarantorReport.guarantorId,

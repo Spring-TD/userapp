@@ -85,24 +85,25 @@ export interface CommodityMaturityPayoutInput {
   metadata?: Record<string, unknown>;
 }
 
-/** Source for investment apply split (user debited principal; commission + creator principal hold). */
+/** Source for investment apply (user debited principal + fee; commission to offering; principal to Plata creator). */
 export const INVESTMENT_PURCHASE_SOURCE = 'investment-purchase';
 
-/** Source for savings deposit (user debited principal; full amount held for Plata creator). */
+/** Source for savings deposit (user debited principal; principal to Plata creator via gateway). */
 export const SAVINGS_PURCHASE_SOURCE = 'savings-purchase';
 
 export interface InvestmentPurchaseCollectInput {
   userId: string;
   offeringMerchantId: string;
   offeringAppId: string;
-  integratorMerchantId: string;
-  integratorAppId?: string;
-  /** Total debited from user PRIMARY (investment principal). */
+  /** Investment principal credited to Plata product creator. */
   principalAmount: number;
-  /** Merchant commission taken from principal (e.g. 1% of ₦1,000 → ₦10). */
+  /** Spring merchant fee on top of principal. */
   commissionAmount: number;
-  /** Net credited to integrator hold / Plata creator (principal − commission). */
-  creatorPrincipalAmount: number;
+  /** @deprecated Legacy integrator hold amount; ignored on new collects. */
+  creatorPrincipalAmount?: number;
+  /** @deprecated Legacy integrator merchant; ignored on new collects. */
+  integratorMerchantId?: string;
+  integratorAppId?: string;
   referenceId: string;
   productId: string;
   applicationId?: string;
@@ -116,7 +117,8 @@ export interface SavingsPurchaseCollectInput {
   userId: string;
   offeringMerchantId: string;
   offeringAppId: string;
-  integratorMerchantId: string;
+  /** @deprecated Legacy integrator merchant; ignored on new collects. */
+  integratorMerchantId?: string;
   integratorAppId?: string;
   principalAmount: number;
   referenceId: string;

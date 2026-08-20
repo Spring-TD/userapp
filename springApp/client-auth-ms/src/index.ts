@@ -19,9 +19,14 @@ import { sessionRoutes } from './routes/sessionRoutes';
 import { faqRoutes } from './routes/faqRoutes';
 import { supportContactRoutes } from './routes/supportContactRoutes';
 import { legalDocumentRoutes } from './routes/legalDocumentRoutes';
+import { loginSensitiveLimiter } from './middleware/rateLimitMiddleware';
 import { connectDb } from './config/db';
+import { internalServiceAuth } from './middleware/internalServiceAuth';
+import { InternalUserController } from './controllers/internalUserController';
 
 const app = express();
+
+app.set('trust proxy', 1);
 
 // Security and CORS middleware
 app.use(helmet());
@@ -72,6 +77,8 @@ app.get('/health', (_req, res) => {
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.get('/api-docs.json', (_req, res) => res.json(swaggerSpec));
 
+app.use(loginSensitiveLimiter);
+
 // API routes
 app.use('/api/v1/registration', registrationRoutes);
 app.use('/api/v1/auth', authRoutes);
@@ -86,6 +93,13 @@ app.use('/api/v1/faqs', faqRoutes);
 app.use('/api/v1/support-contacts', supportContactRoutes);
 app.use('/api/v1/legal-documents', legalDocumentRoutes);
 app.use('/verify-email', verifyEmailRoutes);
+
+// Internal service-to-service (analytics top accounts — path matches Plata contract)
+app.post(
+  '/internal/api/v1/users/contacts',
+  internalServiceAuth,
+  InternalUserController.getUserContactsBatch
+);
 
 // Error handling middleware
 app.use(notFoundHandler);

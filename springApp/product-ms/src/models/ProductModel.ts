@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 import type { Product } from '../types/product';
 import { coerceStoredProductType, PRODUCT_DISCRIMINATORS } from '../utils/productType';
+import { applyCollateralRequirement } from '../utils/collateralRequirement';
 
 export interface IProductDocument extends Omit<Product, 'id'>, Document {
   _id: mongoose.Types.ObjectId;
@@ -59,7 +60,9 @@ const loanSecuritySchema = new Schema(
     guarantor: { type: Boolean },
     bankGuarantee: { type: Boolean },
     savingsAccount: { type: Boolean },
-    noSecurity: { type: Boolean }
+    noSecurity: { type: Boolean },
+    mixedSecurity: { type: Boolean },
+    insurance: { type: Boolean }
   },
   { _id: false }
 );
@@ -173,6 +176,17 @@ const mortgagePropertyItemSchema = new Schema(
     propertyDescription: { type: String },
     facilities: { type: [String], default: undefined },
     customFacilities: { type: [String], default: undefined },
+    propertyDocumentation: {
+      type: [
+        new Schema(
+          {
+            documentType: { type: String }
+          },
+          { _id: false }
+        )
+      ],
+      default: undefined
+    },
     imageUrls: { type: [String], default: undefined },
     videoUrl: { type: String },
     previewAssetUrl: { type: String }
@@ -374,10 +388,16 @@ export function toProduct(doc: IProductDocument | Record<string, unknown>): Prod
       raw.about !== undefined && raw.about !== null && typeof raw.about === 'object'
         ? (raw.about as Product['about'])
         : undefined,
-    requirements:
-      raw.requirements !== undefined && raw.requirements !== null && typeof raw.requirements === 'object'
-        ? (raw.requirements as Product['requirements'])
-        : undefined,
+    requirements: applyCollateralRequirement({
+      metadata:
+        raw.metadata !== undefined && raw.metadata !== null && typeof raw.metadata === 'object'
+          ? (raw.metadata as Record<string, unknown>)
+          : undefined,
+      requirements:
+        raw.requirements !== undefined && raw.requirements !== null && typeof raw.requirements === 'object'
+          ? (raw.requirements as Product['requirements'])
+          : undefined
+    }),
     feesAndCharges:
       raw.feesAndCharges !== undefined && raw.feesAndCharges !== null && typeof raw.feesAndCharges === 'object'
         ? (raw.feesAndCharges as Product['feesAndCharges'])

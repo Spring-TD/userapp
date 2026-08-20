@@ -18,7 +18,7 @@ import {
 } from './pendingApprovedLoanClient';
 import { proxyUploadSignedLoanContract } from './pendingApprovedMultipartClient';
 import { buildOfferLetterForProductApplication } from './offerLetterPresentationService';
-import { collectToSettlementWallet } from './settlement/walletSettlementClient';
+import { collectLoanDownPayment } from './settlement/settlementChargeService';
 import { buildLoanOfferTerms } from '../utils/loanOfferTerms';
 
 const ACTIVE_STATUSES = ['offer_pending', 'offer_accepted'];
@@ -187,28 +187,25 @@ class PendingApprovedLoanService {
     const requiredAmount = fulfillment?.downPayment?.requiredAmount ?? 0;
     const amountDue = alreadyPaid ? 0 : requiredAmount;
     let providerReference: string | undefined;
-    let walletResult: Awaited<ReturnType<typeof collectToSettlementWallet>> | undefined;
+    let walletResult: Awaited<ReturnType<typeof collectLoanDownPayment>> | undefined;
 
     if (amountDue > 0) {
       if (!application.merchantId || !application.appId) {
         throw new ApiError(409, 'Application is missing the merchant/app wallet scope');
       }
 
+      const localApplicationId = application._id.toString();
       try {
-        walletResult = await collectToSettlementWallet({
+        walletResult = await collectLoanDownPayment({
           merchantId: application.merchantId,
           appId: application.appId,
           userId,
           amount: amountDue,
-          referenceId: `loan-down-payment:${application.id}`,
-          source: 'product-loan-down-payment',
-          category: 'LOAN_EQUITY',
-          description: `Loan down payment for application ${application.id}`,
-          applicationId: application.id,
+          referenceId: `loan-down-payment:${localApplicationId}`,
+          description: `Loan down payment for application ${localApplicationId}`,
+          applicationId: localApplicationId,
           productId: application.productId,
-          productType: 'LOAN',
           currency: fulfillment?.downPayment?.currency ?? application.currency,
-          debitUserWallet: true
         });
       } catch {
         throw new ApiError(503, 'Wallet service is unavailable');
@@ -229,7 +226,7 @@ class PendingApprovedLoanService {
       providerReference =
         walletResult.userTransactionId ??
         walletResult.transactionId ??
-        `loan-down-payment:${application.id}`;
+        `loan-down-payment:${localApplicationId}`;
     }
 
     const updatedUpstream = await proxyLoanDownPayment(application._id.toString(), {

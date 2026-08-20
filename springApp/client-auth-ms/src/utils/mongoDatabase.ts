@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { UserModel } from '../models/UserModel';
 import { RoleModel } from '../models/RoleModel';
 import { InvitationModel } from '../models/InvitationModel';
@@ -150,6 +151,36 @@ class MongoDatabase {
         });
     }
 
+    /**
+     * Registered / active retail customers for an app (analytics).
+     * `registeredDeltaThisMonth` uses Africa/Lagos calendar month on `created_at`.
+     */
+    async getRetailCustomerStatsByAppId(appId: string): Promise<{
+        registered: number;
+        active: number;
+        registeredDeltaThisMonth: number;
+    }> {
+        const normalized = appId.trim();
+        if (!normalized) {
+            return { registered: 0, active: 0, registeredDeltaThisMonth: 0 };
+        }
+
+        const lagosOffsetMs = 60 * 60 * 1000;
+        const now = new Date();
+        const lagos = new Date(now.getTime() + lagosOffsetMs);
+        const monthStartUtc = Date.UTC(lagos.getUTCFullYear(), lagos.getUTCMonth(), 1, 0, 0, 0, 0);
+        const monthStart = new Date(monthStartUtc - lagosOffsetMs);
+
+        const base = { app_id: normalized, user_type: 'user' as const };
+        const [registered, active, registeredDeltaThisMonth] = await Promise.all([
+            UserModel.countDocuments(base),
+            UserModel.countDocuments({ ...base, status: 'active' }),
+            UserModel.countDocuments({ ...base, created_at: { $gte: monthStart } })
+        ]);
+
+        return { registered, active, registeredDeltaThisMonth };
+    }
+
     /** List retail customer ids for account maintenance settlement. */
     async listRetailCustomersByAppId(appId: string): Promise<Array<{ userId: string; merchantId: string }>> {
         const normalized = appId.trim();
@@ -166,6 +197,42 @@ class MongoDatabase {
                 merchantId: String((d as { user_merchant_id?: string }).user_merchant_id || '').trim()
             }))
             .filter((row) => row.userId && row.merchantId);
+    }
+
+    /** Contact + status for analytics top accounts (subset by ids). */
+    async getRetailCustomerContactsByIds(userIds: string[]): Promise<
+        Array<{ userId: string; userName: string; email: string; status: string }>
+    > {
+        const ids = [...new Set(userIds.map((id) => String(id || '').trim()).filter(Boolean))].slice(0, 50);
+        if (!ids.length) return [];
+        const objectIds = ids
+            .filter((id) => mongoose.isValidObjectId(id))
+            .map((id) => new mongoose.Types.ObjectId(id));
+        if (!objectIds.length) return [];
+        const docs = await UserModel.find({ _id: { $in: objectIds } })
+            .select({ first_name: 1, last_name: 1, email: 1, status: 1 })
+            .lean();
+        const byId = new Map(
+            docs.map((d) => {
+                const firstName = String((d as { first_name?: string }).first_name || '').trim();
+                const lastName = String((d as { last_name?: string }).last_name || '').trim();
+                const email = String((d as { email?: string }).email || '').trim();
+                const userName = [firstName, lastName].filter(Boolean).join(' ').trim();
+                const userId = String(d._id);
+                return [
+                    userId,
+                    {
+                        userId,
+                        userName: userName || email || 'Customer',
+                        email,
+                        status: String((d as { status?: string }).status || 'active')
+                    }
+                ] as const;
+            })
+        );
+        return ids
+            .map((id) => byId.get(id))
+            .filter((row): row is NonNullable<typeof row> => Boolean(row));
     }
 
     /**

@@ -85,7 +85,8 @@ export class InternalUserController {
           userId: owner.id,
           email: owner.email,
           firstName: owner.first_name,
-          lastName: owner.last_name
+          lastName: owner.last_name,
+          phone: owner.phone
         }
       });
     } catch (error) {
@@ -102,18 +103,51 @@ export class InternalUserController {
         return;
       }
 
-      const customerCount = await db.countRetailCustomersByAppId(appId);
+      const stats = await db.getRetailCustomerStatsByAppId(appId);
 
       res.status(200).json({
         success: true,
         data: {
           appId,
-          customerCount
+          /** @deprecated Prefer `registered` — kept for billing-ms compatibility */
+          customerCount: stats.registered,
+          registered: stats.registered,
+          active: stats.active,
+          registeredDeltaThisMonth: stats.registeredDeltaThisMonth
         }
       });
     } catch (error) {
       console.error('Error in internal getAppCustomerCount:', error);
       res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * POST body: { userIds: string[] } — batch contact + status for analytics top accounts.
+   */
+  static async getUserContactsBatch(req: Request, res: Response): Promise<void> {
+    try {
+      const body = req.body as { userIds?: unknown };
+      const ids = Array.isArray(body.userIds)
+        ? [...new Set(body.userIds.map((id) => String(id || '').trim()).filter(Boolean))]
+        : [];
+      if (!ids.length) {
+        res.status(400).json({ success: false, error: 'userIds must be a non-empty array' });
+        return;
+      }
+      if (ids.length > 50) {
+        res.status(400).json({ success: false, error: 'userIds max length is 50' });
+        return;
+      }
+
+      const contacts = await db.getRetailCustomerContactsByIds(ids);
+      res.status(200).json({
+        success: true,
+        data: { contacts }
+      });
+    } catch (error) {
+      console.error('Error in internal getUserContactsBatch:', error);
+      res.status(500).json({ success: false, error: 'Failed to fetch user contacts' });
     }
   }
 

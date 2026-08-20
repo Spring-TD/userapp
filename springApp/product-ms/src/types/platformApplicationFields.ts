@@ -90,6 +90,34 @@ export const PLATFORM_APPLICATION_FIELD_DEFINITIONS: PlatformApplicationFieldDef
     type: 'text',
     required: true,
     productTypes: ['LOAN', 'MORTGAGE']
+  },
+  {
+    key: 'occupation',
+    label: 'Occupation',
+    type: 'text',
+    required: false,
+    productTypes: ['LOAN', 'MORTGAGE']
+  },
+  {
+    key: 'placeOfWork',
+    label: 'Place of Work',
+    type: 'text',
+    required: false,
+    productTypes: ['LOAN', 'MORTGAGE']
+  },
+  {
+    key: 'hrName',
+    label: 'Name of HR',
+    type: 'text',
+    required: false,
+    productTypes: ['LOAN', 'MORTGAGE']
+  },
+  {
+    key: 'hrEmail',
+    label: "HR's Email",
+    type: 'text',
+    required: false,
+    productTypes: ['LOAN', 'MORTGAGE']
   }
 ];
 
@@ -110,6 +138,10 @@ export interface PlatformApplicationFieldInput {
   spousePhone?: string;
   spouseOccupation?: string;
   spouseCountry?: string;
+  occupation?: string;
+  placeOfWork?: string;
+  hrName?: string;
+  hrEmail?: string;
 }
 
 export interface ValidatedPlatformApplicationFields {
@@ -127,6 +159,10 @@ export interface ValidatedPlatformApplicationFields {
   spousePhone?: string;
   spouseOccupation?: string;
   spouseCountry?: string;
+  occupation?: string;
+  placeOfWork?: string;
+  hrName?: string;
+  hrEmail?: string;
 }
 
 export const PLATFORM_APPLICATION_FIELD_KEYS = [
@@ -143,7 +179,11 @@ export const PLATFORM_APPLICATION_FIELD_KEYS = [
   'spouseEmail',
   'spousePhone',
   'spouseOccupation',
-  'spouseCountry'
+  'spouseCountry',
+  'occupation',
+  'placeOfWork',
+  'hrName',
+  'hrEmail'
 ] as const;
 
 export type PlatformApplicationFieldKey = (typeof PLATFORM_APPLICATION_FIELD_KEYS)[number];

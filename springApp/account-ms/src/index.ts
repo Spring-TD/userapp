@@ -16,6 +16,7 @@ import { setupProxies } from './middleware/proxyMiddleware';
 import { plataIntegratorGatewayAuth } from './middleware/plataIntegratorGatewayAuth';
 import { tenantResolverMiddleware } from './middleware/tenantResolverMiddleware';
 import { userListAppScopeMiddleware } from './middleware/userListAppScopeMiddleware';
+import { authSensitiveLimiter, generalApiLimiter } from './middleware/rateLimitMiddleware';
 import { sessionActivityTouchMiddleware } from './middleware/sessionActivityTouchMiddleware';
 import type { TenantRequest } from './types/tenant';
 import { tenantManifestWebmanifest, tenantRootOrGatewayStatus } from './handlers/tenantPublicPwaHandler';
@@ -23,10 +24,14 @@ import { tenantManifestWebmanifest, tenantRootOrGatewayStatus } from './handlers
 const app = express();
 const PORT = config.port;
 
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(helmet());
 app.use(corsMiddleware);
 app.use(morgan(config.logLevel));
+app.use(authSensitiveLimiter);
+app.use(generalApiLimiter);
 app.use(tenantResolverMiddleware);
 
 // Plata integrator API key verification for applicant-profile pulls (before proxies)

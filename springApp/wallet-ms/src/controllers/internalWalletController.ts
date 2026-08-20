@@ -675,11 +675,12 @@ export class InternalWalletController {
         userId: (body.userId || '').trim(),
         offeringMerchantId: (body.offeringMerchantId || '').trim(),
         offeringAppId: (body.offeringAppId || '').trim(),
-        integratorMerchantId: (body.integratorMerchantId || '').trim(),
+        integratorMerchantId: body.integratorMerchantId?.trim() || undefined,
         integratorAppId: body.integratorAppId?.trim() || undefined,
         principalAmount: Number(body.principalAmount),
         commissionAmount: Number(body.commissionAmount ?? 0),
-        creatorPrincipalAmount: Number(body.creatorPrincipalAmount),
+        creatorPrincipalAmount:
+          body.creatorPrincipalAmount != null ? Number(body.creatorPrincipalAmount) : undefined,
         referenceId: (body.referenceId || '').trim(),
         productId: (body.productId || '').trim(),
         applicationId: body.applicationId?.trim() || undefined,
@@ -710,12 +711,11 @@ export class InternalWalletController {
         duplicate: result.duplicate === true,
         data: {
           principalAmount: result.principalAmount,
+          totalUserDebit: result.totalUserDebit,
           userWallet: result.userWallet,
           offeringSettlementWallet: result.offeringSettlementWallet,
-          integratorSettlementWallet: result.integratorSettlementWallet,
           userTransaction: result.userTransaction,
-          commissionTransaction: result.commissionTransaction,
-          principalHoldTransaction: result.principalHoldTransaction
+          commissionTransaction: result.commissionTransaction
         }
       });
     } catch (error) {
@@ -749,11 +749,12 @@ export class InternalWalletController {
         userId: (body.userId || '').trim(),
         offeringMerchantId: (body.offeringMerchantId || '').trim(),
         offeringAppId: (body.offeringAppId || '').trim(),
-        integratorMerchantId: (body.integratorMerchantId || '').trim(),
+        integratorMerchantId: body.integratorMerchantId?.trim() || undefined,
         integratorAppId: body.integratorAppId?.trim() || undefined,
         principalAmount: Number(body.principalAmount),
         commissionAmount: Number(body.commissionAmount ?? 0),
-        creatorPrincipalAmount: Number(body.creatorPrincipalAmount),
+        creatorPrincipalAmount:
+          body.creatorPrincipalAmount != null ? Number(body.creatorPrincipalAmount) : undefined,
         referenceId: (body.referenceId || '').trim(),
         productId: (body.productId || '').trim(),
         applicationId: body.applicationId?.trim() || undefined,
@@ -798,7 +799,7 @@ export class InternalWalletController {
         userId: (body.userId || '').trim(),
         offeringMerchantId: (body.offeringMerchantId || '').trim(),
         offeringAppId: (body.offeringAppId || '').trim(),
-        integratorMerchantId: (body.integratorMerchantId || '').trim(),
+        integratorMerchantId: body.integratorMerchantId?.trim() || undefined,
         integratorAppId: body.integratorAppId?.trim() || undefined,
         principalAmount: Number(body.principalAmount),
         referenceId: (body.referenceId || '').trim(),
@@ -832,9 +833,7 @@ export class InternalWalletController {
         data: {
           principalAmount: result.principalAmount,
           userWallet: result.userWallet,
-          integratorSettlementWallet: result.integratorSettlementWallet,
-          userTransaction: result.userTransaction,
-          principalHoldTransaction: result.principalHoldTransaction
+          userTransaction: result.userTransaction
         }
       });
     } catch (error) {
@@ -866,7 +865,7 @@ export class InternalWalletController {
         userId: (body.userId || '').trim(),
         offeringMerchantId: (body.offeringMerchantId || '').trim(),
         offeringAppId: (body.offeringAppId || '').trim(),
-        integratorMerchantId: (body.integratorMerchantId || '').trim(),
+        integratorMerchantId: body.integratorMerchantId?.trim() || undefined,
         integratorAppId: body.integratorAppId?.trim() || undefined,
         principalAmount: Number(body.principalAmount),
         referenceId: (body.referenceId || '').trim(),

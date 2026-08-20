@@ -164,4 +164,34 @@ describe('platformApplicationFieldInput', () => {
     expect(application.loanReason).toBe('business');
     expect(application.repayingWithSpouse).toBe(false);
   });
+
+  it('persists optional employment fields for mortgage applications', () => {
+    const result = validatePlatformApplicationFields({
+      ...baseSubmitFields,
+      productType: 'MORTGAGE',
+      loanReason: 'investment',
+      repayingWithSpouse: false,
+      occupation: 'Engineer',
+      placeOfWork: 'Stanleys Enterprise',
+      hrName: 'Ada HR',
+      hrEmail: 'hr@example.com'
+    });
+
+    expect(result.occupation).toBe('Engineer');
+    expect(result.placeOfWork).toBe('Stanleys Enterprise');
+    expect(result.hrName).toBe('Ada HR');
+    expect(result.hrEmail).toBe('hr@example.com');
+  });
+
+  it('rejects invalid hrEmail', () => {
+    expect(() =>
+      validatePlatformApplicationFields({
+        ...baseSubmitFields,
+        productType: 'MORTGAGE',
+        loanReason: 'investment',
+        repayingWithSpouse: false,
+        hrEmail: 'not-an-email'
+      })
+    ).toThrow(/hrEmail must be a valid email/);
+  });
 });

@@ -55,7 +55,7 @@ const WalletSchema = new Schema<IWalletDoc>(
     balance: { type: Number, required: true, default: 0 },
     mainBalance: { type: Number, required: true, default: 0 },
     ledgerBalance: { type: Number, required: true, default: 0 },
-    currency: { type: String, required: true, default: 'USD' },
+    currency: { type: String, required: true, default: 'NGN' },
     status: { type: String, required: true, enum: Object.values(WalletStatus), default: WalletStatus.ACTIVE },
     payonusNubanAccountNumber: { type: String, required: false },
     payonusNubanBankName: { type: String, required: false },

@@ -124,7 +124,11 @@ export const platformApplicationFieldsSchema = Joi.object({
   spouseEmail: Joi.string().email().optional(),
   spousePhone: Joi.string().trim().min(3).max(40).optional(),
   spouseOccupation: Joi.string().trim().max(120).optional(),
-  spouseCountry: Joi.string().trim().uppercase().length(2).optional()
+  spouseCountry: Joi.string().trim().uppercase().length(2).optional(),
+  occupation: Joi.string().trim().max(120).optional().allow(''),
+  placeOfWork: Joi.string().trim().max(200).optional().allow(''),
+  hrName: Joi.string().trim().max(200).optional().allow(''),
+  hrEmail: Joi.string().trim().email().max(320).optional().allow('')
 });
 
 const requirementSubmissionSchema = Joi.object({
@@ -301,7 +305,11 @@ export const saveProductApplicationProgressSchema = Joi.object({
     'spouseEmail',
     'spousePhone',
     'spouseOccupation',
-    'spouseCountry'
+    'spouseCountry',
+    'occupation',
+    'placeOfWork',
+    'hrName',
+    'hrEmail'
   );
 
 export const createApplicationGuarantorSchema = Joi.object({
@@ -395,7 +403,7 @@ export const completePendingMortgageVirtualInspectionSchema = Joi.object({
 
 export const signPendingMortgageContractSchema = Joi.object({
   userId: Joi.string().trim().required(),
-  acceptedTerms: Joi.boolean().valid(true).required().messages({
+  acceptedTerms: Joi.boolean().valid(true).default(true).messages({
     'any.only': 'acceptedTerms must be true to sign the contract'
   })
 });

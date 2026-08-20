@@ -178,6 +178,129 @@ export async function collectLoanCharge(input: {
   return springResult;
 }
 
+/**
+ * Storefront lending down payment (LOAN / MORTGAGE):
+ * 1) Debit applicant Central Wallet under the Spring integrator app
+ * 2) Credit product-creator REPAYMENT on Plata (gateway principal-settlement)
+ */
+async function collectLendingDownPayment(input: {
+  merchantId: string;
+  appId: string;
+  userId: string;
+  productId: string;
+  applicationId: string;
+  amount: number;
+  currency: string;
+  referenceId: string;
+  description?: string;
+  productType: 'LOAN' | 'MORTGAGE';
+  category: 'LOAN_EQUITY' | 'MORTGAGE_EQUITY';
+  purpose: 'loan_down_payment' | 'mortgage_down_payment';
+}): Promise<SettlementCollectResult> {
+  if (!input.amount || input.amount <= 0) {
+    return { success: true, skipped: true };
+  }
+
+  const label = input.productType === 'LOAN' ? 'Loan' : 'Mortgage';
+  const springResult = await collectToSettlementWallet({
+    merchantId: input.merchantId,
+    appId: input.appId,
+    userId: input.userId,
+    amount: input.amount,
+    referenceId: input.referenceId,
+    source: SETTLEMENT_SOURCE,
+    category: input.category,
+    applicationId: input.applicationId,
+    productId: input.productId,
+    productType: input.productType,
+    currency: input.currency,
+    description:
+      input.description || `${label} down payment for application ${input.applicationId}`,
+    debitUserWallet: true,
+    metadata: { purpose: input.purpose }
+  });
+
+  if (!springResult.success) {
+    return springResult;
+  }
+  if (springResult.duplicate || springResult.skipped) {
+    return springResult;
+  }
+
+  const creatorResult = await creditCreatorEquitySettlement({
+    productId: input.productId,
+    applicationId: input.applicationId,
+    productType: input.productType,
+    currency: input.currency,
+    amount: input.amount,
+    referenceId: `${input.referenceId}:plata-creator`,
+    category: input.category,
+    description:
+      input.description ||
+      `${label} down payment creator repayment credit (${input.amount} ${input.currency})`,
+    metadata: {
+      purpose: input.purpose,
+      springReferenceId: input.referenceId,
+      springTransactionId: springResult.transactionId,
+      springUserTransactionId: springResult.userTransactionId
+    }
+  });
+
+  if (!creatorResult.success && !creatorResult.skipped) {
+    return {
+      ...springResult,
+      error:
+        creatorResult.error ||
+        'Central Wallet debited but Plata product-creator Repayment credit failed'
+    };
+  }
+
+  return {
+    ...springResult,
+    transactionId: creatorResult.transactionId ?? springResult.transactionId
+  };
+}
+
+/** Storefront LOAN down payment — Central Wallet debit + Plata creator Repayment credit. */
+export async function collectLoanDownPayment(input: {
+  merchantId: string;
+  appId: string;
+  userId: string;
+  productId: string;
+  applicationId: string;
+  amount: number;
+  currency: string;
+  referenceId: string;
+  description?: string;
+}): Promise<SettlementCollectResult> {
+  return collectLendingDownPayment({
+    ...input,
+    productType: 'LOAN',
+    category: 'LOAN_EQUITY',
+    purpose: 'loan_down_payment'
+  });
+}
+
+/** Storefront MORTGAGE down payment — Central Wallet debit + Plata creator Repayment credit. */
+export async function collectMortgageDownPayment(input: {
+  merchantId: string;
+  appId: string;
+  userId: string;
+  productId: string;
+  applicationId: string;
+  amount: number;
+  currency: string;
+  referenceId: string;
+  description?: string;
+}): Promise<SettlementCollectResult> {
+  return collectLendingDownPayment({
+    ...input,
+    productType: 'MORTGAGE',
+    category: 'MORTGAGE_EQUITY',
+    purpose: 'mortgage_down_payment'
+  });
+}
+
 export async function collectMortgageCharge(input: {
   merchantId: string;
   appId?: string;

@@ -437,6 +437,19 @@ class ProductApplicationController {
     }
   };
 
+  getAmortizationSchedule = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = String(req.query.userId ?? '').trim();
+      if (!userId) {
+        throw new ApiError(400, 'userId query parameter is required');
+      }
+      const data = await productApplicationService.getAmortizationSchedule(req.params.id, userId);
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      this.handleError(error, res, 'Error getting amortization schedule');
+    }
+  };
+
   listApplications = async (req: Request, res: Response): Promise<void> => {
     try {
       const result = await productApplicationService.listApplications(
@@ -715,9 +728,9 @@ class ProductApplicationController {
 
   signPendingMortgageContract = async (req: Request, res: Response): Promise<void> => {
     try {
-      const body = req.validatedBody as { userId: string; acceptedTerms: boolean };
+      const body = req.validatedBody as { userId: string; acceptedTerms?: boolean };
       const data = await pendingApprovedMortgageService.signContract(req.params.id, body.userId, {
-        acceptedTerms: body.acceptedTerms
+        acceptedTerms: body.acceptedTerms !== false
       });
       res.status(200).json({ success: true, data });
     } catch (error) {

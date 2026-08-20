@@ -1,7 +1,8 @@
 import { App } from '../types/app';
 import { AppPwaTemplate } from '../types/pwaTemplate';
-import { RuntimeManifest } from '../types/pwaPublish';
+import { RuntimeManifest, RuntimeManifestAppBuilder } from '../types/pwaPublish';
 import { buildDefaultAppUrl, config } from '../config/environment';
+import { coerceAppPwaTemplateConfig } from './pwaTemplateConfig';
 
 function trimSlash(url: string): string {
   return url.replace(/\/+$/, '');
@@ -59,6 +60,39 @@ export function resolvePwaBaseUrl(app: App, template: AppPwaTemplate): string | 
   return null;
 }
 
+function buildAppBuilderBlock(app: App, template: AppPwaTemplate): RuntimeManifestAppBuilder {
+  // Always emit all seven App Creator sections (empty objects when unset).
+  const fullConfig = coerceAppPwaTemplateConfig(template.config);
+  return {
+    schemaVersion: 1,
+    template: {
+      id: template.id,
+      name: template.name,
+      ...(template.category ? { category: template.category } : {}),
+      ...(template.description ? { description: template.description } : {}),
+      ...(template.iconKey ? { iconKey: template.iconKey } : {}),
+      isApplied: template.isApplied,
+      createdAt: template.createdAt,
+      updatedAt: template.updatedAt
+    },
+    app: {
+      id: String(app.id),
+      name: app.name,
+      alias: app.alias,
+      websiteUrl: app.websiteUrl,
+      ...(app.subdomain ? { subdomain: app.subdomain } : {}),
+      status: app.status,
+      merchantId: app.merchantId
+    },
+    config: fullConfig
+  };
+}
+
+/**
+ * Builds the published web app manifest.
+ * Includes standard W3C install fields plus `app_builder` with the full App Creator config
+ * (Asset, Splash, Onboarding, App Profile, Policy/Terms, Support, DNS, and template metadata).
+ */
 export function buildRuntimeManifest(app: App, template: AppPwaTemplate): RuntimeManifest {
   const baseUrl = resolvePwaBaseUrl(app, template) || 'https://springtd.com';
   const shortName = (app.alias || app.name).slice(0, 12);
@@ -87,7 +121,7 @@ export function buildRuntimeManifest(app: App, template: AppPwaTemplate): Runtim
     display: 'standalone',
     theme_color: template.config.splash.primaryColor || '#6B46C1',
     background_color: template.config.splash.secondaryColor || '#E5E7EB',
-    icons
+    icons,
+    app_builder: buildAppBuilderBlock(app, template)
   };
 }
-

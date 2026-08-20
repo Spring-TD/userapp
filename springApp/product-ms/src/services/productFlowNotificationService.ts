@@ -258,3 +258,117 @@ export async function notifyLoanDisbursedFromSpring(args: {
     }
   });
 }
+
+/** Human-readable inspection slot (UTC calendar components from stored ISO). */
+export function formatInspectionScheduledFor(iso: string | undefined): string {
+  if (!iso?.trim()) {
+    return 'the scheduled time';
+  }
+  const d = new Date(iso.trim());
+  if (Number.isNaN(d.getTime())) {
+    return iso.trim();
+  }
+  return d.toLocaleString('en-GB', {
+    timeZone: 'UTC',
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZoneName: 'short'
+  });
+}
+
+type SpringMortgageApplicationLike = {
+  id: string;
+  userId: string;
+  email?: string;
+  customerName?: string;
+  applicantName?: string;
+  productName: string;
+  contractSnapshot?: Record<string, unknown>;
+  postApprovalFulfillment?: {
+    appointment?: { scheduledFor?: string; location?: string; notes?: string };
+  };
+};
+
+function mortgageApplicantNotifyData(application: SpringMortgageApplicationLike) {
+  const userName =
+    application.customerName?.trim() ||
+    application.applicantName?.trim() ||
+    application.email?.split('@')[0] ||
+    'Customer';
+  const propertyAddress = resolvePropertyAddressFromSnapshot(
+    application.contractSnapshot,
+    application.productName
+  );
+  const appointment = application.postApprovalFulfillment?.appointment;
+  const email =
+    application.email?.trim() || applicantEmailFromSnapshot(application.contractSnapshot);
+  return {
+    userId: application.userId,
+    email,
+    userName,
+    recipientName: userName,
+    applicantName: userName,
+    propertyAddress,
+    productName: application.productName || 'Mortgage product',
+    scheduledFor: formatInspectionScheduledFor(appointment?.scheduledFor),
+    location: appointment?.location?.trim() || 'TBD',
+    notes: appointment?.notes?.trim() || '',
+    applicationId: application.id
+  };
+}
+
+async function notifyMortgageApplicantFromSpring(
+  application: SpringMortgageApplicationLike,
+  template: string,
+  extra: Record<string, unknown> = {}
+): Promise<void> {
+  const data = { ...mortgageApplicantNotifyData(application), ...extra };
+  await postProductFlowNotification({
+    userId: data.userId,
+    email: data.email,
+    template,
+    priority: 'high',
+    data
+  });
+}
+
+export async function notifyMortgageVirtualInspectionCompletedFromSpring(
+  application: SpringMortgageApplicationLike
+): Promise<void> {
+  await notifyMortgageApplicantFromSpring(application, 'mortgage-virtual-inspection-completed');
+}
+
+export async function notifyMortgageOfferAcceptedFromSpring(
+  application: SpringMortgageApplicationLike
+): Promise<void> {
+  await notifyMortgageApplicantFromSpring(application, 'mortgage-offer-accepted');
+}
+
+export async function notifyMortgageInspectionBookingFromSpring(
+  application: SpringMortgageApplicationLike
+): Promise<void> {
+  await notifyMortgageApplicantFromSpring(application, 'mortgage-inspection-booking');
+}
+
+export async function notifyMortgageInspectionOutcomeFromSpring(
+  application: SpringMortgageApplicationLike
+): Promise<void> {
+  await notifyMortgageApplicantFromSpring(application, 'mortgage-inspection-outcome');
+}
+
+export async function notifyMortgageDownPaymentReceivedFromSpring(
+  application: SpringMortgageApplicationLike
+): Promise<void> {
+  await notifyMortgageApplicantFromSpring(application, 'mortgage-down-payment-received');
+}
+
+export async function notifyMortgageContractSignedFromSpring(
+  application: SpringMortgageApplicationLike
+): Promise<void> {
+  await notifyMortgageApplicantFromSpring(application, 'mortgage-contract-signed');
+}

@@ -161,11 +161,58 @@ describe('applyPlataLoanWorkflowWebhook post-approval', () => {
           currency: 'NGN',
           walletId: 'wallet-1'
         },
+        amortizationSchedule: {
+          source: 'confirmed',
+          loanAmount: 500000,
+          instalment: 45840,
+          totalInterest: 50080,
+          totalRepayment: 550080,
+          periodCount: 2,
+          currency: 'NGN',
+          paidInstallmentCount: 0,
+          outstandingAmount: 550080,
+          nextInstallmentNumber: 1,
+          periods: [
+            {
+              period: 1,
+              label: 'Payment 1',
+              dueDate: '2026-08-20T00:00:00.000Z',
+              payment: 45840,
+              principal: 38340,
+              interest: 7500,
+              fees: 0,
+              balance: 461660,
+              status: 'pending',
+              isNext: true
+            },
+            {
+              period: 2,
+              label: 'Payment 2',
+              dueDate: '2026-09-20T00:00:00.000Z',
+              payment: 45840,
+              principal: 40000,
+              interest: 5840,
+              fees: 0,
+              balance: 421660,
+              status: 'pending',
+              isNext: false
+            }
+          ]
+        },
         postApprovalFulfillment: { status: 'disbursed' }
       }
     });
 
     expect(mockedWalletApproval).toHaveBeenCalled();
     expect(doc.disbursementDeferred).toBe(false);
+    expect(doc.amortizationSchedule).toEqual(
+      expect.objectContaining({
+        source: 'confirmed',
+        periodCount: 2,
+        periods: expect.arrayContaining([
+          expect.objectContaining({ period: 1, isNext: true, status: 'pending' })
+        ])
+      })
+    );
   });
 });

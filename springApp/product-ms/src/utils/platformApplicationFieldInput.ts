@@ -17,10 +17,25 @@ function pickPlatformFieldInput(source: Record<string, unknown> | undefined): Pl
     return {};
   }
 
+  const aliases: Record<string, PlatformApplicationFieldKey> = {
+    place_of_work: 'placeOfWork',
+    nameOfHr: 'hrName',
+    hr_name: 'hrName',
+    hrsEmail: 'hrEmail',
+    hr_email: 'hrEmail'
+  };
+
+  const normalized: Record<string, unknown> = { ...source };
+  for (const [alias, canonical] of Object.entries(aliases)) {
+    if (normalized[canonical] === undefined && normalized[alias] !== undefined) {
+      normalized[canonical] = normalized[alias];
+    }
+  }
+
   const picked: PlatformApplicationFieldInput = {};
   for (const key of PLATFORM_APPLICATION_FIELD_KEYS) {
-    if (source[key] !== undefined) {
-      (picked as Record<string, unknown>)[key] = source[key];
+    if (normalized[key] !== undefined) {
+      (picked as Record<string, unknown>)[key] = normalized[key];
     }
   }
   return picked;

@@ -38,11 +38,12 @@ export type InvestmentPurchaseCollectRequest = {
   userId: string;
   offeringMerchantId: string;
   offeringAppId: string;
-  integratorMerchantId: string;
-  integratorAppId?: string;
+  /** Full investment principal (credited to Plata creator via gateway). */
   principalAmount: number;
+  /** Spring merchant fee on top of principal. */
   commissionAmount: number;
-  creatorPrincipalAmount: number;
+  /** @deprecated Legacy field; equals principalAmount. */
+  creatorPrincipalAmount?: number;
   referenceId: string;
   productId: string;
   applicationId?: string;
@@ -56,8 +57,6 @@ export type SavingsPurchaseCollectRequest = {
   userId: string;
   offeringMerchantId: string;
   offeringAppId: string;
-  integratorMerchantId: string;
-  integratorAppId?: string;
   principalAmount: number;
   referenceId: string;
   productId: string;

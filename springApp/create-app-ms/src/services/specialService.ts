@@ -177,7 +177,7 @@ export class SpecialService {
           userId: user.id,
           merchantId: userData.user_merchant_id,
           name: `Wallet for ${user.firstName} ${user.lastName}`,
-          currency: 'USD'
+          currency: 'NGN'
         });
         wallet = walletResponse.data.data?.wallet || null;
       }

@@ -30,7 +30,7 @@ const TransactionSchema = new Schema<ITransactionDocument>({
         virtuals: true,
         transform: function (doc, ret: any) {
             if (ret._id) {
-                ret.id = ret._id;
+                ret.id = String(ret._id);
                 delete ret._id;
             }
             if (ret.__v !== undefined) {

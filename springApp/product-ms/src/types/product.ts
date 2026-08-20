@@ -58,6 +58,8 @@ export interface LoanRequirements {
     bankGuarantee?: boolean;
     savingsAccount?: boolean;
     noSecurity?: boolean;
+    mixedSecurity?: boolean;
+    insurance?: boolean;
   };
   documentsToDownload?: Array<{ name: string; fileUrl?: string }>;
   otherRequirements?: Array<{
@@ -72,6 +74,10 @@ export interface LoanRequirements {
   airSignUid?: string;
 }
 
+export interface MortgagePropertyDocumentation {
+  documentType?: string;
+}
+
 export interface MortgageProperty {
   name?: string;
   propertyType?: string;
@@ -80,6 +86,8 @@ export interface MortgageProperty {
   propertyDescription?: string;
   facilities?: string[];
   customFacilities?: string[];
+  /** Title / legal documents available for this property (types only). */
+  propertyDocumentation?: MortgagePropertyDocumentation[];
   imageUrls?: string[];
   videoUrl?: string;
   /** Legacy / Spring-only preview field (kept for backward compatibility). */

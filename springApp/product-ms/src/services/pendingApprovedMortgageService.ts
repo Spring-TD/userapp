@@ -23,6 +23,15 @@ import {
 } from './pendingApprovedMortgageClient';
 import { proxyUploadSignedMortgageContract } from './pendingApprovedMultipartClient';
 import { buildOfferLetterForProductApplication } from './offerLetterPresentationService';
+import { collectMortgageDownPayment } from './settlement/settlementChargeService';
+import {
+  notifyMortgageContractSignedFromSpring,
+  notifyMortgageDownPaymentReceivedFromSpring,
+  notifyMortgageInspectionBookingFromSpring,
+  notifyMortgageInspectionOutcomeFromSpring,
+  notifyMortgageOfferAcceptedFromSpring,
+  notifyMortgageVirtualInspectionCompletedFromSpring
+} from './productFlowNotificationService';
 
 const ACTIVE_STATUSES = [
   'virtual_inspection_pending',
@@ -212,14 +221,18 @@ class PendingApprovedMortgageService {
     userId: string,
     input: { action: 'accept' | 'decline'; acceptedTerms?: boolean }
   ): Promise<ProductApplication> {
-    return this.loadOwnedApplication(applicationId, userId).then((application) =>
-      this.proxyAndMirror(application, userId, () =>
+    return this.loadOwnedApplication(applicationId, userId).then(async (application) => {
+      const saved = await this.proxyAndMirror(application, userId, () =>
         proxyRespondToMortgageOffer(application._id.toString(), {
           ...input,
           springUserId: userId
         })
-      )
-    );
+      );
+      if (input.action === 'accept') {
+        void notifyMortgageOfferAcceptedFromSpring(saved);
+      }
+      return saved;
+    });
   }
 
   scheduleAppointment(
@@ -227,14 +240,16 @@ class PendingApprovedMortgageService {
     userId: string,
     input: { scheduledFor: string; notes?: string; location?: string }
   ): Promise<ProductApplication> {
-    return this.loadOwnedApplication(applicationId, userId).then((application) =>
-      this.proxyAndMirror(application, userId, () =>
+    return this.loadOwnedApplication(applicationId, userId).then(async (application) => {
+      const saved = await this.proxyAndMirror(application, userId, () =>
         proxyScheduleMortgageInspection(application._id.toString(), {
           ...input,
           springUserId: userId
         })
-      )
-    );
+      );
+      void notifyMortgageInspectionBookingFromSpring(saved);
+      return saved;
+    });
   }
 
   startInspection(applicationId: string, userId: string): Promise<ProductApplication> {
@@ -250,14 +265,16 @@ class PendingApprovedMortgageService {
     userId: string,
     input?: { notes?: string }
   ): Promise<ProductApplication> {
-    return this.loadOwnedApplication(applicationId, userId).then((application) =>
-      this.proxyAndMirror(application, userId, () =>
+    return this.loadOwnedApplication(applicationId, userId).then(async (application) => {
+      const saved = await this.proxyAndMirror(application, userId, () =>
         proxyCompleteMortgageVirtualInspection(application._id.toString(), {
           notes: input?.notes,
           springUserId: userId
         })
-      )
-    );
+      );
+      void notifyMortgageVirtualInspectionCompletedFromSpring(saved);
+      return saved;
+    });
   }
 
   completeInspection(
@@ -265,14 +282,18 @@ class PendingApprovedMortgageService {
     userId: string,
     input: { outcome: 'completed' | 'declined_offer' }
   ): Promise<ProductApplication> {
-    return this.loadOwnedApplication(applicationId, userId).then((application) =>
-      this.proxyAndMirror(application, userId, () =>
+    return this.loadOwnedApplication(applicationId, userId).then(async (application) => {
+      const saved = await this.proxyAndMirror(application, userId, () =>
         proxyCompleteMortgageInspection(application._id.toString(), {
           ...input,
           springUserId: userId
         })
-      )
-    );
+      );
+      if (input.outcome === 'completed') {
+        void notifyMortgageInspectionOutcomeFromSpring(saved);
+      }
+      return saved;
+    });
   }
 
   signContract(
@@ -280,14 +301,16 @@ class PendingApprovedMortgageService {
     userId: string,
     input: { acceptedTerms: boolean }
   ): Promise<ProductApplication> {
-    return this.loadOwnedApplication(applicationId, userId).then((application) =>
-      this.proxyAndMirror(application, userId, () =>
+    return this.loadOwnedApplication(applicationId, userId).then(async (application) => {
+      const saved = await this.proxyAndMirror(application, userId, () =>
         proxySignMortgageContract(application._id.toString(), {
           acceptedTerms: input.acceptedTerms,
           springUserId: userId
         })
-      )
-    );
+      );
+      void notifyMortgageContractSignedFromSpring(saved);
+      return saved;
+    });
   }
 
   uploadSignedContract(
@@ -308,22 +331,107 @@ class PendingApprovedMortgageService {
     amount?: number
   ): Promise<PendingApprovedMortgageDetail> {
     const application = await this.loadOwnedApplication(applicationId, userId);
-    await this.proxyAndMirror(application, userId, () =>
-      proxyMortgageDownPayment(application._id.toString(), {
-        amount,
-        springUserId: userId
-      })
-    );
-
-    try {
-      const upstream = await fetchUpstreamPendingApprovedMortgage(application._id.toString());
-      syncFulfillmentFromUpstream(application, upstream);
-      await application.save();
-    } catch {
-      // Best-effort refresh after wallet debit.
+    if (!application.upstreamApplicationId) {
+      throw new ApiError(409, 'Application is not linked to Plata upstream');
     }
 
-    return this.getDetail(applicationId, userId);
+    const localApplicationId = application._id.toString();
+    const upstream = await fetchUpstreamPendingApprovedMortgage(localApplicationId);
+    syncFulfillmentFromUpstream(application, upstream);
+
+    const fulfillment = application.postApprovalFulfillment;
+    if (fulfillment?.status !== 'down_payment_pending') {
+      throw new ApiError(
+        409,
+        `Mortgage down payment cannot be collected from status ${fulfillment?.status || 'unknown'}`
+      );
+    }
+
+    const upstreamEquityPayment = asRecord(upstream.equityPayment);
+    const alreadyPaid =
+      upstreamEquityPayment?.status === 'paid' || Boolean(fulfillment?.downPayment?.paidAt);
+    const requiredAmount = fulfillment?.downPayment?.requiredAmount ?? 0;
+    const requestedAmount =
+      amount != null && Number.isFinite(amount) && amount > 0 ? amount : requiredAmount;
+    const amountDue = alreadyPaid ? 0 : requestedAmount;
+    let providerReference: string | undefined;
+    let walletResult: Awaited<ReturnType<typeof collectMortgageDownPayment>> | undefined;
+
+    if (amountDue > 0) {
+      if (!(requiredAmount > 0)) {
+        throw new ApiError(400, 'This application does not require a down payment');
+      }
+      if (Math.abs(amountDue - requiredAmount) > 0.009) {
+        throw new ApiError(400, `Down payment must equal the required amount (${requiredAmount})`);
+      }
+      if (!application.merchantId || !application.appId) {
+        throw new ApiError(409, 'Application is missing the merchant/app wallet scope');
+      }
+
+      try {
+        walletResult = await collectMortgageDownPayment({
+          merchantId: application.merchantId,
+          appId: application.appId,
+          userId,
+          productId: application.productId,
+          applicationId: localApplicationId,
+          amount: amountDue,
+          currency: fulfillment?.downPayment?.currency ?? application.currency ?? 'NGN',
+          referenceId: `mortgage-down-payment:${localApplicationId}`,
+          description: `Mortgage down payment for application ${localApplicationId}`
+        });
+      } catch {
+        throw new ApiError(503, 'Wallet service is unavailable');
+      }
+
+      if (!walletResult.success) {
+        if (walletResult.insufficientFunds) {
+          throw new ApiError(402, walletResult.error || 'Insufficient Central Wallet balance', true, {
+            code: 'INSUFFICIENT_CENTRAL_WALLET_BALANCE',
+            requiredAmount: amountDue,
+            availableBalance: walletResult.userWallet?.mainBalance ?? null,
+            currency: walletResult.userWallet?.currency ?? application.currency
+          });
+        }
+        throw new ApiError(502, walletResult.error || 'Failed to collect mortgage down payment');
+      }
+
+      providerReference =
+        walletResult.userTransactionId ??
+        walletResult.transactionId ??
+        `mortgage-down-payment:${localApplicationId}`;
+    }
+
+    const updatedUpstream = await proxyMortgageDownPayment(localApplicationId, {
+      ...(amountDue > 0 ? { amount: amountDue } : {}),
+      ...(providerReference ? { providerReference } : {}),
+      springUserId: userId
+    });
+    syncFulfillmentFromUpstream(application, updatedUpstream);
+    await application.save();
+
+    const saved = toProductApplication(application);
+    if (amountDue > 0) {
+      void notifyMortgageDownPaymentReceivedFromSpring(saved);
+    }
+
+    const detail = await this.getDetail(applicationId, userId);
+    return {
+      ...detail,
+      payment: {
+        method: 'wallet',
+        amount: amountDue,
+        currency: fulfillment?.downPayment?.currency ?? application.currency ?? 'NGN',
+        duplicate: walletResult?.duplicate === true || amountDue === 0,
+        centralWalletBalance: walletResult?.userWallet?.mainBalance ?? null,
+        ...(walletResult?.userTransactionId
+          ? { userTransactionId: walletResult.userTransactionId }
+          : {}),
+        ...(walletResult?.transactionId
+          ? { repaymentTransactionId: walletResult.transactionId }
+          : {})
+      }
+    };
   }
 }
 

@@ -5,6 +5,8 @@ import type { ProductRequirementSubmission } from '../types/productApplication';
 type RequirementItem = {
   id?: string;
   name?: string;
+  requirementType?: string;
+  description?: string;
   required?: boolean;
   uploadRequired?: boolean;
   contentType?: string;
@@ -16,7 +18,7 @@ type DownloadableDocumentItem = {
 };
 
 function requirementKey(item: RequirementItem, index: number): string {
-  return String(item.id ?? item.name ?? index).trim();
+  return String(item.id ?? item.requirementType ?? item.name ?? item.description ?? index).trim();
 }
 
 function downloadableDocumentKey(item: DownloadableDocumentItem, index: number): string {

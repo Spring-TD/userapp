@@ -12,6 +12,7 @@ import { normalizeProductType } from '../utils/productType';
 import { deepMerge } from '../utils/deepMerge';
 import { ApiError } from '../middleware/errorHandler';
 import { sanitizeSpringMerchantFeeAdditions } from '../utils/managementFee';
+import { refreshInProgressApplicationsFromProduct } from './pendingApplicationProductSync';
 
 function asPlainObjectRecord(value: unknown): Record<string, unknown> | undefined {
   if (value !== undefined && value !== null && typeof value === 'object' && !Array.isArray(value)) {
@@ -634,10 +635,11 @@ export class ProductService {
         throw new ApiError(404, 'Upstream Plata product not found');
       }
 
-      return this.applyUpstreamSnapshotToLocalClone(localProduct, upstreamProduct, {
+      const refreshed = await this.applyUpstreamSnapshotToLocalClone(localProduct, upstreamProduct, {
         isActive: true,
         preserveFeatured: true
       });
+      return refreshed?.product ?? null;
     }
 
     if (!activate) {
@@ -659,7 +661,12 @@ export class ProductService {
    */
   async syncLocalClonesFromUpstreamProductId(
     upstreamProductId: string
-  ): Promise<{ synced: number; productIds: string[] }> {
+  ): Promise<{
+    synced: number;
+    productIds: string[];
+    applicationsRefreshed: number;
+    applicationIds: string[];
+  }> {
     const id = upstreamProductId.trim();
     if (!id) {
       throw new ApiError(400, 'productId is required');
@@ -672,6 +679,7 @@ export class ProductService {
 
     const docs = await ProductModel.find({ upstreamProductId: id });
     const productIds: string[] = [];
+    const applicationIds: string[] = [];
 
     for (const doc of docs) {
       const local = toProduct(doc);
@@ -680,11 +688,17 @@ export class ProductService {
         preserveFeatured: true
       });
       if (updated) {
-        productIds.push(updated.id);
+        productIds.push(updated.product.id);
+        applicationIds.push(...updated.applicationIds);
       }
     }
 
-    return { synced: productIds.length, productIds };
+    return {
+      synced: productIds.length,
+      productIds,
+      applicationsRefreshed: applicationIds.length,
+      applicationIds
+    };
   }
 
   /**
@@ -757,13 +771,14 @@ export class ProductService {
   }
 
   /**
-   * Apply a Plata catalog snapshot onto an existing Spring local clone.
+   * Apply a Plata catalog snapshot onto an existing Spring local clone,
+   * then refresh in-progress storefront applications that still snapshot this product.
    */
   private async applyUpstreamSnapshotToLocalClone(
     localProduct: Product,
     upstreamProduct: Product,
     options: { isActive: boolean; preserveFeatured: boolean }
-  ): Promise<Product | null> {
+  ): Promise<{ product: Product; applicationIds: string[] } | null> {
     const refreshed = this.buildLocalProductPayload(
       upstreamProduct,
       localProduct.appId,
@@ -795,7 +810,23 @@ export class ProductService {
       { $set: { ...setDoc, updatedAt: new Date().toISOString() } },
       { new: true }
     );
-    return updated ? toProduct(updated) : null;
+    const product = updated ? toProduct(updated) : null;
+    if (!product) {
+      return null;
+    }
+
+    let applicationIds: string[] = [];
+    try {
+      const applications = await refreshInProgressApplicationsFromProduct(product);
+      applicationIds = applications.applicationIds;
+    } catch (error) {
+      console.error('Failed to refresh in-progress applications after catalog sync:', {
+        productId: product.id,
+        message: error instanceof Error ? error.message : String(error)
+      });
+    }
+
+    return { product, applicationIds };
   }
 
   /**

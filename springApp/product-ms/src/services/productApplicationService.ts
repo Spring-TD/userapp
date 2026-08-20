@@ -1,6 +1,7 @@
 import { ApiError } from '../middleware/errorHandler';
 import mongoose from 'mongoose';
 import { randomInt, randomUUID } from 'crypto';
+import { config } from '../config/environment';
 import { ProductModel, toProduct } from '../models/ProductModel';
 import {
   IProductApplicationDocument,
@@ -27,6 +28,9 @@ import {
 } from '../utils/platformApplicationFieldInput';
 import type { ValidatedPlatformApplicationFields } from '../types/platformApplicationFields';
 import type { PlatformApplicationFieldInput } from '../types/platformApplicationFields';
+import { parseAmortizationSchedule } from '../types/amortizationSchedule';
+import { fetchUpstreamAmortizationSchedule } from './amortizationScheduleClient';
+import { lendingEquitySnapshotFields } from '../utils/lendingEquitySnapshot';
 import {
   sendGuarantorKycApprovedNotification,
   sendGuarantorApplicantReportedNotification,
@@ -62,6 +66,11 @@ import {
   buildApprovedApplicationAmountSummary,
   type ApprovedAmountAggregateRow
 } from '../utils/approvedApplicationAmountSummary';
+import {
+  isBlockingLendingApplicationStatus,
+  lendingApplicationBlockMessage,
+  LENDING_PRODUCT_TYPES
+} from '../utils/lendingApplicationGuard';
 
 function applicationFilters(query: ApplicationListQuery): Record<string, string> {
   const filters: Record<string, string> = {};
@@ -541,36 +550,7 @@ export class ProductApplicationService {
   }
 
   private lendingEquitySnapshotFields(product: Product): Record<string, unknown> {
-    const productType = String(product.type).toUpperCase();
-    if (productType !== 'LOAN' && productType !== 'MORTGAGE') {
-      return {};
-    }
-
-    const productRecord = product as Product & {
-      baseEquityContribution?: number;
-      merchantEquityAddition?: number;
-      calculatedConfig?: { mortgage?: Record<string, unknown> };
-    };
-    const baseEquity = Number(productRecord.baseEquityContribution);
-    const merchantEquity = Number(productRecord.merchantEquityAddition);
-    const layeredEquity =
-      Number.isFinite(baseEquity) || Number.isFinite(merchantEquity)
-        ? (Number.isFinite(baseEquity) ? baseEquity : 0) +
-          (Number.isFinite(merchantEquity) ? merchantEquity : 0)
-        : undefined;
-    const equityContribution = product.equityContribution ?? layeredEquity;
-    return {
-      ...(equityContribution != null ? { equityContribution } : {}),
-      ...(productType === 'MORTGAGE' && product.propertyValue != null
-        ? { propertyValue: product.propertyValue }
-        : {}),
-      ...(productType === 'MORTGAGE' && Array.isArray(product.properties) && product.properties.length > 0
-        ? { properties: product.properties }
-        : {}),
-      ...(productType === 'MORTGAGE' && productRecord.calculatedConfig?.mortgage
-        ? { calculatedConfig: { mortgage: productRecord.calculatedConfig.mortgage } }
-        : {})
-    };
+    return lendingEquitySnapshotFields(product);
   }
 
   /** Per-unit price for a commodity: `structure.unitAmount` (number/string, or `{ amount }`) → fallback `product.price`. */
@@ -831,18 +811,22 @@ export class ProductApplicationService {
     });
   }
 
-  private async findInitializedApplication(
-    input: CreateProductApplicationRequest,
-    product: Product
-  ): Promise<IProductApplicationDocument | null> {
+  private async findBlockingLendingApplication(input: {
+    userId: string;
+    productId: string;
+    merchantId: string;
+    appId: string;
+  }): Promise<IProductApplicationDocument | null> {
     return ProductApplicationModel.findOne({
-      userId: input.userId,
-      productId: product.id,
-      appId: product.appId,
-      merchantId: input.merchantId,
-      status: 'PENDING',
-      'productWallet.upstreamAccount.accountNumber': { $exists: true, $nin: ['', null] }
-    }).sort({ updatedAt: -1 }).exec();
+      userId: input.userId.trim(),
+      productId: input.productId.trim(),
+      merchantId: input.merchantId.trim(),
+      appId: input.appId.trim(),
+      productType: { $in: [...LENDING_PRODUCT_TYPES] },
+      status: { $in: ['PENDING', 'APPROVED', 'BLACKLISTED'] }
+    })
+      .sort({ updatedAt: -1 })
+      .exec();
   }
 
   private accountCreatedNotificationDetail(application: IProductApplicationDocument): string {
@@ -1379,6 +1363,12 @@ export class ProductApplicationService {
     };
   }
 
+  /**
+   * PayOnUs staging workaround: randomize last 3 BVN digits so repeated test applies
+   * do not collide on the same virtual-account BVN. Must NOT run for BankOne / Charis
+   * (or any creator in UPSTREAM_BVN_MUTATION_SKIP_MERCHANT_IDS) — FI account creation
+   * requires the applicant's real BVN.
+   */
   private randomizeBvnLastThreeDigitsForUpstream(bvn: string | undefined): string | undefined {
     const digits = bvn?.replace(/\D/g, '') || '';
     if (digits.length !== 11) {
@@ -1394,11 +1384,38 @@ export class ProductApplicationService {
     return `${digits.slice(0, -3)}${randomSuffix}`;
   }
 
+  private shouldMutateBvnForUpstream(product: Product): boolean {
+    const creatorMerchantId = (product.merchant as { id?: string } | undefined)?.id?.trim() || '';
+    if (!creatorMerchantId) {
+      // Prefer mutating only when we know the creator; unresolved creator keeps legacy
+      // PayOnUs-safe behavior (mutate) to avoid breaking existing Sample Test App flows.
+      return true;
+    }
+    return !config.upstreamBvnMutationSkipMerchantIds.includes(creatorMerchantId);
+  }
+
+  private bvnForUpstreamAccountInit(product: Product, bvn: string | undefined): string | undefined {
+    if (!this.shouldMutateBvnForUpstream(product)) {
+      return bvn;
+    }
+    return this.randomizeBvnLastThreeDigitsForUpstream(bvn);
+  }
+
   async createApplication(
     input: CreateProductApplicationRequest,
     authorizationHeader?: string
   ): Promise<ProductApplication> {
     const product = await this.resolveLoanProduct(input);
+    const existingApplication = await this.findBlockingLendingApplication({
+      userId: input.userId,
+      productId: product.id,
+      merchantId: input.merchantId!,
+      appId: product.appId
+    });
+    if (existingApplication) {
+      throw new ApiError(409, lendingApplicationBlockMessage(existingApplication.status));
+    }
+
     const inputWithApplicantName = await this.withApplicantName(input, authorizationHeader);
     const inputWithPhone = await this.withUserPhone(inputWithApplicantName, authorizationHeader);
     const inputWithComplianceBvn = await this.withComplianceBvn(inputWithPhone);
@@ -1456,12 +1473,20 @@ export class ProductApplicationService {
     authorizationHeader?: string
   ): Promise<{ application: ProductApplication; created: boolean }> {
     const product = await this.resolveLoanProduct(input);
-    const initializedApplication = await this.findInitializedApplication(input, product);
-    if (initializedApplication) {
+    const existingApplication = await this.findBlockingLendingApplication({
+      userId: input.userId,
+      productId: product.id,
+      merchantId: input.merchantId!,
+      appId: product.appId
+    });
+    if (existingApplication?.status === 'PENDING') {
       return {
-        application: toProductApplication(initializedApplication),
+        application: toProductApplication(existingApplication),
         created: false
       };
+    }
+    if (existingApplication) {
+      throw new ApiError(409, lendingApplicationBlockMessage(existingApplication.status));
     }
 
     const inputWithApplicantName = await this.withApplicantName(input, authorizationHeader);
@@ -1484,7 +1509,7 @@ export class ProductApplicationService {
 
     const upstreamInitInput = {
       ...resolvedInput,
-      bvn: this.randomizeBvnLastThreeDigitsForUpstream(resolvedInput.bvn)
+      bvn: this.bvnForUpstreamAccountInit(product, resolvedInput.bvn)
     };
 
     await this.syncUpstreamApplication(application, upstreamInitInput, product, [], {
@@ -1896,7 +1921,106 @@ export class ProductApplicationService {
 
   async getApplicationById(id: string): Promise<ProductApplication | null> {
     const application = await ProductApplicationModel.findById(id);
-    return application ? toProductApplication(application) : null;
+    if (!application) return null;
+    return this.withLiveAmortizationSchedule(application);
+  }
+
+  async getAmortizationSchedule(applicationId: string, userId: string): Promise<ProductApplication['amortizationSchedule']> {
+    if (!mongoose.isValidObjectId(applicationId)) {
+      throw new ApiError(404, 'Application not found');
+    }
+    const application = await ProductApplicationModel.findById(applicationId);
+    if (!application) {
+      throw new ApiError(404, 'Application not found');
+    }
+    if (application.userId !== userId) {
+      throw new ApiError(403, 'Application does not belong to this user');
+    }
+    const serialized = await this.withLiveAmortizationSchedule(application);
+    if (!serialized.amortizationSchedule) {
+      throw new ApiError(404, 'Amortization schedule is not available for this application');
+    }
+    return serialized.amortizationSchedule;
+  }
+
+  private async withLiveAmortizationSchedule(
+    application: IProductApplicationDocument
+  ): Promise<ProductApplication> {
+    const serialized = toProductApplication(application);
+    const live = await fetchUpstreamAmortizationSchedule(application._id.toString());
+    const amortizationSchedule = live ?? serialized.amortizationSchedule;
+
+    if (live && JSON.stringify(live) !== JSON.stringify(serialized.amortizationSchedule)) {
+      application.amortizationSchedule = live;
+      void application.save().catch((error) => {
+        console.warn('Failed to persist live amortization schedule snapshot', {
+          applicationId: application._id.toString(),
+          error: error instanceof Error ? error.message : String(error)
+        });
+      });
+    }
+
+    const productWallet = await this.withLiveProductWalletBalances(application, serialized.productWallet);
+
+    return {
+      ...serialized,
+      amortizationSchedule,
+      productWallet
+    };
+  }
+
+  /**
+   * Overlay live PRODUCT wallet balances from wallet-ms so transfer-to-primary
+   * UIs see 0 after funds move, instead of stale principal-only application.amount.
+   */
+  private async withLiveProductWalletBalances(
+    application: IProductApplicationDocument,
+    existing?: ProductApplication['productWallet']
+  ): Promise<ProductApplication['productWallet']> {
+    if (!existing?.walletId && !application.merchantId?.trim()) {
+      return existing;
+    }
+    if (!application.appId?.trim() || !application.merchantId?.trim()) {
+      return existing;
+    }
+
+    try {
+      const ensured = await walletService.ensureProductWallet({
+        userId: application.userId,
+        merchantId: application.merchantId,
+        applicationId: application._id.toString(),
+        productId: application.productId,
+        productName: application.productName,
+        productType: application.productType,
+        appId: application.appId,
+        currency: (application.currency || 'NGN').trim().toUpperCase()
+      });
+      const mainBalance = Number(ensured.wallet.mainBalance ?? ensured.wallet.balance);
+      const balance = Number.isFinite(mainBalance) ? Math.max(0, mainBalance) : 0;
+      const nuban = ensured.wallet.virtualNuban;
+      return {
+        walletId: ensured.wallet.id,
+        walletPurpose: ensured.wallet.walletPurpose || existing?.walletPurpose || 'PRODUCT',
+        reusedUpstreamAccount:
+          ensured.reusedUpstreamAccount === true || existing?.reusedUpstreamAccount === true,
+        balance,
+        mainBalance: balance,
+        upstreamAccount: {
+          accountNumber: nuban?.accountNumber ?? existing?.upstreamAccount?.accountNumber,
+          bankName: nuban?.bankName ?? existing?.upstreamAccount?.bankName,
+          bankCode: nuban?.bankCode ?? existing?.upstreamAccount?.bankCode,
+          providerReference:
+            nuban?.providerReference ?? existing?.upstreamAccount?.providerReference,
+          provisionStatus:
+            (nuban?.provisionStatus as string | undefined) ||
+            existing?.upstreamAccount?.provisionStatus ||
+            (nuban?.accountNumber ? 'active' : undefined),
+          provisionError: nuban?.provisionError ?? existing?.upstreamAccount?.provisionError
+        }
+      };
+    } catch {
+      return existing;
+    }
   }
 
   async listApplications(query: ApplicationListQuery = {}): Promise<ProductApplicationListResult> {
@@ -1934,11 +2058,17 @@ export class ProductApplicationService {
     if (query.appId) filters.appId = query.appId;
 
     const applications = await ProductApplicationModel.find(filters).sort({ updatedAt: -1 }).exec();
+    const blockingApplication = applications.find((application) =>
+      isBlockingLendingApplicationStatus(application.status)
+    );
     const accountApplication =
-      applications.find((application) => application.productWallet?.upstreamAccount?.accountNumber) ?? applications[0];
+      applications.find((application) => application.productWallet?.upstreamAccount?.accountNumber) ??
+      blockingApplication ??
+      applications[0];
     const serialized = accountApplication ? toProductApplication(accountApplication) : undefined;
     const upstreamAccount = serialized?.productWallet?.upstreamAccount;
     const hasUpstreamAccount = Boolean(upstreamAccount?.accountNumber);
+    const canApply = !blockingApplication;
 
     return {
       userId: query.userId,
@@ -1947,6 +2077,13 @@ export class ProductApplicationService {
       merchantId: serialized?.merchantId ?? query.merchantId,
       hasInitializedApplication: applications.length > 0,
       hasUpstreamAccount,
+      canApply,
+      ...(blockingApplication
+        ? {
+            applyDisabledReason: lendingApplicationBlockMessage(blockingApplication.status),
+            blockingApplicationId: blockingApplication._id.toString()
+          }
+        : {}),
       ...(serialized ? { application: serialized } : {}),
       ...(upstreamAccount ? { upstreamAccount } : {}),
       ...(serialized?.loanWorkflowStatus ? { loanWorkflowStatus: serialized.loanWorkflowStatus } : {}),
@@ -2085,6 +2222,11 @@ export class ProductApplicationService {
     }
 
     if (eventId && application.loanWorkflowLastEventId === eventId) {
+      const duplicateSchedule = parseAmortizationSchedule(data.amortizationSchedule);
+      if (duplicateSchedule) {
+        application.amortizationSchedule = duplicateSchedule;
+        await application.save();
+      }
       return { application: toProductApplication(application), duplicate: true };
     }
 
@@ -2208,6 +2350,11 @@ export class ProductApplicationService {
         ...(application.contractSnapshot as Record<string, unknown> | undefined),
         postApprovalFulfillment: application.postApprovalFulfillment
       };
+    }
+
+    const amortizationSchedule = parseAmortizationSchedule(data.amortizationSchedule);
+    if (amortizationSchedule) {
+      application.amortizationSchedule = amortizationSchedule;
     }
 
     await application.save();

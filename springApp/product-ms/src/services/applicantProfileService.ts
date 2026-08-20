@@ -133,6 +133,7 @@ class ApplicantProfileService {
       merchantId: application.merchantId,
       appId: application.appId,
       requirementSubmissions: application.requirementSubmissions,
+      platformFields: application.platformFields,
       guarantors,
       contractSnapshot: snapshot,
       upstreamApplicationId: application.upstreamApplicationId,

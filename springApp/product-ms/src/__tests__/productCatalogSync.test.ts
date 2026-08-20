@@ -20,6 +20,13 @@ jest.mock('axios', () => ({
   }
 }));
 
+jest.mock('../services/pendingApplicationProductSync', () => ({
+  refreshInProgressApplicationsFromProduct: jest.fn(async () => ({
+    refreshed: 0,
+    applicationIds: [] as string[]
+  }))
+}));
+
 jest.mock('../models/ProductModel', () => ({
   ProductModel: {
     find: jest.fn(),
@@ -61,6 +68,7 @@ jest.mock('../models/ProductModel', () => ({
 import axios from 'axios';
 import { ProductService } from '../services/productService';
 import { ProductModel } from '../models/ProductModel';
+import { refreshInProgressApplicationsFromProduct } from '../services/pendingApplicationProductSync';
 
 const mockedAxiosGet = axios.get as jest.MockedFunction<typeof axios.get>;
 const mockedFind = ProductModel.find as jest.MockedFunction<typeof ProductModel.find>;
@@ -143,6 +151,10 @@ describe('ProductService catalog sync', () => {
 
     expect(result.synced).toBe(1);
     expect(result.productIds).toEqual(['local-1']);
+    expect(result.applicationsRefreshed).toBe(0);
+    expect(refreshInProgressApplicationsFromProduct).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'local-1' })
+    );
     expect(mockedUpdate).toHaveBeenCalledWith(
       'local-1',
       expect.objectContaining({

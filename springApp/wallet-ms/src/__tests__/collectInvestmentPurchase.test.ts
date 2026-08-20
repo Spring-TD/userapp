@@ -31,22 +31,6 @@ const offeringSettlement = {
   updatedAt: new Date()
 };
 
-const integratorSettlement = {
-  id: 'wallet_integrator_settlement',
-  merchantId: 'integrator_merchant',
-  appId: 'app_integrator',
-  walletType: 'MERCHANT' as const,
-  merchantWalletType: MerchantWalletType.REPAYMENT,
-  name: 'Integrator Settlement',
-  currency: 'NGN',
-  balance: 0,
-  mainBalance: 0,
-  ledgerBalance: 0,
-  status: WalletStatus.ACTIVE,
-  createdAt: new Date(),
-  updatedAt: new Date()
-};
-
 const userWallet = {
   id: 'wallet_user_1',
   userId: 'user_1',
@@ -68,13 +52,10 @@ describe('WalletService.collectInvestmentPurchase', () => {
     jest.clearAllMocks();
   });
 
-  it('debits user principal and splits commission + creator principal hold', async () => {
+  it('debits principal + commission and credits offering commission only', async () => {
     mockedDb.findTransactionByExternalReferenceAndSource.mockResolvedValue(null);
     mockedDb.getUserWalletForMerchant.mockResolvedValue(userWallet);
-    mockedDb.getMerchantWalletByType.mockImplementation(async (_merchantId, _type, appId) => {
-      if (appId === 'app_spring') return offeringSettlement;
-      return integratorSettlement;
-    });
+    mockedDb.getMerchantWalletByType.mockResolvedValue(offeringSettlement);
     mockedDb.updateWalletBalance.mockResolvedValue(null);
     mockedDb.createTransaction.mockImplementation(async (input) => ({
       id: `tx_${input.referenceId}`,
@@ -83,20 +64,16 @@ describe('WalletService.collectInvestmentPurchase', () => {
       updatedAt: new Date()
     }));
     mockedDb.getWalletById.mockImplementation(async (id) => {
-      if (id === userWallet.id) return { ...userWallet, mainBalance: 4000 };
-      if (id === offeringSettlement.id) return { ...offeringSettlement, mainBalance: 10 };
-      return { ...integratorSettlement, mainBalance: 990 };
+      if (id === userWallet.id) return { ...userWallet, mainBalance: 3990 };
+      return { ...offeringSettlement, mainBalance: 10 };
     });
 
     const result = await WalletService.collectInvestmentPurchase({
       userId: 'user_1',
       offeringMerchantId: 'offering_merchant',
       offeringAppId: 'app_spring',
-      integratorMerchantId: 'integrator_merchant',
-      integratorAppId: 'app_integrator',
       principalAmount: 1000,
       commissionAmount: 10,
-      creatorPrincipalAmount: 990,
       referenceId: 'investment-ref-1',
       productId: 'product_1',
       applicationId: 'app_doc_1',
@@ -104,10 +81,10 @@ describe('WalletService.collectInvestmentPurchase', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(result.principalAmount).toBe(1000);
+    expect(result.totalUserDebit).toBe(1010);
     expect(mockedDb.updateWalletBalance).toHaveBeenCalledWith(userWallet.id, {
-      mainBalance: 4000,
-      ledgerBalance: 4000
+      mainBalance: 3990,
+      ledgerBalance: 3990
     });
     expect(mockedDb.createTransaction).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -116,11 +93,9 @@ describe('WalletService.collectInvestmentPurchase', () => {
         category: 'INVESTMENT_CHARGE'
       })
     );
-    expect(mockedDb.createTransaction).toHaveBeenCalledWith(
+    expect(mockedDb.createTransaction).not.toHaveBeenCalledWith(
       expect.objectContaining({
-        walletId: integratorSettlement.id,
-        amount: 990,
-        category: 'INVESTMENT_DEPOSIT'
+        referenceId: expect.stringContaining('principal-hold')
       })
     );
   });

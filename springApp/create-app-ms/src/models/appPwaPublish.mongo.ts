@@ -21,6 +21,8 @@ const AppPwaPublishSchema = new Schema(
   },
   {
     timestamps: false,
+    // Keep empty App Builder sections (e.g. support: {}) inside Mixed manifest JSON.
+    minimize: false,
     toJSON: {
       virtuals: true,
       transform: (_doc, ret: Record<string, unknown>) => {
