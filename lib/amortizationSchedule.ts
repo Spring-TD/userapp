@@ -29,6 +29,9 @@ export type AmortizationSchedule = {
   interestMethod?: string
   interestRate?: number | string
   rate?: number | string
+  repaymentStructure?: string
+  scheduleType?: string
+  repaymentFrequency?: string
   loanAmount?: number
   instalment?: number
   installment?: number
@@ -124,6 +127,9 @@ export function normalizeAmortizationSchedule(raw: unknown): AmortizationSchedul
     interestMethod: pickString(nested.interestMethod, nested.method),
     interestRate: pickRate(nested.interestRate, nested.rate, nested.annualRate),
     rate: pickRate(nested.rate, nested.interestRate),
+    repaymentStructure: pickString(nested.repaymentStructure, nested.repaymentSchedule, nested.structure),
+    scheduleType: pickString(nested.scheduleType, nested.amortizationScheduleType),
+    repaymentFrequency: pickString(nested.repaymentFrequency, nested.frequency),
     loanAmount: pickNumber(nested.loanAmount, nested.principal, nested.amount),
     instalment: pickNumber(nested.instalment, nested.installment, nested.monthlyInstalment, nested.monthlyInstallment),
     installment: pickNumber(nested.installment, nested.instalment),
@@ -217,6 +223,24 @@ export function interestPaidFromSchedule(schedule: AmortizationSchedule): number
     .reduce((sum, row) => sum + (typeof row.interest === 'number' ? row.interest : 0), 0)
 }
 
+export function humanizeScheduleToken(value?: string | null): string | null {
+  if (!value || !String(value).trim()) return null
+  return String(value)
+    .trim()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
+/** Prefer repaymentStructure, then scheduleType from the schedule payload. */
+export function resolveRepaymentStructureLabel(schedule?: AmortizationSchedule | null): string | null {
+  return (
+    humanizeScheduleToken(schedule?.repaymentStructure) ||
+    humanizeScheduleToken(schedule?.scheduleType)
+  )
+}
+
 export function buildScheduleSectionNote(
   schedule: AmortizationSchedule,
   options?: { interestRateLabel?: string | null; interestMethod?: string | null },
@@ -227,13 +251,15 @@ export function buildScheduleSectionNote(
     formatInterestRateLabel(schedule.interestRate ?? schedule.rate) || options?.interestRateLabel
   const methodRaw = schedule.interestMethod || options?.interestMethod || 'reducing balance'
   const method = String(methodRaw).replace(/[_-]+/g, ' ').toLowerCase()
+  const structure = resolveRepaymentStructureLabel(schedule)
+  const structureClause = structure ? ` using ${structure.toLowerCase()}` : ''
   const source = String(schedule.source || '').toLowerCase()
 
   if (source === 'confirmed') {
-    return `Confirmed repayment plan for a ${amount} loan${rate ? ` at ${rate} p.a.` : ''} on a ${method}.`
+    return `Confirmed repayment plan for a ${amount} loan${rate ? ` at ${rate} p.a.` : ''} on a ${method}${structureClause}.`
   }
 
-  return `Indicative repayment plan for a ${amount} loan${rate ? ` at ${rate} p.a.` : ''} on a ${method}. The final schedule is confirmed once the application is approved and disbursed.`
+  return `Indicative repayment plan for a ${amount} loan${rate ? ` at ${rate} p.a.` : ''} on a ${method}${structureClause}. The final schedule is confirmed once the application is approved and disbursed.`
 }
 
 export function isLoanDisbursedForSchedule(application: {
@@ -241,7 +267,10 @@ export function isLoanDisbursedForSchedule(application: {
   loanWorkflowStatus?: string | null
   postApprovalFulfillment?: { status?: string | null; disbursedAt?: string | null } | null
   amortizationSchedule?: AmortizationSchedule | null
+  disbursementDeferred?: boolean | null
 }): boolean {
+  if (application.disbursementDeferred === true) return false
+
   const status = String(application.status || '')
     .trim()
     .toLowerCase()
@@ -256,16 +285,18 @@ export function isLoanDisbursedForSchedule(application: {
     .replace(/[\s-]+/g, '_')
   const source = String(application.amortizationSchedule?.source || '').toLowerCase()
 
+  // Confirmed schedule is post-disburse only.
   if (source === 'confirmed') return true
   if (application.postApprovalFulfillment?.disbursedAt) return true
   if (pafStatus === 'disbursed' || pafStatus === 'loan_disbursed') return true
+  if (pafStatus.includes('disbursed') && !pafStatus.includes('awaiting')) return true
   if (workflow.includes('disbursed') && !workflow.includes('awaiting')) return true
   if (status.includes('disbursed') && !status.includes('awaiting')) return true
   if (['active', 'completed', 'successful'].includes(status) && workflow.includes('disburs')) return true
   return false
 }
 
-/** Show schedule section when a payload exists (indicative or confirmed) or loan is disbursed. */
+/** Show schedule only after disbursement — never for indicative pre-disburse previews. */
 export function shouldShowAmortizationSchedule(options: {
   isLoan: boolean
   schedule?: AmortizationSchedule | null
@@ -273,11 +304,10 @@ export function shouldShowAmortizationSchedule(options: {
     status?: string | null
     loanWorkflowStatus?: string | null
     postApprovalFulfillment?: { status?: string | null; disbursedAt?: string | null } | null
+    disbursementDeferred?: boolean | null
   } | null
 }): boolean {
-  if (!options.isLoan) return false
-  if (options.schedule) return true
-  if (!options.application) return false
+  if (!options.isLoan || !options.application) return false
   return isLoanDisbursedForSchedule({
     ...options.application,
     amortizationSchedule: options.schedule,

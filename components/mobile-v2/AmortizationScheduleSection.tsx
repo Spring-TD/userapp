@@ -9,8 +9,10 @@ import {
   formatInterestRateLabel,
   formatScheduleDate,
   formatScheduleMoney,
+  humanizeScheduleToken,
   interestPaidFromSchedule,
   isScheduleConfirmed,
+  resolveRepaymentStructureLabel,
   scheduleMonthlyInstalment,
   type AmortizationSchedule,
 } from '@/lib/amortizationSchedule'
@@ -77,6 +79,11 @@ export function AmortizationScheduleSection({
   const interestPaid = interestPaidFromSchedule(schedule)
   const periods = schedule.periods || []
   const confirmed = isScheduleConfirmed(schedule)
+  const repaymentStructure = resolveRepaymentStructureLabel(schedule)
+  const repaymentFrequency = humanizeScheduleToken(schedule.repaymentFrequency)
+  const interestMethodLabel = humanizeScheduleToken(
+    schedule.interestMethod || interestMethod || undefined,
+  )
 
   return (
     <section className={cn('space-y-4', className)}>
@@ -104,6 +111,35 @@ export function AmortizationScheduleSection({
           </Button>
         ) : null}
       </div>
+
+      {(repaymentStructure || interestMethodLabel || repaymentFrequency) ? (
+        <dl className="rounded-2xl border sf-border-subtle px-4">
+          {repaymentStructure ? (
+            <div className="flex items-start justify-between gap-4 border-b border-gray-100 py-3 last:border-0">
+              <dt className="text-xs text-gray-500">Repayment structure</dt>
+              <dd className="max-w-[58%] text-right text-xs font-semibold sf-text-ink">
+                {repaymentStructure}
+              </dd>
+            </div>
+          ) : null}
+          {interestMethodLabel ? (
+            <div className="flex items-start justify-between gap-4 border-b border-gray-100 py-3 last:border-0">
+              <dt className="text-xs text-gray-500">Interest method</dt>
+              <dd className="max-w-[58%] text-right text-xs font-semibold sf-text-ink">
+                {interestMethodLabel}
+              </dd>
+            </div>
+          ) : null}
+          {repaymentFrequency ? (
+            <div className="flex items-start justify-between gap-4 border-b border-gray-100 py-3 last:border-0">
+              <dt className="text-xs text-gray-500">Repayment frequency</dt>
+              <dd className="max-w-[58%] text-right text-xs font-semibold sf-text-ink">
+                {repaymentFrequency}
+              </dd>
+            </div>
+          ) : null}
+        </dl>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-2.5">
         <div className="rounded-2xl bg-[var(--sf-tint,#F4F6FB)] px-4 py-3.5">

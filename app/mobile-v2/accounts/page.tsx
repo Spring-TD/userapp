@@ -31,6 +31,7 @@ import {
 import {
     canTransferProductWalletToPrimary,
     productWalletAvailableBalance,
+    shouldShowTransferredToPrimary,
     withZeroProductWallet,
 } from '@/lib/productWalletTransfer';
 import { fetchApplicationById } from '@/lib/storefrontApplicationClient';
@@ -436,8 +437,7 @@ function ProductAccountCard({
                     ) : null}
                 </div>
             ) : (activeFilter === 'Loan' || activeFilter === 'Mortgage') &&
-              productBalance <= 0 &&
-              !statusLabel.toLowerCase().includes('pending') ? (
+              shouldShowTransferredToPrimary(application) ? (
                 <div className="mt-4" onClick={(event) => event.preventDefault()}>
                     <Button
                         type="button"

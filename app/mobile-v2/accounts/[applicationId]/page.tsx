@@ -13,6 +13,7 @@ import { useUserWallet } from '@/hooks/useUserWallet'
 import {
   canTransferProductWalletToPrimary,
   productWalletAvailableBalance,
+  shouldShowTransferredToPrimary,
   withZeroProductWallet,
 } from '@/lib/productWalletTransfer'
 import { resolveUserProductApplication } from '@/lib/services/productApplicationApi'
@@ -61,25 +62,6 @@ function statusBadgeTone(status?: string | null): string {
 
 function canTransferApplication(application: ProductApplication): boolean {
   return canTransferProductWalletToPrimary(application)
-}
-
-function wouldAllowTransferIfFunded(application: ProductApplication): boolean {
-  const type = String(application.productType || '').toUpperCase()
-  if (type === 'COMMODITY') return false
-  const status = normalizeStatus(application.status)
-  if (status.includes('reject') || status.includes('cancel') || status.includes('pending') || status.includes('draft')) {
-    return false
-  }
-  return (
-    status.includes('approv') ||
-    status.includes('disburs') ||
-    status.includes('active') ||
-    status.includes('complete') ||
-    type === 'SAVINGS' ||
-    type === 'INVESTMENT' ||
-    type === 'LOAN' ||
-    type === 'MORTGAGE'
-  )
 }
 
 function applicationUpdatedAt(application: ProductApplication): number {
@@ -293,10 +275,7 @@ export default function AccountDetailPage() {
               const balance = productWalletAvailableBalance(application)
               const transferable = Boolean(wallet?.userId && canTransferApplication(application))
               const showTransferredState =
-                Boolean(wallet?.userId) &&
-                wouldAllowTransferIfFunded(application) &&
-                !transferable &&
-                balance <= 0
+                Boolean(wallet?.userId) && shouldShowTransferredToPrimary(application)
               const statusLabel = formatStatusLabel(application.status)
               return (
                 <div key={application.id} className="rounded-2xl border sf-border-subtle px-4 py-4">
