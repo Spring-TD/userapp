@@ -1,30 +1,45 @@
 import { apiClient } from '@/lib/api'
 
-export type AmortizationPeriodStatus = 'paid' | 'due' | 'upcoming' | 'overdue' | string
+export type AmortizationPeriodStatus =
+  | 'pending'
+  | 'collecting'
+  | 'paid'
+  | 'failed'
+  | 'overdue'
+  | 'due'
+  | 'upcoming'
+  | string
 
 export type AmortizationPeriod = {
+  period?: number
   label?: string
   dueDate?: string
   payment?: number
   principal?: number
   interest?: number
+  fees?: number
   balance?: number
   status?: AmortizationPeriodStatus
   isNext?: boolean
+  paidAt?: string
 }
 
 export type AmortizationSchedule = {
   source?: 'indicative' | 'confirmed' | string
+  interestMethod?: string
+  interestRate?: number | string
+  rate?: number | string
   loanAmount?: number
   instalment?: number
   installment?: number
   totalInterest?: number
   totalRepayment?: number
   periodCount?: number
-  interestRate?: number | string
-  rate?: number | string
-  interestMethod?: string
   currency?: string
+  planStatus?: string
+  paidInstallmentCount?: number
+  outstandingAmount?: number
+  nextInstallmentNumber?: number
   periods?: AmortizationPeriod[]
 }
 
@@ -69,15 +84,19 @@ function pickRate(...vals: unknown[]): number | string | undefined {
 
 function normalizePeriod(raw: unknown, index: number): AmortizationPeriod {
   const row = asRecord(raw) ?? {}
+  const periodNumber = pickNumber(row.period, row.periodNumber, row.installmentNumber, index + 1)
   return {
-    label: pickString(row.label, row.title, row.name) || `Payment ${index + 1}`,
+    period: periodNumber,
+    label: pickString(row.label, row.title, row.name) || `Payment ${periodNumber ?? index + 1}`,
     dueDate: pickString(row.dueDate, row.due_date, row.date),
     payment: pickNumber(row.payment, row.amount, row.instalment, row.installment),
     principal: pickNumber(row.principal, row.principalAmount),
     interest: pickNumber(row.interest, row.interestAmount),
+    fees: pickNumber(row.fees, row.fee, row.feeAmount),
     balance: pickNumber(row.balance, row.remainingBalance, row.outstandingBalance),
     status: pickString(row.status) as AmortizationPeriodStatus | undefined,
     isNext: pickBoolean(row.isNext, row.next) === true,
+    paidAt: pickString(row.paidAt, row.paid_at, row.collectedAt),
   }
 }
 
@@ -96,24 +115,40 @@ export function normalizeAmortizationSchedule(raw: unknown): AmortizationSchedul
     ? periodsRaw.map((item, index) => normalizePeriod(item, index))
     : []
 
+  const paidFromPeriods = periods.filter(
+    (row) => String(row.status || '').toLowerCase() === 'paid',
+  ).length
+
   return {
     source: pickString(nested.source, nested.scheduleSource),
+    interestMethod: pickString(nested.interestMethod, nested.method),
+    interestRate: pickRate(nested.interestRate, nested.rate, nested.annualRate),
+    rate: pickRate(nested.rate, nested.interestRate),
     loanAmount: pickNumber(nested.loanAmount, nested.principal, nested.amount),
     instalment: pickNumber(nested.instalment, nested.installment, nested.monthlyInstalment, nested.monthlyInstallment),
     installment: pickNumber(nested.installment, nested.instalment),
     totalInterest: pickNumber(nested.totalInterest, nested.interestTotal),
     totalRepayment: pickNumber(nested.totalRepayment, nested.totalPayable, nested.totalAmount),
     periodCount: pickNumber(nested.periodCount, nested.periodsCount, nested.paymentCount) ?? periods.length,
-    interestRate: pickRate(nested.interestRate, nested.rate, nested.annualRate),
-    rate: pickRate(nested.rate, nested.interestRate),
-    interestMethod: pickString(nested.interestMethod, nested.method),
     currency: pickString(nested.currency) || 'NGN',
+    planStatus: pickString(nested.planStatus, nested.status),
+    paidInstallmentCount: pickNumber(nested.paidInstallmentCount, nested.paidCount) ?? paidFromPeriods,
+    outstandingAmount: pickNumber(nested.outstandingAmount, nested.outstanding, nested.amountOutstanding),
+    nextInstallmentNumber: pickNumber(nested.nextInstallmentNumber, nested.nextPeriod),
     periods,
   }
 }
 
 export function scheduleMonthlyInstalment(schedule: AmortizationSchedule): number | undefined {
-  return schedule.instalment ?? schedule.installment
+  const topLevel = schedule.instalment ?? schedule.installment
+  if (typeof topLevel === 'number' && Number.isFinite(topLevel)) return topLevel
+
+  // Some confirmed plans omit a constant instalment (variable EMI / bullet). Fall back to next or first period.
+  const periods = schedule.periods || []
+  const next = periods.find((row) => row.isNext === true)
+  const candidate = next?.payment ?? periods[0]?.payment
+  if (typeof candidate === 'number' && Number.isFinite(candidate)) return candidate
+  return undefined
 }
 
 export function formatScheduleMoney(amount: number | undefined | null, currency = 'NGN'): string {
@@ -138,6 +173,10 @@ export function formatScheduleDate(value?: string): string {
 
 export function isScheduleConfirmed(schedule?: AmortizationSchedule | null): boolean {
   return String(schedule?.source || '').toLowerCase() === 'confirmed'
+}
+
+export function isScheduleIndicative(schedule?: AmortizationSchedule | null): boolean {
+  return String(schedule?.source || '').toLowerCase() === 'indicative'
 }
 
 /** Prefer live schedule rate from GET application; fall back to product/catalog rate. */
@@ -170,14 +209,12 @@ export function formatInterestRateLabel(rate: unknown): string | null {
   return null
 }
 
-export function interestPaidFromSchedule(schedule: AmortizationSchedule): number | undefined {
+/** Interest paid so far — sum of paid period interest (0 when none paid yet). */
+export function interestPaidFromSchedule(schedule: AmortizationSchedule): number {
   const periods = schedule.periods || []
-  const paidInterest = periods
+  return periods
     .filter((row) => String(row.status || '').toLowerCase() === 'paid')
     .reduce((sum, row) => sum + (typeof row.interest === 'number' ? row.interest : 0), 0)
-  if (paidInterest > 0) return paidInterest
-  if (String(schedule.source || '').toLowerCase() === 'confirmed') return schedule.totalInterest
-  return schedule.totalInterest
 }
 
 export function buildScheduleSectionNote(
@@ -226,6 +263,25 @@ export function isLoanDisbursedForSchedule(application: {
   if (status.includes('disbursed') && !status.includes('awaiting')) return true
   if (['active', 'completed', 'successful'].includes(status) && workflow.includes('disburs')) return true
   return false
+}
+
+/** Show schedule section when a payload exists (indicative or confirmed) or loan is disbursed. */
+export function shouldShowAmortizationSchedule(options: {
+  isLoan: boolean
+  schedule?: AmortizationSchedule | null
+  application?: {
+    status?: string | null
+    loanWorkflowStatus?: string | null
+    postApprovalFulfillment?: { status?: string | null; disbursedAt?: string | null } | null
+  } | null
+}): boolean {
+  if (!options.isLoan) return false
+  if (options.schedule) return true
+  if (!options.application) return false
+  return isLoanDisbursedForSchedule({
+    ...options.application,
+    amortizationSchedule: options.schedule,
+  })
 }
 
 type ApiEnvelope<T> = {
