@@ -230,6 +230,11 @@ export default function AppliedProductDetailPage() {
   const isLoan = productType === 'LOAN'
   const isMortgage = productType === 'MORTGAGE'
   const scheduleApplication = detailApplication || (application ? toStorefrontApplication(application) : null)
+  const disbursementDeferred = Boolean(
+    (scheduleApplication as { disbursementDeferred?: boolean } | null)?.disbursementDeferred ||
+      (detailApplication as { disbursementDeferred?: boolean } | null)?.disbursementDeferred ||
+      (application as { disbursementDeferred?: boolean } | null)?.disbursementDeferred,
+  )
   const isDisbursed = Boolean(
     isLoan &&
       scheduleApplication &&
@@ -238,12 +243,15 @@ export default function AppliedProductDetailPage() {
         loanWorkflowStatus: scheduleApplication.loanWorkflowStatus,
         postApprovalFulfillment: scheduleApplication.postApprovalFulfillment,
         amortizationSchedule: schedule,
+        disbursementDeferred,
       }),
   )
   const showAmortization = shouldShowAmortizationSchedule({
     isLoan,
     schedule,
-    application: scheduleApplication,
+    application: scheduleApplication
+      ? { ...scheduleApplication, disbursementDeferred }
+      : null,
   })
 
   // After disburse, billing plan may backfill — poll application + schedule endpoint until confirmed.
@@ -380,6 +388,10 @@ export default function AppliedProductDetailPage() {
     scheduleApplication?.applicantName ||
     product?.description ||
     ''
+  // Backend keeps top-level status as APPROVED after disburse; prefer live fulfillment/schedule.
+  const displayStatus = isDisbursed
+    ? 'DISBURSED'
+    : String(application?.status || scheduleApplication?.status || '—')
 
   return (
     <MobileFlowShell title="Product details">
@@ -409,7 +421,7 @@ export default function AppliedProductDetailPage() {
                 <p className="mt-1 break-all text-sm font-semibold sf-text-ink">{application.id}</p>
               </div>
               <span className="sf-accent-soft shrink-0 rounded-full px-3 py-1 text-[10px] font-semibold uppercase sf-text-ink">
-                {application.status}
+                {displayStatus}
               </span>
             </div>
           </section>

@@ -39,6 +39,20 @@ export interface ProductApplication {
     status?: string
     disbursedAt?: string
   }
+  disbursementDeferred?: boolean
+  approval?: {
+    wallet?: {
+      balance?: number
+      mainBalance?: number
+      ledgerBalance?: number
+      currency?: string
+    }
+    disbursementDeferred?: boolean
+    postApprovalFulfillment?: {
+      status?: string
+      disbursedAt?: string
+    }
+  }
   createdAt?: string
   updatedAt?: string
 }
