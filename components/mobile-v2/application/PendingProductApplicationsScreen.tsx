@@ -54,7 +54,8 @@ function isPendingApplication(application: StorefrontApplication, kind: PendingK
 
   if (kind === 'loan') {
     const step = resolveLoanWorkflowStep(application)
-    if (step === 'declined' || step === 'loan_disbursed') return false
+    if (step === 'declined') return false
+    // Keep disbursed loans on My Loan so users can open the repayment schedule.
     return true
   }
 
@@ -210,8 +211,12 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreen
             <div className="rounded-2xl bg-red-50 px-4 py-6 text-center text-sm text-red-600">{error}</div>
           ) : pendingApplications.length === 0 ? (
             <div className="rounded-2xl bg-gray-50 px-4 py-8 text-center">
-              <p className="text-sm font-semibold text-gray-900">No pending {emptyLabel}</p>
-              <p className="mt-1 text-xs text-gray-500">Pending applications will appear here once you start an application.</p>
+              <p className="text-sm font-semibold text-gray-900">No {emptyLabel}</p>
+              <p className="mt-1 text-xs text-gray-500">
+                {kind === 'loan'
+                  ? 'Approved and disbursed loans will appear here once you start an application.'
+                  : 'Pending applications will appear here once you start an application.'}
+              </p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -249,6 +254,8 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreen
                     : loanCta
                 const detailHref = awaitingSubmit
                   ? resumeApplyHref
+                  : pendingReady && appKind === 'loan' && applicationId && loanStep === 'loan_disbursed'
+                    ? `/mobile-v2/accounts/${encodeURIComponent(applicationId)}/product`
                   : pendingReady && appKind === 'mortgage' && applicationId
                     ? mortgagePendingDetailHref(applicationId)
                     : pendingReady && appKind === 'loan' && applicationId
@@ -273,7 +280,13 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreen
                             {appKind}
                           </p>
                         ) : null}
-                        <p className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--sf-button,#1E40AF)]">
+                        <p
+                          className={`mt-2 text-[10px] font-semibold uppercase tracking-wide ${
+                            loanStep === 'loan_disbursed'
+                              ? 'text-emerald-700'
+                              : 'text-[var(--sf-button,#1E40AF)]'
+                          }`}
+                        >
                           Next: {nextStepLabel}
                         </p>
                         {awaitingSubmit ? (
@@ -290,7 +303,7 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreen
 
                     {detailHref || cta ? (
                       <div className="mt-4 flex gap-2">
-                        {detailHref && !awaitingSubmit ? (
+                        {detailHref && !awaitingSubmit && loanStep !== 'loan_disbursed' ? (
                           <Link
                             href={detailHref}
                             className="flex flex-1 items-center justify-center gap-1 rounded-full border border-gray-200 py-2.5 text-xs font-semibold text-gray-700"
@@ -305,6 +318,13 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreen
                             className="flex flex-1 items-center justify-center rounded-full bg-[var(--sf-button,#1E40AF)] py-2.5 text-xs font-semibold text-white"
                           >
                             {cta.label}
+                          </Link>
+                        ) : detailHref && loanStep === 'loan_disbursed' ? (
+                          <Link
+                            href={detailHref}
+                            className="flex flex-1 items-center justify-center rounded-full bg-[var(--sf-button,#1E40AF)] py-2.5 text-xs font-semibold text-white"
+                          >
+                            View repayment schedule
                           </Link>
                         ) : null}
                       </div>

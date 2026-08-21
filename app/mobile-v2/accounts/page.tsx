@@ -250,10 +250,22 @@ function getProductAccountDisplayStatus(application: ProductApplication): string
     const snapshot = commoditySnapshot(application)
     const holding = normalizeStatusToken(snapshot?.commodityHoldingStatus)
     const hasAccountNumber = Boolean(account?.accountNumber?.trim())
+    const pafStatus = normalizeStatusToken(
+        (application as { postApprovalFulfillment?: { status?: string } }).postApprovalFulfillment?.status,
+    )
+    const scheduleSource = normalizeStatusToken(
+        (application as { amortizationSchedule?: { source?: string } }).amortizationSchedule?.source,
+    )
 
     if (appStatus.includes('reject') || appStatus.includes('declin')) return 'Rejected'
     if (appStatus.includes('cancel')) return 'Cancelled'
-    if (appStatus.includes('disburs')) return 'Disbursed'
+    if (
+        appStatus.includes('disburs') ||
+        pafStatus.includes('disburs') ||
+        scheduleSource === 'confirmed'
+    ) {
+        return 'Disbursed'
+    }
     if (holding.includes('withdraw')) return 'Withdrawn'
 
     const provisionLive =

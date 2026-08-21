@@ -28,16 +28,25 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function fulfillment(application: StorefrontApplication): Record<string, unknown> {
-  return asRecord(application.postApprovalFulfillment) ?? {}
+  const raw = application as unknown as Record<string, unknown>
+  const top = asRecord(application.postApprovalFulfillment)
+  if (top) return top
+  const approval = asRecord(raw.approval)
+  const fromApproval = asRecord(approval?.postApprovalFulfillment)
+  if (fromApproval) return fromApproval
+  const snapshot = asRecord(raw.contractSnapshot)
+  const snapApproval = asRecord(snapshot?.approval)
+  return asRecord(snapApproval?.postApprovalFulfillment) ?? {}
 }
 
 function loanProgress(application: StorefrontApplication) {
   const raw = application as unknown as Record<string, unknown>
   const paf = fulfillment(application)
   const offer = asRecord(paf.offer)
-  const disbursement = asRecord(raw.loanDisbursement) ?? {}
+  const disbursement = asRecord(raw.loanDisbursement) ?? asRecord(paf.disbursement) ?? {}
   const nested = asRecord(disbursement.loanWorkflow) ?? disbursement
   const snapshot = asRecord(raw.contractSnapshot) ?? {}
+  const schedule = asRecord(raw.amortizationSchedule) ?? asRecord(application.amortizationSchedule)
   return {
     offerAcceptedAt: pickString(
       nested.offerAcceptedAt,
@@ -46,9 +55,19 @@ function loanProgress(application: StorefrontApplication) {
       paf.offerAcceptedAt,
     ),
     offerDeclinedAt: pickString(nested.offerDeclinedAt, snapshot.offerDeclinedAt, offer?.declinedAt),
-    disbursedAt: pickString(nested.disbursedAt, disbursement.disbursedAt, snapshot.disbursedAt, paf.disbursedAt),
+    disbursedAt: pickString(
+      nested.disbursedAt,
+      disbursement.disbursedAt,
+      snapshot.disbursedAt,
+      paf.disbursedAt,
+    ),
     pafStatus: normalize(typeof paf.status === 'string' ? paf.status : ''),
     stepId: normalize(typeof paf.currentWorkflowStepId === 'string' ? paf.currentWorkflowStepId : ''),
+    scheduleSource: normalize(typeof schedule?.source === 'string' ? schedule.source : ''),
+    disbursementDeferred:
+      paf.disbursementDeferred === true ||
+      raw.disbursementDeferred === true ||
+      asRecord(raw.approval)?.disbursementDeferred === true,
   }
 }
 
@@ -67,6 +86,7 @@ function isDeclined(application: StorefrontApplication): boolean {
 
 function isDisbursed(application: StorefrontApplication): boolean {
   const progress = loanProgress(application)
+  if (progress.scheduleSource === 'confirmed') return true
   if (progress.disbursedAt) return true
   if (progress.pafStatus === 'disbursed' || progress.pafStatus === 'loan_disbursed') return true
   if (progress.pafStatus.includes('disbursed') && !progress.pafStatus.includes('awaiting')) return true
@@ -87,18 +107,28 @@ function isDisbursed(application: StorefrontApplication): boolean {
   if (status.includes('disbursed') && !status.includes('awaiting')) return true
   if (workflow.includes('disbursed') && !workflow.includes('awaiting')) return true
 
+  // Deferred approvals stay on awaiting-disbursement even if a wallet row exists.
+  if (progress.disbursementDeferred) return false
+
   if (isOfferAccepted(application)) {
     if (['active', 'completed', 'successful'].includes(status)) return true
     if (['active', 'completed', 'successful'].includes(workflow)) return true
   }
 
   const walletBalance = Number(
-    application.productWallet?.upstreamAccount?.balance ?? application.account?.balance ?? NaN,
+    application.productWallet?.mainBalance ??
+      application.productWallet?.balance ??
+      application.productWallet?.upstreamAccount?.mainBalance ??
+      application.productWallet?.upstreamAccount?.balance ??
+      application.account?.balance ??
+      NaN,
   )
   return (
     Number.isFinite(walletBalance) &&
     walletBalance > 0 &&
-    isOfferAccepted(application)
+    isOfferAccepted(application) &&
+    progress.pafStatus !== 'offer_accepted' &&
+    progress.pafStatus !== 'offer_pending'
   )
 }
 
@@ -209,7 +239,7 @@ const STEP_META: Record<
     description: 'Your offer was accepted. Funds will be disbursed to your loan wallet shortly.',
   },
   loan_disbursed: {
-    title: 'Loan disbursed',
+    title: 'Disbursed',
     description: 'Your loan has been disbursed. Open product details to view your amortization schedule.',
     actionLabel: 'View repayment schedule',
   },
@@ -279,6 +309,12 @@ export function loanStepCta(
 
 export function loanNextStepLabel(application: StorefrontApplication): string {
   const step = resolveLoanWorkflowStep(application)
+  if (step === 'loan_disbursed') return 'Disbursed'
   const thread = buildLoanThread(step)
   return thread.find((item) => item.status === 'current')?.title ?? 'In progress'
+}
+
+/** True when backend PAF / confirmed schedule shows the loan is disbursed. */
+export function isLoanApplicationDisbursed(application: StorefrontApplication): boolean {
+  return isDisbursed(application)
 }
