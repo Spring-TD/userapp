@@ -12,7 +12,21 @@ import { resolveMortgagePropertyHeroImage } from '@/lib/mortgagePropertyTour'
 import { mortgageApplyChoosePaymentHref } from '@/lib/mortgageApplyRoutes'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
 import { ProductDetailsScreen } from '@/components/mobile-v2/application/ProductDetailsScreen'
-import { amountRange, feeSummary, formatNgn, poweredBy, rateLabel, requirementSummary } from '@/lib/mobileProductDetailDisplay'
+import {
+  amountRange,
+  feeSummary,
+  formatNgn,
+  mortgageEquityDisplay,
+  poweredBy,
+  propertyDocumentationLabels,
+  rateLabel,
+  requirementSummary,
+} from '@/lib/mobileProductDetailDisplay'
+import {
+  classifyEquityRequirementMode,
+  hasFixedMortgageFacility,
+  resolveMortgageFacilityAmount,
+} from '@/lib/mortgageWorkflow'
 
 function MortgageDetailInner() {
   const params = useParams()
@@ -63,61 +77,87 @@ function MortgageDetailInner() {
     )
   }
 
-  const amount = product?.propertyValue ?? null
   const property = detailProduct?.properties?.[0]
+  const facilityAmount = resolveMortgageFacilityAmount(detailProduct)
+  const fixedFacility = hasFixedMortgageFacility(detailProduct)
+  const equityMode = classifyEquityRequirementMode(detailProduct?.equityRequirement)
+  const equityLine = detailProduct ? mortgageEquityDisplay(detailProduct) : 'Not specified'
+  const listingValue = property?.value ?? detailProduct?.propertyValue ?? null
+  const availableDocuments = propertyDocumentationLabels(property?.propertyDocumentation)
+
+  const amountRows =
+    fixedFacility && facilityAmount != null
+      ? [{ label: 'Mortgage Amount', value: formatNgn(facilityAmount) }]
+      : detailProduct?.amountMin != null && detailProduct?.amountMax != null
+        ? [
+            { label: 'Minimum amount', value: formatNgn(detailProduct.amountMin) },
+            { label: 'Maximum amount', value: formatNgn(detailProduct.amountMax) },
+          ]
+        : [{ label: 'Mortgage Amount', value: amountRange(detailProduct!) }]
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-    <ProductDetailsScreen
-      key={productId}
-      kind="mortgage"
-      productId={productId}
-      initialTab={initialTab}
-      detailsOnly={detailsOnly}
-      title={product?.name || 'Mortgage'}
-      amount={detailProduct ? amountRange(detailProduct) : formatNgn(amount)}
-      description={
-        product?.description ||
-        'Explore this mortgage option tailored for your property goals. Review the key facts below before you apply.'
-      }
-      duration={product?.duration || '12 months'}
-      rate={detailProduct ? rateLabel(detailProduct) : product?.interestRate || '3% p.a'}
-      provider={lender}
-      imageUrl={imageUrl}
-      applyHref={product?.id ? mortgageApplyChoosePaymentHref(product.id) : '/mobile-v2/products/mortgage'}
-      backHref="/mobile-v2/products/mortgage"
-      detailRows={
-        detailProduct
-          ? [
-              { label: 'Property type', value: property?.propertyType || detailProduct.subType || 'Residential' },
-              { label: 'Mortgage type', value: detailProduct.subType || detailProduct.name },
-              ...(detailProduct.amountMin != null && detailProduct.amountMax != null
-                ? [
-                    { label: 'Minimum amount', value: formatNgn(detailProduct.amountMin) },
-                    { label: 'Maximum amount', value: formatNgn(detailProduct.amountMax) },
-                  ]
-                : [{ label: 'Loan amount', value: amountRange(detailProduct) }]),
-              { label: 'Loan Tenure', value: detailProduct.duration || 'Not specified' },
-              { label: 'Repayment Frequency', value: detailProduct.repaymentFrequency || 'Not specified' },
-              { label: 'Equity Contribution', value: detailProduct.equityContribution != null ? `${detailProduct.equityContribution}%` : 'Not specified' },
-              { label: 'Requirements', value: requirementSummary(detailProduct) },
-              { label: 'Fees & charges', value: feeSummary(detailProduct) },
-              { label: 'Interest Rate', value: rateLabel(detailProduct) },
-              { label: 'Powered by:', value: lender },
-            ]
-          : undefined
-      }
-      propertyRows={
-        detailProduct
-          ? [
-              { label: 'Property Name', value: property?.name || detailProduct.name },
-              { label: 'Property Type', value: property?.propertyType || 'Not specified' },
-              { label: 'Property Value', value: formatNgn(property?.value ?? detailProduct.propertyValue ?? null) },
-              { label: 'Location', value: property?.location || 'Not specified' },
-            ]
-          : undefined
-      }
-    />
+      <ProductDetailsScreen
+        key={productId}
+        kind="mortgage"
+        productId={productId}
+        initialTab={initialTab}
+        detailsOnly={detailsOnly}
+        title={product?.name || 'Mortgage'}
+        amount={detailProduct ? amountRange(detailProduct) : formatNgn(facilityAmount)}
+        description={
+          product?.description ||
+          'Explore this mortgage option tailored for your property goals. Review the key facts below before you apply.'
+        }
+        duration={product?.duration || '12 months'}
+        rate={detailProduct ? rateLabel(detailProduct) : product?.interestRate || '3% p.a'}
+        provider={lender}
+        imageUrl={imageUrl}
+        applyHref={product?.id ? mortgageApplyChoosePaymentHref(product.id) : '/mobile-v2/products/mortgage'}
+        backHref="/mobile-v2/products/mortgage"
+        detailRows={
+          detailProduct
+            ? [
+                {
+                  label: 'Property type',
+                  value: property?.propertyType || detailProduct.subType || 'Residential',
+                },
+                { label: 'Mortgage type', value: detailProduct.subType || detailProduct.name },
+                ...amountRows,
+                { label: 'Loan Tenure', value: detailProduct.duration || 'Not specified' },
+                {
+                  label: 'Repayment Frequency',
+                  value: detailProduct.repaymentFrequency || 'Not specified',
+                },
+                {
+                  label:
+                    equityMode === 'percentage' && detailProduct.equityContribution != null
+                      ? `Equity (${detailProduct.equityContribution}% of Mortgage Amount)`
+                      : 'Equity Contribution',
+                  value: equityLine,
+                },
+                { label: 'Requirements', value: requirementSummary(detailProduct) },
+                { label: 'Fees & charges', value: feeSummary(detailProduct) },
+                { label: 'Interest Rate', value: rateLabel(detailProduct) },
+                { label: 'Powered by:', value: lender },
+              ]
+            : undefined
+        }
+        propertyRows={
+          detailProduct
+            ? [
+                { label: 'Property Name', value: property?.name || detailProduct.name },
+                { label: 'Property Type', value: property?.propertyType || 'Not specified' },
+                {
+                  label: 'Property Value (optional)',
+                  value: listingValue != null ? formatNgn(listingValue) : 'Not specified',
+                },
+                { label: 'Location', value: property?.location || 'Not specified' },
+              ]
+            : undefined
+        }
+        availableDocuments={availableDocuments}
+      />
     </div>
   )
 }

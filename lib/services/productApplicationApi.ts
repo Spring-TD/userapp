@@ -22,9 +22,35 @@ function applicationIdOf(application: LooseApplication | null | undefined): stri
 /** Normalize Mongo-style `_id` onto `id` so list/detail lookups stay consistent. */
 function normalizeApplication(raw: LooseApplication): ProductApplication {
   const id = applicationIdOf(raw)
+  const loose = raw as LooseApplication & {
+    approval?: ProductApplication["approval"]
+    contractSnapshot?: { approval?: ProductApplication["approval"] }
+  }
+  const nestedPaf =
+    loose.postApprovalFulfillment ||
+    loose.approval?.postApprovalFulfillment ||
+    loose.contractSnapshot?.approval?.postApprovalFulfillment
+  const nestedDeferred =
+    loose.disbursementDeferred ??
+    loose.approval?.disbursementDeferred ??
+    loose.contractSnapshot?.approval?.disbursementDeferred
+
+  const productWallet =
+    loose.productWallet ||
+    (loose as { productWallet?: ProductApplication["productWallet"] }).productWallet ||
+    (loose as { productWallet?: ProductApplication["productWallet"] }).productWallet ||
+    (loose as { productWallet?: ProductApplication["productWallet"] }).productWallet
+
   return {
     ...raw,
     id: id || raw.id,
+    ...(nestedPaf && !loose.postApprovalFulfillment
+      ? { postApprovalFulfillment: nestedPaf }
+      : {}),
+    ...(nestedDeferred !== undefined && loose.disbursementDeferred === undefined
+      ? { disbursementDeferred: nestedDeferred }
+      : {}),
+    ...(productWallet && !loose.productWallet ? { productWallet } : {}),
   }
 }
 
@@ -214,8 +240,24 @@ export async function resolveUserProductApplication(
     const applications = list.applications
     const matchedFromList =
       applications.find((item) => matchProductApplicationId(item, targetId)) ?? byId.application
+    // Prefer list wallet/NUBAN when present, but keep by-id disbursement signals.
+    const application =
+      matchedFromList && byId.application && matchedFromList !== byId.application
+        ? {
+            ...matchedFromList,
+            postApprovalFulfillment:
+              byId.application.postApprovalFulfillment || matchedFromList.postApprovalFulfillment,
+            amortizationSchedule:
+              byId.application.amortizationSchedule || matchedFromList.amortizationSchedule,
+            loanWorkflowStatus:
+              byId.application.loanWorkflowStatus || matchedFromList.loanWorkflowStatus,
+            disbursementDeferred:
+              byId.application.disbursementDeferred ?? matchedFromList.disbursementDeferred,
+            approval: byId.application.approval || matchedFromList.approval,
+          }
+        : matchedFromList
     return {
-      application: matchedFromList,
+      application,
       applications: applications.length > 0 ? applications : [byId.application],
       error: null,
     }

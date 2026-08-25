@@ -66,6 +66,8 @@ type ProductDetailsScreenProps = {
   primaryActionHref?: string
   detailRows?: Array<{ label: string; value: React.ReactNode }>
   propertyRows?: Array<{ label: string; value: React.ReactNode }>
+  /** Declared title-doc types for the property tab (chips — not downloads). */
+  availableDocuments?: string[]
   applicationBlocked?: boolean
   applicationBlockedNote?: string
 }
@@ -129,7 +131,7 @@ function AccountSummaryCard({
   kind: DetailKind
   provider: string
   title: string
-  imageUrl: string
+  imageUrl?: string
   application?: StorefrontApplication | null
 }) {
   const account = getApplicationAccount(application)
@@ -286,6 +288,7 @@ function ProductPanel({
   primaryActionHref,
   detailRows,
   propertyRows,
+  availableDocuments,
   applicationBlocked,
   applicationBlockedNote,
 }: ProductDetailsScreenProps) {
@@ -339,12 +342,13 @@ function ProductPanel({
               ).map(([facility, value]) => (
                 <div
                   key={facility}
-                  className={`flex items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-sm font-medium shadow-sm ${BRAND_INK}`}
+                  className={`flex min-w-0 items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-sm font-medium shadow-sm ${BRAND_INK}`}
                 >
-                  <span>{facility}</span>
+                  <span className="shrink-0">{facility}</span>
                   <span
+                    title={typeof value === 'string' ? value : undefined}
                     className={cn(
-                      'shrink-0 rounded-full px-3 py-1 text-[10px] font-bold uppercase',
+                      'min-w-0 max-w-[62%] truncate rounded-full px-3 py-1 text-right text-[10px] font-bold uppercase',
                       String(value).toLowerCase() === 'yes'
                         ? 'bg-green-50 text-green-600'
                         : String(value).toLowerCase() === 'no'
@@ -358,6 +362,24 @@ function ProductPanel({
               ))}
             </div>
           </div>
+
+          {availableDocuments && availableDocuments.length > 0 ? (
+            <div>
+              <h2 className={`mb-3 text-sm font-bold uppercase tracking-wide ${BRAND_INK}`}>
+                Available documents
+              </h2>
+              <div className="flex flex-wrap gap-2">
+                {availableDocuments.map((label) => (
+                  <span
+                    key={label}
+                    className="rounded-full bg-white px-3 py-1.5 text-[11px] font-semibold text-[var(--sf-ink,#1E293B)] shadow-sm ring-1 ring-gray-100"
+                  >
+                    {label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : (
         <>
@@ -401,7 +423,7 @@ function ProductPanel({
                 <InfoRow label="Property type" value="Residential" />
                 <InfoRow label="Mortgage type" value="Fixed Rate" />
                 <InfoRow label="Loan Tenure" value="7years" />
-                <InfoRow label="Down payment" value="10%" />
+                <InfoRow label="Equity Contribution" value="See product details" />
                 <InfoRow label="Fees & charges" value="Nil" />
                 <InfoRow label="Interest Rate" value={rate} />
                 <InfoRow label="Powered by:" value={provider} />

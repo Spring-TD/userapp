@@ -38,12 +38,22 @@ function productFacts(
   currency: string,
   schedule?: AmortizationSchedule | null,
 ): Array<[string, string]> {
+  const isMortgage = String(product.type || '').toLowerCase() === 'mortgage'
+  const facility =
+    product.mortgageAmount != null
+      ? formatAmount(product.mortgageAmount, currency)
+      : product.amountMin != null &&
+          product.amountMax != null &&
+          product.amountMin === product.amountMax
+        ? formatAmount(product.amountMin, currency)
+        : null
   const amountRange =
-    product.amountMin != null || product.amountMax != null
+    facility ||
+    (product.amountMin != null || product.amountMax != null
       ? [formatAmount(product.amountMin, currency), formatAmount(product.amountMax, currency)]
           .filter(Boolean)
           .join(' – ')
-      : null
+      : null)
 
   const interestRate =
     resolveScheduleInterestRateLabel(schedule, product.interestRate) ||
@@ -56,7 +66,7 @@ function productFacts(
   return [
     ['Product type', product.type],
     ['Product category', product.subType || ''],
-    ['Amount range', amountRange || ''],
+    [isMortgage ? 'Mortgage Amount' : 'Amount range', amountRange || ''],
     ['Interest rate', interestRate],
     ['Interest method', interestMethod],
     ['Duration', product.duration || ''],

@@ -13,17 +13,46 @@ function pickFiniteNumber(...vals: unknown[]): number | undefined {
   return undefined
 }
 
-function approvalWallet(application: ProductApplication): Record<string, unknown> | null {
-  const raw = application as ProductApplication & {
-    approval?: { wallet?: unknown; disbursementDeferred?: unknown }
-    contractSnapshot?: { approval?: { wallet?: unknown; disbursementDeferred?: unknown } }
-    disbursementDeferred?: boolean
+/** Live product-application wallet from list/detail aliases — never approval.wallet. */
+function liveProductWalletRecord(source: unknown): Record<string, unknown> | null {
+  const src = asRecord(source)
+  if (!src) return null
+  const direct = asRecord(src.productWallet)
+  if (direct) return direct
+  for (const [key, value] of Object.entries(src)) {
+    const lower = key.toLowerCase()
+    if (!lower.includes('wallet')) continue
+    if (lower.includes('approval')) continue
+    const wallet = asRecord(value)
+    if (!wallet) continue
+    if (
+      wallet.balance != null ||
+      wallet.mainBalance != null ||
+      wallet.upstreamAccount != null ||
+      wallet.upstreamAccount != null ||
+      wallet.walletId != null ||
+      wallet.walletId != null
+    ) {
+      return wallet
+    }
   }
-  return (
-    asRecord(raw.approval?.wallet) ||
-    asRecord(raw.contractSnapshot?.approval?.wallet) ||
+  return null
+}
+
+function liveBalanceFromWalletRecord(wallet: Record<string, unknown> | null): number | null {
+  if (!wallet) return null
+  const upstream =
+    asRecord(wallet.upstreamAccount) ||
+    asRecord(wallet.upstreamAccount) ||
+    asRecord(wallet.upstreamAccount) ||
     null
+  const value = pickFiniteNumber(
+    wallet.mainBalance,
+    wallet.balance,
+    upstream?.mainBalance,
+    upstream?.balance,
   )
+  return value == null ? null : value
 }
 
 /** True when backend marks the loan/mortgage as disbursed (funds credited). */
@@ -74,36 +103,23 @@ export function isApplicationDisbursedForWallet(application: ProductApplication)
 }
 
 /**
- * Explicit product-wallet balances from list/detail payloads.
- * Returns null when balance fields are omitted (common on list endpoints).
+ * Live product-wallet balances from list/detail payloads.
+ * Returns null when balance fields are omitted.
+ * Never uses `approval.wallet` — that snapshot is the credit at approval and stays
+ * stale after transfer-to-primary.
  */
 export function explicitProductWalletBalance(application: ProductApplication): number | null {
-  const wallet = application.productWallet
-  const upstream = wallet?.upstreamAccount
-  const value = pickFiniteNumber(
-    wallet?.mainBalance,
-    wallet?.balance,
-    upstream?.mainBalance,
-    upstream?.balance,
-  )
-  return value == null ? null : value
+  const typed = liveBalanceFromWalletRecord(asRecord(application.productWallet))
+  if (typed != null) return typed
+  return liveBalanceFromWalletRecord(liveProductWalletRecord(application))
 }
 
 /**
  * Spendable balance on the product application wallet.
- * Never fall back to `application.amount` — that is the loan/product principal.
- * When list payloads omit wallet balances, fall back to approval.wallet for disbursed apps only.
+ * Never fall back to `application.amount` or `approval.wallet`.
  */
 export function productWalletAvailableBalance(application: ProductApplication): number {
-  const explicit = explicitProductWalletBalance(application)
-  if (explicit != null) return explicit
-
-  if (!isApplicationDisbursedForWallet(application)) return 0
-
-  const approved = approvalWallet(application)
-  return (
-    pickFiniteNumber(approved?.mainBalance, approved?.balance, approved?.ledgerBalance) ?? 0
-  )
+  return explicitProductWalletBalance(application) ?? 0
 }
 
 export function canTransferProductWalletToPrimary(
@@ -132,7 +148,8 @@ export function canTransferProductWalletToPrimary(
     return false
   }
 
-  return productWalletAvailableBalance(application) > 0
+  const live = explicitProductWalletBalance(application)
+  return live != null && live > 0
 }
 
 /**
@@ -158,10 +175,14 @@ export function shouldShowTransferredToPrimary(application: ProductApplication):
 
   if (type === 'LOAN' || type === 'MORTGAGE') {
     if (!isApplicationDisbursedForWallet(application)) return false
+    // List payloads omit live balances and keep a stale approval.wallet credit.
+    // No live productWallet balance (or 0) after disburse → already moved to primary.
+    return !canTransferProductWalletToPrimary(application)
   }
 
   if (canTransferProductWalletToPrimary(application)) return false
-  return productWalletAvailableBalance(application) <= 0
+  const live = explicitProductWalletBalance(application)
+  return live != null && live <= 0
 }
 
 /** Clear product-wallet balances after a successful transfer-to-primary. */
@@ -203,4 +224,75 @@ export function withZeroProductWallet(
         : upstream,
     },
   } as ProductApplication
+}
+
+/**
+ * Copy disbursement / schedule signals from a richer detail payload onto a list row.
+ * List endpoints often keep top-level status as APPROVED and omit PAF.
+ */
+export function mergeDisbursementSignals(
+  target: ProductApplication,
+  source: unknown,
+): ProductApplication {
+  const src = asRecord(source)
+  if (!src) return target
+
+  const srcApproval = asRecord(src.approval)
+  const srcContract = asRecord(src.contractSnapshot)
+  const srcContractApproval = asRecord(srcContract?.approval)
+
+  const paf =
+    asRecord(src.postApprovalFulfillment) ||
+    asRecord(srcApproval?.postApprovalFulfillment) ||
+    asRecord(srcContractApproval?.postApprovalFulfillment) ||
+    null
+
+  const schedule = asRecord(src.amortizationSchedule)
+  const workflow =
+    typeof src.loanWorkflowStatus === 'string' ? src.loanWorkflowStatus : undefined
+  const deferred =
+    typeof src.disbursementDeferred === 'boolean'
+      ? src.disbursementDeferred
+      : typeof srcApproval?.disbursementDeferred === 'boolean'
+        ? (srcApproval.disbursementDeferred as boolean)
+        : undefined
+
+  const nextApproval =
+    srcApproval || target.approval
+      ? {
+          ...(target.approval || {}),
+          ...(srcApproval || {}),
+          ...(paf && !asRecord(srcApproval?.postApprovalFulfillment)
+            ? { postApprovalFulfillment: paf }
+            : {}),
+        }
+      : target.approval
+
+  return {
+    ...target,
+    ...(paf
+      ? {
+          postApprovalFulfillment: {
+            ...(target.postApprovalFulfillment || {}),
+            status: typeof paf.status === 'string' ? paf.status : target.postApprovalFulfillment?.status,
+            disbursedAt:
+              typeof paf.disbursedAt === 'string'
+                ? paf.disbursedAt
+                : target.postApprovalFulfillment?.disbursedAt,
+          },
+        }
+      : {}),
+    ...(schedule ? { amortizationSchedule: { ...(target.amortizationSchedule || {}), ...schedule } } : {}),
+    ...(workflow ? { loanWorkflowStatus: workflow } : {}),
+    ...(deferred !== undefined ? { disbursementDeferred: deferred } : {}),
+    ...(nextApproval ? { approval: nextApproval as ProductApplication['approval'] } : {}),
+    ...(liveProductWalletRecord(src)
+      ? {
+          productWallet: {
+            ...target.productWallet,
+            ...(liveProductWalletRecord(src) as object),
+          } as ProductApplication['productWallet'],
+        }
+      : {}),
+  }
 }

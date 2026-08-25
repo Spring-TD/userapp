@@ -134,11 +134,18 @@ export function normalizePendingApprovedMortgageDetail(
     String(record.applicationId || application?.id || record.id || "").trim() || undefined
 
   const requiredFromNested = postApprovalFulfillment?.downPayment?.requiredAmount
+  const equityPayment = (record as Record<string, unknown>).equityPayment
+  const requiredFromEquityPayment =
+    equityPayment && typeof equityPayment === 'object'
+      ? (equityPayment as { requiredAmount?: number }).requiredAmount
+      : undefined
   const requiredAmount =
     typeof record.requiredAmount === "number"
       ? record.requiredAmount
       : typeof requiredFromNested === "number"
         ? requiredFromNested
+        : typeof requiredFromEquityPayment === "number"
+          ? requiredFromEquityPayment
         : typeof record.equityAmount === "number"
           ? record.equityAmount
           : undefined

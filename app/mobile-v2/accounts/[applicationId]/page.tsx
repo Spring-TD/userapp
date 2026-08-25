@@ -12,6 +12,8 @@ import { TransferToPrimaryDrawer } from '@/components/mobile-v2/TransferToPrimar
 import { useUserWallet } from '@/hooks/useUserWallet'
 import {
   canTransferProductWalletToPrimary,
+  isApplicationDisbursedForWallet,
+  mergeDisbursementSignals,
   productWalletAvailableBalance,
   shouldShowTransferredToPrimary,
   withZeroProductWallet,
@@ -48,14 +50,20 @@ function formatStatusLabel(status?: string | null): string {
     .join(' ')
 }
 
+/** Prefer Disbursed when PAF/schedule says so — top-level status often stays APPROVED. */
+function applicationDisplayStatus(application: ProductApplication): string {
+  if (isApplicationDisbursedForWallet(application)) return 'Disbursed'
+  return formatStatusLabel(application.status)
+}
+
 function statusBadgeTone(status?: string | null): string {
   const s = normalizeStatus(status)
   if (s.includes('pending') || s.includes('review') || s.includes('draft')) {
     return 'bg-orange-100 text-orange-700'
   }
   if (s.includes('active')) return 'bg-emerald-600 text-white'
-  if (s.includes('approved')) return 'bg-[var(--sf-button,#1E40AF)] text-white'
   if (s.includes('disburs') || s.includes('complete')) return 'bg-teal-600 text-white'
+  if (s.includes('approved')) return 'bg-[var(--sf-button,#1E40AF)] text-white'
   if (s.includes('reject') || s.includes('cancel')) return 'bg-red-100 text-red-700'
   return 'bg-slate-100 text-slate-700'
 }
@@ -90,13 +98,34 @@ export default function AccountDetailPage() {
     void Promise.all([
       resolveUserProductApplication(userId, applicationId),
       fetchApplicationById(applicationId),
-    ]).then(([resolved, byId]) => {
+    ]).then(async ([resolved, byId]) => {
       let application = resolved.application
-      if (application && byId.ok && byId.application?.productWallet) {
-        application = { ...application, productWallet: byId.application.productWallet }
+      if (application && byId.ok && byId.application) {
+        application = mergeDisbursementSignals(application, byId.application)
+        if (byId.application.productWallet) {
+          application = { ...application, productWallet: byId.application.productWallet }
+        }
       }
       setSelectedApplication(application)
-      setApplications(resolved.applications)
+
+      let list = resolved.applications
+      const needsEnrichment = list.filter((app) => {
+        const type = String(app.productType || '').toUpperCase()
+        if (type !== 'LOAN' && type !== 'MORTGAGE') return false
+        return !isApplicationDisbursedForWallet(app)
+      })
+      if (needsEnrichment.length > 0) {
+        const enriched = await Promise.all(
+          needsEnrichment.map(async (app) => {
+            const detail = await fetchApplicationById(app.id)
+            if (!detail.ok || !detail.application) return app
+            return mergeDisbursementSignals(app, detail.application)
+          }),
+        )
+        const byEnrichedId = new Map(enriched.map((app) => [app.id, app]))
+        list = list.map((app) => byEnrichedId.get(app.id) ?? app)
+      }
+      setApplications(list)
       setError(application ? null : resolved.error || 'Account record not found.')
     })
     void refetchWallet()
@@ -141,11 +170,40 @@ export default function AccountDetailPage() {
     setLoading(true)
     setError(null)
 
-    void resolveUserProductApplication(userId, applicationId).then((result) => {
+    void Promise.all([
+      resolveUserProductApplication(userId, applicationId),
+      fetchApplicationById(applicationId),
+    ]).then(async ([resolved, byId]) => {
       if (cancelled) return
-      setSelectedApplication(result.application)
-      setApplications(result.applications)
-      setError(result.application ? null : result.error || 'Account record not found.')
+      let application = resolved.application
+      if (application && byId.ok && byId.application) {
+        application = mergeDisbursementSignals(application, byId.application)
+        if (byId.application.productWallet) {
+          application = { ...application, productWallet: byId.application.productWallet }
+        }
+      }
+      setSelectedApplication(application)
+
+      let list = resolved.applications
+      const needsEnrichment = list.filter((app) => {
+        const type = String(app.productType || '').toUpperCase()
+        if (type !== 'LOAN' && type !== 'MORTGAGE') return false
+        return !isApplicationDisbursedForWallet(app)
+      })
+      if (needsEnrichment.length > 0) {
+        const enriched = await Promise.all(
+          needsEnrichment.map(async (app) => {
+            const detail = await fetchApplicationById(app.id)
+            if (!detail.ok || !detail.application) return app
+            return mergeDisbursementSignals(app, detail.application)
+          }),
+        )
+        if (cancelled) return
+        const byEnrichedId = new Map(enriched.map((app) => [app.id, app]))
+        list = list.map((app) => byEnrichedId.get(app.id) ?? app)
+      }
+      setApplications(list)
+      setError(application ? null : resolved.error || 'Account record not found.')
       setLoading(false)
     })
 
@@ -276,7 +334,7 @@ export default function AccountDetailPage() {
               const transferable = Boolean(wallet?.userId && canTransferApplication(application))
               const showTransferredState =
                 Boolean(wallet?.userId) && shouldShowTransferredToPrimary(application)
-              const statusLabel = formatStatusLabel(application.status)
+              const statusLabel = applicationDisplayStatus(application)
               return (
                 <div key={application.id} className="rounded-2xl border sf-border-subtle px-4 py-4">
                   <div className="flex items-start justify-between gap-3">
@@ -289,7 +347,7 @@ export default function AccountDetailPage() {
                       </p>
                     </div>
                     <span
-                      className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase ${statusBadgeTone(application.status)}`}
+                      className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase ${statusBadgeTone(statusLabel)}`}
                     >
                       {statusLabel}
                     </span>

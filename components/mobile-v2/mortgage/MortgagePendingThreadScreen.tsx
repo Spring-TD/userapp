@@ -245,10 +245,6 @@ export function MortgagePendingThreadScreen({
     [liveApplication, product, springTourProduct],
   )
 
-  const propertyValue =
-    product?.properties?.[0]?.value ?? product?.propertyValue ?? product?.amountMax ?? liveApplication.amount
-  const downPaymentPercent = product?.equityContribution ?? 10
-
   const openStepModal = useCallback(
     (step = currentStep) => {
       if (step === 'virtual_tour' || step === 'virtual_inspection') {
@@ -406,8 +402,6 @@ export function MortgagePendingThreadScreen({
         applicationId={applicationId}
         productId={productId}
         product={product}
-        propertyValue={propertyValue}
-        downPaymentPercent={downPaymentPercent}
         onStepAdvanced={refreshWorkflow}
       />
     </>

@@ -30,6 +30,8 @@ import {
 } from '@/lib/commodityApi';
 import {
     canTransferProductWalletToPrimary,
+    isApplicationDisbursedForWallet,
+    mergeDisbursementSignals,
     productWalletAvailableBalance,
     shouldShowTransferredToPrimary,
     withZeroProductWallet,
@@ -145,17 +147,17 @@ function provisionStatusTone(status?: string | null): string {
         return 'bg-emerald-600 text-white'
     }
 
-    // Merchant-approved application (not the same stage as Active)
-    if (normalized.includes('approved')) {
-        return 'bg-[var(--sf-button,#1E40AF)] text-white'
-    }
-
     if (
         normalized.includes('disbursed') ||
         normalized.includes('successful') ||
         normalized.includes('completed')
     ) {
         return 'bg-teal-600 text-white'
+    }
+
+    // Merchant-approved application (not the same stage as Active)
+    if (normalized.includes('approved')) {
+        return 'bg-[var(--sf-button,#1E40AF)] text-white'
     }
 
     if (normalized.includes('reject') || normalized.includes('cancel') || normalized.includes('withdraw')) {
@@ -251,20 +253,11 @@ function getProductAccountDisplayStatus(application: ProductApplication): string
     const snapshot = commoditySnapshot(application)
     const holding = normalizeStatusToken(snapshot?.commodityHoldingStatus)
     const hasAccountNumber = Boolean(account?.accountNumber?.trim())
-    const pafStatus = normalizeStatusToken(
-        (application as { postApprovalFulfillment?: { status?: string } }).postApprovalFulfillment?.status,
-    )
-    const scheduleSource = normalizeStatusToken(
-        (application as { amortizationSchedule?: { source?: string } }).amortizationSchedule?.source,
-    )
 
     if (appStatus.includes('reject') || appStatus.includes('declin')) return 'Rejected'
     if (appStatus.includes('cancel')) return 'Cancelled'
-    if (
-        appStatus.includes('disburs') ||
-        pafStatus.includes('disburs') ||
-        scheduleSource === 'confirmed'
-    ) {
+    // Backend keeps top-level status APPROVED after disburse; check PAF / confirmed schedule.
+    if (isApplicationDisbursedForWallet(application)) {
         return 'Disbursed'
     }
     if (holding.includes('withdraw')) return 'Withdrawn'
@@ -557,11 +550,33 @@ export default function AccountsPage() {
         setApplicationsLoading(true);
         setApplicationsError(null);
 
-        void fetchUserProductApplications(userId, approvedListParams).then((result) => {
+        void fetchUserProductApplications(userId, approvedListParams).then(async (result) => {
             if (cancelled) return;
             setApplications(result.applications);
             setApplicationsError(result.error);
             setApplicationsLoading(false);
+
+            // List rows often keep status APPROVED; hydrate PAF/schedule for loan/mortgage badges.
+            const needsEnrichment = result.applications.filter((app) => {
+                const type = String(app.productType || '').toUpperCase();
+                if (type !== 'LOAN' && type !== 'MORTGAGE') return false;
+                return !isApplicationDisbursedForWallet(app);
+            });
+            if (needsEnrichment.length === 0) return;
+
+            const enriched = await Promise.all(
+                needsEnrichment.map(async (app) => {
+                    const byId = await fetchApplicationById(app.id);
+                    if (!byId.ok || !byId.application) return app;
+                    return mergeDisbursementSignals(app, byId.application);
+                }),
+            );
+            if (cancelled) return;
+
+            const byEnrichedId = new Map(enriched.map((app) => [app.id, app]));
+            setApplications((prev) =>
+                prev.map((app) => byEnrichedId.get(app.id) ?? app),
+            );
         });
 
         return () => {
@@ -572,9 +587,28 @@ export default function AccountsPage() {
     const reloadApplications = useCallback(() => {
         const userId = wallet?.userId;
         if (!userId || !appId) return;
-        void fetchUserProductApplications(userId, approvedListParams).then((result) => {
+        void fetchUserProductApplications(userId, approvedListParams).then(async (result) => {
             setApplications(result.applications);
             setApplicationsError(result.error);
+
+            const needsEnrichment = result.applications.filter((app) => {
+                const type = String(app.productType || '').toUpperCase();
+                if (type !== 'LOAN' && type !== 'MORTGAGE') return false;
+                return !isApplicationDisbursedForWallet(app);
+            });
+            if (needsEnrichment.length === 0) return;
+
+            const enriched = await Promise.all(
+                needsEnrichment.map(async (app) => {
+                    const byId = await fetchApplicationById(app.id);
+                    if (!byId.ok || !byId.application) return app;
+                    return mergeDisbursementSignals(app, byId.application);
+                }),
+            );
+            const byEnrichedId = new Map(enriched.map((app) => [app.id, app]));
+            setApplications((prev) =>
+                prev.map((app) => byEnrichedId.get(app.id) ?? app),
+            );
         });
         void fetchApprovedAmountSummary(userId, appId).then((result) => {
             setApprovedSummary(result.summary);
