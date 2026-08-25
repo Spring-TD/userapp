@@ -23,7 +23,14 @@ export interface MobileProduct {
   withdrawalFlexibility?: string
   amountMin?: number
   amountMax?: number
+  /** fixed_amount | percentage_based | zero_down (and label variants). */
+  equityRequirement?: string
   equityContribution?: number
+  /** MORTGAGE facility base (`structure.mortgageAmount`). */
+  mortgageAmount?: number
+  /** From `calculatedConfig.mortgage` when present. */
+  estimatedDownPayment?: number
+  estimatedFinancedAmount?: number
   propertyValue?: number
   price?: number
   minimumQuantity?: number
@@ -67,6 +74,8 @@ export interface ProductProperty {
   propertyDescription?: string
   videoUrl?: string
   imageUrls?: string[]
+  /** Declared title-doc types only (no file URLs). */
+  propertyDocumentation?: { documentType: string }[]
 }
 
 const TYPE_TO_UI: Record<string, StorefrontProductType> = {
@@ -227,6 +236,15 @@ function mapProperties(value: unknown): ProductProperty[] {
   return value.map((item) => {
     const row = asRecord(item)
     const imageUrls = collectPropertyImageUrls(row)
+    const propertyDocumentation = Array.isArray(row.propertyDocumentation)
+      ? row.propertyDocumentation
+          .map((doc) => {
+            const docRow = asRecord(doc)
+            const documentType = asString(docRow.documentType)
+            return documentType ? { documentType } : null
+          })
+          .filter(Boolean) as { documentType: string }[]
+      : []
     return {
       name: asString(row.name),
       propertyType: asString(row.propertyType ?? row.type),
@@ -235,6 +253,7 @@ function mapProperties(value: unknown): ProductProperty[] {
       propertyDescription: asString(row.propertyDescription ?? row.description),
       videoUrl: asString(row.videoUrl),
       ...(imageUrls.length ? { imageUrls } : {}),
+      ...(propertyDocumentation.length ? { propertyDocumentation } : {}),
     }
   })
 }
@@ -338,6 +357,11 @@ export function mapApiProductToMobileProduct(row: Record<string, unknown>): Mobi
   const merchantFeeAdditions = asRecord(row.merchantFeeAdditions)
 
   const loanAmount = asRange(structure.loanAmount)
+  const calculatedMortgage = asRecord(asRecord(row.calculatedConfig).mortgage)
+  const mortgageFacility =
+    asNumber(structure.mortgageAmount) ?? asNumber(calculatedMortgage.mortgageAmount)
+  const estimatedDownPayment = asNumber(calculatedMortgage.estimatedDownPayment)
+  const estimatedFinancedAmount = asNumber(calculatedMortgage.estimatedFinancedAmount)
   const investmentAmount = asRange(structure.investmentAmount)
   const savingsAmount = asRange(structure.savingsAmount)
   const unitPrice =
@@ -377,7 +401,9 @@ export function mapApiProductToMobileProduct(row: Record<string, unknown>): Mobi
     firstNamedDescription(about.commodityTypes) ||
     {}
   const amountRange =
-    loanAmount.min != null || loanAmount.max != null
+    mortgageFacility != null
+      ? { min: mortgageFacility, max: mortgageFacility }
+      : loanAmount.min != null || loanAmount.max != null
       ? loanAmount
       : investmentAmount.min != null || investmentAmount.max != null
         ? investmentAmount
@@ -430,9 +456,16 @@ export function mapApiProductToMobileProduct(row: Record<string, unknown>): Mobi
           ? row.unitOfMeasure
           : undefined,
     propertyValue:
-      typeof structure.propertyValue === "number" ? structure.propertyValue : undefined,
+      asNumber(structure.propertyValue) ??
+      mappedProperties.find((p) => p.value != null)?.value ??
+      undefined,
+    equityRequirement:
+      asString(row.equityRequirement) ?? asString(structure.equityRequirement),
     equityContribution:
       asNumber(row.equityContribution) ?? asNumber(structure.equityContribution),
+    mortgageAmount: mortgageFacility,
+    estimatedDownPayment,
+    estimatedFinancedAmount,
     minimumQuantity:
       minimumQuantity,
     unitAmount: asNumber(unitAmount.amount ?? structure.unitAmount),
@@ -457,14 +490,23 @@ export function mapApiProductToMobileProduct(row: Record<string, unknown>): Mobi
     properties: mappedProperties,
     createdAt: String(row.createdAt ?? ""),
     updatedAt: String(row.updatedAt ?? ""),
-    ...(loanAmount.max != null ? { propertyValue: loanAmount.max } : {}),
-    ...(investmentAmount.min != null && loanAmount.max == null
-      ? { propertyValue: investmentAmount.min }
-      : {}),
-    ...(savingsAmount.min != null && loanAmount.max == null && investmentAmount.min == null
-      ? { propertyValue: savingsAmount.min }
-      : {}),
-    ...(asNumber(row.propertyValue) != null ? { propertyValue: asNumber(row.propertyValue) } : {}),
+    // Only fall back to loan/investment/savings ranges when no real property value exists.
+    // Never overwrite mortgage propertyValue with loanAmount.max (that forced fake 10% → ₦500k).
+    ...((() => {
+      const hasPropertyValue =
+        asNumber(structure.propertyValue) != null ||
+        mappedProperties.some((p) => p.value != null) ||
+        asNumber(row.propertyValue) != null
+      if (hasPropertyValue) {
+        return asNumber(row.propertyValue) != null
+          ? { propertyValue: asNumber(row.propertyValue) }
+          : {}
+      }
+      if (loanAmount.max != null) return { propertyValue: loanAmount.max }
+      if (investmentAmount.min != null) return { propertyValue: investmentAmount.min }
+      if (savingsAmount.min != null) return { propertyValue: savingsAmount.min }
+      return {}
+    })()),
   }
 
   return mapped

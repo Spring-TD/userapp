@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeletons';
 import { loanApplyStartHref, loanProductApplyDetailHref } from '@/lib/loanApplyRoutes';
 import { mortgageProductApplyDetailHref } from '@/lib/mortgageApplyRoutes';
-import { amountRange, formatNgn, poweredBy, rateLabel } from '@/lib/mobileProductDetailDisplay';
+import { amountRange, formatNgn, mortgageEquityDisplay, poweredBy, rateLabel } from '@/lib/mobileProductDetailDisplay';
 import {
     blocksAnotherApplication,
     doesApplicationMatchProduct,
@@ -307,6 +307,7 @@ export function FeaturedMortgageCard({ product, disabled }: { product: MobilePro
     const imageStyle = productImageBackgroundStyle(resolveProductDisplayImage(product));
     const [slide, setSlide] = React.useState(0);
     const price = amountRange(product);
+    const equityLine = mortgageEquityDisplay(product);
     const provider = poweredBy(displayName || undefined);
 
     return (
@@ -322,11 +323,15 @@ export function FeaturedMortgageCard({ product, disabled }: { product: MobilePro
             <div className="p-4">
                 <div className="mb-1 flex items-start justify-between gap-2">
                     <h3 className="line-clamp-1 text-base font-bold text-[var(--sf-ink,#1E1B4B)]">{product.name}</h3>
-                    <span className="shrink-0 text-right text-sm font-bold text-[var(--sf-ink,#1E1B4B)]">{price}</span>
+                    <div className="shrink-0 text-right">
+                        <p className="text-[9px] font-medium uppercase tracking-wide text-gray-400">Mortgage Amount</p>
+                        <span className="text-sm font-bold text-[var(--sf-ink,#1E1B4B)]">{price}</span>
+                    </div>
                 </div>
-                <p className="mb-4 line-clamp-2 text-[11px] leading-relaxed text-gray-500">
+                <p className="mb-2 line-clamp-2 text-[11px] leading-relaxed text-gray-500">
                     {product.description || 'Explore competitive rates and flexible repayment on this mortgage.'}
                 </p>
+                <p className="mb-4 text-[10px] font-semibold text-[var(--sf-button,#1E40AF)]">{equityLine}</p>
                 <div className="mb-4 flex gap-6 text-xs text-gray-700">
                     <div className="flex items-center gap-1.5">
                         <Calendar className="h-3.5 w-3.5 text-[var(--sf-primary,#2563EB)]" />
@@ -368,6 +373,7 @@ export function MortgageProductCard({ product, compact, disabled }: { product: M
     const detailHref = mortgageProductApplyDetailHref(product.id);
     const imageStyle = productImageBackgroundStyle(resolveProductDisplayImage(product));
     const imgH = compact ? 'h-[100px]' : 'h-[140px]';
+    const equityLine = mortgageEquityDisplay(product);
 
     return (
         <div className={cn('min-w-0 overflow-hidden border border-gray-100 bg-white shadow-sm', compact ? 'rounded-[18px] p-2.5' : 'rounded-[20px] p-3')}>
@@ -380,10 +386,14 @@ export function MortgageProductCard({ product, compact, disabled }: { product: M
                 {!compact && (
                     <p className="line-clamp-2 text-[10px] text-gray-500">{product.description}</p>
                 )}
-                <div className={cn('font-bold text-[var(--sf-ink,#1E1B4B)]', compact ? 'break-words text-[11px] leading-tight' : 'text-xs')}>
-                    {amountRange(product)}
+                <div>
+                    <p className="text-[9px] font-medium uppercase tracking-wide text-gray-400">Mortgage Amount</p>
+                    <div className={cn('font-bold text-[var(--sf-ink,#1E1B4B)]', compact ? 'break-words text-[11px] leading-tight' : 'text-xs')}>
+                        {amountRange(product)}
+                    </div>
                 </div>
-                <div className="text-[10px] font-semibold text-[var(--sf-button,#1E40AF)]">{rateLabel(product)}</div>
+                <div className="text-[10px] font-semibold text-[var(--sf-button,#1E40AF)]">{equityLine}</div>
+                <div className="text-[10px] font-semibold text-gray-500">{rateLabel(product)}</div>
                 <Link href={detailHref}>
                     <Button
                         className={cn(

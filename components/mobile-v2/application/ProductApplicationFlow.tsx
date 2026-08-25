@@ -47,6 +47,10 @@ import {
   validateApplicationAmount,
 } from '@/lib/applicationAmount'
 import {
+  hasFixedMortgageFacility,
+  resolveMortgageFacilityAmount,
+} from '@/lib/mortgageWorkflow'
+import {
   collectRequirementStepIssues,
   validateCollateralRequirements,
   validateFileUploadStep,
@@ -175,6 +179,8 @@ function buildMortgageSelectionPayload(
   total: number,
 ): Record<string, unknown> {
   const property = product?.properties?.[0]
+  // Apply amount / facility is Mortgage Amount — listing price is optional metadata only.
+  const facility = resolveMortgageFacilityAmount(product) ?? total
   const unitPrice =
     (typeof property?.value === 'number' && Number.isFinite(property.value) && property.value > 0
       ? property.value
@@ -182,7 +188,7 @@ function buildMortgageSelectionPayload(
     (typeof product?.propertyValue === 'number' && product.propertyValue > 0
       ? product.propertyValue
       : null) ??
-    total
+    facility
   const start = new Date()
   const startDate = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`
   const tenureRaw = String(product?.duration || '').trim()
@@ -195,7 +201,7 @@ function buildMortgageSelectionPayload(
     quantity: 1,
     startDate,
     investmentPeriod,
-    total,
+    total: facility,
     ...(property?.location?.trim()
       ? { metadata: { location: property.location.trim() } }
       : {}),
@@ -262,6 +268,7 @@ function InputPill({
   type = 'text',
   inputMode,
   autoComplete,
+  readOnly,
 }: {
   placeholder: string
   right?: React.ReactNode
@@ -270,17 +277,24 @@ function InputPill({
   type?: React.HTMLInputTypeAttribute
   inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode']
   autoComplete?: string
+  readOnly?: boolean
 }) {
   return (
-    <label className="flex h-12 items-center justify-between rounded-2xl bg-gray-100 px-4 ring-[var(--sf-button,#1E40AF)]/20 focus-within:ring-2">
+    <label
+      className={cn(
+        'flex h-12 items-center justify-between rounded-2xl bg-gray-100 px-4 ring-[var(--sf-button,#1E40AF)]/20 focus-within:ring-2',
+        readOnly && 'opacity-90',
+      )}
+    >
       <input
         type={type}
         inputMode={inputMode}
         autoComplete={autoComplete}
         value={value}
+        readOnly={readOnly}
         onChange={(e) => onChange?.(e.target.value)}
         placeholder={placeholder}
-        className={`min-w-0 flex-1 bg-transparent text-[12px] placeholder:text-gray-400 focus:outline-none ${BRAND_INK}`}
+        className={`min-w-0 flex-1 bg-transparent text-[12px] placeholder:text-gray-400 focus:outline-none ${BRAND_INK} ${readOnly ? 'cursor-default' : ''}`}
       />
       {right}
     </label>
@@ -931,6 +945,22 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     productId,
     enabled: Boolean(productId),
   })
+  const mortgageFacilityFixed = kind === 'mortgage' && hasFixedMortgageFacility(catalogProduct)
+  const mortgageFacilityAmount = resolveMortgageFacilityAmount(catalogProduct)
+  const amountBounds = useMemo(() => {
+    if (mortgageFacilityFixed && mortgageFacilityAmount != null) {
+      return { min: mortgageFacilityAmount, max: mortgageFacilityAmount }
+    }
+    return {
+      min: catalogProduct?.amountMin ?? null,
+      max: catalogProduct?.amountMax ?? null,
+    }
+  }, [
+    mortgageFacilityFixed,
+    mortgageFacilityAmount,
+    catalogProduct?.amountMin,
+    catalogProduct?.amountMax,
+  ])
   const parsedApplicationAmount = parseApplicationAmount(applicationAmount)
   const productType = kind === 'loan' ? 'LOAN' : 'MORTGAGE'
   const { fields: platformFieldCatalog, optionsByPath, loading: platformFieldsLoading } =
@@ -1046,23 +1076,30 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
         }
         const seeded = defaultApplicationAmountValue(
           initializedApplication?.amount,
-          catalogProduct?.amountMin,
+          amountBounds.min,
         )
         if (seeded) setApplicationAmount(seeded)
       }
     }
     setDraftHydrated(true)
-  }, [draftHydrated, currentDraftKey, steps, applicationProgressKey, initializedApplication?.amount, catalogProduct?.amountMin])
+  }, [draftHydrated, currentDraftKey, steps, applicationProgressKey, initializedApplication?.amount, amountBounds.min])
 
   // Seed amount once when catalog/min arrives late — never while the user is editing / clearing.
   useEffect(() => {
     if (!draftHydrated || amountTouchedRef.current || applicationAmount.trim()) return
     const seeded = defaultApplicationAmountValue(
-      initializedApplication?.amount,
-      catalogProduct?.amountMin,
+      initializedApplication?.amount ?? (mortgageFacilityFixed ? mortgageFacilityAmount : null),
+      amountBounds.min,
     )
     if (seeded) setApplicationAmount(seeded)
-  }, [draftHydrated, initializedApplication?.amount, catalogProduct?.amountMin, applicationAmount])
+  }, [
+    draftHydrated,
+    initializedApplication?.amount,
+    amountBounds.min,
+    applicationAmount,
+    mortgageFacilityFixed,
+    mortgageFacilityAmount,
+  ])
 
   const scrollToFeedback = () => {
     feedbackRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -1072,8 +1109,8 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
     if (step === 'requirement') {
       return collectRequirementStepIssues({
         applicationAmount,
-        amountMin: catalogProduct?.amountMin,
-        amountMax: catalogProduct?.amountMax,
+        amountMin: amountBounds.min,
+        amountMax: amountBounds.max,
         platformFields,
         employment: employmentDraft,
         otherRequirements: [],
@@ -1216,8 +1253,8 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
 
     const validationError = validateApplicationAmount(
       parsed,
-      catalogProduct?.amountMin,
-      catalogProduct?.amountMax,
+      amountBounds.min,
+      amountBounds.max,
     )
     if (validationError) {
       setError(validationError)
@@ -1324,8 +1361,8 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
 
     const requirementIssues = collectRequirementStepIssues({
       applicationAmount,
-      amountMin: catalogProduct?.amountMin,
-      amountMax: catalogProduct?.amountMax,
+      amountMin: amountBounds.min,
+      amountMax: amountBounds.max,
       platformFields,
       employment: employmentDraft,
         otherRequirements: requirementRows,
@@ -1704,8 +1741,8 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
 
     const validationError = validateApplicationAmount(
       parsed,
-      catalogProduct?.amountMin,
-      catalogProduct?.amountMax,
+      amountBounds.min,
+      amountBounds.max,
     )
     if (validationError) {
       setCreateAccountError(validationError)
@@ -1808,9 +1845,16 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
               <SectionTitle>{kind === 'loan' ? 'Loan amount' : 'Mortgage amount'}</SectionTitle>
               <div className="space-y-2">
                 <InputPill
-                  placeholder={kind === 'loan' ? 'Amount to borrow' : 'Amount to apply for'}
+                  placeholder={
+                    kind === 'loan'
+                      ? 'Amount to borrow'
+                      : mortgageFacilityFixed
+                        ? 'Mortgage Amount (fixed)'
+                        : 'Amount to apply for'
+                  }
                   value={applicationAmount}
                   onChange={(value) => {
+                    if (mortgageFacilityFixed) return
                     amountTouchedRef.current = true
                     setApplicationAmount(value)
                     setError(null)
@@ -1819,9 +1863,12 @@ export function ProductApplicationFlow({ kind, productId: productIdProp }: { kin
                   type="text"
                   inputMode="decimal"
                   autoComplete="off"
+                  readOnly={mortgageFacilityFixed}
                 />
                 <p className="text-[11px] text-gray-500">
-                  {formatApplicationAmountHint(catalogProduct?.amountMin, catalogProduct?.amountMax)}
+                  {mortgageFacilityFixed
+                    ? 'Facility amount is fixed for this mortgage product.'
+                    : formatApplicationAmountHint(amountBounds.min, amountBounds.max)}
                 </p>
               </div>
 

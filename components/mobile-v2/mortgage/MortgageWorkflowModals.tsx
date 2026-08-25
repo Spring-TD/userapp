@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { CopyableDetailRow } from '@/components/mobile-v2/CopyableDetailRow'
 import { MortgageSheet, MORTGAGE_PRIMARY } from '@/components/mobile-v2/mortgage/MortgageSheet'
-import { type MortgageWorkflowModal } from '@/lib/mortgageWorkflow'
+import { type MortgageWorkflowModal, resolveMortgageEquityRequired } from '@/lib/mortgageWorkflow'
 import { extractOfferLetterFromRecord } from '@/lib/offerLetter'
 import type { InsufficientCentralWalletBalance } from '@/lib/pendingApprovedLoanApi'
 import {
@@ -39,7 +39,9 @@ type MortgageWorkflowModalsProps = {
   applicationId: string
   productId: string
   product: MobileProduct | null
+  /** @deprecated Equity fallback uses product helpers; ignored for math. */
   propertyValue?: number | null
+  /** @deprecated Prefer product.equityContribution + product.equityRequirement */
   downPaymentPercent?: number
   onStepAdvanced: () => void
 }
@@ -98,8 +100,8 @@ export function MortgageWorkflowModals({
   applicationId,
   productId,
   product,
-  propertyValue,
-  downPaymentPercent = 10,
+  propertyValue: _propertyValue,
+  downPaymentPercent: _downPaymentPercent,
   onStepAdvanced,
 }: MortgageWorkflowModalsProps) {
   const { wallet, formattedBalance, loading: walletLoading, refetch: refetchWallet } = useUserWallet()
@@ -122,10 +124,10 @@ export function MortgageWorkflowModals({
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [slotsError, setSlotsError] = useState<string | null>(null)
 
-  const computedFallbackAmount = useMemo(() => {
-    if (!propertyValue || Number.isNaN(propertyValue)) return null
-    return Math.round(propertyValue * (downPaymentPercent / 100))
-  }, [downPaymentPercent, propertyValue])
+  const computedFallbackAmount = useMemo(
+    () => resolveMortgageEquityRequired(product),
+    [product],
+  )
 
   const downPaymentAmount = useMemo(() => {
     const fromApi = mortgageDownPaymentDue(detail)

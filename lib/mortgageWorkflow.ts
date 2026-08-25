@@ -552,10 +552,160 @@ export function mortgageStepCta(
   }
 }
 
-export function computeDownPaymentAmount(
-  propertyValue?: number | null,
-  percent = 10,
+export type EquityRequirementMode = 'zero' | 'fixed' | 'percentage' | 'none'
+
+/** Classify merchant equity config: fixed ₦ amount, % of facility, or zero down. */
+export function classifyEquityRequirementMode(
+  selected?: string | null,
+): EquityRequirementMode {
+  const s = String(selected || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+  if (!s) return 'none'
+  if (s.includes('zero') && s.includes('down')) return 'zero'
+  if (s === 'percentage_based' || s.includes('percentage') || (s.includes('percent') && s.includes('based'))) {
+    return 'percentage'
+  }
+  if (s === 'fixed_amount' || (s.includes('fixed') && s.includes('amount'))) return 'fixed'
+  return 'none'
+}
+
+type MortgageFacilityProduct = {
+  type?: string
+  mortgageAmount?: number | null
+  amountMin?: number | null
+  amountMax?: number | null
+  equityRequirement?: string | null
+  equityContribution?: number | null
+  estimatedDownPayment?: number | null
+  estimatedFinancedAmount?: number | null
+}
+
+/** Facility / Mortgage Amount — never property listing value. */
+export function resolveMortgageFacilityAmount(
+  product?: MortgageFacilityProduct | null,
 ): number | null {
-  if (!propertyValue || Number.isNaN(propertyValue)) return null
-  return Math.round(propertyValue * (percent / 100))
+  if (!product) return null
+  const fromFacility =
+    typeof product.mortgageAmount === 'number' &&
+    Number.isFinite(product.mortgageAmount) &&
+    product.mortgageAmount > 0
+      ? product.mortgageAmount
+      : null
+  if (fromFacility != null) return fromFacility
+
+  // Legacy catalog: equal min===max (or max) until clone syncs mortgageAmount.
+  const min =
+    typeof product.amountMin === 'number' && Number.isFinite(product.amountMin) && product.amountMin > 0
+      ? product.amountMin
+      : null
+  const max =
+    typeof product.amountMax === 'number' && Number.isFinite(product.amountMax) && product.amountMax > 0
+      ? product.amountMax
+      : null
+  if (min != null && max != null && min === max) return min
+  if (max != null) return max
+  if (min != null) return min
+  return null
+}
+
+/**
+ * Required equity / down payment for display.
+ * Prefer calculatedConfig.estimatedDownPayment; else % or fixed of Mortgage Amount.
+ * Never uses propertyValue / properties[].value.
+ */
+export function resolveMortgageEquityRequired(
+  product?: MortgageFacilityProduct | null,
+): number | null {
+  if (!product) return null
+  if (
+    typeof product.estimatedDownPayment === 'number' &&
+    Number.isFinite(product.estimatedDownPayment) &&
+    product.estimatedDownPayment >= 0
+  ) {
+    return Math.round(product.estimatedDownPayment)
+  }
+
+  return computeDownPaymentAmount(
+    resolveMortgageFacilityAmount(product),
+    product.equityContribution ?? null,
+    product.equityRequirement ?? null,
+  )
+}
+
+export function resolveMortgageFinancedAmount(
+  product?: MortgageFacilityProduct | null,
+): number | null {
+  if (!product) return null
+  if (
+    typeof product.estimatedFinancedAmount === 'number' &&
+    Number.isFinite(product.estimatedFinancedAmount) &&
+    product.estimatedFinancedAmount >= 0
+  ) {
+    return Math.round(product.estimatedFinancedAmount)
+  }
+  const facility = resolveMortgageFacilityAmount(product)
+  const equity = resolveMortgageEquityRequired(product)
+  if (facility == null || equity == null) return null
+  return Math.max(0, Math.round(facility - equity))
+}
+
+/** True when apply amount should be locked to a single facility (not a min–max range). */
+export function hasFixedMortgageFacility(product?: MortgageFacilityProduct | null): boolean {
+  if (!product) return false
+  if (
+    typeof product.mortgageAmount === 'number' &&
+    Number.isFinite(product.mortgageAmount) &&
+    product.mortgageAmount > 0
+  ) {
+    return true
+  }
+  const min = product.amountMin
+  const max = product.amountMax
+  return (
+    typeof min === 'number' &&
+    typeof max === 'number' &&
+    Number.isFinite(min) &&
+    Number.isFinite(max) &&
+    min > 0 &&
+    min === max
+  )
+}
+
+/**
+ * Resolve required down payment / equity from the mortgage product config.
+ * First arg is the facility (Mortgage Amount) — never Property Value.
+ */
+export function computeDownPaymentAmount(
+  facilityAmount?: number | null,
+  equityContribution?: number | null,
+  equityRequirement?: string | null,
+): number | null {
+  const contribution =
+    typeof equityContribution === 'number' && Number.isFinite(equityContribution)
+      ? equityContribution
+      : null
+  const facility =
+    typeof facilityAmount === 'number' && Number.isFinite(facilityAmount) && facilityAmount > 0
+      ? facilityAmount
+      : null
+
+  const mode = classifyEquityRequirementMode(equityRequirement)
+
+  if (mode === 'zero') return 0
+  if (mode === 'fixed') {
+    if (contribution == null || contribution < 0) return null
+    return Math.round(contribution)
+  }
+  if (mode === 'percentage') {
+    if (contribution == null || !facility) return null
+    return Math.round((facility * contribution) / 100)
+  }
+
+  // equityRequirement missing — infer from contribution shape; never default to 10%.
+  if (contribution == null) return null
+  if (contribution > 100 || !facility) return Math.round(contribution)
+  return Math.round((facility * contribution) / 100)
 }

@@ -39,12 +39,14 @@ function parsePositiveAmount(value: unknown): number | null {
 export async function resolveDefaultApplyAmount(productId: string): Promise<number> {
   try {
     const product = await fetchMobileProductById(productId)
+    const fromMortgage = parsePositiveAmount(product?.mortgageAmount)
+    if (fromMortgage != null) return fromMortgage
     const fromMin = parsePositiveAmount(product?.amountMin)
     if (fromMin != null) return fromMin
+    const fromMax = parsePositiveAmount(product?.amountMax)
+    if (fromMax != null) return fromMax
     const fromPrice = parsePositiveAmount(product?.price)
     if (fromPrice != null) return fromPrice
-    const fromProperty = parsePositiveAmount(product?.propertyValue)
-    if (fromProperty != null) return fromProperty
   } catch {
     /* use fallback */
   }

@@ -205,10 +205,18 @@ export function mortgageDownPaymentDue(
   detail: PendingApprovedMortgageDetail | null | undefined,
 ): number {
   if (!detail) return 0
+  const app = detail.application as Record<string, unknown> | undefined
+  const equityPayment =
+    (detail as Record<string, unknown>).equityPayment ?? app?.equityPayment
+  const equityPaymentRequired =
+    equityPayment && typeof equityPayment === 'object'
+      ? (equityPayment as { requiredAmount?: number }).requiredAmount
+      : undefined
   const candidates = [
     detail.requiredAmount,
     detail.postApprovalFulfillment?.downPayment?.requiredAmount,
     detail.application?.postApprovalFulfillment?.downPayment?.requiredAmount,
+    equityPaymentRequired,
     detail.equityAmount,
     detail.bankDetails?.amount,
     detail.postApprovalFulfillment?.bankDetails?.amount,

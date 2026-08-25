@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { CopyableDetailRow } from '@/components/mobile-v2/CopyableDetailRow'
 import { MortgageSheet, MORTGAGE_PRIMARY } from '@/components/mobile-v2/mortgage/MortgageSheet'
 import { mortgagePendingDetailHref } from '@/lib/mortgageApplyRoutes'
+import { computeDownPaymentAmount, resolveMortgageEquityRequired } from '@/lib/mortgageWorkflow'
 import type { InsufficientCentralWalletBalance } from '@/lib/pendingApprovedLoanApi'
 import { pendingApprovedMortgageApi } from '@/lib/pendingApprovedMortgageApi'
 import {
@@ -22,6 +23,7 @@ import { useUserWallet } from '@/hooks/useUserWallet'
 import { formatNaira, formatNgn } from '@/lib/mobileProductDetailDisplay'
 import { formatWalletBalance, isVirtualNubanActive } from '@/lib/userWallet'
 import { cn } from '@/lib/utils'
+import type { MobileProduct } from '@/lib/storefrontProducts'
 
 export type MortgageOfferFlowStep =
   | 'schedule_inspection'
@@ -34,8 +36,12 @@ type MortgageOfferFlowProps = {
   applicationId?: string
   productName: string
   provider: string
-  propertyValue?: number | null
+  /** Catalog product for facility/equity fallback when API requiredAmount is missing. */
+  product?: MobileProduct | null
+  /** @deprecated Prefer product + resolveMortgageEquityRequired; kept for callers. */
+  mortgageFacilityAmount?: number | null
   downPaymentPercent?: number | null
+  equityRequirement?: string | null
   backHref: string
   initialStep?: MortgageOfferFlowStep
 }
@@ -90,8 +96,10 @@ export function MortgageOfferFlow({
   applicationId,
   productName,
   provider: _provider,
-  propertyValue,
+  product,
+  mortgageFacilityAmount,
   downPaymentPercent,
+  equityRequirement,
   backHref,
   initialStep = 'schedule_inspection',
 }: MortgageOfferFlowProps) {
@@ -107,11 +115,15 @@ export function MortgageOfferFlow({
   const [detail, setDetail] = useState<PendingApprovedMortgageDetail | null>(null)
   const [insufficient, setInsufficient] = useState<InsufficientCentralWalletBalance | null>(null)
 
-  const percent = downPaymentPercent ?? 10
   const computedFallbackAmount = useMemo(() => {
-    if (!propertyValue || Number.isNaN(propertyValue)) return null
-    return Math.round(propertyValue * (percent / 100))
-  }, [percent, propertyValue])
+    const fromProduct = resolveMortgageEquityRequired(product)
+    if (fromProduct != null) return fromProduct
+    return computeDownPaymentAmount(
+      mortgageFacilityAmount,
+      downPaymentPercent ?? null,
+      equityRequirement ?? null,
+    )
+  }, [product, mortgageFacilityAmount, downPaymentPercent, equityRequirement])
 
   const downPaymentAmount = useMemo(() => {
     const fromApi = mortgageDownPaymentDue(detail)
@@ -119,7 +131,10 @@ export function MortgageOfferFlow({
     return computedFallbackAmount
   }, [computedFallbackAmount, detail])
 
-  const displayAmount = downPaymentAmount != null ? formatNaira(downPaymentAmount) : formatNgn(propertyValue)
+  const displayAmount =
+    downPaymentAmount != null
+      ? formatNaira(downPaymentAmount)
+      : formatNgn(mortgageFacilityAmount)
   const bankDetails = mortgageEquityBankDetails(detail)
   const alreadyPaid = isMortgageDownPaymentPaidOrLater(mortgageFulfillmentStatus(detail))
   const nuban = wallet?.virtualNuban

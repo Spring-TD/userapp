@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 import { mortgageApplyStartHref } from '@/lib/mortgageApplyRoutes'
-import { computeDownPaymentAmount } from '@/lib/mortgageWorkflow'
+import { resolveMortgageEquityRequired } from '@/lib/mortgageWorkflow'
 import { formatNaira } from '@/lib/mobileProductDetailDisplay'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
 import { cn } from '@/lib/utils'
@@ -42,10 +42,15 @@ function ChoosePaymentContent() {
     )
   }
 
-  const property = product?.properties?.[0]
-  const propertyValue = property?.value ?? product?.propertyValue ?? product?.amountMax ?? null
-  const downPayment = computeDownPaymentAmount(propertyValue, product?.equityContribution ?? 10)
+  // Equity from estimatedDownPayment or % × Mortgage Amount — never Property Value.
+  const downPayment = resolveMortgageEquityRequired(product)
   const downPaymentLabel = downPayment != null ? formatNaira(downPayment) : '—'
+  const equityPct =
+    product?.equityRequirement &&
+    /percent/i.test(String(product.equityRequirement)) &&
+    product.equityContribution != null
+      ? product.equityContribution
+      : null
 
   const continueApply = () => {
     sessionStorage.setItem(
@@ -84,8 +89,14 @@ function ChoosePaymentContent() {
             <h2 className="text-xl font-bold text-[#1E293B]">Down payment required</h2>
             <p className="mx-auto mt-3 max-w-xs text-sm leading-relaxed text-gray-500">
               This mortgage requires a down payment of{' '}
-              <strong className="text-[var(--sf-ink,#1E293B)]">{downPaymentLabel}</strong>. How would
-              you like to proceed?
+              <strong className="text-[var(--sf-ink,#1E293B)]">{downPaymentLabel}</strong>
+              {equityPct != null ? (
+                <>
+                  {' '}
+                  ({equityPct}% of Mortgage Amount)
+                </>
+              ) : null}
+              . How would you like to proceed?
             </p>
           </div>
 
@@ -93,7 +104,9 @@ function ChoosePaymentContent() {
             <button
               type="button"
               onClick={openSavingsPlan}
-              className="flex w-full items-start gap-4 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-4 text-left transition hover:sf-border-brand border"
+              className={cn(
+                'flex w-full items-start gap-4 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-4 text-left transition hover:sf-border-brand border',
+              )}
             >
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--sf-tint,#E0E7FF)] text-[var(--sf-button,#1E40AF)]">
                 <PiggyBank className="h-5 w-5" />
