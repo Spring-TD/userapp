@@ -2,59 +2,94 @@
 
 import React, { useMemo } from 'react';
 import Link from 'next/link';
-import { LockKeyhole, PiggyBank, Target } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { LockKeyhole, PiggyBank, Target, Landmark } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { MobileV2TabBar } from '../MobileV2ProductComponents';
 import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
 import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeletons';
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
 import { useMobileProducts } from '@/hooks/useMobileProducts';
 import type { MobileProduct } from '@/lib/storefrontProducts';
-import { poweredBy } from '@/lib/mobileProductDetailDisplay';
+import { rateLabel } from '@/lib/mobileProductDetailDisplay';
 
-const SAVINGS_ICONS = [PiggyBank, Target, LockKeyhole];
+const CARD_GRADIENTS = [
+    'bg-[linear-gradient(160deg,#8E7CF2_0%,#C77DE0_100%)]',
+    'bg-[linear-gradient(160deg,#4E9BF2_0%,#4FD8C9_100%)]',
+    'bg-[linear-gradient(160deg,#F2704E_0%,#F5B94E_100%)]',
+    'bg-[linear-gradient(160deg,#3FBF87_0%,#A6E24F_100%)]',
+] as const;
 
-function SavingsCard({ plan, index, providerName }: { plan: MobileProduct; index: number; providerName: string }) {
-    const Icon = SAVINGS_ICONS[index % SAVINGS_ICONS.length];
+const CARD_ICONS = [PiggyBank, Landmark, LockKeyhole, Target] as const;
+
+function savingsBadge(plan: MobileProduct): string {
+    const haystack = `${plan.name} ${plan.subType || ''} ${plan.description || ''}`.toLowerCase();
+    if (plan.isFeatured) return 'Popular';
+    if (/\b(bank|agmb|mortgage bank)\b/.test(haystack)) return 'Bank-backed';
+    if (/\b(christmas|dezemba|seasonal|festive)\b/.test(haystack)) return 'Seasonal';
+    if (/\b(lock|locked|fixed|term)\b/.test(haystack)) return 'Locked';
+    if (/\b(starter|shanty|beginner)\b/.test(haystack)) return 'Starter';
+    if (/\b(flex|flexible|regular)\b/.test(haystack)) return 'Flexible';
+    return 'Savings';
+}
+
+function returnPercent(plan: MobileProduct): string {
+    const raw = rateLabel(plan);
+    if (!raw || /rate available/i.test(raw)) return '—';
+    const match = raw.match(/[\d.]+/);
+    if (!match) return raw.includes('%') ? raw : `${raw}%`;
+    return `${match[0]}%`;
+}
+
+function SavingsCard({ plan, index }: { plan: MobileProduct; index: number }) {
+    const Icon = CARD_ICONS[index % CARD_ICONS.length];
+    const gradient = CARD_GRADIENTS[index % CARD_GRADIENTS.length];
     const detailHref = `/mobile-v2/products/savings/flex-naira?productId=${encodeURIComponent(plan.id)}`;
+    const percent = returnPercent(plan);
+    const badge = savingsBadge(plan);
+    const desc = plan.description || plan.subType || 'A savings plan tailored for your goals.';
 
     return (
-        <div className="min-w-0 overflow-hidden rounded-[10px] bg-[#1F1F1F] p-3 text-white shadow-lg shadow-black/10">
-            <div className="mb-4 flex items-center justify-between gap-2">
-                <p className="min-w-0 truncate text-[9px] font-medium text-white/60">
-                    By {providerName}
-                </p>
-                {plan.isFeatured ? (
-                    <span className="shrink-0 rounded-full bg-white/10 px-2 py-1 text-[8px] font-bold uppercase text-white">
-                        Featured
-                    </span>
-                ) : null}
+        <Link
+            href={detailHref}
+            aria-label={`View ${plan.name}, ${percent} per annum returns`}
+            className={cn(
+                'relative flex min-h-[250px] flex-col overflow-hidden rounded-[24px] p-4 text-left text-white shadow-[0_12px_24px_-12px_rgba(23,19,33,0.28)] transition-transform active:scale-[0.98]',
+                gradient,
+            )}
+        >
+            <div className="mb-3.5 flex items-start justify-between gap-2">
+                <div
+                    className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-white/25 backdrop-blur-[4px]"
+                    aria-hidden
+                >
+                    <Icon className="h-[17px] w-[17px] text-white" strokeWidth={2.25} />
+                </div>
+                <span className="whitespace-nowrap rounded-full bg-white/20 px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wide text-white">
+                    {badge}
+                </span>
             </div>
-            <div className="mb-2">
-                <Icon className="h-5 w-5 text-[var(--sf-primary,#2563EB)]" />
-            </div>
-            <h3 className="mb-2 line-clamp-2 break-words text-xl font-bold leading-tight text-[var(--sf-primary,#2563EB)]">
+
+            <h3 className="mb-1.5 line-clamp-2 text-base font-extrabold leading-snug text-white">
                 {plan.name}
             </h3>
-            <p className="mb-2 line-clamp-2 break-words text-[12px] leading-relaxed text-white/85">
-                {plan.description || plan.subType || 'Savings product'}
+            <p className="mb-3.5 line-clamp-2 flex-grow text-[11.5px] leading-snug text-white/80">
+                {desc}
             </p>
-            {plan.interestRate ? (
-                <p className="mb-3 text-[11px] font-semibold text-white">
-                    Up to {plan.interestRate.includes('%') ? plan.interestRate : `${plan.interestRate}%`} returns
-                </p>
-            ) : null}
-            <Link href={detailHref}>
-                <Button className="h-9 w-full rounded-xl bg-[var(--sf-button,#2563EB)] text-xs font-semibold text-white hover:bg-[var(--sf-button-hover,#1e3a8a)]">
-                    View
-                </Button>
-            </Link>
-        </div>
+
+            <div className="mb-3 flex items-baseline gap-1.5">
+                <span className="text-[19px] font-extrabold text-white">{percent}</span>
+                <span className="text-[10.5px] font-bold text-white/75">p.a. returns</span>
+            </div>
+
+            <span className="block rounded-full bg-white py-2.5 text-center text-[13px] font-extrabold text-[#171321]">
+                View
+            </span>
+        </Link>
     );
 }
 
 export default function SavingsProductPage() {
-    const { appId, ready: tenantReady, displayName } = useMobileV2Tenant();
+    const { appId, ready: tenantReady } = useMobileV2Tenant();
     const { loading, error, getProductsByType } = useMobileProducts({
         springAppId: appId ?? undefined,
         tenantReady,
@@ -67,27 +102,26 @@ export default function SavingsProductPage() {
     }, [savingsPlans]);
 
     return (
-        <div className="relative flex h-full min-h-0 flex-col sf-page-bg">
+        <div className="relative flex h-full min-h-0 flex-col bg-[#F3F1FB]">
             <div className="min-h-0 flex-1 overflow-y-auto no-scrollbar pb-32">
-                {/* Header with Tabs */}
-                <div className="sticky top-0 z-30 sf-page-bg px-6 pb-4 pt-4 md:pt-9">
-                    <MobileV2TabBar activeTab="Savings" />
+                <div className="sticky top-0 z-30 bg-[#F3F1FB] px-4 pb-0 pt-5 md:pt-9">
+                    <MobileV2TabBar activeTab="Savings" variant="ink" />
                 </div>
 
-                <div className="p-6">
-                    <h2 className="mb-6 text-base font-bold text-[#1E293B]">Hot Savings</h2>
+                <div className="px-4 pb-10 pt-2">
+                    <h2 className="mb-3.5 mt-2 text-lg font-extrabold text-[#171321]">Hot Savings</h2>
                     {!tenantReady || loading ? (
                         <MobileV2ProductListSkeleton />
                     ) : orderedPlans.length > 0 ? (
-                        <div className="grid grid-cols-2 gap-5">
+                        <div className="grid grid-cols-2 gap-3">
                             {orderedPlans.map((plan, index) => (
-                                <SavingsCard key={plan.id} plan={plan} index={index} providerName={poweredBy(displayName || undefined)} />
+                                <SavingsCard key={plan.id} plan={plan} index={index} />
                             ))}
                         </div>
                     ) : (
-                        <div className="rounded-2xl bg-white px-5 py-10 text-center shadow-sm">
-                            <p className="text-sm font-semibold text-[#1E293B]">No active savings products yet</p>
-                            <p className="mt-2 text-xs leading-relaxed text-gray-500">
+                        <div className="rounded-[24px] border border-dashed border-[#171321]/15 bg-white px-5 py-10 text-center shadow-sm">
+                            <p className="text-sm font-extrabold text-[#171321]">No active savings products yet</p>
+                            <p className="mt-2 text-xs leading-relaxed text-[#6B6478]">
                                 {error || 'Only products enabled for this app will appear here.'}
                             </p>
                         </div>
