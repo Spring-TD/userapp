@@ -26,7 +26,14 @@ import {
 } from '@/lib/storefrontProducts';
 
 // ─── Tab Bar ──────────────────────────────────────────────────────────────────
-export function MobileV2TabBar({ activeTab }: { activeTab: StorefrontProductType }) {
+export function MobileV2TabBar({
+    activeTab,
+    variant = 'capsule',
+}: {
+    activeTab: StorefrontProductType
+    /** `ink` matches the Hot Savings list design (dark active pill). */
+    variant?: 'capsule' | 'ink'
+}) {
     const { appId: tenantAppId, ready: tenantReady } = useMobileV2Tenant();
     const { products, loading } = useMobileProducts({
         springAppId: tenantAppId ?? undefined,
@@ -39,10 +46,45 @@ export function MobileV2TabBar({ activeTab }: { activeTab: StorefrontProductType
     );
 
     if (!tenantReady || loading) {
-        return <div className="h-11 w-full animate-pulse rounded-full bg-[#F3F4F6]" />;
+        return (
+            <div
+                className={cn(
+                    'h-11 w-full animate-pulse rounded-full',
+                    variant === 'ink' ? 'bg-[#171321]/10' : 'bg-[#F3F4F6]',
+                )}
+            />
+        );
     }
 
     if (tabs.length === 0) return null;
+
+    if (variant === 'ink') {
+        return (
+            <nav
+                className="flex gap-2 overflow-x-auto pb-4 no-scrollbar"
+                aria-label="Product categories"
+            >
+                {tabs.map((tab) => {
+                    const active = tab === activeTab;
+                    return (
+                        <Link
+                            key={tab}
+                            href={storefrontProductTypeRoute(tab)}
+                            aria-current={active ? 'page' : undefined}
+                            className={cn(
+                                'shrink-0 whitespace-nowrap rounded-full px-3.5 py-2 text-[13.5px] transition-colors',
+                                active
+                                    ? 'bg-[#171321] font-extrabold text-white'
+                                    : 'bg-transparent font-semibold text-[#6B6478] hover:text-[#171321]',
+                            )}
+                        >
+                            {tab}
+                        </Link>
+                    );
+                })}
+            </nav>
+        );
+    }
 
     return (
         <div className="w-full bg-[#F3F4F6] p-1.5 rounded-full flex items-center justify-between overflow-x-auto no-scrollbar">
