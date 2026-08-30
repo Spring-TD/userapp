@@ -13,10 +13,10 @@ import type { MobileProduct } from '@/lib/storefrontProducts';
 import { rateLabel } from '@/lib/mobileProductDetailDisplay';
 
 const CARD_GRADIENTS = [
-    'bg-[linear-gradient(160deg,#8E7CF2_0%,#C77DE0_100%)]',
-    'bg-[linear-gradient(160deg,#4E9BF2_0%,#4FD8C9_100%)]',
-    'bg-[linear-gradient(160deg,#F2704E_0%,#F5B94E_100%)]',
-    'bg-[linear-gradient(160deg,#3FBF87_0%,#A6E24F_100%)]',
+    'bg-[linear-gradient(160deg,#5C4EB0_0%,#9A5FAF_100%)]',
+    'bg-[linear-gradient(160deg,#2F6FB0_0%,#2E9A90_100%)]',
+    'bg-[linear-gradient(160deg,#C45A38_0%,#C48A32_100%)]',
+    'bg-[linear-gradient(160deg,#2A8A62_0%,#6E9E38_100%)]',
 ] as const;
 
 const CARD_ICONS = [PiggyBank, Landmark, LockKeyhole, Target] as const;
@@ -53,37 +53,43 @@ function SavingsCard({ plan, index }: { plan: MobileProduct; index: number }) {
             href={detailHref}
             aria-label={`View ${plan.name}, ${percent} per annum returns`}
             className={cn(
-                'relative flex min-h-[250px] flex-col overflow-hidden rounded-[24px] p-4 text-left text-white shadow-[0_12px_24px_-12px_rgba(23,19,33,0.28)] transition-transform active:scale-[0.98]',
+                'relative flex min-h-[250px] flex-col overflow-hidden rounded-[24px] p-4 text-left text-white shadow-[0_12px_24px_-12px_rgba(23,19,33,0.34)] transition-transform active:scale-[0.98]',
                 gradient,
             )}
         >
-            <div className="mb-3.5 flex items-start justify-between gap-2">
-                <div
-                    className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-white/25 backdrop-blur-[4px]"
-                    aria-hidden
-                >
-                    <Icon className="h-[17px] w-[17px] text-white" strokeWidth={2.25} />
+            <span
+                className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(18,14,28,0.14)_0%,rgba(18,14,28,0.26)_100%)]"
+                aria-hidden
+            />
+            <div className="relative z-[1] flex flex-1 flex-col">
+                <div className="mb-3.5 flex items-start justify-between gap-2">
+                    <div
+                        className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-white/20"
+                        aria-hidden
+                    >
+                        <Icon className="h-[17px] w-[17px] text-white" strokeWidth={2.25} />
+                    </div>
+                    <span className="whitespace-nowrap rounded-full bg-white/15 px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wide text-white">
+                        {badge}
+                    </span>
                 </div>
-                <span className="whitespace-nowrap rounded-full bg-white/20 px-2.5 py-1 text-[9.5px] font-extrabold uppercase tracking-wide text-white">
-                    {badge}
+
+                <h3 className="mb-1.5 line-clamp-2 text-base font-extrabold leading-snug text-white">
+                    {plan.name}
+                </h3>
+                <p className="mb-3.5 line-clamp-2 flex-grow text-[11.5px] leading-snug text-white/80">
+                    {desc}
+                </p>
+
+                <div className="mb-3 flex items-baseline gap-1.5">
+                    <span className="text-[19px] font-extrabold text-white">{percent}</span>
+                    <span className="text-[10.5px] font-bold text-white/70">p.a. returns</span>
+                </div>
+
+                <span className="block rounded-full bg-white py-2.5 text-center text-[13px] font-extrabold text-[#171321]">
+                    View
                 </span>
             </div>
-
-            <h3 className="mb-1.5 line-clamp-2 text-base font-extrabold leading-snug text-white">
-                {plan.name}
-            </h3>
-            <p className="mb-3.5 line-clamp-2 flex-grow text-[11.5px] leading-snug text-white/80">
-                {desc}
-            </p>
-
-            <div className="mb-3 flex items-baseline gap-1.5">
-                <span className="text-[19px] font-extrabold text-white">{percent}</span>
-                <span className="text-[10.5px] font-bold text-white/75">p.a. returns</span>
-            </div>
-
-            <span className="block rounded-full bg-white py-2.5 text-center text-[13px] font-extrabold text-[#171321]">
-                View
-            </span>
         </Link>
     );
 }
