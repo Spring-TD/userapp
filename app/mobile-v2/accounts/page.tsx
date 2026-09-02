@@ -43,6 +43,8 @@ import {
     type StorefrontProductType,
 } from '@/lib/storefrontProducts';
 import { formatWalletBalance } from '@/lib/userWallet';
+import { getSavingsAccountGradientClass } from '@/lib/savingsCardTheme';
+import { SavingsGradientCard } from '@/components/mobile-v2/savings/SavingsGradientCard';
 import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
 import { MobileV2NotificationBell } from '@/components/mobile-v2/MobileV2NotificationBell';
 import type { ProductApplication } from '@/types/productApplication';
@@ -331,6 +333,10 @@ function ProductAccountCard({
     );
     const transferable = Boolean(userId && canTransferProductToPrimary(application, activeFilter));
     const hasCardAction = withdrawable || transferable;
+    const isSavingsAccount = activeFilter === 'Savings';
+    const savingsGradient = isSavingsAccount
+        ? getSavingsAccountGradientClass(application.id)
+        : null;
 
     const handleWithdraw = async (event: React.MouseEvent) => {
         event.preventDefault();
@@ -348,17 +354,29 @@ function ProductAccountCard({
         onWithdrawComplete?.();
     };
 
-    const content = (
-        <div className="w-full rounded-[24px] border sf-border-brand sf-accent-soft p-5 shadow-sm">
+    const cardInner = (
+        <>
             <div className="mb-4 flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-[var(--sf-primary,#2563EB)]">
+                    <p
+                        className={`text-xs font-semibold uppercase tracking-wide ${
+                            isSavingsAccount ? 'text-white/75' : 'text-[var(--sf-primary,#2563EB)]'
+                        }`}
+                    >
                         {application.productType || activeFilter}
                     </p>
-                    <h3 className="mt-1 truncate text-base font-bold text-[var(--sf-ink,#1E1B4B)]">
+                    <h3
+                        className={`mt-1 truncate text-base font-bold ${
+                            isSavingsAccount ? 'text-white' : 'text-[var(--sf-ink,#1E1B4B)]'
+                        }`}
+                    >
                         {application.productName || application.productType || activeFilter}
                     </h3>
-                    <p className="mt-1 text-sm font-medium text-[var(--sf-ink,#1E1B4B)]">
+                    <p
+                        className={`mt-1 text-sm font-medium ${
+                            isSavingsAccount ? 'text-white/85' : 'text-[var(--sf-ink,#1E1B4B)]'
+                        }`}
+                    >
                         {activeFilter === 'Commodity'
                             ? 'Commodity holding'
                             : account?.accountNumber?.trim()
@@ -368,13 +386,17 @@ function ProductAccountCard({
                                 : account?.bankName || application.productName || 'Product account'}
                     </p>
                 </div>
-                <span className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold uppercase ${provisionStatusTone(statusLabel)}`}>
+                <span
+                    className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold uppercase ${
+                        isSavingsAccount ? 'bg-white/20 text-white' : provisionStatusTone(statusLabel)
+                    }`}
+                >
                     {statusLabel}
                 </span>
             </div>
 
             <div className="flex items-center justify-between gap-3 text-sm">
-                <p className="min-w-0 truncate text-gray-500">
+                <p className={`min-w-0 truncate ${isSavingsAccount ? 'text-white/70' : 'text-gray-500'}`}>
                     {activeFilter === 'Commodity'
                         ? snapshot?.maturityAt
                             ? `Unlocks ${formatMaturityLabel(snapshot.maturityAt)}`
@@ -383,10 +405,18 @@ function ProductAccountCard({
                 </p>
             </div>
             {principal != null ? (
-                <p className="mt-3 text-sm font-semibold text-[var(--sf-ink,#1E1B4B)]">
+                <p
+                    className={`mt-3 text-sm font-semibold ${
+                        isSavingsAccount ? 'text-white' : 'text-[var(--sf-ink,#1E1B4B)]'
+                    }`}
+                >
                     {formatWalletBalance(principal, currency)}
                     {snapshot?.totalAtMaturity != null ? (
-                        <span className="ml-2 text-xs font-medium text-gray-500">
+                        <span
+                            className={`ml-2 text-xs font-medium ${
+                                isSavingsAccount ? 'text-white/70' : 'text-gray-500'
+                            }`}
+                        >
                             → {formatWalletBalance(snapshot.totalAtMaturity, currency)} at maturity
                         </span>
                     ) : null}
@@ -398,7 +428,11 @@ function ProductAccountCard({
                         type="button"
                         disabled={withdrawing}
                         onClick={(event) => void handleWithdraw(event)}
-                        className="h-10 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-sm font-semibold text-white"
+                        className={`h-10 w-full rounded-full text-sm font-semibold ${
+                            isSavingsAccount
+                                ? 'bg-white text-[#171321] hover:bg-white/90'
+                                : 'bg-[var(--sf-button,#1E40AF)] text-white'
+                        }`}
                     >
                         {withdrawing ? (
                             <span className="inline-flex items-center gap-2">
@@ -410,7 +444,7 @@ function ProductAccountCard({
                         )}
                     </Button>
                     {withdrawError ? (
-                        <p className="mt-2 text-center text-xs text-red-600">{withdrawError}</p>
+                        <p className="mt-2 text-center text-xs text-red-200">{withdrawError}</p>
                     ) : null}
                 </div>
             ) : null}
@@ -423,12 +457,20 @@ function ProductAccountCard({
                             event.stopPropagation();
                             setTransferOpen(true);
                         }}
-                        className="h-10 w-full rounded-full bg-[var(--sf-button,#1E40AF)] text-sm font-semibold text-white"
+                        className={`h-10 w-full rounded-full text-sm font-semibold ${
+                            isSavingsAccount
+                                ? 'bg-white text-[#171321] hover:bg-white/90'
+                                : 'bg-[var(--sf-button,#1E40AF)] text-white'
+                        }`}
                     >
                         Transfer to primary wallet
                     </Button>
                     {productBalance > 0 ? (
-                        <p className="mt-2 text-center text-[11px] text-gray-500">
+                        <p
+                            className={`mt-2 text-center text-[11px] ${
+                                isSavingsAccount ? 'text-white/70' : 'text-gray-500'
+                            }`}
+                        >
                             Available: {formatWalletBalance(productBalance, application.currency || currency)}
                         </p>
                     ) : null}
@@ -445,6 +487,16 @@ function ProductAccountCard({
                     </Button>
                 </div>
             ) : null}
+        </>
+    );
+
+    const content = savingsGradient ? (
+        <SavingsGradientCard gradientClass={savingsGradient} className="w-full p-5">
+            {cardInner}
+        </SavingsGradientCard>
+    ) : (
+        <div className="w-full rounded-[24px] border sf-border-brand sf-accent-soft p-5 shadow-sm">
+            {cardInner}
         </div>
     );
 
