@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { ensureInvestmentAccount } from '@/lib/investmentApplyClient';
 import { ensureSavingsAccount } from '@/lib/savingsApplyClient';
+import { assignSavingsAccountTheme } from '@/lib/savingsCardTheme';
 import {
     formatApplicationAmountHint,
     parseApplicationAmount,
@@ -285,7 +286,12 @@ export function ProductFundingFlowSheet({
             }
 
             setProvisionedAccount(result.account ?? null);
-            if (result.applicationId) setProvisionedApplicationId(result.applicationId);
+            if (result.applicationId) {
+                setProvisionedApplicationId(result.applicationId);
+                if (accountKind === 'savings') {
+                    assignSavingsAccountTheme(result.applicationId);
+                }
+            }
             const successMsg =
                 result.message || `Your ${productKindLabel} account was created successfully.`;
             setAccountCreationMessage(successMsg);
@@ -336,7 +342,12 @@ export function ProductFundingFlowSheet({
                 }
                 return;
             }
-            if (result.applicationId) setProvisionedApplicationId(result.applicationId);
+            if (result.applicationId) {
+                setProvisionedApplicationId(result.applicationId);
+                if (accountKind === 'savings') {
+                    assignSavingsAccountTheme(result.applicationId);
+                }
+            }
             setProvisionedAccount(result.account ?? provisionedAccount);
             toast.success(result.message || 'Deposit successful.');
             setStep('success');

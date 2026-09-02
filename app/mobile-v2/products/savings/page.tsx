@@ -11,13 +11,8 @@ import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
 import { useMobileProducts } from '@/hooks/useMobileProducts';
 import type { MobileProduct } from '@/lib/storefrontProducts';
 import { rateLabel } from '@/lib/mobileProductDetailDisplay';
-
-const CARD_GRADIENTS = [
-    'bg-[linear-gradient(160deg,#5C4EB0_0%,#9A5FAF_100%)]',
-    'bg-[linear-gradient(160deg,#2F6FB0_0%,#2E9A90_100%)]',
-    'bg-[linear-gradient(160deg,#C45A38_0%,#C48A32_100%)]',
-    'bg-[linear-gradient(160deg,#2A8A62_0%,#6E9E38_100%)]',
-] as const;
+import { getSavingsProductGradientClass } from '@/lib/savingsCardTheme';
+import { SavingsGradientCard } from '@/components/mobile-v2/savings/SavingsGradientCard';
 
 const CARD_ICONS = [PiggyBank, Landmark, LockKeyhole, Target] as const;
 
@@ -42,7 +37,7 @@ function returnPercent(plan: MobileProduct): string {
 
 function SavingsCard({ plan, index }: { plan: MobileProduct; index: number }) {
     const Icon = CARD_ICONS[index % CARD_ICONS.length];
-    const gradient = CARD_GRADIENTS[index % CARD_GRADIENTS.length];
+    const gradientClass = getSavingsProductGradientClass(plan.id);
     const detailHref = `/mobile-v2/products/savings/flex-naira?productId=${encodeURIComponent(plan.id)}`;
     const percent = returnPercent(plan);
     const badge = savingsBadge(plan);
@@ -52,16 +47,13 @@ function SavingsCard({ plan, index }: { plan: MobileProduct; index: number }) {
         <Link
             href={detailHref}
             aria-label={`View ${plan.name}, ${percent} per annum returns`}
-            className={cn(
-                'relative flex min-h-[250px] flex-col overflow-hidden rounded-[24px] p-4 text-left text-white shadow-[0_12px_24px_-12px_rgba(23,19,33,0.34)] transition-transform active:scale-[0.98]',
-                gradient,
-            )}
+            className="block transition-transform active:scale-[0.98]"
         >
-            <span
-                className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(18,14,28,0.14)_0%,rgba(18,14,28,0.26)_100%)]"
-                aria-hidden
-            />
-            <div className="relative z-[1] flex flex-1 flex-col">
+            <SavingsGradientCard
+                gradientClass={gradientClass}
+                className="flex min-h-[250px] flex-col p-4 text-left"
+            >
+                <div className="flex flex-1 flex-col">
                 <div className="mb-3.5 flex items-start justify-between gap-2">
                     <div
                         className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-white/20"
@@ -90,6 +82,7 @@ function SavingsCard({ plan, index }: { plan: MobileProduct; index: number }) {
                     View
                 </span>
             </div>
+            </SavingsGradientCard>
         </Link>
     );
 }
