@@ -31,7 +31,7 @@ export function useMobileProductDetail({
     try {
       const mapped = await fetchMobileProductById(productId.trim());
       if (!mapped) {
-        throw new Error('Invalid product detail response');
+        throw new Error('This product is not turned on for this app.');
       }
 
       setProduct(mapped);

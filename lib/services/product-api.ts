@@ -162,11 +162,18 @@ export const productApi = {
     return data;
   },
 
-  /** Active / turned-on products for this app — GET /api/v1/products/app/:appId (not the full catalog). */
-  async getProductsByAppId(appId: string) {
-    const response = await fetch(`/api/v1/products/app/${encodeURIComponent(appId)}`, {
-      headers: getAuthHeaders(),
-    });
+  /** Storefront offerings — GET /api/v1/products/app/:appId?page=&limit=&type= */
+  async getProductsByAppId(appId: string, query?: { page?: number; limit?: number; type?: string }) {
+    const qs = new URLSearchParams();
+    qs.set("page", String(query?.page && query.page > 0 ? query.page : 1));
+    qs.set("limit", String(query?.limit && query.limit > 0 ? Math.min(query.limit, 100) : 100));
+    if (query?.type && query.type.toLowerCase() !== "all") qs.set("type", query.type.toUpperCase());
+    const response = await fetch(
+      `/api/v1/products/app/${encodeURIComponent(appId)}?${qs.toString()}`,
+      {
+        headers: getAuthHeaders(),
+      },
+    );
 
     const data = await response.json().catch(() => ({}));
 
@@ -177,9 +184,9 @@ export const productApi = {
     return data;
   },
 
-  // Get product by ID
+  // Get product by ID — GET /api/v1/products/:id
   async getProductById(productId: string) {
-    const response = await fetch(`/api/product/${productId}`, {
+    const response = await fetch(`/api/v1/products/${encodeURIComponent(productId)}`, {
       headers: getAuthHeaders(),
     });
 
@@ -194,7 +201,7 @@ export const productApi = {
 
   // Update product
   async updateProduct(productId: string, updates: any) {
-    const response = await fetch(`/api/product/${productId}`, {
+    const response = await fetch(`/api/v1/products/${encodeURIComponent(productId)}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(updates),
@@ -211,7 +218,7 @@ export const productApi = {
 
   // Delete product
   async deleteProduct(productId: string) {
-    const response = await fetch(`/api/product/${productId}`, {
+    const response = await fetch(`/api/v1/products/${encodeURIComponent(productId)}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
     });
@@ -227,7 +234,7 @@ export const productApi = {
 
   // Get product configuration
   async getProductConfiguration(productId: string) {
-    const response = await fetch(`/api/product/${productId}`, {
+    const response = await fetch(`/api/v1/products/${encodeURIComponent(productId)}`, {
       headers: getAuthHeaders(),
     });
 
@@ -243,7 +250,7 @@ export const productApi = {
   // Create or update product configuration
   async saveProductConfiguration(productId: string, productType: string, configuration: any) {
     const payload = buildConfigurationPayload(productType, configuration);
-    const response = await fetch(`/api/product/${productId}`, {
+    const response = await fetch(`/api/v1/products/${encodeURIComponent(productId)}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(payload),
@@ -278,34 +285,17 @@ export const productApi = {
     return data;
   },
 
-  /** Full catalog — GET /api/v1/products (all products, not app-filtered). */
-  async getAllProducts() {
-    const response = await fetch('/api/v1/products', {
-      headers: getAuthHeaders(),
-    });
-
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      throw new Error((data as { error?: string }).error || 'Failed to fetch products');
+  /** Storefront catalog — GET /api/v1/products/app/:appId (requires tenant appId). */
+  async getAllProducts(appId: string, query?: { page?: number; limit?: number; type?: string }) {
+    if (!appId?.trim()) {
+      throw new Error('appId is required — storefront catalog is GET /api/v1/products/app/{appId}');
     }
-
-    return data;
+    return this.getProductsByAppId(appId.trim(), query);
   },
 
-  // Get all products from Product Builder (global pool)
-  async getAllProductsFromBuilder() {
-    const response = await fetch('/api/product-builder/all', {
-      headers: getAuthHeaders(),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || 'Failed to fetch products from Product Builder');
-    }
-
-    return data;
+  /** Alias of the app catalog (storefront has no product-builder pool). */
+  async getAllProductsFromBuilder(appId: string) {
+    return this.getAllProducts(appId);
   },
 
   /** Alias: active products for app — GET /api/v1/products/app/:appId */

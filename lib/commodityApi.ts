@@ -10,6 +10,7 @@ import {
 } from "@/lib/platformApplicationFields"
 import { resolveWalletUserId } from "@/lib/resolveWalletUserId"
 import { sanitizeProductId } from "@/lib/sanitizeProductId"
+import { invalidateStorefrontApplications, invalidateStorefrontWallet } from "@/lib/storefrontSessionData"
 import type { ProductApplication } from "@/types/productApplication"
 
 const BFF = "/api"
@@ -394,6 +395,9 @@ export async function purchaseCommodity(
     }
   }
 
+  invalidateStorefrontWallet()
+  invalidateStorefrontApplications()
+
   return { ok: true, data: data.data ?? {} }
 }
 
@@ -431,6 +435,8 @@ export async function withdrawCommodity(
   if (!res.ok || (data as ApiEnvelope<unknown>).success === false) {
     return { ok: false, error: parseApiError(data, res.status) }
   }
+  invalidateStorefrontWallet(resolvedUserId)
+  invalidateStorefrontApplications(resolvedUserId)
   return { ok: true, data: (data as ApiEnvelope<unknown>).data }
 }
 

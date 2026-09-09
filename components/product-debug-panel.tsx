@@ -31,18 +31,37 @@ export function ProductDebugPanel({ appId, location }: ProductDebugPanelProps) {
     const fetchDebugInfo = async () => {
         setLoading(true)
         try {
-            // Fetch all products
-            const allProductsResponse = await productApi.getAllProducts()
+            if (!appId) {
+                setDebugInfo({
+                    currentAppId: appId,
+                    productsForCurrentApp: 0,
+                    totalProducts: 0,
+                    allAppIds: [],
+                    sampleProducts: [],
+                    apiStatus: 'error',
+                    apiError: 'appId is required — storefront catalog is GET /api/v1/products/app/{appId}',
+                    timestamp: new Date().toISOString()
+                })
+                return
+            }
 
-            const allProducts = allProductsResponse.success ? allProductsResponse.data : []
-            const productsForApp = appId
-                ? allProducts.filter((p: any) => p.appId === appId)
-                : []
+            const allProductsResponse = await productApi.getProductsByAppId(appId, { page: 1, limit: 100 })
+            const payload = allProductsResponse as { success?: boolean; data?: unknown; items?: unknown[] }
+            const nested = payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data)
+                ? (payload.data as { items?: unknown[]; products?: unknown[] })
+                : null
+            const allProducts = Array.isArray(payload.data)
+                ? payload.data
+                : Array.isArray(nested?.items)
+                    ? nested.items
+                    : Array.isArray(nested?.products)
+                        ? nested.products
+                        : Array.isArray(payload.items)
+                            ? payload.items
+                            : []
 
-            // Get unique appIds
-            const uniqueAppIds = [...new Set(allProducts.map((p: any) => p.appId))]
+            const uniqueAppIds = [...new Set(allProducts.map((p: any) => p.appId).filter(Boolean))]
 
-            // Get sample products (first 5)
             const sampleProducts = allProducts.slice(0, 5).map((p: any) => ({
                 id: p.id,
                 name: p.name,
@@ -54,7 +73,7 @@ export function ProductDebugPanel({ appId, location }: ProductDebugPanelProps) {
 
             setDebugInfo({
                 currentAppId: appId,
-                productsForCurrentApp: productsForApp.length,
+                productsForCurrentApp: allProducts.length,
                 totalProducts: allProducts.length,
                 allAppIds: uniqueAppIds,
                 sampleProducts,

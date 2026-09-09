@@ -6,6 +6,7 @@ import {
 export interface MobileProduct {
   id: string
   upstreamProductId?: string
+  merchantId?: string
   referenceNumber: string
   name: string
   description: string
@@ -100,8 +101,22 @@ export function normalizeStorefrontProductType(raw: unknown): StorefrontProductT
   return null
 }
 
-export function filterActiveAppProducts<T extends { isActive?: boolean }>(rows: T[]): T[] {
-  return rows.filter((p) => p.isActive === true)
+/**
+ * Swagger list items are `{ id, isActive, merchant, type, ... }` with no `upstreamProductId`.
+ * Clones may also include `upstreamProductId`; either shape is purchasable when active.
+ */
+export function isStorefrontPurchasableProduct(
+  product: Pick<MobileProduct, "id" | "upstreamProductId" | "isActive">,
+): boolean {
+  const localId = String(product.id ?? "").trim()
+  if (!localId) return false
+  return product.isActive === true
+}
+
+export function filterActiveAppProducts<T extends Pick<MobileProduct, "id" | "upstreamProductId" | "isActive">>(
+  rows: T[],
+): T[] {
+  return rows.filter((p) => isStorefrontPurchasableProduct(p))
 }
 
 /** Tab for list UI — e.g. API `LOAN` + name contains "Mortgage" → Mortgage tab. */
@@ -135,19 +150,19 @@ export function availableStorefrontProductTypes(
   return STOREFRONT_PRODUCT_TYPE_ORDER.filter((type) => present.has(type))
 }
 
-function formatAboutDuration(about: Record<string, unknown>): string | undefined {
-  if (typeof about.duration === "string" && about.duration.trim()) {
-    return about.duration.trim()
-  }
-  const tenure = about.tenure
-  if (typeof tenure === "string" && tenure.trim()) return tenure.trim()
-  if (tenure && typeof tenure === "object") {
-    const t = tenure as { label?: string; value?: number; unit?: string; min?: number; max?: number }
-    if (typeof t.label === "string" && t.label.trim()) return t.label.trim()
-    if (t.min != null && t.max != null) return `${t.min}–${t.max} mo`
-    if (t.value != null && t.unit) return `${t.value} ${t.unit}`
-  }
+function formatLabeledDuration(value: unknown): string | undefined {
+  if (typeof value === "string" && value.trim()) return value.trim()
+  if (!value || typeof value !== "object") return undefined
+  const t = value as { label?: string; value?: number; unit?: string; min?: number; max?: number }
+  if (typeof t.label === "string" && t.label.trim()) return t.label.trim()
+  if (t.min != null && t.max != null) return `${t.min}–${t.max} mo`
+  if (t.value != null && t.unit) return `${t.value} ${t.unit}`
+  if (t.value != null) return String(t.value)
   return undefined
+}
+
+function formatAboutDuration(about: Record<string, unknown>): string | undefined {
+  return formatLabeledDuration(about.duration) || formatLabeledDuration(about.tenure)
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -355,9 +370,12 @@ export function mapApiProductToMobileProduct(row: Record<string, unknown>): Mobi
   const requirementsPayload = asRecord(row.requirements)
   const feesAndCharges = asRecord(row.feesAndCharges)
   const merchantFeeAdditions = asRecord(row.merchantFeeAdditions)
+  const calculatedConfig = asRecord(row.calculatedConfig)
+  const calculatedBasis = asRecord(calculatedConfig.basis)
+  const calculatedCommodity = asRecord(calculatedConfig.commodity)
+  const calculatedMortgage = asRecord(calculatedConfig.mortgage)
 
   const loanAmount = asRange(structure.loanAmount)
-  const calculatedMortgage = asRecord(asRecord(row.calculatedConfig).mortgage)
   const mortgageFacility =
     asNumber(structure.mortgageAmount) ?? asNumber(calculatedMortgage.mortgageAmount)
   const estimatedDownPayment = asNumber(calculatedMortgage.estimatedDownPayment)
@@ -365,13 +383,15 @@ export function mapApiProductToMobileProduct(row: Record<string, unknown>): Mobi
   const investmentAmount = asRange(structure.investmentAmount)
   const savingsAmount = asRange(structure.savingsAmount)
   const unitPrice =
-    asNumber(structure.price) ??
     asNumber(row.price) ??
+    asNumber(structure.price) ??
+    asNumber(calculatedCommodity.unitPrice) ??
     asNumber(asRecord(structure.unitAmount).amount) ??
     asNumber(structure.unitAmount)
   const minimumQuantity =
     asNumber(row.minimumQuantity) ??
     asNumber(structure.minQuantityPurchase) ??
+    asNumber(calculatedCommodity.minimumQuantity) ??
     asNumber(asRecord(structure.unitAmount).minQuantity)
   const commodityAmount = {
     min: unitPrice != null && minimumQuantity != null ? unitPrice * minimumQuantity : undefined,
@@ -383,6 +403,12 @@ export function mapApiProductToMobileProduct(row: Record<string, unknown>): Mobi
   let interestRate: string | undefined
   if (structure.interestRate != null) {
     interestRate = String(structure.interestRate)
+  } else if (structure.offerYield != null) {
+    interestRate = formatPercent(structure.offerYield)
+  } else if (calculatedCommodity.offerYieldPercent != null) {
+    interestRate = formatPercent(calculatedCommodity.offerYieldPercent)
+  } else if (calculatedBasis.annualRatePercent != null) {
+    interestRate = formatPercent(calculatedBasis.annualRatePercent)
   } else if (returnsOnInvestment != null) {
     interestRate = `${returnsOnInvestment}%`
   }
@@ -429,7 +455,11 @@ export function mapApiProductToMobileProduct(row: Record<string, unknown>): Mobi
 
   const mapped: MobileProduct = {
     id,
-    upstreamProductId: asString(row.upstreamProductId),
+    upstreamProductId: asString(row.upstreamProductId ?? row.upstream_product_id),
+    merchantId:
+      asString(asRecord(row.merchant).id) ??
+      asString(row.merchantId) ??
+      asString(row.merchant_id),
     referenceNumber: String(row.referenceNumber ?? row.reference_number ?? ""),
     name: String(row.name ?? "Product"),
     description: String(row.description || typeDetails.description || ""),
@@ -456,6 +486,8 @@ export function mapApiProductToMobileProduct(row: Record<string, unknown>): Mobi
           ? row.unitOfMeasure
           : undefined,
     propertyValue:
+      asNumber(row.propertyValue) ??
+      asNumber(calculatedMortgage.propertyValue) ??
       asNumber(structure.propertyValue) ??
       mappedProperties.find((p) => p.value != null)?.value ??
       undefined,
@@ -472,7 +504,8 @@ export function mapApiProductToMobileProduct(row: Record<string, unknown>): Mobi
     roi: formatPercent(returnsOnInvestment),
     termsAndCondition:
       asString(structure.investmentTermsAndCondition) ??
-      asString(structure.commodityTermsAndCondition),
+      asString(structure.commodityTermsAndCondition) ??
+      asString(structure.savingsTermsAndCondition),
     fees: allFees,
     requirements: mapRequirements(
       mergeCollateralRequirements(

@@ -348,9 +348,12 @@ export const ENDPOINTS = {
   },
   applications: {
     init: "/v1/applications/init",
+    byId: (applicationId: string) => `/v1/applications/${encodeURIComponent(applicationId)}`,
     user: (userId: string) => `/v1/applications/user/${encodeURIComponent(userId)}`,
     approvedAmountSummary: (userId: string) =>
       `/v1/applications/user/${encodeURIComponent(userId)}/approved-amount-summary`,
+    pendingApprovedLoans: (userId: string) =>
+      `/v1/applications/user/${encodeURIComponent(userId)}/pending-approved-loans`,
     pendingApprovedMortgages: (userId: string) =>
       `/v1/applications/user/${encodeURIComponent(userId)}/pending-approved-mortgages`,
     pendingApprovedMortgage: (applicationId: string, userId: string) => {
@@ -366,18 +369,26 @@ export const ENDPOINTS = {
   /** Savings — provision then wallet deposit (never /applications/apply). */
   savingsAccounts: {
     create: "/v1/savings-accounts",
-    depositDetails: (applicationId: string) =>
-      `/v1/savings-accounts/${encodeURIComponent(applicationId)}/deposit-details`,
+    depositDetails: (applicationId: string, userId: string) => {
+      const qs = new URLSearchParams({ userId })
+      return `/v1/savings-accounts/${encodeURIComponent(applicationId)}/deposit-details?${qs}`
+    },
     deposits: (applicationId: string) =>
       `/v1/savings-accounts/${encodeURIComponent(applicationId)}/deposits`,
+    withdraw: (applicationId: string) =>
+      `/v1/savings-accounts/${encodeURIComponent(applicationId)}/withdraw`,
   },
   /** Investment — mirrors savings (never /applications/apply). */
   investmentAccounts: {
     create: "/v1/investment-accounts",
-    depositDetails: (applicationId: string) =>
-      `/v1/investment-accounts/${encodeURIComponent(applicationId)}/deposit-details`,
+    depositDetails: (applicationId: string, userId: string) => {
+      const qs = new URLSearchParams({ userId })
+      return `/v1/investment-accounts/${encodeURIComponent(applicationId)}/deposit-details?${qs}`
+    },
     deposits: (applicationId: string) =>
       `/v1/investment-accounts/${encodeURIComponent(applicationId)}/deposits`,
+    withdraw: (applicationId: string) =>
+      `/v1/investment-accounts/${encodeURIComponent(applicationId)}/withdraw`,
   },
   commodityAccounts: {
     apply: "/v1/commodity-accounts/apply",
@@ -390,9 +401,17 @@ export const ENDPOINTS = {
    * Modular KYC — proxied via `/api/v1/kyc/*` → compliance-ms.
    * Flow: POST `modularVerification` (Bearer; `fuspay.customerId` from signup). Optional GET `modularVerificationUrl`.
    */
-  /** Storefront catalog — app-enabled products only (not full Plata catalog). */
+  /** Storefront catalog — GET /api/v1/products/app/:appId (`data.items` + `pagination`). */
   products: {
-    byAppId: (appId: string) => `/v1/products/app/${encodeURIComponent(appId)}`,
+    byAppId: (appId: string, query?: { page?: number; limit?: number; type?: string }) => {
+      const qs = new URLSearchParams()
+      qs.set("page", String(query?.page && query.page > 0 ? query.page : 1))
+      const limit = query?.limit && query.limit > 0 ? Math.min(query.limit, 100) : 100
+      qs.set("limit", String(limit))
+      const type = query?.type?.trim()
+      if (type && type.toLowerCase() !== "all") qs.set("type", type.toUpperCase())
+      return `/v1/products/app/${encodeURIComponent(appId)}?${qs.toString()}`
+    },
     byId: (productId: string) => `/v1/products/${encodeURIComponent(productId)}`,
   },
   kyc: {

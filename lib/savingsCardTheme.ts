@@ -1,24 +1,24 @@
 /**
- * Muted savings card gradients — 160deg two-stop + dark overlay (see SavingsGradientCard).
- * Colors are subdued (not neon/shiny) for Hot Savings catalog and user savings accounts.
+ * Savings card gradients — 160deg two-stop + dark overlay (see SavingsGradientCard).
+ * Applied as inline `backgroundImage` so Tailwind does not drop dynamic class names.
  */
 
 export type SavingsGradientStop = { from: string; to: string }
 
-/** Curated palette: dusty purples, blues, greens, warm earth — all mid-saturation. */
+/** Distinct mid-saturation palette for Hot Savings catalog and user savings accounts. */
 export const SAVINGS_GRADIENT_PALETTE: SavingsGradientStop[] = [
   { from: '#5C4EB0', to: '#9A5FAF' },
   { from: '#2F6FB0', to: '#2E9A90' },
-  { from: '#9A5A42', to: '#B8844A' },
-  { from: '#2A8A62', to: '#6E9E38' },
-  { from: '#4A5568', to: '#5B6B8A' },
-  { from: '#6B4E71', to: '#8A6B8F' },
-  { from: '#3D5A4C', to: '#5C7A6A' },
-  { from: '#3A5F7A', to: '#4A7A8C' },
-  { from: '#5D4E60', to: '#7A6B7E' },
-  { from: '#5A6B52', to: '#7A8B6E' },
-  { from: '#4E5282', to: '#6B6F99' },
-  { from: '#7A5C4A', to: '#9A7A62' },
+  { from: '#C45C2A', to: '#D4A017' },
+  { from: '#1E8A5A', to: '#6E9E38' },
+  { from: '#3B5BDB', to: '#5C7CFA' },
+  { from: '#9C3D6E', to: '#C25A8A' },
+  { from: '#2B6A4F', to: '#4C9A78' },
+  { from: '#1D6A8A', to: '#2F9BB0' },
+  { from: '#7B3FA0', to: '#A56BC4' },
+  { from: '#3F7A3A', to: '#6AAA4A' },
+  { from: '#4E5282', to: '#7480C2' },
+  { from: '#B45309', to: '#D97706' },
 ]
 
 const STORAGE_KEY = 'mobile-v2:savings-account-themes'
@@ -32,20 +32,22 @@ function hashString(input: string): number {
   return Math.abs(hash)
 }
 
-function gradientClassForIndex(index: number): string {
-  const safe = ((index % SAVINGS_GRADIENT_PALETTE.length) + SAVINGS_GRADIENT_PALETTE.length) % SAVINGS_GRADIENT_PALETTE.length
+function gradientCssForIndex(index: number): string {
+  const safe =
+    ((index % SAVINGS_GRADIENT_PALETTE.length) + SAVINGS_GRADIENT_PALETTE.length) %
+    SAVINGS_GRADIENT_PALETTE.length
   const { from, to } = SAVINGS_GRADIENT_PALETTE[safe]
-  return `bg-[linear-gradient(160deg,${from}_0%,${to}_100%)]`
+  return `linear-gradient(160deg, ${from} 0%, ${to} 100%)`
 }
 
 export function savingsGradientClassForKey(key: string): string {
-  if (!key.trim()) return gradientClassForIndex(0)
-  return gradientClassForIndex(hashString(key.trim()))
+  if (!key.trim()) return gradientCssForIndex(0)
+  return gradientCssForIndex(hashString(key.trim()))
 }
 
 /** Dark overlay matching Hot Savings cards. */
 export const SAVINGS_CARD_OVERLAY_CLASS =
-  'pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(18,14,28,0.14)_0%,rgba(18,14,28,0.26)_100%)]'
+  'pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(18,14,28,0.08)_0%,rgba(18,14,28,0.18)_100%)]'
 
 function readThemeStore(): Record<string, number> {
   if (typeof window === 'undefined') return {}
@@ -79,11 +81,11 @@ function writeThemeStore(store: Record<string, number>): void {
  */
 export function assignSavingsAccountTheme(applicationId: string): string {
   const id = applicationId.trim()
-  if (!id) return gradientClassForIndex(0)
+  if (!id) return gradientCssForIndex(0)
 
   const store = readThemeStore()
   if (store[id] != null) {
-    return gradientClassForIndex(store[id])
+    return gradientCssForIndex(store[id])
   }
 
   const used = new Set(Object.values(store))
@@ -96,17 +98,17 @@ export function assignSavingsAccountTheme(applicationId: string): string {
 
   store[id] = idx
   writeThemeStore(store)
-  return gradientClassForIndex(idx)
+  return gradientCssForIndex(idx)
 }
 
-/** Resolved gradient for a user savings account (stored random or stable hash fallback). */
+/** Resolved gradient CSS for a user savings account (stored random or stable hash fallback). */
 export function getSavingsAccountGradientClass(applicationId: string): string {
   const id = applicationId.trim()
-  if (!id) return gradientClassForIndex(0)
+  if (!id) return gradientCssForIndex(0)
 
   const store = readThemeStore()
   if (store[id] != null) {
-    return gradientClassForIndex(store[id])
+    return gradientCssForIndex(store[id])
   }
   return savingsGradientClassForKey(id)
 }

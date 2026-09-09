@@ -1,5 +1,11 @@
 import { ENDPOINTS } from "@/lib/endpoints"
 import { fetchWithAuth } from "@/lib/fetchWithAuth"
+import { queryCache } from "@/lib/sessionQueryCache"
+import {
+  STOREFRONT_TTL,
+  invalidateStorefrontApplications,
+  storefrontApplicationsKey,
+} from "@/lib/storefrontSessionData"
 import type {
   InitProductApplicationPayload,
   ProductApplication,
@@ -96,8 +102,7 @@ export type ProductApplicationListParams = {
   productType?: string
   appId?: string
   status?: string
-  page?: number
-  limit?: number
+  productId?: string
 }
 
 export type ApprovedAmountBucket = {
@@ -117,6 +122,14 @@ export type ApprovedAmountSummary = {
 
 /** GET /v1/applications/user/:userId/approved-amount-summary?appId= */
 export async function fetchApprovedAmountSummary(
+  userId: string,
+  appId: string,
+): Promise<{ summary: ApprovedAmountSummary | null; error: string | null; status: number }> {
+  const key = `storefront:approved-summary:${userId}:${appId}`
+  return queryCache(key, () => fetchApprovedAmountSummaryUncached(userId, appId), STOREFRONT_TTL.applications)
+}
+
+async function fetchApprovedAmountSummaryUncached(
   userId: string,
   appId: string,
 ): Promise<{ summary: ApprovedAmountSummary | null; error: string | null; status: number }> {
@@ -151,12 +164,22 @@ export async function fetchUserProductApplications(
   userId: string,
   params?: ProductApplicationListParams,
 ): Promise<{ applications: ProductApplication[]; error: string | null; status: number }> {
+  return queryCache(
+    storefrontApplicationsKey(userId, params),
+    () => fetchUserProductApplicationsUncached(userId, params),
+    STOREFRONT_TTL.applications,
+  )
+}
+
+async function fetchUserProductApplicationsUncached(
+  userId: string,
+  params?: ProductApplicationListParams,
+): Promise<{ applications: ProductApplication[]; error: string | null; status: number }> {
   const qs = new URLSearchParams()
   if (params?.productType) qs.set("productType", params.productType)
   if (params?.appId) qs.set("appId", params.appId)
   if (params?.status) qs.set("status", params.status)
-  if (params?.page != null) qs.set("page", String(params.page))
-  if (params?.limit != null) qs.set("limit", String(params.limit))
+  if (params?.productId) qs.set("productId", params.productId)
 
   const path = ENDPOINTS.applications.user(userId)
   const url = bffUrl(qs.toString() ? `${path}?${qs}` : path)
@@ -182,7 +205,7 @@ export async function fetchUserProductApplications(
   }
 }
 
-/** GET /api/v1/products/applications/:applicationId */
+/** GET /api/v1/applications/:applicationId */
 export async function fetchProductApplicationById(
   applicationId: string,
 ): Promise<{ application: ProductApplication | null; error: string | null; status: number }> {
@@ -191,7 +214,7 @@ export async function fetchProductApplicationById(
     return { application: null, error: "Missing application id", status: 400 }
   }
 
-  const res = await fetchWithAuth(bffUrl(`/v1/products/applications/${encodeURIComponent(id)}`), {
+  const res = await fetchWithAuth(bffUrl(ENDPOINTS.applications.byId(id)), {
     method: "GET",
   })
   const data = (await res.json().catch(() => ({}))) as ProductApplicationInitResponse
@@ -307,6 +330,8 @@ export async function initializeProductApplication(
       status: res.status,
     }
   }
+
+  invalidateStorefrontApplications(payload.userId)
 
   return {
     application: application ?? null,
