@@ -27,9 +27,9 @@ const http = axios.create({
 })
 
 /**
- * GET /api/v1/products/app/:appId — app-scoped products from Product MS.
- * The client filters `isActive === true`; this endpoint may include inactive rows.
- * Does **not** fall back to the full catalog; use GET /api/v1/products for all products.
+ * GET /api/v1/products/app/:appId — storefront catalog for this tenant app.
+ * Query: page (default 1), limit (default 20, max 100), type (LOAN|MORTGAGE|SAVINGS|INVESTMENT|COMMODITY).
+ * Does **not** fall back to GET /api/v1/products (not in storefront swagger).
  */
 export async function GET(
   request: NextRequest,
@@ -40,10 +40,18 @@ export async function GET(
   const headers: Record<string, string> = { ...forwardStorefrontHeaders(request) }
   if (authHeader) headers.Authorization = authHeader
 
-  const appUrl = `${PRODUCT_SERVICE_URL}/api/v1/products/app/${encodeURIComponent(appId)}`
+  const incoming = request.nextUrl.searchParams
+  const pageRaw = Number(incoming.get("page") || "1")
+  const limitRaw = Number(incoming.get("limit") || "20")
+  const qs = new URLSearchParams()
+  qs.set("page", String(Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1))
+  qs.set("limit", String(Number.isFinite(limitRaw) ? Math.min(100, Math.max(1, Math.floor(limitRaw))) : 20))
+  const type = incoming.get("type")?.trim()
+  if (type && type.toLowerCase() !== "all") qs.set("type", type.toUpperCase())
+  const url = `${PRODUCT_SERVICE_URL}/api/v1/products/app/${encodeURIComponent(appId)}?${qs.toString()}`
 
   try {
-    const appResp = await http.get(appUrl, { headers })
+    const appResp = await http.get(url, { headers })
 
     if (appResp.status >= 200 && appResp.status < 300) {
       return NextResponse.json(appResp.data)

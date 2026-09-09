@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react"
-import { usePathname, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 
 import { getTenantSubdomainFromHost } from "@/lib/mobileTenant/subdomain"
 import {
@@ -21,6 +21,8 @@ import {
 import type { StorefrontPwaInstallPayload } from "@/lib/storefrontPwaTypes"
 import { parseWebAppManifestBranding, storefrontDisplayName, type WebAppManifestBranding } from "@/lib/webAppManifest"
 import { fetchMerchantBranding, type MerchantBranding } from "@/lib/merchantBrandingApi"
+import { prefetchStorefrontSession, STOREFRONT_TTL } from "@/lib/storefrontSessionData"
+import { queryCache } from "@/lib/sessionQueryCache"
 
 interface MobileV2TenantState {
   appId: string | null
@@ -42,7 +44,7 @@ interface MobileV2TenantContextValue extends MobileV2TenantState {
 const MobileV2TenantContext = createContext<MobileV2TenantContextValue | undefined>(undefined)
 
 /** Proxies `GET /api/v1/apps/resolve/{subdomain}` — includes `pwaManifest` + optional `pwaInstall`. */
-async function resolveSubdomain(slug: string) {
+async function resolveSubdomainUncached(slug: string) {
   const res = await fetch(`/api/v1/apps/resolve/${encodeURIComponent(slug)}`, {
     cache: "no-store",
     headers: { Accept: "application/json" },
@@ -74,7 +76,23 @@ async function resolveSubdomain(slug: string) {
   }
 }
 
+async function resolveSubdomain(slug: string) {
+  return queryCache(
+    `storefront:tenant:${slug}`,
+    () => resolveSubdomainUncached(slug),
+    STOREFRONT_TTL.tenant,
+  )
+}
+
 async function fetchManifestForAppId(appId: string): Promise<WebAppManifestBranding | null> {
+  return queryCache(
+    `storefront:manifest:${appId}`,
+    () => fetchManifestForAppIdUncached(appId),
+    STOREFRONT_TTL.tenant,
+  )
+}
+
+async function fetchManifestForAppIdUncached(appId: string): Promise<WebAppManifestBranding | null> {
   try {
     const res = await fetch(`/api/apps/${encodeURIComponent(appId)}/pwa/manifest.webmanifest`, {
       cache: "no-store",
@@ -267,10 +285,11 @@ async function loadTenantFromNavigation(search: string) {
 }
 
 export function MobileV2TenantProvider({ children }: { children: ReactNode }) {
-  const pathname = usePathname()
   const searchParams = useSearchParams()
   const searchKey = searchParams?.toString() ?? ""
   const hostKey = typeof window !== "undefined" ? window.location.hostname : ""
+
+  const navKey = `${hostKey}|${searchKey}`
 
   const [appId, setAppId] = useState<string | null>(null)
   const [merchantId, setMerchantId] = useState<string | null>(null)
@@ -301,7 +320,6 @@ export function MobileV2TenantProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false
-    setReady(false)
 
     const run = async () => {
       const sk = searchKey || (typeof window !== "undefined" ? window.location.search : "")
@@ -330,7 +348,12 @@ export function MobileV2TenantProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [pathname, searchKey, hostKey])
+  }, [navKey, searchKey])
+
+  useEffect(() => {
+    if (!ready || !appId) return
+    void prefetchStorefrontSession(appId)
+  }, [ready, appId])
 
   const value = useMemo(
     () => ({

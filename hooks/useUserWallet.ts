@@ -39,7 +39,7 @@ export function useUserWallet(explicitUserId?: string | null): UseUserWalletRetu
   const [error, setError] = useState<string | null>(null)
   const [notFound, setNotFound] = useState(false)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     setLoading(true)
     setError(null)
     setNotFound(false)
@@ -65,7 +65,7 @@ export function useUserWallet(explicitUserId?: string | null): UseUserWalletRetu
       let status = 0
 
       for (const userId of userIds) {
-        const result = await fetchUserWallet(userId)
+        const result = await fetchUserWallet(userId, { force })
         fetchError = result.error
         status = result.status
 
@@ -134,7 +134,7 @@ export function useUserWallet(explicitUserId?: string | null): UseUserWalletRetu
     loading,
     error,
     notFound,
-    refetch: load,
+    refetch: () => load(true),
   }
 }
 

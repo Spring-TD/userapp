@@ -4,7 +4,10 @@ export const dynamic = "force-dynamic"
 
 const BASE_URL = (process.env.NEXT_PUBLIC_API_URL || "https://account-ms.fly.dev").replace(/\/+$/, "")
 
-// GET /api/v1/products/applications?appId=...&userId=...
+/**
+ * GET /api/v1/products/applications?userId=&appId=&status=&productType=&productId=
+ * Rewrites to documented GET /api/v1/applications/user/{userId}.
+ */
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization")
@@ -13,8 +16,20 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url)
-    const qs = searchParams.toString()
-    const target = `${BASE_URL}/api/v1/products/applications${qs ? `?${qs}` : ""}`
+    const userId = searchParams.get("userId")?.trim()
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: "userId is required — list applications via GET /api/v1/applications/user/{userId}" },
+        { status: 400 },
+      )
+    }
+
+    const qs = new URLSearchParams()
+    for (const key of ["status", "productType", "productId", "appId"] as const) {
+      const value = searchParams.get(key)?.trim()
+      if (value) qs.set(key, value)
+    }
+    const target = `${BASE_URL}/api/v1/applications/user/${encodeURIComponent(userId)}${qs.toString() ? `?${qs}` : ""}`
 
     const response = await fetch(target, {
       headers: {
@@ -38,7 +53,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/v1/products/applications
+/** POST is not a storefront catalog operation — map leftovers to POST /api/v1/applications/init. */
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization")
@@ -48,7 +63,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json().catch(() => ({}))
 
-    const response = await fetch(`${BASE_URL}/api/v1/products/applications`, {
+    const response = await fetch(`${BASE_URL}/api/v1/applications/init`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -61,14 +76,13 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       return NextResponse.json(
-        { success: false, error: data.error || data.message || "Failed to create product application snapshot" },
+        { success: false, error: data.error || data.message || "Failed to initialize application" },
         { status: response.status || 502 },
       )
     }
 
     return NextResponse.json(data)
   } catch (error: unknown) {
-    return NextResponse.json({ success: false, error: (error as Error)?.message || "Failed to create product application snapshot" }, { status: 500 })
+    return NextResponse.json({ success: false, error: (error as Error)?.message || "Failed to initialize application" }, { status: 500 })
   }
 }
-

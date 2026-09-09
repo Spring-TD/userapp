@@ -6,9 +6,8 @@ import dns from 'dns';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// Base URL for all APIs (account-ms). Endpoints match Product API doc:
-// POST /api/v1/products/select-type, POST /api/v1/products/create-after-type, POST /api/v1/products (legacy),
-// GET /api/v1/products (catalog). App-scoped enabled list: GET /api/v1/products/app/:appId (see app/api/v1/products/app/[appId]/route.ts).
+// Storefront catalog is GET /api/v1/products/app/:appId (see that route). GET here requires appId
+// and rewrites to the app catalog. POST create is not a storefront operation.
 const PRODUCT_SERVICE_URL = (process.env.NEXT_PUBLIC_API_URL || 'https://account-ms.fly.dev').replace(/\/$/, '');
 
 const agent = new https.Agent({
@@ -149,7 +148,24 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const url = `${PRODUCT_SERVICE_URL}/api/v1/products`;
+    const incoming = request.nextUrl.searchParams
+    const appId = incoming.get("appId")?.trim()
+    if (!appId) {
+      return NextResponse.json(
+        { success: false, error: "appId is required — storefront catalog is GET /api/v1/products/app/{appId}" },
+        { status: 400 },
+      )
+    }
+
+    const pageRaw = Number(incoming.get("page") || "1")
+    const limitRaw = Number(incoming.get("limit") || "20")
+    const qs = new URLSearchParams()
+    qs.set("page", String(Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1))
+    qs.set("limit", String(Number.isFinite(limitRaw) ? Math.min(100, Math.max(1, Math.floor(limitRaw))) : 20))
+    const type = incoming.get("type")?.trim()
+    if (type && type.toLowerCase() !== "all") qs.set("type", type.toUpperCase())
+
+    const url = `${PRODUCT_SERVICE_URL}/api/v1/products/app/${encodeURIComponent(appId)}?${qs.toString()}`
 
     let response;
     try {

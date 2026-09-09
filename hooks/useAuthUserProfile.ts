@@ -15,7 +15,7 @@ export function useAuthUserProfile() {
   const refetch = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const result = await fetchAuthUserProfile()
+    const result = await fetchAuthUserProfile({ force: true })
     setUser(result.user)
     setKycStatus(result.kycStatus)
     setKycCompleted(result.kycCompleted)

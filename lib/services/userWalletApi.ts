@@ -5,6 +5,8 @@
 
 import { ENDPOINTS } from "@/lib/endpoints"
 import { fetchWithAuth } from "@/lib/fetchWithAuth"
+import { queryCache } from "@/lib/sessionQueryCache"
+import { STOREFRONT_TTL, invalidateStorefrontWallet, storefrontWalletKey } from "@/lib/storefrontSessionData"
 import { parseUserWalletFromResponse } from "@/lib/userWallet"
 import type {
   TransferProductToPrimaryPayload,
@@ -24,7 +26,22 @@ function bffUrl(path: string): string {
   return `${BFF}${path.startsWith("/") ? path : `/${path}`}`
 }
 
-export async function fetchUserWallet(userId: string): Promise<{
+export async function fetchUserWallet(
+  userId: string,
+  options?: { force?: boolean },
+): Promise<{
+  wallet: UserWallet | null
+  error: string | null
+  status: number
+}> {
+  const id = userId.trim()
+  if (!id) return { wallet: null, error: "Missing user id", status: 400 }
+  return queryCache(storefrontWalletKey(id), () => fetchUserWalletUncached(id), STOREFRONT_TTL.wallet, {
+    force: options?.force,
+  })
+}
+
+async function fetchUserWalletUncached(userId: string): Promise<{
   wallet: UserWallet | null
   error: string | null
   status: number
@@ -145,6 +162,8 @@ export async function transferProductApplicationToPrimary(
       status: res.status,
     }
   }
+
+  invalidateStorefrontWallet(userId)
 
   return {
     data: data.data ?? null,
