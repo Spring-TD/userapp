@@ -110,86 +110,102 @@ const GUIDES: Record<IntegratorProductSlug, string> = {
   loan: `
 # Loan
 
-Cash loan only. Mortgage, commodity, savings, and investment are other guides.
+This guide walks you through offering **cash loans** on your own platform. Mortgage, commodity, savings, and investment each have their own guide.
 
-Auth: \`PLATA_PUBLIC_KEY\` and \`PLATA_SECRET_KEY\` on every call. The two product reads in step 1 also work without keys.
+**How to authenticate:** send \`PLATA_PUBLIC_KEY\` and \`PLATA_SECRET_KEY\` on every request. Listing and reading a product (step 1) also work without keys if you prefer.
 
-## The loan journey at a glance
+**Who does what:** you build the customer experience; Plata holds the products, applications, offer letters, and repayment schedules. Lender staff approve and disburse in the Plata dashboard — you watch progress with status calls and webhooks.
 
-| # | What you want | Call |
-|---|---------------|------|
-| 1 | Get loan products | \`GET /api/v1/products?type=LOAN\`, then \`GET /api/v1/products/{id}\` |
-| 2 | Show the borrower what they will repay | \`POST /api/v1/products/{id}/loan-schedule\` |
-| 3 | Apply for a loan | \`POST /api/v1/products/external-applications\` |
-| 4 | Get loan status | \`GET /api/v1/products/external-applications/{applicationId}\` |
-| 5 | Accept the loan offer | \`GET\` then \`POST .../external-applications/{applicationId}/offer\` |
-| 6 | Get loan account details | \`GET .../external-applications/{applicationId}/account\` |
-| 7 | Get loan repayment details | \`GET .../external-applications/{applicationId}/repayment-schedule\` |
+## The journey at a glance
 
-\`{applicationId}\` is either the Plata id returned by step 3 (\`data.application.id\`) or your own \`localApplicationId\`. You can only read applications you submitted with your own keys.
+| Step | Goal | API |
+|------|------|-----|
+| 1 | Show available loans | \`GET /api/v1/products?type=LOAN\` · \`GET /api/v1/products/{id}\` |
+| 2 | Preview what they will repay *(optional)* | \`POST /api/v1/products/{id}/loan-schedule\` |
+| 3 | Submit the application | \`POST /api/v1/products/external-applications\` |
+| 4 | Check where it stands | \`GET /api/v1/products/external-applications/{applicationId}\` |
+| 5 | Let them accept or decline the offer | \`GET\` then \`POST .../offer\` |
+| 6 | Show the live loan account | \`GET .../account\` |
+| 7 | Show the repayment schedule | \`GET .../repayment-schedule\` |
+
+After you apply, keep either Plata’s \`data.application.id\` or your own \`localApplicationId\` — both work as \`{applicationId}\`. You can only see applications created with **your** keys.
+
+---
 
 ## 1. Get loan products
 
-\`GET /api/v1/products?type=LOAN\` — do not send \`appId\`.
+Start by loading the loan catalog so you can display products in your app.
 
-Keep \`id\`, \`structure.interestRate\`, \`structure.interestMethod\`, tenure, and min/max loan amount. That \`id\` is \`productId\` later. \`GET /api/v1/products/{id}\` returns one product in full.
+Call \`GET /api/v1/products?type=LOAN\`. Leave \`appId\` out of this request.
 
-Show the loan in your app. Plata does not host your storefront. When a sub-merchant turns the loan on or off, \`POST /api/v1/products/sub-merchant-activations\` with that \`productId\` and \`status\` \`active\` or \`deactivated\`.
+From each product, save:
 
-## 2. Preview repayments (optional)
+- \`id\` — you will send this later as \`productId\`
+- Interest rate and method (\`structure.interestRate\`, \`structure.interestMethod\`)
+- Tenure and the min / max loan amount
 
-\`POST /api/v1/products/{id}/loan-schedule\` with \`amount\` and \`duration\` returns every instalment and the total to repay. Nothing is saved.
+Need one product in full? Use \`GET /api/v1/products/{id}\`.
+
+You host the storefront — Plata does not. If a sub-merchant turns a loan on or off in your network, tell Plata with \`POST /api/v1/products/sub-merchant-activations\` (\`productId\` + \`status\`: \`active\` or \`deactivated\`). Skip this if you do not use sub-merchants.
+
+## 2. Preview repayments *(optional)*
+
+Before someone applies, you can show a calculator-style breakdown.
+
+Call \`POST /api/v1/products/{id}/loan-schedule\` with the amount and duration they are considering. Plata returns each instalment and the total to repay. Nothing is saved — it is only a preview.
 
 ## 3. Apply for a loan
 
-\`POST /api/v1/products/external-applications\` once per applicant.
+When the customer is ready, submit once with \`POST /api/v1/products/external-applications\`.
 
-| Field | Loan meaning |
-|-------|----------------|
-| \`productId\` | Catalog loan \`id\` |
-| \`user.bvn\` | Required, 11 digits |
-| \`application.localApplicationId\` | Your application id |
-| \`application.contractSnapshot.principal\` | Requested loan amount in naira |
-| \`application.monthlyIncome\` / \`repaymentSource\` | Underwriting fields |
-| \`loanWorkflowCallbackUrl\` | Where Plata POSTs status |
-| \`guarantorKycCallbackUrl\` | Optional, if the loan requires a guarantor |
+| What to send | Why it matters |
+|--------------|----------------|
+| \`productId\` | Which loan they chose (from step 1) |
+| \`user.bvn\` | Required — 11 digits |
+| \`application.localApplicationId\` | Your own id, so you can look the application up later |
+| \`application.contractSnapshot.principal\` | Amount requested (naira) |
+| \`application.monthlyIncome\` / \`repaymentSource\` | Helps underwriting — send when you have them |
+| \`loanWorkflowCallbackUrl\` | Plata will POST status updates here |
+| \`guarantorKycCallbackUrl\` | Only if this loan needs a guarantor |
 
-Do not send equity or property fields. Those belong on the mortgage guide.
+Leave equity and property fields out — those belong on the **mortgage** guide.
 
-Optional before apply: \`POST /api/v1/products/external-accounts\` creates the borrower's Plata NUBAN.
+Want a Plata bank account (NUBAN) for the borrower first? Call \`POST /api/v1/products/external-accounts\` before you apply. It is optional if apply already provisions what you need.
 
 ## 4. Get loan status
 
-\`GET /api/v1/products/external-applications/{applicationId}\`
+Poll anytime with \`GET /api/v1/products/external-applications/{applicationId}\`.
 
-- \`stage\` — where the loan is: \`submitted\` → \`under_review\` → \`offer_pending\` → \`offer_accepted\` → \`disbursed\` (or \`declined\`)
-- \`nextAction\` — what to do: \`wait_for_review\`, \`wait_for_offer_letter\`, \`accept_or_decline_offer\`, \`wait_for_disbursement\`, \`repay\`
-- \`downPayment\` — whether a down payment is still owed
+The response tells you two useful things:
 
-Plata also POSTs \`loan_application.submitted\` and \`loan_workflow_status.updated\` to your \`loanWorkflowCallbackUrl\` (verify \`X-Plata-Signature\` when configured). The webhook tells you the moment something changes; this call lets you check any time.
+- **\`stage\`** — where the application is now, for example \`submitted\` → \`under_review\` → \`offer_pending\` → \`offer_accepted\` → \`disbursed\` (or \`declined\`)
+- **\`nextAction\`** — what should happen next, for example \`wait_for_review\`, \`wait_for_offer_letter\`, \`accept_or_decline_offer\`, \`wait_for_disbursement\`, or \`repay\`
+- **\`downPayment\`** — whether any down payment is still outstanding
+
+You do not have to poll only. If you set \`loanWorkflowCallbackUrl\`, Plata also POSTs \`loan_application.submitted\` and \`loan_workflow_status.updated\` when something changes. When signature verification is configured, check the \`X-Plata-Signature\` header.
 
 ## 5. Accept the loan offer
 
-When \`nextAction\` is \`accept_or_decline_offer\`:
+When \`nextAction\` is \`accept_or_decline_offer\`, the lender has sent an offer letter and the borrower needs to decide.
 
-1. \`GET .../external-applications/{applicationId}/offer\` — show \`offerLetter.pdfUrl\` to the borrower.
-2. \`POST .../external-applications/{applicationId}/offer\` with \`{ "action": "accept", "acceptedTerms": true }\` or \`{ "action": "decline" }\`.
+1. \`GET .../external-applications/{applicationId}/offer\` — open \`offerLetter.pdfUrl\` for the customer.
+2. \`POST .../external-applications/{applicationId}/offer\` with either \`{ "action": "accept", "acceptedTerms": true }\` or \`{ "action": "decline" }\`.
 
-If the loan needs a down payment, it must be paid first: either the borrower transfers it with reference \`equity-payment:{applicationId}\`, or you collect it and send \`downPayment: { amount, providerReference }\` in the accept call. Otherwise you get **402**.
+**Down payment:** if the product requires one, settle it before accept. The borrower can transfer with reference \`equity-payment:{applicationId}\`, or you collect payment yourself and include \`downPayment: { amount, providerReference }\` in the accept body. Accepting without it returns **402**.
 
-Accepting moves no money. The lender then disburses to the borrower's wallet and the stage becomes \`disbursed\`.
+Accepting does **not** move money. After acceptance, the lender disburses into the borrower’s wallet; then \`stage\` becomes \`disbursed\`.
 
 ## 6. Get loan account details
 
-\`GET .../external-applications/{applicationId}/account\`
+Call \`GET .../external-applications/{applicationId}/account\` to show the live facility.
 
-Before disbursement: \`accountStatus: not_disbursed\`. After: amount lent, amount received after fees, the wallet it went to, amount paid, outstanding balance, next instalment, days overdue, and maturity date. \`accountStatus\` is \`active\`, \`overdue\`, \`paid_off\`, or \`closed\`.
+Until money is sent, you will see \`accountStatus: not_disbursed\`. After disbursement you get the amount lent, what the borrower received after fees, the wallet credited, amount paid so far, outstanding balance, next instalment, days overdue, and maturity date. Status moves between \`active\`, \`overdue\`, \`paid_off\`, and \`closed\`.
 
 ## 7. Get loan repayment details
 
-\`GET .../external-applications/{applicationId}/repayment-schedule\`
+Call \`GET .../external-applications/{applicationId}/repayment-schedule\` once the loan is disbursed.
 
-Every instalment with due date, amount, principal/interest split, remaining balance, and status (\`pending\`, \`paid\`, \`overdue\`). \`isNext: true\` marks the next one. Available once the loan is disbursed. Before that you get **409**.
+You get every instalment: due date, amount, principal vs interest, remaining balance, and status (\`pending\`, \`paid\`, \`overdue\`). The row with \`isNext: true\` is the one coming up. Call this before disbursement and you get **409** — the schedule is created when the loan is funded.
 `.trim(),
   mortgage: `
 # Mortgage
@@ -518,9 +534,9 @@ const APPLICATION_EXAMPLES: Record<IntegratorProductSlug, Record<string, unknown
 
 const CATALOG_COPY: Record<IntegratorProductSlug, { summary: string; description: string }> = {
   loan: {
-    summary: 'Fetch cash-loan products',
+    summary: 'List cash loan products',
     description:
-      'type=LOAN only. Returns rate, method, and loan amount range. Save id as productId. Do not send appId. Ignore mortgage, commodity, savings, and investment rows.'
+      'Returns published cash loans only (`type=LOAN`). Save each product `id` — you will need it as `productId` when someone applies. Do not send `appId`. Ignore other product types; they have their own guides.'
   },
   mortgage: {
     summary: 'Fetch property mortgage products',
@@ -546,9 +562,9 @@ const CATALOG_COPY: Record<IntegratorProductSlug, { summary: string; description
 
 const APPLICATION_COPY: Record<IntegratorProductSlug, { summary: string; description: string }> = {
   loan: {
-    summary: 'Send a loan application to Plata',
+    summary: 'Submit a loan application',
     description:
-      'One call per borrower. productId is the LOAN catalog id. Put the requested amount in application.contractSnapshot.principal. Set loanWorkflowCallbackUrl. Include monthlyIncome and repaymentSource when you have them.'
+      'One request per borrower. Use the loan catalog `id` as `productId`, put the amount in `application.contractSnapshot.principal`, and set `loanWorkflowCallbackUrl` so Plata can notify you when the application moves. Include `monthlyIncome` and `repaymentSource` when you have them.'
   },
   mortgage: {
     summary: 'Send a mortgage application to Plata',
@@ -650,9 +666,11 @@ export function buildIntegratorProductSpec(slug: string) {
                 ? 'Report that a sub-merchant turned this savings plan on or off'
                 : product.slug === 'investment'
                   ? 'Report that a sub-merchant turned this investment on or off'
-                  : 'Report that a sub-merchant turned this loan on or off';
+                  : 'Tell Plata a sub-merchant turned this loan on or off';
         operation.description =
-          `productId must be a ${product.type} catalog id from this guide. status is active or deactivated. This does not host the product.`;
+          product.slug === 'loan'
+            ? 'Optional. Only needed if sellers in your network activate or deactivate a loan. Send the catalog `productId` and `status` (`active` or `deactivated`). This does not create or host the product for you.'
+            : `productId must be a ${product.type} catalog id from this guide. status is active or deactivated. This does not host the product.`;
       }
       const mortgageCopy = product.slug === 'mortgage' ? MORTGAGE_COPY[path] : undefined;
       if (mortgageCopy) {
@@ -668,11 +686,19 @@ export function buildIntegratorProductSpec(slug: string) {
     openapi: '3.0.0',
     info: {
       title: `Plata Merchant Integration Documentation — ${product.title}`,
-      version: '1.6.0',
+      version: '1.6.1',
       description: guide(product.slug)
     },
     servers: source.servers,
-    tags: [{ name: product.title, description: `Only ${product.title}. Other products are separate guides under /docs.` }],
+    tags: [
+      {
+        name: product.title,
+        description:
+          product.slug === 'loan'
+            ? 'Cash loans only — follow the numbered steps in the description above. Other products are separate guides under /docs.'
+            : `Only ${product.title}. Other products are separate guides under /docs.`
+      }
+    ],
     paths,
     components: source.components,
     security: source.security

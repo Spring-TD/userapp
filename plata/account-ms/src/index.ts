@@ -139,7 +139,7 @@ function integratorDocsIndexHtml(): string {
 <head><meta charset="utf-8"><title>Plata Merchant Integration Documentation</title></head>
 <body>
   <h1>Plata Merchant Integration Documentation</h1>
-  <p>Pick one product. Each guide is its own page, with how to fetch products, make them available, and send applications back.</p>
+  <p>Choose a product guide below. Each page explains, in order, how to list products, take applications, and follow the customer through the rest of the journey.</p>
   <ul>${links}</ul>
 </body>
 </html>`;
