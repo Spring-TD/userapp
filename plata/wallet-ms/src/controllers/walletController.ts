@@ -1,8 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import { WalletService } from '../services';
 import { logger } from '../utils/logger';
-import { validateInput, createMerchantWalletSchema, createUserWalletSchema, updateWalletBalanceSchema, filterTransactionSchema, transferOutSchema, debitWalletSchema, debitTreasurySchema, operationToKycTransferSchema, kycToOperationTransferSchema, userApiCallSchema } from '../utils/validation';
+import { validateInput, createMerchantWalletSchema, createUserWalletSchema, updateWalletBalanceSchema, filterTransactionSchema, transferOutSchema, debitWalletSchema, debitTreasurySchema, billingToRepaymentTransferSchema, repaymentToBillingTransferSchema, userApiCallSchema, repaymentBankPayoutSchema } from '../utils/validation';
 import { MerchantWalletType, TransactionType } from '../models/Wallet';
+import { normalizeMerchantWalletType } from '../utils/merchantWalletType';
+import { requestAmountToKobo } from '../utils/money';
+import { walletForApi, walletsForApi, transactionForApi, transactionsForApi } from '../utils/walletApiMoney';
 
 // Define interfaces for the validated data
 interface CreateMerchantWalletData {
@@ -28,6 +31,36 @@ interface FilterTransactionData {
   startDate?: string;
   endDate?: string;
   type?: TransactionType;
+  limit?: string | number;
+  skip?: string | number;
+}
+
+function parseAppIdQuery(req: Request): string | undefined {
+  const appId = req.query.appId;
+  return typeof appId === 'string' && appId.trim() ? appId.trim() : undefined;
+}
+
+function parseMerchantTransactionFilters(req: Request): {
+  appId?: string;
+  filterData: {
+    startDate?: Date;
+    endDate?: Date;
+    type?: TransactionType;
+    limit?: number;
+    skip?: number;
+  };
+} {
+  const { startDate, endDate, type, limit, skip } = req.query;
+  return {
+    appId: parseAppIdQuery(req),
+    filterData: {
+      startDate: startDate ? new Date(startDate as string) : undefined,
+      endDate: endDate ? new Date(endDate as string) : undefined,
+      type: type as TransactionType,
+      limit: limit !== undefined ? Number(limit) : undefined,
+      skip: skip !== undefined ? Number(skip) : undefined
+    }
+  };
 }
 
 interface TransferOutData {
@@ -49,12 +82,12 @@ interface DebitTreasuryData {
   description: string;
 }
 
-interface OperationToKycTransferData {
+interface BillingToRepaymentTransferData {
   amount: number;
   description: string;
 }
 
-interface KycToOperationTransferData {
+interface RepaymentToBillingTransferData {
   amount: number;
   description: string;
 }
@@ -64,7 +97,7 @@ interface OperationDebitData {
   description: string;
 }
 
-interface KycDebitData {
+interface RepaymentDebitData {
   amount: number;
   description: string;
 }
@@ -96,6 +129,32 @@ interface UserApiCallData {
   apiKey?: string;
 }
 
+interface RepaymentBankPayoutData {
+  appId?: string;
+  accountNumber: string;
+  bankCode: string;
+  accountName: string;
+  bankName?: string;
+  amount: number;
+  currency?: string;
+  narration?: string;
+  reference?: string;
+}
+
+
+function parseAmountOrFail(
+  res: Response,
+  amount: unknown,
+  amountUnit?: unknown
+): number | null {
+  const parsed = requestAmountToKobo(amount, amountUnit);
+  if (!parsed.ok) {
+    res.status(400).json({ success: false, error: parsed.error });
+    return null;
+  }
+  return parsed.kobo;
+}
+
 export class WalletController {
   /**
    * POST /api/v1/wallets/merchant
@@ -124,6 +183,14 @@ export class WalletController {
 
       const merchantId = req.user.merchantId || req.user.userId;
       const { name, currency, merchantWalletType, appId, appName, payonusSubaccountCode } = value!;
+      const normalizedWalletType = normalizeMerchantWalletType(merchantWalletType);
+      if (!normalizedWalletType) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid merchant wallet type'
+        });
+        return;
+      }
 
       const result = await WalletService.createMerchantWallet({
         merchantId,
@@ -131,9 +198,9 @@ export class WalletController {
         appId,
         appName,
         payonusSubaccountCode,
-        name: name || `${merchantWalletType} Wallet`,
+        name: name || `${normalizedWalletType} Wallet`,
         currency: currency || 'USD',
-        merchantWalletType
+        merchantWalletType: normalizedWalletType
       });
 
       if (!result.success) {
@@ -148,14 +215,14 @@ export class WalletController {
         merchantId,
         appId,
         walletId: result.wallet?.id,
-        walletType: merchantWalletType
+        walletType: normalizedWalletType
       });
 
       res.status(201).json({
         success: true,
         message: 'Merchant wallet created successfully',
         data: {
-          wallet: result.wallet
+          wallet: result.wallet ? walletForApi(result.wallet) : result.wallet
         }
       });
     } catch (error) {
@@ -166,7 +233,7 @@ export class WalletController {
 
   /**
    * POST /api/v1/wallets/merchant/all
-   * Create all required merchant wallets (Treasury, Operation, KYC)
+   * Create all required merchant wallets (Billing, Treasury, Settlement)
    */
   static async createAllMerchantWallets(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -209,7 +276,7 @@ export class WalletController {
         success: true,
         message: 'All merchant wallets created successfully',
         data: {
-          wallets: result.wallets
+          wallets: result.wallets ? walletsForApi(result.wallets) : result.wallets
         }
       });
     } catch (error) {
@@ -244,8 +311,8 @@ export class WalletController {
         return;
       }
 
-      // Validate wallet type
-      if (!Object.values(MerchantWalletType).includes(walletType as MerchantWalletType)) {
+      const normalizedWalletType = normalizeMerchantWalletType(walletType);
+      if (!normalizedWalletType) {
         res.status(400).json({
           success: false,
           error: 'Invalid merchant wallet type'
@@ -253,7 +320,7 @@ export class WalletController {
         return;
       }
 
-      const result = await WalletService.getMerchantWalletByType(merchantId, walletType as MerchantWalletType, appId);
+      const result = await WalletService.getMerchantWalletByType(merchantId, normalizedWalletType, appId);
 
       if (!result.success) {
         res.status(404).json({
@@ -266,7 +333,7 @@ export class WalletController {
       res.status(200).json({
         success: true,
         data: {
-          wallet: result.wallet
+          wallet: result.wallet ? walletForApi(result.wallet) : result.wallet
         }
       });
     } catch (error) {
@@ -314,7 +381,7 @@ export class WalletController {
       res.status(200).json({
         success: true,
         data: {
-          wallets: result.wallets
+          wallets: result.wallets ? walletsForApi(result.wallets) : result.wallets
         }
       });
     } catch (error) {
@@ -382,7 +449,10 @@ export class WalletController {
         }
       }
 
-      const result = await WalletService.updateWalletBalance(walletId, amount, description);
+      const amountKobo = parseAmountOrFail(res, amount, (req.body as { amountUnit?: string }).amountUnit);
+      if (amountKobo === null) return;
+
+      const result = await WalletService.updateWalletBalance(walletId, amountKobo, description);
 
       if (!result.success) {
         res.status(400).json({
@@ -394,7 +464,7 @@ export class WalletController {
 
       logger.info('Merchant wallet balance updated', {
         walletId,
-        amount,
+        amount: amountKobo,
         newBalance: result.wallet?.balance
       });
 
@@ -402,7 +472,7 @@ export class WalletController {
         success: true,
         message: 'Wallet balance updated successfully',
         data: {
-          wallet: result.wallet
+          wallet: result.wallet ? walletForApi(result.wallet) : result.wallet
         }
       });
     } catch (error) {
@@ -474,7 +544,7 @@ export class WalletController {
         success: true,
         message: 'User wallet created successfully',
         data: {
-          wallet: result.wallet
+          wallet: result.wallet ? walletForApi(result.wallet) : result.wallet
         }
       });
     } catch (error) {
@@ -491,7 +561,7 @@ export class WalletController {
     try {
       const { userId } = req.params;
 
-      if (!req.user) {
+      if (!req.user && !req.gatewayMerchant) {
         res.status(401).json({
           success: false,
           error: 'Authentication required'
@@ -499,29 +569,46 @@ export class WalletController {
         return;
       }
 
-      // Check if user has permission to access this wallet
-      if (req.user.userId !== userId && req.user.merchantId !== userId && req.user.userType !== 'ADMIN') {
-        res.status(403).json({
+      const result = await WalletService.getUserWallet(userId);
+
+      if (!result.success || !result.wallet) {
+        res.status(404).json({
           success: false,
-          error: 'Access denied'
+          error: result.error || 'User wallet not found'
         });
         return;
       }
 
-      const result = await WalletService.getUserWallet(userId);
-
-      if (!result.success) {
-        res.status(404).json({
-          success: false,
-          error: result.error
-        });
-        return;
+      const walletMerchantId = String(result.wallet.merchantId || '').trim();
+      if (req.gatewayMerchant) {
+        if (walletMerchantId !== req.gatewayMerchant.merchantId) {
+          res.status(403).json({
+            success: false,
+            error: 'Access denied',
+            message: 'User wallet does not belong to your merchant'
+          });
+          return;
+        }
+      } else if (req.user) {
+        const callerMerchantId = String(req.user.merchantId || req.user.userMerchantId || '').trim();
+        const allowed =
+          req.user.userType === 'ADMIN' ||
+          req.user.userId === userId ||
+          callerMerchantId === userId ||
+          (Boolean(callerMerchantId) && callerMerchantId === walletMerchantId);
+        if (!allowed) {
+          res.status(403).json({
+            success: false,
+            error: 'Access denied'
+          });
+          return;
+        }
       }
 
       res.status(200).json({
         success: true,
         data: {
-          wallet: result.wallet
+          wallet: walletForApi(result.wallet)
         }
       });
     } catch (error) {
@@ -568,7 +655,10 @@ export class WalletController {
         return;
       }
 
-      const result = await WalletService.updateWalletBalance(userId, amount, description);
+      const amountKobo = parseAmountOrFail(res, amount, (req.body as { amountUnit?: string }).amountUnit);
+      if (amountKobo === null) return;
+
+      const result = await WalletService.updateWalletBalance(userId, amountKobo, description);
 
       if (!result.success) {
         res.status(400).json({
@@ -580,7 +670,7 @@ export class WalletController {
 
       logger.info('User wallet balance updated', {
         userId,
-        amount,
+        amount: amountKobo,
         newBalance: result.wallet?.balance
       });
 
@@ -588,7 +678,7 @@ export class WalletController {
         success: true,
         message: 'Wallet balance updated successfully',
         data: {
-          wallet: result.wallet
+          wallet: result.wallet ? walletForApi(result.wallet) : result.wallet
         }
       });
     } catch (error) {
@@ -622,7 +712,24 @@ export class WalletController {
         return;
       }
 
-      const result = await WalletService.getUserWalletsByMerchant(merchantId);
+      const { limit, skip } = req.query;
+      const { error, value } = validateInput<FilterTransactionData>(filterTransactionSchema, {
+        limit,
+        skip
+      });
+      if (error) {
+        res.status(400).json({
+          success: false,
+          error: 'Validation failed',
+          details: error
+        });
+        return;
+      }
+
+      const result = await WalletService.getUserWalletsByMerchant(merchantId, {
+        limit: value?.limit !== undefined ? Number(value.limit) : undefined,
+        skip: value?.skip !== undefined ? Number(value.skip) : undefined
+      });
 
       if (!result.success) {
         res.status(400).json({
@@ -635,7 +742,8 @@ export class WalletController {
       res.status(200).json({
         success: true,
         data: {
-          wallets: result.wallets
+          wallets: result.wallets ? walletsForApi(result.wallets) : result.wallets,
+          pagination: result.pagination
         }
       });
     } catch (error) {
@@ -651,9 +759,9 @@ export class WalletController {
   static async filterUserTransactions(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { userId } = req.params;
-      const { startDate, endDate, type } = req.query;
+      const { startDate, endDate, type, limit, skip } = req.query;
 
-      if (!req.user) {
+      if (!req.user && !req.gatewayMerchant) {
         res.status(401).json({
           success: false,
           error: 'Authentication required'
@@ -661,17 +769,43 @@ export class WalletController {
         return;
       }
 
-      // Check if user has permission to access this wallet
-      if (req.user.userId !== userId && req.user.merchantId !== userId && req.user.userType !== 'ADMIN') {
-        res.status(403).json({
+      const ownership = await WalletService.getUserWallet(userId);
+      if (!ownership.success || !ownership.wallet) {
+        res.status(404).json({
           success: false,
-          error: 'Access denied'
+          error: ownership.error || 'User wallet not found'
         });
         return;
       }
 
+      const walletMerchantId = String(ownership.wallet.merchantId || '').trim();
+      if (req.gatewayMerchant) {
+        if (walletMerchantId !== req.gatewayMerchant.merchantId) {
+          res.status(403).json({
+            success: false,
+            error: 'Access denied',
+            message: 'User wallet does not belong to your merchant'
+          });
+          return;
+        }
+      } else if (req.user) {
+        const callerMerchantId = String(req.user.merchantId || req.user.userMerchantId || '').trim();
+        const allowed =
+          req.user.userType === 'ADMIN' ||
+          req.user.userId === userId ||
+          callerMerchantId === userId ||
+          (Boolean(callerMerchantId) && callerMerchantId === walletMerchantId);
+        if (!allowed) {
+          res.status(403).json({
+            success: false,
+            error: 'Access denied'
+          });
+          return;
+        }
+      }
+
       // Validate input data
-      const { error, value } = validateInput<FilterTransactionData>(filterTransactionSchema, { startDate, endDate, type });
+      const { error } = validateInput<FilterTransactionData>(filterTransactionSchema, { startDate, endDate, type, limit, skip });
       if (error) {
         res.status(400).json({
           success: false,
@@ -685,7 +819,9 @@ export class WalletController {
       const filterData = {
         startDate: startDate ? new Date(startDate as string) : undefined,
         endDate: endDate ? new Date(endDate as string) : undefined,
-        type: type as TransactionType
+        type: type as TransactionType,
+        limit: limit !== undefined ? Number(limit) : undefined,
+        skip: skip !== undefined ? Number(skip) : undefined
       };
 
       const result = await WalletService.filterUserTransactions(userId, filterData);
@@ -700,13 +836,15 @@ export class WalletController {
 
       logger.info('User wallet transactions filtered', {
         userId,
-        transactionCount: result.transactions?.length
+        transactionCount: result.transactions?.length,
+        pagination: result.pagination
       });
 
       res.status(200).json({
         success: true,
         data: {
-          transactions: result.transactions
+          transactions: result.transactions ? transactionsForApi(result.transactions) : result.transactions,
+          pagination: result.pagination
         }
       });
     } catch (error) {
@@ -752,12 +890,14 @@ export class WalletController {
       }
 
       const { toWalletId, amount, description } = value!;
+      const amountKobo = parseAmountOrFail(res, amount, (req.body as { amountUnit?: string }).amountUnit);
+      if (amountKobo === null) return;
 
       // Perform the transfer
       const result = await WalletService.transferOutFromUser({
         userId,
         toWalletId,
-        amount,
+        amount: amountKobo,
         description
       });
 
@@ -779,9 +919,9 @@ export class WalletController {
         success: true,
         message: 'Money transferred successfully',
         data: {
-          fromWallet: result.fromWallet,
-          toWallet: result.toWallet,
-          transaction: result.transaction
+          fromWallet: result.fromWallet ? walletForApi(result.fromWallet) : result.fromWallet,
+          toWallet: result.toWallet ? walletForApi(result.toWallet) : result.toWallet,
+          transaction: result.transaction ? transactionForApi(result.transaction) : result.transaction
         }
       });
     } catch (error) {
@@ -797,7 +937,7 @@ export class WalletController {
   static async filterTreasuryTransactions(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { merchantId } = req.params;
-      const { startDate, endDate, type } = req.query;
+      const { startDate, endDate, type, limit, skip } = req.query;
 
       if (!req.user) {
         res.status(401).json({
@@ -817,7 +957,7 @@ export class WalletController {
       }
 
       // Validate input data
-      const { error, value } = validateInput<FilterTransactionData>(filterTransactionSchema, { startDate, endDate, type });
+      const { error } = validateInput<FilterTransactionData>(filterTransactionSchema, { startDate, endDate, type, limit, skip });
       if (error) {
         res.status(400).json({
           success: false,
@@ -827,27 +967,12 @@ export class WalletController {
         return;
       }
 
-      // Get Treasury Wallet for the merchant
-      const treasuryResult = await WalletService.getTreasuryWallet(merchantId);
-      if (!treasuryResult.success || !treasuryResult.wallet) {
-        res.status(404).json({
-          success: false,
-          error: 'Treasury wallet not found'
-        });
-        return;
-      }
+      const { appId, filterData } = parseMerchantTransactionFilters(req);
 
-      // Filter transactions
-      const filterData = {
-        startDate: startDate ? new Date(startDate as string) : undefined,
-        endDate: endDate ? new Date(endDate as string) : undefined,
-        type: type as TransactionType
-      };
-
-      const result = await WalletService.filterWalletTransactions(treasuryResult.wallet.id, filterData);
+      const result = await WalletService.filterTreasuryTransactions(merchantId, filterData, appId);
 
       if (!result.success) {
-        res.status(400).json({
+        res.status(result.error?.includes('pass appId') ? 400 : 404).json({
           success: false,
           error: result.error
         });
@@ -856,13 +981,16 @@ export class WalletController {
 
       logger.info('Treasury wallet transactions filtered', {
         merchantId,
-        transactionCount: result.transactions?.length
+        appId,
+        transactionCount: result.transactions?.length,
+        pagination: result.pagination
       });
 
       res.status(200).json({
         success: true,
         data: {
-          transactions: result.transactions
+          transactions: result.transactions ? transactionsForApi(result.transactions) : result.transactions,
+          pagination: result.pagination
         }
       });
     } catch (error) {
@@ -899,6 +1027,8 @@ export class WalletController {
       }
 
       const { fromWalletId, toWalletId, amount, description } = value!;
+      const amountKobo = parseAmountOrFail(res, amount, (req.body as { amountUnit?: string }).amountUnit);
+      if (amountKobo === null) return;
 
       // Verify that the fromWallet is the Treasury Wallet of this merchant
       const treasuryResult = await WalletService.getTreasuryWallet(merchantId);
@@ -922,7 +1052,7 @@ export class WalletController {
       const result = await WalletService.transferOut({
         fromWalletId,
         toWalletId,
-        amount,
+        amount: amountKobo,
         description
       });
 
@@ -945,9 +1075,9 @@ export class WalletController {
         success: true,
         message: 'Money transferred successfully',
         data: {
-          fromWallet: result.fromWallet,
-          toWallet: result.toWallet,
-          transaction: result.transaction
+          fromWallet: result.fromWallet ? walletForApi(result.fromWallet) : result.fromWallet,
+          toWallet: result.toWallet ? walletForApi(result.toWallet) : result.toWallet,
+          transaction: result.transaction ? transactionForApi(result.transaction) : result.transaction
         }
       });
     } catch (error) {
@@ -957,10 +1087,10 @@ export class WalletController {
   }
 
   /**
-   * POST /api/v1/wallets/operation-to-kyc
-   * Transfer money from Operation Wallet to KYC Wallet
+   * POST /api/v1/wallets/billing-to-repayment
+   * Transfer money from Billing Wallet to Repayment Wallet
    */
-  static async transferFromOperationToKyc(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async transferFromBillingToRepayment(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {
         res.status(401).json({
@@ -973,7 +1103,7 @@ export class WalletController {
       const merchantId = req.user.merchantId || req.user.userId;
 
       // Validate input data
-      const { error, value } = validateInput<OperationToKycTransferData>(operationToKycTransferSchema, req.body);
+      const { error, value } = validateInput<BillingToRepaymentTransferData>(billingToRepaymentTransferSchema, req.body);
       if (error) {
         res.status(400).json({
           success: false,
@@ -984,11 +1114,13 @@ export class WalletController {
       }
 
       const { amount, description } = value!;
+      const amountKobo = parseAmountOrFail(res, amount, (req.body as { amountUnit?: string }).amountUnit);
+      if (amountKobo === null) return;
 
       // Perform the transfer
-      const result = await WalletService.transferFromOperationToKyc({
+      const result = await WalletService.transferFromBillingToRepayment({
         merchantId,
-        amount,
+        amount: amountKobo,
         description
       });
 
@@ -1000,31 +1132,36 @@ export class WalletController {
         return;
       }
 
-      logger.info('Money transferred from Operation to KYC Wallet', {
+      logger.info('Money transferred from Billing to Repayment Wallet', {
         merchantId,
         amount
       });
 
       res.status(200).json({
         success: true,
-        message: 'Money transferred successfully from Operation to KYC Wallet',
+        message: 'Money transferred successfully from Billing to Repayment Wallet',
         data: {
-          fromWallet: result.fromWallet,
-          toWallet: result.toWallet,
-          transaction: result.transaction
+          fromWallet: result.fromWallet ? walletForApi(result.fromWallet) : result.fromWallet,
+          toWallet: result.toWallet ? walletForApi(result.toWallet) : result.toWallet,
+          transaction: result.transaction ? transactionForApi(result.transaction) : result.transaction
         }
       });
     } catch (error) {
-      logger.error('Error transferring money from Operation to KYC Wallet', { error });
+      logger.error('Error transferring money from Billing to Repayment Wallet', { error });
       next(error);
     }
   }
 
+  /** @deprecated Use transferFromBillingToRepayment */
+  static async transferFromOperationToKyc(req: Request, res: Response, next: NextFunction): Promise<void> {
+    return WalletController.transferFromBillingToRepayment(req, res, next);
+  }
+
   /**
-   * POST /api/v1/wallets/kyc-to-operation
-   * Transfer money from KYC Wallet to Operation Wallet
+   * POST /api/v1/wallets/repayment-to-billing
+   * Transfer money from Repayment Wallet to Billing Wallet
    */
-  static async transferFromKycToOperation(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async transferFromRepaymentToBilling(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {
         res.status(401).json({
@@ -1037,7 +1174,7 @@ export class WalletController {
       const merchantId = req.user.merchantId || req.user.userId;
 
       // Validate input data
-      const { error, value } = validateInput<KycToOperationTransferData>(kycToOperationTransferSchema, req.body);
+      const { error, value } = validateInput<RepaymentToBillingTransferData>(repaymentToBillingTransferSchema, req.body);
       if (error) {
         res.status(400).json({
           success: false,
@@ -1048,11 +1185,13 @@ export class WalletController {
       }
 
       const { amount, description } = value!;
+      const amountKobo = parseAmountOrFail(res, amount, (req.body as { amountUnit?: string }).amountUnit);
+      if (amountKobo === null) return;
 
       // Perform the transfer
-      const result = await WalletService.transferFromKycToOperation({
+      const result = await WalletService.transferFromRepaymentToBilling({
         merchantId,
-        amount,
+        amount: amountKobo,
         description
       });
 
@@ -1064,24 +1203,29 @@ export class WalletController {
         return;
       }
 
-      logger.info('Money transferred from KYC to Operation Wallet', {
+      logger.info('Money transferred from Repayment to Billing Wallet', {
         merchantId,
         amount
       });
 
       res.status(200).json({
         success: true,
-        message: 'Money transferred successfully from KYC to Operation Wallet',
+        message: 'Money transferred successfully from Repayment to Billing Wallet',
         data: {
-          fromWallet: result.fromWallet,
-          toWallet: result.toWallet,
-          transaction: result.transaction
+          fromWallet: result.fromWallet ? walletForApi(result.fromWallet) : result.fromWallet,
+          toWallet: result.toWallet ? walletForApi(result.toWallet) : result.toWallet,
+          transaction: result.transaction ? transactionForApi(result.transaction) : result.transaction
         }
       });
     } catch (error) {
-      logger.error('Error transferring money from KYC to Operation Wallet', { error });
+      logger.error('Error transferring money from Repayment to Billing Wallet', { error });
       next(error);
     }
+  }
+
+  /** @deprecated Use transferFromRepaymentToBilling */
+  static async transferFromKycToOperation(req: Request, res: Response, next: NextFunction): Promise<void> {
+    return WalletController.transferFromRepaymentToBilling(req, res, next);
   }
 
   /**
@@ -1091,7 +1235,7 @@ export class WalletController {
   static async filterOperationTransactions(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { merchantId } = req.params;
-      const { startDate, endDate, type } = req.query;
+      const { startDate, endDate, type, limit, skip } = req.query;
 
       if (!req.user) {
         res.status(401).json({
@@ -1111,7 +1255,7 @@ export class WalletController {
       }
 
       // Validate input data
-      const { error, value } = validateInput<FilterTransactionData>(filterTransactionSchema, { startDate, endDate, type });
+      const { error } = validateInput<FilterTransactionData>(filterTransactionSchema, { startDate, endDate, type, limit, skip });
       if (error) {
         res.status(400).json({
           success: false,
@@ -1121,17 +1265,12 @@ export class WalletController {
         return;
       }
 
-      // Filter transactions
-      const filterData = {
-        startDate: startDate ? new Date(startDate as string) : undefined,
-        endDate: endDate ? new Date(endDate as string) : undefined,
-        type: type as TransactionType
-      };
+      const { appId, filterData } = parseMerchantTransactionFilters(req);
 
-      const result = await WalletService.filterOperationTransactions(merchantId, filterData);
+      const result = await WalletService.filterOperationTransactions(merchantId, filterData, appId);
 
       if (!result.success) {
-        res.status(400).json({
+        res.status(result.error?.includes('pass appId') ? 400 : 404).json({
           success: false,
           error: result.error
         });
@@ -1140,13 +1279,16 @@ export class WalletController {
 
       logger.info('Operation wallet transactions filtered', {
         merchantId,
-        transactionCount: result.transactions?.length
+        appId,
+        transactionCount: result.transactions?.length,
+        pagination: result.pagination
       });
 
       res.status(200).json({
         success: true,
         data: {
-          transactions: result.transactions
+          transactions: result.transactions ? transactionsForApi(result.transactions) : result.transactions,
+          pagination: result.pagination
         }
       });
     } catch (error) {
@@ -1156,13 +1298,13 @@ export class WalletController {
   }
 
   /**
-   * GET /api/v1/wallets/kyc/:merchantId/transactions
-   * Filter KYC Wallet transactions by date range and type
+   * GET /api/v1/wallets/repayment/:merchantId/transactions
+   * Filter Repayment Wallet transactions by date range and type
    */
-  static async filterKycTransactions(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async filterRepaymentTransactions(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { merchantId } = req.params;
-      const { startDate, endDate, type } = req.query;
+      const { startDate, endDate, type, limit, skip } = req.query;
 
       if (!req.user) {
         res.status(401).json({
@@ -1182,7 +1324,7 @@ export class WalletController {
       }
 
       // Validate input data
-      const { error, value } = validateInput<FilterTransactionData>(filterTransactionSchema, { startDate, endDate, type });
+      const { error } = validateInput<FilterTransactionData>(filterTransactionSchema, { startDate, endDate, type, limit, skip });
       if (error) {
         res.status(400).json({
           success: false,
@@ -1192,38 +1334,41 @@ export class WalletController {
         return;
       }
 
-      // Filter transactions
-      const filterData = {
-        startDate: startDate ? new Date(startDate as string) : undefined,
-        endDate: endDate ? new Date(endDate as string) : undefined,
-        type: type as TransactionType
-      };
+      const { appId, filterData } = parseMerchantTransactionFilters(req);
 
-      const result = await WalletService.filterKycTransactions(merchantId, filterData);
+      const result = await WalletService.filterRepaymentTransactions(merchantId, filterData, appId);
 
       if (!result.success) {
-        res.status(400).json({
+        res.status(result.error?.includes('pass appId') ? 400 : 404).json({
           success: false,
           error: result.error
         });
         return;
       }
 
-      logger.info('KYC wallet transactions filtered', {
+      logger.info('Repayment wallet transactions filtered', {
         merchantId,
-        transactionCount: result.transactions?.length
+        appId,
+        transactionCount: result.transactions?.length,
+        pagination: result.pagination
       });
 
       res.status(200).json({
         success: true,
         data: {
-          transactions: result.transactions
+          transactions: result.transactions ? transactionsForApi(result.transactions) : result.transactions,
+          pagination: result.pagination
         }
       });
     } catch (error) {
-      logger.error('Error filtering kyc transactions', { error });
+      logger.error('Error filtering repayment transactions', { error });
       next(error);
     }
+  }
+
+  /** @deprecated Use filterRepaymentTransactions */
+  static async filterKycTransactions(req: Request, res: Response, next: NextFunction): Promise<void> {
+    return WalletController.filterRepaymentTransactions(req, res, next);
   }
 
   /**
@@ -1254,11 +1399,13 @@ export class WalletController {
       }
 
       const { amount, description } = value!;
+      const amountKobo = parseAmountOrFail(res, amount, (req.body as { amountUnit?: string }).amountUnit);
+      if (amountKobo === null) return;
 
       // Perform the debit on the Operation Wallet
       const result = await WalletService.debitOperationWallet({
         merchantId,
-        amount,
+        amount: amountKobo,
         description
       });
 
@@ -1279,8 +1426,8 @@ export class WalletController {
         success: true,
         message: 'Operation wallet debited successfully',
         data: {
-          wallet: result.wallet,
-          transaction: result.transaction
+          wallet: result.wallet ? walletForApi(result.wallet) : result.wallet,
+          transaction: result.transaction ? transactionForApi(result.transaction) : result.transaction
         }
       });
     } catch (error) {
@@ -1290,10 +1437,10 @@ export class WalletController {
   }
 
   /**
-   * POST /api/v1/wallets/kyc/debit
-   * Debit the merchant's own KYC Wallet (used for billing)
+   * POST /api/v1/wallets/repayment/debit
+   * Debit the merchant's own Repayment Wallet (used for billing)
    */
-  static async debitKycWallet(req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async debitRepaymentWallet(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {
         res.status(401).json({
@@ -1306,7 +1453,7 @@ export class WalletController {
       const merchantId = req.user.merchantId || req.user.userId;
 
       // Validate input data
-      const { error, value } = validateInput<KycDebitData>(debitTreasurySchema, req.body);
+      const { error, value } = validateInput<RepaymentDebitData>(debitTreasurySchema, req.body);
       if (error) {
         res.status(400).json({
           success: false,
@@ -1317,11 +1464,13 @@ export class WalletController {
       }
 
       const { amount, description } = value!;
+      const amountKobo = parseAmountOrFail(res, amount, (req.body as { amountUnit?: string }).amountUnit);
+      if (amountKobo === null) return;
 
-      // Perform the debit on the KYC Wallet
-      const result = await WalletService.debitKycWallet({
+      // Perform the debit on the Repayment Wallet
+      const result = await WalletService.debitRepaymentWallet({
         merchantId,
-        amount,
+        amount: amountKobo,
         description
       });
 
@@ -1333,23 +1482,28 @@ export class WalletController {
         return;
       }
 
-      logger.info('KYC wallet debited by merchant', {
+      logger.info('Repayment wallet debited by merchant', {
         merchantId,
         amount
       });
 
       res.status(200).json({
         success: true,
-        message: 'KYC wallet debited successfully',
+        message: 'Repayment wallet debited successfully',
         data: {
-          wallet: result.wallet,
-          transaction: result.transaction
+          wallet: result.wallet ? walletForApi(result.wallet) : result.wallet,
+          transaction: result.transaction ? transactionForApi(result.transaction) : result.transaction
         }
       });
     } catch (error) {
-      logger.error('Error debiting KYC wallet', { error });
+      logger.error('Error debiting Repayment wallet', { error });
       next(error);
     }
+  }
+
+  /** @deprecated Use debitRepaymentWallet */
+  static async debitKycWallet(req: Request, res: Response, next: NextFunction): Promise<void> {
+    return WalletController.debitRepaymentWallet(req, res, next);
   }
 
   /**
@@ -1380,11 +1534,13 @@ export class WalletController {
       }
 
       const { amount, description } = value!;
+      const amountKobo = parseAmountOrFail(res, amount, (req.body as { amountUnit?: string }).amountUnit);
+      if (amountKobo === null) return;
 
       // Process the KYC fee
       const result = await WalletService.processKycFee(
         merchantId,
-        amount,
+        amountKobo,
         description || 'KYC Fee'
       );
 
@@ -1405,8 +1561,8 @@ export class WalletController {
         success: true,
         message: 'KYC fee processed successfully',
         data: {
-          wallet: result.wallet,
-          transaction: result.transaction
+          wallet: result.wallet ? walletForApi(result.wallet) : result.wallet,
+          transaction: result.transaction ? transactionForApi(result.transaction) : result.transaction
         }
       });
     } catch (error) {
@@ -1443,6 +1599,8 @@ export class WalletController {
       }
 
       const { userId, amount, description } = value!;
+      const amountKobo = parseAmountOrFail(res, amount, (req.body as { amountUnit?: string }).amountUnit);
+      if (amountKobo === null) return;
 
       // Verify that the user belongs to this merchant
       const userResult = await WalletService.getUserWallet(userId);
@@ -1465,7 +1623,7 @@ export class WalletController {
       // Perform the debit
       const result = await WalletService.debitUserWallet({
         userId,
-        amount,
+        amount: amountKobo,
         description
       });
 
@@ -1487,8 +1645,8 @@ export class WalletController {
         success: true,
         message: 'User wallet debited successfully',
         data: {
-          wallet: result.wallet,
-          transaction: result.transaction
+          wallet: result.wallet ? walletForApi(result.wallet) : result.wallet,
+          transaction: result.transaction ? transactionForApi(result.transaction) : result.transaction
         }
       });
     } catch (error) {
@@ -1525,6 +1683,8 @@ export class WalletController {
       }
 
       const { amount, description } = value!;
+      const amountKobo = parseAmountOrFail(res, amount, (req.body as { amountUnit?: string }).amountUnit);
+      if (amountKobo === null) return;
 
       // Verify that the merchantId in the request matches the authenticated merchant
       if (value!.merchantId !== merchantId) {
@@ -1538,7 +1698,7 @@ export class WalletController {
       // Perform the debit on the Treasury Wallet
       const result = await WalletService.debitTreasuryWallet({
         merchantId,
-        amount,
+        amount: amountKobo,
         description
       });
 
@@ -1559,8 +1719,8 @@ export class WalletController {
         success: true,
         message: 'Treasury wallet debited successfully',
         data: {
-          wallet: result.wallet,
-          transaction: result.transaction
+          wallet: result.wallet ? walletForApi(result.wallet) : result.wallet,
+          transaction: result.transaction ? transactionForApi(result.transaction) : result.transaction
         }
       });
     } catch (error) {
@@ -1606,6 +1766,8 @@ export class WalletController {
       }
 
       const { endpoint, method, headers, body, amount, description, apiKey } = value!;
+      const amountKobo = parseAmountOrFail(res, amount, (req.body as { amountUnit?: string }).amountUnit);
+      if (amountKobo === null) return;
 
       // Perform the API call
       const result = await WalletService.makeUserApiCall({
@@ -1614,7 +1776,7 @@ export class WalletController {
         method: method || 'POST',
         headers: headers || {},
         body: body || {},
-        amount,
+        amount: amountKobo,
         description,
         apiKey
       });
@@ -1637,8 +1799,8 @@ export class WalletController {
         success: true,
         message: 'API call completed successfully',
         data: {
-          wallet: result.wallet,
-          transaction: result.transaction,
+          wallet: result.wallet ? walletForApi(result.wallet) : result.wallet,
+          transaction: result.transaction ? transactionForApi(result.transaction) : result.transaction,
           apiResponse: result.apiResponse
         }
       });
@@ -1646,6 +1808,68 @@ export class WalletController {
       logger.error('Error making API call from user wallet', { error });
       next(error);
     }
+  }
+
+  /**
+   * POST /api/v1/wallets/repayment/payout
+   * Payout from Repayment wallet to an external bank account via PayOnUs.
+   */
+  static async payoutRepaymentWalletToBank(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, error: 'Authentication required' });
+        return;
+      }
+
+      const merchantId = req.user.merchantId || req.user.userId;
+      const { error, value } = validateInput<RepaymentBankPayoutData>(repaymentBankPayoutSchema, req.body);
+      if (error) {
+        res.status(400).json({ success: false, error: 'Validation failed', details: error });
+        return;
+      }
+
+      const amountKobo = parseAmountOrFail(res, value!.amount, (req.body as { amountUnit?: string }).amountUnit);
+      if (amountKobo === null) return;
+
+      const result = await WalletService.payoutRepaymentWalletToBank({
+        merchantId,
+        appId: value!.appId,
+        accountNumber: value!.accountNumber,
+        bankCode: value!.bankCode,
+        accountName: value!.accountName,
+        bankName: value!.bankName,
+        amount: amountKobo,
+        currency: value!.currency,
+        narration: value!.narration,
+        reference: value!.reference
+      });
+
+      if (!result.success || !result.wallet) {
+        res.status(400).json({ success: false, error: result.error || 'Repayment payout failed' });
+        return;
+      }
+
+      res.status(result.duplicate ? 200 : 201).json({
+        success: true,
+        duplicate: result.duplicate === true,
+        message: result.duplicate ? 'Repayment payout already processed' : 'Repayment payout initiated',
+        data: {
+          wallet: result.wallet ? walletForApi(result.wallet) : result.wallet,
+          transaction: result.transaction ? transactionForApi(result.transaction) : result.transaction,
+          payoutReference: result.payoutReference,
+          providerReference: result.providerReference,
+          providerStatus: result.providerStatus
+        }
+      });
+    } catch (error) {
+      logger.error('Error paying out repayment wallet to bank', { error });
+      next(error);
+    }
+  }
+
+  /** @deprecated Use payoutRepaymentWalletToBank */
+  static async payoutSettlementWalletToBank(req: Request, res: Response, next: NextFunction): Promise<void> {
+    return WalletController.payoutRepaymentWalletToBank(req, res, next);
   }
 
 }

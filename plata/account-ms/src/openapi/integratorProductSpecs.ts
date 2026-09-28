@@ -35,6 +35,16 @@ const OFFER_PATH = '/api/v1/products/external-applications/{applicationId}/offer
 const ACCOUNT_PATH = '/api/v1/products/external-applications/{applicationId}/account';
 const REPAYMENT_SCHEDULE_PATH = '/api/v1/products/external-applications/{applicationId}/repayment-schedule';
 
+const WALLET_READ_PATHS = [
+  '/api/v1/wallets/merchant/{merchantId}/all',
+  '/api/v1/wallets/merchant/{merchantId}/type/{walletType}',
+  '/api/v1/wallets/treasury/{merchantId}/transactions',
+  '/api/v1/wallets/billing/{merchantId}/transactions',
+  '/api/v1/wallets/repayment/{merchantId}/transactions',
+  '/api/v1/wallets/user/{userId}',
+  '/api/v1/wallets/user/{userId}/transactions'
+];
+
 export const INTEGRATOR_PRODUCTS: Array<{
   slug: IntegratorProductSlug;
   title: string;
@@ -53,7 +63,8 @@ export const INTEGRATOR_PRODUCTS: Array<{
       OFFER_PATH,
       ACCOUNT_PATH,
       REPAYMENT_SCHEDULE_PATH,
-      ...SUB_MERCHANT_PATHS
+      ...SUB_MERCHANT_PATHS,
+      ...WALLET_READ_PATHS
     ]
   },
   {
@@ -67,7 +78,8 @@ export const INTEGRATOR_PRODUCTS: Array<{
       STATUS_PATH,
       ACCOUNT_PATH,
       REPAYMENT_SCHEDULE_PATH,
-      ...SUB_MERCHANT_PATHS
+      ...SUB_MERCHANT_PATHS,
+      ...WALLET_READ_PATHS
     ]
   },
   {
@@ -78,7 +90,8 @@ export const INTEGRATOR_PRODUCTS: Array<{
       ...SHARED_PATHS,
       '/api/v1/wallets/commodity/principal-repayment',
       '/api/v1/wallets/commodity/maturity-withdrawal-request',
-      '/api/v1/wallets/commodity/maturity-payout'
+      '/api/v1/wallets/commodity/maturity-payout',
+      ...WALLET_READ_PATHS
     ]
   },
   {
@@ -90,7 +103,8 @@ export const INTEGRATOR_PRODUCTS: Array<{
       '/api/v1/wallets/savings/principal-repayment',
       '/api/v1/wallets/savings/application-activity',
       '/api/v1/wallets/savings/maturity-withdrawal-request',
-      '/api/v1/wallets/savings/maturity-payout'
+      '/api/v1/wallets/savings/maturity-payout',
+      ...WALLET_READ_PATHS
     ]
   },
   {
@@ -101,7 +115,8 @@ export const INTEGRATOR_PRODUCTS: Array<{
       ...SHARED_PATHS,
       '/api/v1/wallets/investment/principal-repayment',
       '/api/v1/wallets/investment/maturity-withdrawal-request',
-      '/api/v1/wallets/investment/maturity-payout'
+      '/api/v1/wallets/investment/maturity-payout',
+      ...WALLET_READ_PATHS
     ]
   }
 ];
@@ -465,8 +480,26 @@ Call \`POST /api/v1/wallets/investment/principal-repayment\` to credit the creat
 `.trim()
 };
 
+const WALLET_READS_GUIDE = `
+## Wallet details and history (API keys)
+
+These reads work with your merchant API keys on every product guide. \`{merchantId}\` **must** be your own merchant id (the one on the key). User wallets must belong to your merchant.
+
+| Goal | Call |
+|------|------|
+| Merchant wallets (Treasury, Billing, Repayment) | \`GET /api/v1/wallets/merchant/{merchantId}/all\` |
+| One merchant wallet by type | \`GET /api/v1/wallets/merchant/{merchantId}/type/{walletType}\` (\`TREASURY\`, \`BILLING\`, or \`REPAYMENT\`) |
+| Treasury history | \`GET /api/v1/wallets/treasury/{merchantId}/transactions\` |
+| Billing history | \`GET /api/v1/wallets/billing/{merchantId}/transactions\` |
+| Repayment history | \`GET /api/v1/wallets/repayment/{merchantId}/transactions\` |
+| Customer wallet | \`GET /api/v1/wallets/user/{userId}\` |
+| Customer wallet history | \`GET /api/v1/wallets/user/{userId}/transactions\` |
+
+Optional query filters on history routes: \`startDate\`, \`endDate\`, \`type\`, \`limit\`, \`skip\`, and \`appId\` when wallets are app-scoped.
+`.trim();
+
 function guide(slug: IntegratorProductSlug): string {
-  return GUIDES[slug];
+  return `${GUIDES[slug]}\n\n${WALLET_READS_GUIDE}`.trim();
 }
 
 function clone<T>(value: T): T {
@@ -776,7 +809,7 @@ export function buildIntegratorProductSpec(slug: string) {
     openapi: '3.0.0',
     info: {
       title: `Plata Merchant Integration Documentation — ${product.title}`,
-      version: '1.6.2',
+      version: '1.7.0',
       description: guide(product.slug)
     },
     servers: source.servers,

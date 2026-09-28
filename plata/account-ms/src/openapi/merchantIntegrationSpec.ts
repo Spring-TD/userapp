@@ -41,6 +41,7 @@ Pick **one product section** below and stay inside it. Each section lists every 
 | **3. Commodity** | \`COMMODITY\` | Plus principal repayment, maturity approval request, and Treasury payout. |
 | **4. Savings** | \`SAVINGS\` | Plus principal repayment, savings activity, maturity approval request, and Treasury payout. |
 | **5. Investment** | \`INVESTMENT\` | Plus principal repayment, maturity approval request, and Treasury payout. |
+| **Wallets** | (all guides) | Merchant wallet details/history and customer wallet details/history via API keys. |
 
 Reference stack: **springApp** (\`PLATA_ACCOUNT_SERVICE_URL\`, \`PLATA_PUBLIC_KEY\`, \`PLATA_SECRET_KEY\`).
 
@@ -570,7 +571,7 @@ const merchantIntegrationSpec = {
   openapi: '3.0.0',
   info: {
     title: 'Plata Merchant Integration Documentation',
-    version: '1.4.0',
+    version: '1.5.0',
     description: INTEGRATION_GUIDE,
     contact: {
       name: 'Plata Support',
@@ -1423,6 +1424,171 @@ const merchantIntegrationSpec = {
           '200': { description: 'Duplicate referenceId' },
           '402': { description: 'Insufficient Treasury balance' },
           '401': { $ref: '#/components/responses/UnauthorizedKeys' }
+        }
+      }
+    },
+    '/api/v1/wallets/merchant/{merchantId}/all': {
+      get: {
+        tags: ALL_PRODUCTS,
+        summary: 'Fetch merchant wallet details',
+        description:
+          'Returns this merchant’s Treasury, Billing, and Repayment wallets. `merchantId` must match your API key merchant. Optional `appId` when wallets are app-scoped.',
+        security: [{ plataApiKeys: [] }],
+        parameters: [
+          {
+            in: 'path',
+            name: 'merchantId',
+            required: true,
+            schema: { type: 'string' },
+            description: 'Your merchant id (must match the API key)'
+          },
+          {
+            in: 'query',
+            name: 'appId',
+            required: false,
+            schema: { type: 'string' }
+          }
+        ],
+        responses: {
+          '200': { description: 'Merchant wallets' },
+          '401': { $ref: '#/components/responses/UnauthorizedKeys' },
+          '403': { description: 'merchantId does not match your API key' }
+        }
+      }
+    },
+    '/api/v1/wallets/merchant/{merchantId}/type/{walletType}': {
+      get: {
+        tags: ALL_PRODUCTS,
+        summary: 'Fetch one merchant wallet by type',
+        description: '`walletType` is `TREASURY`, `BILLING`, or `REPAYMENT` (legacy aliases may work).',
+        security: [{ plataApiKeys: [] }],
+        parameters: [
+          { in: 'path', name: 'merchantId', required: true, schema: { type: 'string' } },
+          {
+            in: 'path',
+            name: 'walletType',
+            required: true,
+            schema: { type: 'string', enum: ['TREASURY', 'BILLING', 'REPAYMENT'] }
+          },
+          { in: 'query', name: 'appId', required: false, schema: { type: 'string' } }
+        ],
+        responses: {
+          '200': { description: 'Wallet' },
+          '401': { $ref: '#/components/responses/UnauthorizedKeys' },
+          '403': { description: 'merchantId does not match your API key' },
+          '404': { description: 'Wallet not found' }
+        }
+      }
+    },
+    '/api/v1/wallets/treasury/{merchantId}/transactions': {
+      get: {
+        tags: ALL_PRODUCTS,
+        summary: 'Fetch Treasury wallet history',
+        description: 'Transaction history for the merchant Treasury wallet. Scoped to your API key merchant.',
+        security: [{ plataApiKeys: [] }],
+        parameters: [
+          { in: 'path', name: 'merchantId', required: true, schema: { type: 'string' } },
+          { in: 'query', name: 'startDate', schema: { type: 'string', format: 'date-time' } },
+          { in: 'query', name: 'endDate', schema: { type: 'string', format: 'date-time' } },
+          { in: 'query', name: 'type', schema: { type: 'string' } },
+          { in: 'query', name: 'appId', schema: { type: 'string' } },
+          { in: 'query', name: 'limit', schema: { type: 'integer' } },
+          { in: 'query', name: 'skip', schema: { type: 'integer' } }
+        ],
+        responses: {
+          '200': { description: 'Transactions + pagination' },
+          '401': { $ref: '#/components/responses/UnauthorizedKeys' },
+          '403': { description: 'merchantId does not match your API key' }
+        }
+      }
+    },
+    '/api/v1/wallets/billing/{merchantId}/transactions': {
+      get: {
+        tags: ALL_PRODUCTS,
+        summary: 'Fetch Billing wallet history',
+        description: 'Transaction history for the merchant Billing wallet (platform fees).',
+        security: [{ plataApiKeys: [] }],
+        parameters: [
+          { in: 'path', name: 'merchantId', required: true, schema: { type: 'string' } },
+          { in: 'query', name: 'startDate', schema: { type: 'string', format: 'date-time' } },
+          { in: 'query', name: 'endDate', schema: { type: 'string', format: 'date-time' } },
+          { in: 'query', name: 'type', schema: { type: 'string' } },
+          { in: 'query', name: 'appId', schema: { type: 'string' } },
+          { in: 'query', name: 'limit', schema: { type: 'integer' } },
+          { in: 'query', name: 'skip', schema: { type: 'integer' } }
+        ],
+        responses: {
+          '200': { description: 'Transactions + pagination' },
+          '401': { $ref: '#/components/responses/UnauthorizedKeys' },
+          '403': { description: 'merchantId does not match your API key' }
+        }
+      }
+    },
+    '/api/v1/wallets/repayment/{merchantId}/transactions': {
+      get: {
+        tags: ALL_PRODUCTS,
+        summary: 'Fetch Repayment wallet history',
+        description: 'Transaction history for the merchant Repayment wallet (collections, deposits).',
+        security: [{ plataApiKeys: [] }],
+        parameters: [
+          { in: 'path', name: 'merchantId', required: true, schema: { type: 'string' } },
+          { in: 'query', name: 'startDate', schema: { type: 'string', format: 'date-time' } },
+          { in: 'query', name: 'endDate', schema: { type: 'string', format: 'date-time' } },
+          { in: 'query', name: 'type', schema: { type: 'string' } },
+          { in: 'query', name: 'appId', schema: { type: 'string' } },
+          { in: 'query', name: 'limit', schema: { type: 'integer' } },
+          { in: 'query', name: 'skip', schema: { type: 'integer' } }
+        ],
+        responses: {
+          '200': { description: 'Transactions + pagination' },
+          '401': { $ref: '#/components/responses/UnauthorizedKeys' },
+          '403': { description: 'merchantId does not match your API key' }
+        }
+      }
+    },
+    '/api/v1/wallets/user/{userId}': {
+      get: {
+        tags: ALL_PRODUCTS,
+        summary: 'Fetch user wallet details',
+        description:
+          'Returns the customer wallet for `userId`. Only wallets under your merchant are visible with API keys.',
+        security: [{ plataApiKeys: [] }],
+        parameters: [
+          {
+            in: 'path',
+            name: 'userId',
+            required: true,
+            schema: { type: 'string' },
+            description: 'Plata / external user id that owns the wallet'
+          }
+        ],
+        responses: {
+          '200': { description: 'User wallet' },
+          '401': { $ref: '#/components/responses/UnauthorizedKeys' },
+          '403': { description: 'Wallet belongs to another merchant' },
+          '404': { description: 'Wallet not found' }
+        }
+      }
+    },
+    '/api/v1/wallets/user/{userId}/transactions': {
+      get: {
+        tags: ALL_PRODUCTS,
+        summary: 'Fetch user wallet history',
+        description: 'Transaction history for a customer wallet under your merchant.',
+        security: [{ plataApiKeys: [] }],
+        parameters: [
+          { in: 'path', name: 'userId', required: true, schema: { type: 'string' } },
+          { in: 'query', name: 'startDate', schema: { type: 'string', format: 'date-time' } },
+          { in: 'query', name: 'endDate', schema: { type: 'string', format: 'date-time' } },
+          { in: 'query', name: 'type', schema: { type: 'string' } },
+          { in: 'query', name: 'limit', schema: { type: 'integer' } },
+          { in: 'query', name: 'skip', schema: { type: 'integer' } }
+        ],
+        responses: {
+          '200': { description: 'Transactions + pagination' },
+          '401': { $ref: '#/components/responses/UnauthorizedKeys' },
+          '403': { description: 'Wallet belongs to another merchant' },
+          '404': { description: 'Wallet not found' }
         }
       }
     }

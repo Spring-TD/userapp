@@ -1,6 +1,6 @@
 /**
  * Wallet routes (mounted at /api/v1/wallets)
- * Merchant (Treasury, Operation, KYC), user wallets, and funding callbacks.
+ * Merchant (Treasury, Billing, Repayment — legacy Operation/KYC/Settlement), user wallets, and funding callbacks.
  * Most endpoints require JWT; funding callback is public for provider webhooks.
  *
  * @openapi
@@ -29,13 +29,13 @@
  *                 maxLength: 3
  *               merchantWalletType:
  *                 type: string
- *                 enum: [TREASURY, OPERATION, KYC]
+ *                 enum: [TREASURY, BILLING, REPAYMENT, OPERATION, KYC, SETTLEMENT]
  *     responses:
  *       201:
  *         description: Merchant wallet created
  * /api/v1/wallets/merchant/all:
  *   post:
- *     summary: Create all merchant wallets (Treasury, Operation, KYC)
+ *     summary: Create all merchant wallets (Treasury, Billing, Repayment)
  *     tags: [Wallets - Merchant]
  *     security:
  *       - bearerAuth: []
@@ -68,7 +68,7 @@
  *         required: true
  *         schema:
  *           type: string
- *           enum: [TREASURY, OPERATION, KYC]
+ *           enum: [TREASURY, BILLING, REPAYMENT, OPERATION, KYC, SETTLEMENT]
  *     responses:
  *       200:
  *         description: Merchant wallet
@@ -265,10 +265,56 @@
  *     responses:
  *       200:
  *         description: Operation transactions
+ * /api/v1/wallets/billing-to-repayment:
+ *   post:
+ *     summary: Transfer from Billing to Repayment wallet
+ *     tags: [Wallets - Billing]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *               - description
+ *             properties:
+ *               amount:
+ *                 type: number
+ *               description:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Transfer completed
  * /api/v1/wallets/operation-to-kyc:
  *   post:
- *     summary: Transfer from operation to KYC wallet
+ *     summary: (Legacy alias) Transfer from operation to KYC wallet — use /billing-to-repayment
  *     tags: [Wallets - Operation]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *               - description
+ *             properties:
+ *               amount:
+ *                 type: number
+ *               description:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Transfer completed
+ * /api/v1/wallets/repayment-to-billing:
+ *   post:
+ *     summary: Transfer from Repayment to Billing wallet
+ *     tags: [Wallets - Billing]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -290,7 +336,7 @@
  *         description: Transfer completed
  * /api/v1/wallets/kyc-to-operation:
  *   post:
- *     summary: Transfer from KYC to operation wallet
+ *     summary: (Legacy alias) Transfer from KYC to operation wallet — use /repayment-to-billing
  *     tags: [Wallets - Operation]
  *     security:
  *       - bearerAuth: []
@@ -334,9 +380,85 @@
  *     responses:
  *       200:
  *         description: Debit completed
+ * /api/v1/wallets/repayment/{merchantId}/transactions:
+ *   get:
+ *     summary: Filter Repayment wallet transactions
+ *     tags: [Wallets - Repayment]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: merchantId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [CREDIT, DEBIT]
+ *     responses:
+ *       200:
+ *         description: Repayment transactions
+ * /api/v1/wallets/repayment/debit:
+ *   post:
+ *     summary: Debit Repayment wallet
+ *     tags: [Wallets - Repayment]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *               - description
+ *             properties:
+ *               amount:
+ *                 type: number
+ *               description:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Debit completed
+ * /api/v1/wallets/repayment/fee:
+ *   post:
+ *     summary: Process KYC fee (debits Repayment wallet)
+ *     tags: [Wallets - Repayment]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *               - description
+ *             properties:
+ *               amount:
+ *                 type: number
+ *               description:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: KYC fee processed
  * /api/v1/wallets/kyc/{merchantId}/transactions:
  *   get:
- *     summary: Filter KYC wallet transactions
+ *     summary: (Legacy alias) Filter KYC wallet transactions — use /repayment/{merchantId}/transactions
  *     tags: [Wallets - KYC]
  *     security:
  *       - bearerAuth: []
@@ -366,7 +488,7 @@
  *         description: KYC transactions
  * /api/v1/wallets/kyc/debit:
  *   post:
- *     summary: Debit KYC wallet
+ *     summary: (Legacy alias) Debit KYC wallet — use /repayment/debit
  *     tags: [Wallets - KYC]
  *     security:
  *       - bearerAuth: []
@@ -389,7 +511,7 @@
  *         description: Debit completed
  * /api/v1/wallets/kyc/fee:
  *   post:
- *     summary: Process KYC fee
+ *     summary: (Legacy alias) Process KYC fee — use /repayment/fee
  *     tags: [Wallets - KYC]
  *     security:
  *       - bearerAuth: []
@@ -622,7 +744,7 @@
  *                 type: string
  *               merchantWalletType:
  *                 type: string
- *                 enum: [TREASURY, OPERATION, KYC]
+ *                 enum: [TREASURY, BILLING, REPAYMENT, OPERATION, KYC, SETTLEMENT]
  *     responses:
  *       200:
  *         description: Callback processed
@@ -645,39 +767,260 @@
 import { Router } from 'express';
 import { WalletController } from '../controllers/walletController';
 import { FundingController } from '../controllers/fundingController';
+import { BankOneWebhookController } from '../controllers/bankoneWebhookController';
+import { MonoDirectDebitController } from '../controllers/monoDirectDebitController';
+import { collectCommodityPrincipalSettlement, collectCommodityPrincipalRepayment } from '../controllers/commodityPrincipalSettlementController';
+import { debitCommodityMaturityFromTreasury } from '../controllers/commodityMaturityPayoutController';
+import { requestMaturityWithdrawal } from '../controllers/maturityWithdrawalRequestController';
+import { collectInvestmentPrincipalSettlement, collectInvestmentPrincipalRepayment } from '../controllers/investmentPrincipalSettlementController';
+import { collectSavingsPrincipalSettlement, collectSavingsPrincipalRepayment } from '../controllers/savingsPrincipalSettlementController';
+import { InternalWalletController } from '../controllers/internalWalletController';
+import { requireVerifiedGatewayMerchant } from '../middleware/gatewayMerchantAuth';
 import { authenticate, authorizeMerchant, authorizeUser } from '../middleware/auth';
+import {
+  authenticateJwtOrGatewayMerchant,
+  requirePathMerchantMatchesGateway
+} from '../middleware/authenticateJwtOrGateway';
+import { requirePermission } from '../middleware/requirePermission';
+import { Permission } from '../rbac/permissions';
 
 const router = Router();
 
 // Merchant wallet routes
-router.post('/merchant', authenticate, authorizeMerchant, WalletController.createMerchantWallet);
-router.post('/merchant/all', authenticate, authorizeMerchant, WalletController.createAllMerchantWallets);
-router.get('/merchant/:merchantId/type/:walletType', authenticate, WalletController.getMerchantWalletByType);
-router.get('/merchant/:merchantId/all', authenticate, WalletController.getAllMerchantWallets);
-router.put('/merchant/balance', authenticate, authorizeMerchant, WalletController.updateMerchantWalletBalance);
+router.post(
+  '/merchant',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.MANAGE_SYSTEM_SETTINGS, Permission.VIEW_WALLET_BALANCES),
+  WalletController.createMerchantWallet
+);
+router.post(
+  '/merchant/all',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.MANAGE_SYSTEM_SETTINGS, Permission.VIEW_WALLET_BALANCES),
+  WalletController.createAllMerchantWallets
+);
+router.get(
+  '/merchant/:merchantId/type/:walletType',
+  authenticateJwtOrGatewayMerchant,
+  authorizeMerchant,
+  requirePathMerchantMatchesGateway,
+  requirePermission(Permission.VIEW_WALLET_BALANCES),
+  WalletController.getMerchantWalletByType
+);
+router.get(
+  '/merchant/:merchantId/all',
+  authenticateJwtOrGatewayMerchant,
+  authorizeMerchant,
+  requirePathMerchantMatchesGateway,
+  requirePermission(Permission.VIEW_WALLET_BALANCES),
+  WalletController.getAllMerchantWallets
+);
+router.put(
+  '/merchant/balance',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.RECONCILE_LEDGER, Permission.MANAGE_SYSTEM_SETTINGS),
+  WalletController.updateMerchantWalletBalance
+);
 
 // Treasury Wallet specific routes
-router.get('/treasury/:merchantId/transactions', authenticate, authorizeMerchant, WalletController.filterTreasuryTransactions);
-router.post('/treasury/transfer', authenticate, authorizeMerchant, WalletController.transferOutFromTreasury);
-router.post('/treasury/debit', authenticate, authorizeMerchant, WalletController.debitUserWallet);
-router.post('/treasury/debit-merchant', authenticate, authorizeMerchant, WalletController.debitTreasuryWallet);
+router.get(
+  '/treasury/:merchantId/transactions',
+  authenticateJwtOrGatewayMerchant,
+  authorizeMerchant,
+  requirePathMerchantMatchesGateway,
+  requirePermission(Permission.VIEW_TRANSACTION_LEDGER, Permission.VIEW_PAYOUT_HISTORY),
+  WalletController.filterTreasuryTransactions
+);
+router.post(
+  '/treasury/transfer',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.RECONCILE_LEDGER, Permission.INITIATE_PAYOUT),
+  WalletController.transferOutFromTreasury
+);
+router.post(
+  '/treasury/debit',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.RECONCILE_LEDGER),
+  WalletController.debitUserWallet
+);
+router.post(
+  '/treasury/debit-merchant',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.RECONCILE_LEDGER),
+  WalletController.debitTreasuryWallet
+);
 
-// Operation Wallet specific routes
-router.get('/operation/:merchantId/transactions', authenticate, authorizeMerchant, WalletController.filterOperationTransactions);
-router.post('/operation-to-kyc', authenticate, authorizeMerchant, WalletController.transferFromOperationToKyc);
-router.post('/kyc-to-operation', authenticate, authorizeMerchant, WalletController.transferFromKycToOperation);
-router.post('/operation/debit', authenticate, authorizeMerchant, WalletController.debitOperationWallet);
+// Billing Wallet routes (legacy /operation/* aliases retained)
+router.get(
+  '/billing/:merchantId/transactions',
+  authenticateJwtOrGatewayMerchant,
+  authorizeMerchant,
+  requirePathMerchantMatchesGateway,
+  requirePermission(Permission.VIEW_TRANSACTION_LEDGER),
+  WalletController.filterOperationTransactions
+);
+router.get(
+  '/operation/:merchantId/transactions',
+  authenticateJwtOrGatewayMerchant,
+  authorizeMerchant,
+  requirePathMerchantMatchesGateway,
+  requirePermission(Permission.VIEW_TRANSACTION_LEDGER),
+  WalletController.filterOperationTransactions
+);
+router.post(
+  '/billing-to-repayment',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.RECONCILE_LEDGER),
+  WalletController.transferFromBillingToRepayment
+);
+router.post(
+  '/billing-to-settlement',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.RECONCILE_LEDGER),
+  WalletController.transferFromOperationToKyc
+);
+router.post(
+  '/operation-to-kyc',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.RECONCILE_LEDGER),
+  WalletController.transferFromOperationToKyc
+);
+router.post(
+  '/repayment-to-billing',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.RECONCILE_LEDGER),
+  WalletController.transferFromRepaymentToBilling
+);
+router.post(
+  '/settlement-to-billing',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.RECONCILE_LEDGER),
+  WalletController.transferFromKycToOperation
+);
+router.post(
+  '/kyc-to-operation',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.RECONCILE_LEDGER),
+  WalletController.transferFromKycToOperation
+);
+router.post(
+  '/billing/debit',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.RECONCILE_LEDGER),
+  WalletController.debitOperationWallet
+);
+router.post(
+  '/operation/debit',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.RECONCILE_LEDGER),
+  WalletController.debitOperationWallet
+);
 
-// KYC Wallet specific routes
-router.get('/kyc/:merchantId/transactions', authenticate, authorizeMerchant, WalletController.filterKycTransactions);
-router.post('/kyc/debit', authenticate, authorizeMerchant, WalletController.debitKycWallet);
-router.post('/kyc/fee', authenticate, authorizeMerchant, WalletController.processKycFee);
+// Repayment Wallet routes (legacy /settlement/* and /kyc/* aliases retained)
+router.get(
+  '/repayment/:merchantId/transactions',
+  authenticateJwtOrGatewayMerchant,
+  authorizeMerchant,
+  requirePathMerchantMatchesGateway,
+  requirePermission(Permission.VIEW_TRANSACTION_LEDGER, Permission.VIEW_PAYOUT_HISTORY),
+  WalletController.filterRepaymentTransactions
+);
+router.get(
+  '/settlement/:merchantId/transactions',
+  authenticateJwtOrGatewayMerchant,
+  authorizeMerchant,
+  requirePathMerchantMatchesGateway,
+  requirePermission(Permission.VIEW_TRANSACTION_LEDGER, Permission.VIEW_PAYOUT_HISTORY),
+  WalletController.filterKycTransactions
+);
+router.get(
+  '/kyc/:merchantId/transactions',
+  authenticateJwtOrGatewayMerchant,
+  authorizeMerchant,
+  requirePathMerchantMatchesGateway,
+  requirePermission(Permission.VIEW_TRANSACTION_LEDGER, Permission.VIEW_PAYOUT_HISTORY),
+  WalletController.filterKycTransactions
+);
+router.post(
+  '/repayment/debit',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.RECONCILE_LEDGER),
+  WalletController.debitRepaymentWallet
+);
+router.post(
+  '/settlement/debit',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.RECONCILE_LEDGER),
+  WalletController.debitKycWallet
+);
+router.post(
+  '/kyc/debit',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.RECONCILE_LEDGER),
+  WalletController.debitKycWallet
+);
+router.post(
+  '/repayment/payout',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.INITIATE_PAYOUT, Permission.APPROVE_PAYOUT),
+  WalletController.payoutRepaymentWalletToBank
+);
+router.post(
+  '/settlement/payout',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.INITIATE_PAYOUT, Permission.APPROVE_PAYOUT),
+  WalletController.payoutSettlementWalletToBank
+);
+router.post(
+  '/repayment/fee',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.RECONCILE_LEDGER),
+  WalletController.processKycFee
+);
+router.post(
+  '/settlement/fee',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.RECONCILE_LEDGER),
+  WalletController.processKycFee
+);
+router.post(
+  '/kyc/fee',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.RECONCILE_LEDGER),
+  WalletController.processKycFee
+);
 
 // User wallet routes
 router.post('/user', authenticate, authorizeUser, WalletController.createUserWallet);
-router.get('/user/:userId', authenticate, WalletController.getUserWallet);
+router.get('/user/:userId', authenticateJwtOrGatewayMerchant, WalletController.getUserWallet);
 router.put('/user/:userId/balance', authenticate, authorizeUser, WalletController.updateUserWalletBalance);
-router.get('/user/:userId/transactions', authenticate, WalletController.filterUserTransactions);
+router.get(
+  '/user/:userId/transactions',
+  authenticateJwtOrGatewayMerchant,
+  WalletController.filterUserTransactions
+);
 router.post('/user/:userId/transfer', authenticate, authorizeUser, WalletController.transferOutFromUser);
 router.post('/user/:userId/api-call', authenticate, authorizeUser, WalletController.makeUserApiCall);
 
@@ -685,7 +1028,114 @@ router.post('/user/:userId/api-call', authenticate, authorizeUser, WalletControl
 router.post('/funding/callback', FundingController.handleFundingCallback);
 router.get('/funding/status/:transactionId', FundingController.checkFundingStatus);
 
+// Charis / BankOne activity push webhooks (token via header or ?authToken=)
+router.get('/bankone/webhook', BankOneWebhookController.getInfo);
+router.post('/bankone/webhook', BankOneWebhookController.handleActivity);
+
+// Mono Direct Debit repayment collection
+router.post(
+  '/repayments/mono/mandates',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.INITIATE_PAYOUT, Permission.RECONCILE_LEDGER),
+  MonoDirectDebitController.createMandate
+);
+router.get(
+  '/repayments/mono/mandates/:mandateId/balance-inquiry',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.VIEW_WALLET_BALANCES, Permission.VIEW_TRANSACTION_LEDGER),
+  MonoDirectDebitController.balanceInquiry
+);
+router.post(
+  '/repayments/mono/mandates/:mandateId/debit',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.INITIATE_PAYOUT, Permission.RECONCILE_LEDGER),
+  MonoDirectDebitController.initiateDebit
+);
+router.post('/repayments/mono/webhook', MonoDirectDebitController.webhook);
+
+/** Spring integrator commodity principal → creator REPAYMENT wallet (gateway-verified PLATA keys only). */
+router.post(
+  '/commodity/principal-repayment',
+  requireVerifiedGatewayMerchant,
+  collectCommodityPrincipalRepayment
+);
+// Deprecated alias — use /commodity/principal-repayment
+router.post(
+  '/commodity/principal-settlement',
+  requireVerifiedGatewayMerchant,
+  collectCommodityPrincipalSettlement
+);
+/** Spring integrator maturity → debit creator TREASURY (user credit on Spring). */
+router.post(
+  '/commodity/maturity-payout',
+  requireVerifiedGatewayMerchant,
+  debitCommodityMaturityFromTreasury
+);
+router.post(
+  '/savings/maturity-payout',
+  requireVerifiedGatewayMerchant,
+  debitCommodityMaturityFromTreasury
+);
+router.post(
+  '/investment/maturity-payout',
+  requireVerifiedGatewayMerchant,
+  debitCommodityMaturityFromTreasury
+);
+/** Spring storefront: enqueue for FI Withdrawals approval (no debit yet). */
+router.post(
+  '/commodity/maturity-withdrawal-request',
+  requireVerifiedGatewayMerchant,
+  requestMaturityWithdrawal
+);
+router.post(
+  '/savings/maturity-withdrawal-request',
+  requireVerifiedGatewayMerchant,
+  requestMaturityWithdrawal
+);
+router.post(
+  '/investment/maturity-withdrawal-request',
+  requireVerifiedGatewayMerchant,
+  requestMaturityWithdrawal
+);
+router.post(
+  '/investment/principal-repayment',
+  requireVerifiedGatewayMerchant,
+  collectInvestmentPrincipalRepayment
+);
+// Deprecated alias — use /investment/principal-repayment
+router.post(
+  '/investment/principal-settlement',
+  requireVerifiedGatewayMerchant,
+  collectInvestmentPrincipalSettlement
+);
+router.post(
+  '/savings/principal-repayment',
+  requireVerifiedGatewayMerchant,
+  collectSavingsPrincipalRepayment
+);
+// Deprecated alias — use /savings/principal-repayment
+router.post(
+  '/savings/principal-settlement',
+  requireVerifiedGatewayMerchant,
+  collectSavingsPrincipalSettlement
+);
+
+router.post(
+  '/savings/application-activity',
+  requireVerifiedGatewayMerchant,
+  InternalWalletController.savingsApplicationActivity
+);
+
 // Get wallets by merchant (merchant can view all wallets associated with their business)
-router.get('/merchant/:merchantId/users', authenticate, WalletController.getUserWalletsByMerchant);
+router.get(
+  '/merchant/:merchantId/users',
+  authenticate,
+  authorizeMerchant,
+  requirePermission(Permission.VIEW_WALLET_BALANCES),
+  WalletController.getUserWalletsByMerchant
+);
 
 export { router as walletRoutes };

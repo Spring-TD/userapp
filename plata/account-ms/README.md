@@ -96,6 +96,47 @@ npm start
 ### Savings Services
 - `POST /api/v1/savings-accounts` - Create a savings account
 
+## API documentation (Swagger)
+
+Interactive docs (StockOp-style):
+
+| URL | Purpose |
+|-----|---------|
+| [https://account-ms-plata.fly.dev/docs](https://account-ms-plata.fly.dev/docs) | Integrator index — pick a product |
+| [https://account-ms-plata.fly.dev/docs/loan](https://account-ms-plata.fly.dev/docs/loan) | Loan — products, apply, status, offer accept/decline, loan account, repayment schedule |
+| [https://account-ms-plata.fly.dev/docs/mortgage](https://account-ms-plata.fly.dev/docs/mortgage) | Mortgage — products, apply, status, mortgage account, repayment schedule |
+| [https://account-ms-plata.fly.dev/docs/commodity](https://account-ms-plata.fly.dev/docs/commodity) | Commodity |
+| [https://account-ms-plata.fly.dev/docs/savings](https://account-ms-plata.fly.dev/docs/savings) | Savings |
+| [https://account-ms-plata.fly.dev/docs/investment](https://account-ms-plata.fly.dev/docs/investment) | Investment |
+| [https://account-ms-plata.fly.dev/frontendplata](https://account-ms-plata.fly.dev/frontendplata) | Merchant dashboard — Treasury & Settlements (JWT) |
+| [https://account-ms-plata.fly.dev/frontendplata/openapi.json](https://account-ms-plata.fly.dev/frontendplata/openapi.json) | Frontend Plata OpenAPI JSON |
+| `/api-docs` | Same UI + dropdown for per-microservice specs (Wallet, Product, Compliance, …) |
+
+**Regenerate** `openapi.json` after spec changes:
+
+```bash
+npm run export-swagger
+```
+
+The primary spec (`/docs`) is split into product sections: **1. Loan**, **2. Mortgage**, **3. Commodity**, **4. Savings**, **5. Investment**. Shared API-key routes are repeated in every section that uses them. Merchant JWT routes are on `/frontendplata`.
+
+Loan / mortgage servicing routes (API keys; `{applicationId}` = Plata id or the integrator's `localApplicationId`; only applications submitted with the same merchant's keys are visible):
+
+- `GET /api/v1/products/external-applications/{applicationId}` — status, `stage`, `nextAction`
+- `GET|POST /api/v1/products/external-applications/{applicationId}/offer` — loan offer letter / accept or decline
+- `GET /api/v1/products/external-applications/{applicationId}/account` — loan account summary
+- `GET /api/v1/products/external-applications/{applicationId}/repayment-schedule` — instalments (after disbursement)
+
+Wallet reads (API keys; `{merchantId}` must match the key’s merchant; user wallets must belong to that merchant):
+
+- `GET /api/v1/wallets/merchant/{merchantId}/all` — Treasury, Billing, Repayment
+- `GET /api/v1/wallets/merchant/{merchantId}/type/{walletType}` — one wallet (`TREASURY` | `BILLING` | `REPAYMENT`)
+- `GET /api/v1/wallets/treasury|billing|repayment/{merchantId}/transactions` — merchant history
+- `GET /api/v1/wallets/user/{userId}` — customer wallet
+- `GET /api/v1/wallets/user/{userId}/transactions` — customer history
+
+---
+
 ## API Gateway
 
 This service acts as the API Gateway for the SpringTD platform. It proxies requests to the following microservices:

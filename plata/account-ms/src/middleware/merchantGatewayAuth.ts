@@ -1,6 +1,11 @@
 import type { Request, Response, NextFunction } from 'express';
 import axios from 'axios';
 import { config } from '../config/environment';
+import {
+  isExternalApplicationServicingRoute,
+  isGetUnscopedProductCatalog
+} from '../utils/productGatewayRoute';
+import { isWalletReadRoute } from '../utils/walletGatewayRoute';
 
 function getClientIp(req: Request): string {
   const forwarded = req.headers['x-forwarded-for'];
@@ -18,24 +23,99 @@ function getClientIp(req: Request): string {
 const EXEMPT_PATH_PREFIXES = [
   '/health',
   '/api-docs',
+  '/docs',
+  '/frontendplata',
   '/api/v1/auth',
   '/api/v1/registration',
   '/api/v1/otp',
   '/api/v1/password',
   '/api/v1/user',
   '/api/v1/roles',
+  '/api/v1/invitations',
+  '/api/v1/team',
   '/verify-email',
 ];
 
-/** Only GET /api/v1/products (unscoped full catalog) requires merchant API keys at the gateway. */
-function isGetUnscopedProductList(path: string, method: string): boolean {
-  if (method !== 'GET') return false;
-  return path === '/api/v1/products' || path === '/api/v1/products/';
+function isPostSubMerchantActivations(path: string, method: string): boolean {
+  if (method !== 'POST') return false;
+  return (
+    path === '/api/v1/products/sub-merchant-activations' ||
+    path === '/api/v1/products/sub-merchant-activations/'
+  );
+}
+
+function isPostSubMerchantUsageEvents(path: string, method: string): boolean {
+  if (method !== 'POST') return false;
+  return (
+    path === '/api/v1/products/sub-merchant-usage-events' ||
+    path === '/api/v1/products/sub-merchant-usage-events/'
+  );
+}
+
+function isPostExternalProductApplications(path: string, method: string): boolean {
+  if (method !== 'POST') return false;
+  return (
+    path === '/api/v1/products/external-applications' ||
+    path === '/api/v1/products/external-applications/'
+  );
+}
+
+function isPostExternalProductAccounts(path: string, method: string): boolean {
+  if (method !== 'POST') return false;
+  return (
+    path === '/api/v1/products/external-accounts' ||
+    path === '/api/v1/products/external-accounts/'
+  );
+}
+
+function isPostWalletPrincipalSettlement(path: string, method: string): boolean {
+  if (method !== 'POST') return false;
+  const normalized = path.replace(/\/+$/, '') || '/';
+  return (
+    normalized === '/api/v1/wallets/investment/principal-settlement' ||
+    normalized === '/api/v1/wallets/investment/principal-repayment' ||
+    normalized === '/api/v1/wallets/savings/principal-settlement' ||
+    normalized === '/api/v1/wallets/savings/principal-repayment' ||
+    normalized === '/api/v1/wallets/savings/application-activity' ||
+    normalized === '/api/v1/wallets/commodity/principal-settlement' ||
+    normalized === '/api/v1/wallets/commodity/principal-repayment' ||
+    normalized === '/api/v1/wallets/commodity/maturity-payout' ||
+    normalized === '/api/v1/wallets/savings/maturity-payout' ||
+    normalized === '/api/v1/wallets/investment/maturity-payout' ||
+    normalized === '/api/v1/wallets/commodity/maturity-withdrawal-request' ||
+    normalized === '/api/v1/wallets/savings/maturity-withdrawal-request' ||
+    normalized === '/api/v1/wallets/investment/maturity-withdrawal-request'
+  );
+}
+
+function requiresMerchantGatewayKeys(req: Request): boolean {
+  const path = req.path || '';
+  const method = req.method;
+  return (
+    isGetUnscopedProductCatalog(req) ||
+    isPostSubMerchantActivations(path, method) ||
+    isPostSubMerchantUsageEvents(path, method) ||
+    isPostExternalProductAccounts(path, method) ||
+    isPostExternalProductApplications(path, method) ||
+    isExternalApplicationServicingRoute(path, method) ||
+    isPostWalletPrincipalSettlement(path, method) ||
+    isWalletReadRoute(path, method)
+  );
 }
 
 /**
- * Merchant API keys (pk/sk) + IP allowlist are enforced only for GET /api/v1/products (full product list).
- * Merchant-scoped routes (e.g. /api/v1/products/app/:appId), configurations, and all other paths skip gateway key verification.
+ * Merchant API keys (pk/sk) are enforced for:
+ * - GET /api/v1/products with no appId (integrator full catalog)
+ * - POST /api/v1/products/sub-merchant-activations (sub-merchant activate/deactivate reporting)
+ * - POST /api/v1/products/sub-merchant-usage-events (external user started-usage reporting)
+ * - POST /api/v1/products/external-accounts (external user/wallet provisioning)
+ * - POST /api/v1/products/external-applications (external apply + user/wallet provisioning)
+ * - GET /api/v1/products/external-applications/{id}[/offer|/account|/repayment-schedule], POST .../{id}/offer
+ * - POST /api/v1/wallets/{investment|savings|commodity}/principal-{settlement|repayment}
+ * - POST /api/v1/wallets/commodity/maturity-payout (Treasury debit for Spring maturity credit)
+ * - GET merchant wallet details/history and user wallet details/history (scoped to key merchant)
+ * Dashboard GET /api/v1/products?appId=... skips key verification (JWT session).
+ * Other product routes and configurations skip gateway key verification.
  * Exempt paths skip this middleware entirely for docs, health, and client-auth flows.
  */
 export async function merchantGatewayAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -51,7 +131,7 @@ export async function merchantGatewayAuth(req: Request, res: Response, next: Nex
     return;
   }
 
-  if (path.startsWith('/api-docs')) {
+  if (path.startsWith('/api-docs') || path.startsWith('/docs') || path.startsWith('/frontendplata')) {
     next();
     return;
   }
@@ -63,19 +143,19 @@ export async function merchantGatewayAuth(req: Request, res: Response, next: Nex
     }
   }
 
-  if (!isGetUnscopedProductList(path, req.method)) {
+  if (!requiresMerchantGatewayKeys(req)) {
     next();
     return;
   }
 
-  const publicKey = (req.header('X-Public-Key') || req.header('x-public-key') || '').trim();
-  const secretKey = (req.header('X-Secret-Key') || req.header('x-secret-key') || '').trim();
+  const publicKey = (req.header('PLATA_PUBLIC_KEY') || '').trim();
+  const secretKey = (req.header('PLATA_SECRET_KEY') || '').trim();
 
   if (!publicKey || !secretKey) {
     res.status(401).json({
       success: false,
       error: 'Merchant API authentication required',
-      message: 'Send X-Public-Key and X-Secret-Key. Keys are verified at the gateway (API key + IP policy).',
+      message: 'Send PLATA_PUBLIC_KEY and PLATA_SECRET_KEY. Keys are verified at the gateway (API key + IP policy).',
     });
     return;
   }
@@ -85,7 +165,7 @@ export async function merchantGatewayAuth(req: Request, res: Response, next: Nex
   try {
     const response = await axios.post<{
       success?: boolean;
-      data?: { merchant_id: string; api_key_id: string; environment: string };
+      data?: { merchant_id: string; merchant_name?: string; api_key_id: string; environment: string };
       error?: string;
     }>(
       `${config.serviceAuthUrl}/internal/api/v1/gateway/verify`,
@@ -105,10 +185,24 @@ export async function merchantGatewayAuth(req: Request, res: Response, next: Nex
     );
 
     if (response.status !== 200 || !response.data?.success || !response.data?.data) {
-      const errMsg =
-        (response.data && typeof response.data === 'object' && 'error' in response.data
-          ? (response.data as { error?: string }).error
-          : null) || 'Gateway authentication failed';
+      const body = response.data as unknown;
+      let errMsg: string | undefined;
+      if (body && typeof body === 'object') {
+        const record = body as { error?: unknown; message?: unknown };
+        if (typeof record.error === 'string' && record.error.trim()) {
+          errMsg = record.error.trim();
+        } else if (typeof record.message === 'string' && record.message.trim()) {
+          errMsg = record.message.trim();
+        }
+      } else if (typeof body === 'string' && body.trim()) {
+        errMsg = body.trim();
+      }
+      if (!errMsg) {
+        errMsg =
+          response.status === 429
+            ? 'Gateway auth rate limited; retry shortly'
+            : 'Gateway authentication failed';
+      }
       res.status(response.status >= 400 && response.status < 600 ? response.status : 401).json({
         success: false,
         error: errMsg,
@@ -118,6 +212,7 @@ export async function merchantGatewayAuth(req: Request, res: Response, next: Nex
 
     req.gatewayMerchantAuth = {
       merchantId: response.data.data.merchant_id,
+      merchantName: response.data.data.merchant_name || response.data.data.merchant_id,
       apiKeyId: response.data.data.api_key_id,
       environment: response.data.data.environment,
     };
