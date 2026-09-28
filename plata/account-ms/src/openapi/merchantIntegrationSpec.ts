@@ -379,9 +379,14 @@ const integratorComponents = {
             'wait_for_disbursement',
             'continue_mortgage_workflow',
             'repay',
+            'deposit',
+            'request_maturity_withdrawal',
+            'wait_for_withdrawal_approval',
             'none'
           ],
-          description: 'What should happen next. `accept_or_decline_offer` means call `POST .../offer`.'
+          description:
+            'What should happen next. Loan: `accept_or_decline_offer` means call `POST .../offer`. ' +
+            'Commodity / savings / investment: `deposit` or `request_maturity_withdrawal`.'
         },
         currency: { type: 'string', example: 'NGN' },
         approvedAmount: { type: 'number', description: 'Only once approved', example: 500000 },
@@ -443,19 +448,27 @@ const integratorComponents = {
     },
     ExternalLoanAccount: {
       type: 'object',
+      description:
+        'Account summary for any product. LOAN/MORTGAGE use principal/disbursement/schedule fields; ' +
+        'COMMODITY/SAVINGS/INVESTMENT use balance, quantity, maturity, and pendingWithdrawal.',
       properties: {
         applicationId: { type: 'string' },
         localApplicationId: { type: 'string' },
         productId: { type: 'string' },
         productName: { type: 'string' },
-        productType: { type: 'string', enum: ['LOAN', 'MORTGAGE'] },
+        productType: {
+          type: 'string',
+          enum: ['LOAN', 'MORTGAGE', 'COMMODITY', 'SAVINGS', 'INVESTMENT']
+        },
         accountStatus: {
           type: 'string',
-          enum: ['not_disbursed', 'active', 'overdue', 'paid_off', 'closed'],
-          description: '`not_disbursed` until the money reaches the borrower. Balance fields appear after disbursement.'
+          description:
+            'Lending: `not_disbursed` | `active` | `overdue` | `paid_off` | `closed`. ' +
+            'Deposit products: `enrolled` | `active` | `withdrawal_pending` | `withdrawn` | `cancelled`.'
         },
         stage: { type: 'string' },
         currency: { type: 'string', example: 'NGN' },
+        userId: { type: 'string', description: 'Customer user id (deposit products)' },
         principal: { type: 'number', description: 'Approved loan amount (repayments are calculated on this)' },
         disbursedAmount: { type: 'number', description: 'Amount actually credited to the borrower after fees' },
         managementFees: {
@@ -495,8 +508,29 @@ const integratorComponents = {
             status: { type: 'string' }
           }
         },
-        maturityDate: { type: 'string', format: 'date-time', description: 'Due date of the last instalment' },
-        repaymentScheduleAvailable: { type: 'boolean' }
+        maturityDate: { type: 'string', format: 'date-time', description: 'Due date of the last instalment (loans)' },
+        repaymentScheduleAvailable: {
+          type: 'boolean',
+          description: 'True for disbursed loans/mortgages with a billing schedule. False for deposit products.'
+        },
+        balance: { type: 'number', description: 'Current holding balance (commodity / savings / investment)' },
+        quantity: { type: 'number', description: 'Units held (commodity / investment)' },
+        unitAmount: { type: 'number', description: 'Price per unit' },
+        amount: { type: 'number', description: 'Purchase / subscription total' },
+        expectedInterest: { type: 'number' },
+        interestPaid: { type: 'number' },
+        totalWithdrawals: { type: 'number' },
+        targetAmount: { type: 'number', description: 'Savings target lock goal' },
+        monthlyContribution: { type: 'number' },
+        maturityAt: { type: 'string', format: 'date-time', description: 'Holding maturity (deposit products)' },
+        holdingStatus: { type: 'string', description: 'Raw holding status from the contract snapshot' },
+        pendingWithdrawal: {
+          type: 'object',
+          properties: {
+            amount: { type: 'number' },
+            requestedAt: { type: 'string', format: 'date-time' }
+          }
+        }
       }
     },
     RepaymentSchedule: {
@@ -571,7 +605,7 @@ const merchantIntegrationSpec = {
   openapi: '3.0.0',
   info: {
     title: 'Plata Merchant Integration Documentation',
-    version: '1.5.0',
+    version: '1.5.1',
     description: INTEGRATION_GUIDE,
     contact: {
       name: 'Plata Support',
@@ -627,11 +661,13 @@ const merchantIntegrationSpec = {
         '1. **List products** — `GET /api/v1/products?type=COMMODITY`.\n' +
         '2. **Create the customer bank account** (optional) — `POST /api/v1/products/external-accounts`.\n' +
         '3. **Submit the purchase / application snapshot** — `POST /api/v1/products/external-applications`.\n' +
-        '4. **Sub-merchant on/off** — `POST /api/v1/products/sub-merchant-activations`.\n' +
-        '5. **Customer started usage** — `POST /api/v1/products/sub-merchant-usage-events`.\n' +
-        '6. **Customer paid principal** — `POST /api/v1/wallets/commodity/principal-repayment` credits the product-creator **Repayment** wallet. Body needs `creatorMerchantId`, `creatorAppId`, `amount`, `referenceId`.\n' +
-        '7. **Customer wants funds at maturity** — `POST /api/v1/wallets/commodity/maturity-withdrawal-request` only **asks the FI to approve**. No money moves yet.\n' +
-        '8. **After the FI approves** — `POST /api/v1/wallets/commodity/maturity-payout` debits creator **Treasury**. You credit the customer on your own platform.\n\n' +
+        '4. **Get status** — `GET /api/v1/products/external-applications/{applicationId}`.\n' +
+        '5. **Get commodity account details** — `GET .../external-applications/{applicationId}/account`.\n' +
+        '6. **Sub-merchant on/off** — `POST /api/v1/products/sub-merchant-activations`.\n' +
+        '7. **Customer started usage** — `POST /api/v1/products/sub-merchant-usage-events`.\n' +
+        '8. **Customer paid principal** — `POST /api/v1/wallets/commodity/principal-repayment` credits the product-creator **Repayment** wallet. Body needs `creatorMerchantId`, `creatorAppId`, `amount`, `referenceId`.\n' +
+        '9. **Customer wants funds at maturity** — `POST /api/v1/wallets/commodity/maturity-withdrawal-request` only **asks the FI to approve**. No money moves yet.\n' +
+        '10. **After the FI approves** — `POST /api/v1/wallets/commodity/maturity-payout` debits creator **Treasury**. You credit the customer on your own platform.\n\n' +
         'Old URL `.../principal-settlement` still works. Prefer `.../principal-repayment`.'
     },
     {
@@ -641,12 +677,14 @@ const merchantIntegrationSpec = {
         '1. **List products** — `GET /api/v1/products?type=SAVINGS`.\n' +
         '2. **Create the customer bank account** (optional) — `POST /api/v1/products/external-accounts`.\n' +
         '3. **Submit the savings application / plan snapshot** — `POST /api/v1/products/external-applications`.\n' +
-        '4. **Sub-merchant on/off** — `POST /api/v1/products/sub-merchant-activations`.\n' +
-        '5. **Customer started saving** — `POST /api/v1/products/sub-merchant-usage-events`.\n' +
-        '6. **Customer deposited or topped up** — `POST /api/v1/wallets/savings/principal-repayment` credits creator **Repayment**.\n' +
-        '7. **Show the activity feed** — `POST /api/v1/wallets/savings/application-activity` with the application id. Returns deposits, top-ups, and withdrawals.\n' +
-        '8. **Maturity withdrawal request** — `POST /api/v1/wallets/savings/maturity-withdrawal-request` (FI approval queue; no debit yet).\n' +
-        '9. **After the FI approves** — `POST /api/v1/wallets/savings/maturity-payout` debits creator **Treasury**. You credit the customer on your platform.\n\n' +
+        '4. **Get status** — `GET /api/v1/products/external-applications/{applicationId}`.\n' +
+        '5. **Get savings account details** — `GET .../external-applications/{applicationId}/account`.\n' +
+        '6. **Sub-merchant on/off** — `POST /api/v1/products/sub-merchant-activations`.\n' +
+        '7. **Customer started saving** — `POST /api/v1/products/sub-merchant-usage-events`.\n' +
+        '8. **Customer deposited or topped up** — `POST /api/v1/wallets/savings/principal-repayment` credits creator **Repayment**.\n' +
+        '9. **Show the activity feed** — `POST /api/v1/wallets/savings/application-activity` with the application id. Returns deposits, top-ups, and withdrawals.\n' +
+        '10. **Maturity withdrawal request** — `POST /api/v1/wallets/savings/maturity-withdrawal-request` (FI approval queue; no debit yet).\n' +
+        '11. **After the FI approves** — `POST /api/v1/wallets/savings/maturity-payout` debits creator **Treasury**. You credit the customer on your platform.\n\n' +
         'Old URL `.../principal-settlement` still works. Prefer `.../principal-repayment`.'
     },
     {
@@ -656,11 +694,13 @@ const merchantIntegrationSpec = {
         '1. **List products** — `GET /api/v1/products?type=INVESTMENT`.\n' +
         '2. **Create the customer bank account** (optional) — `POST /api/v1/products/external-accounts`.\n' +
         '3. **Submit the investment application** — `POST /api/v1/products/external-applications`.\n' +
-        '4. **Sub-merchant on/off** — `POST /api/v1/products/sub-merchant-activations`.\n' +
-        '5. **Customer started the investment** — `POST /api/v1/products/sub-merchant-usage-events`.\n' +
-        '6. **Customer paid principal** — `POST /api/v1/wallets/investment/principal-repayment` credits creator **Repayment**.\n' +
-        '7. **Maturity / liquidation request** — `POST /api/v1/wallets/investment/maturity-withdrawal-request` (FI approval queue; no debit yet).\n' +
-        '8. **After the FI approves** — `POST /api/v1/wallets/investment/maturity-payout` debits creator **Treasury**. You credit the customer on your platform.\n\n' +
+        '4. **Get status** — `GET /api/v1/products/external-applications/{applicationId}`.\n' +
+        '5. **Get investment account details** — `GET .../external-applications/{applicationId}/account`.\n' +
+        '6. **Sub-merchant on/off** — `POST /api/v1/products/sub-merchant-activations`.\n' +
+        '7. **Customer started the investment** — `POST /api/v1/products/sub-merchant-usage-events`.\n' +
+        '8. **Customer paid principal** — `POST /api/v1/wallets/investment/principal-repayment` credits creator **Repayment**.\n' +
+        '9. **Maturity / liquidation request** — `POST /api/v1/wallets/investment/maturity-withdrawal-request` (FI approval queue; no debit yet).\n' +
+        '10. **After the FI approves** — `POST /api/v1/wallets/investment/maturity-payout` debits creator **Treasury**. You credit the customer on your platform.\n\n' +
         'Old URL `.../principal-settlement` still works. Prefer `.../principal-repayment`.'
     }
   ],
@@ -863,14 +903,13 @@ const merchantIntegrationSpec = {
     },
     '/api/v1/products/external-applications/{applicationId}': {
       get: {
-        tags: ['1. Loan', '2. Mortgage'],
+        tags: ALL_PRODUCTS,
         summary: 'Get application status',
         description:
           'Ask Plata where an application is right now. Use this any time, e.g. on page load or if you missed a webhook.\n\n' +
-          '- `stage` — where it is (`submitted`, `under_review`, `offer_pending`, `disbursed`, …)\n' +
-          '- `nextAction` — what happens next (`wait_for_review`, `accept_or_decline_offer`, `repay`, …)\n' +
-          '- `downPayment` — whether a down payment is still owed\n\n' +
-          'The webhook on `loanWorkflowCallbackUrl` still fires; this is the same information on demand. ' +
+          '- `stage` — where it is (loans: `submitted` → `disbursed`; deposit products: `enrolled` → `active` → `withdrawal_pending`)\n' +
+          '- `nextAction` — what happens next (`wait_for_review`, `accept_or_decline_offer`, `deposit`, `request_maturity_withdrawal`, …)\n' +
+          '- `downPayment` — equity still owed (loans/mortgages; usually `not_required` for commodity/savings/investment)\n\n' +
           'You can only read applications you submitted with your own API keys.',
         security: [{ plataApiKeys: [] }],
         parameters: [{ $ref: '#/components/parameters/ExternalApplicationId' }],
@@ -1002,18 +1041,20 @@ const merchantIntegrationSpec = {
     },
     '/api/v1/products/external-applications/{applicationId}/account': {
       get: {
-        tags: ['1. Loan', '2. Mortgage'],
-        summary: 'Get loan account details',
+        tags: ALL_PRODUCTS,
+        summary: 'Get application account details',
         description:
-          'The borrower’s loan account: how much was lent, where it was paid, how much is left, and what is due next.\n\n' +
-          'Before disbursement `accountStatus` is `not_disbursed` and only the approved amount is shown. ' +
-          'After disbursement you get `disbursedAmount`, `outstandingAmount`, `amountPaid`, `nextInstallment`, `daysOverdue`, and `maturityDate`. ' +
-          '`accountStatus` becomes `active`, `overdue`, `paid_off`, or `closed`.',
+          'Live account for the application you submitted.\n\n' +
+          '**LOAN / MORTGAGE:** before disbursement `accountStatus` is `not_disbursed`; after you get principal, ' +
+          '`disbursedAmount`, outstanding balance, next instalment, and overdue info.\n\n' +
+          '**COMMODITY / SAVINGS / INVESTMENT:** holding summary from the contract snapshot — `balance`, units, ' +
+          '`maturityAt`, `holdingStatus`, and any `pendingWithdrawal`. `accountStatus` is `enrolled`, `active`, ' +
+          '`withdrawal_pending`, or `withdrawn`.',
         security: [{ plataApiKeys: [] }],
         parameters: [{ $ref: '#/components/parameters/ExternalApplicationId' }],
         responses: {
           '200': {
-            description: 'Loan account summary',
+            description: 'Account summary',
             content: {
               'application/json': {
                 schema: {
@@ -1023,44 +1064,54 @@ const merchantIntegrationSpec = {
                     data: { $ref: '#/components/schemas/ExternalLoanAccount' }
                   }
                 },
-                example: {
-                  success: true,
-                  data: {
-                    applicationId: '6650a1b2c3d4e5f607182930',
-                    localApplicationId: 'loan-app-1001',
-                    productId: '674a1b2c3d4e5f6789012345',
-                    productType: 'LOAN',
-                    accountStatus: 'active',
-                    stage: 'disbursed',
-                    currency: 'NGN',
-                    principal: 500000,
-                    disbursedAmount: 492500,
-                    managementFees: { plata: 7500 },
-                    disbursedAt: '2026-09-21T10:00:00.000Z',
-                    disbursementAccount: { walletId: 'wal_123', accountNumber: '9012345678', bankName: 'Providus Bank' },
-                    interestRate: 12,
-                    repaymentFrequency: 'monthly',
-                    durationMonths: 12,
-                    totalInterest: 33061.92,
-                    totalRepayment: 533061.92,
-                    amountPaid: 0,
-                    outstandingAmount: 533061.92,
-                    installmentCount: 12,
-                    paidInstallmentCount: 0,
-                    overdueInstallmentCount: 0,
-                    overdueAmount: 0,
-                    daysOverdue: 0,
-                    nextInstallment: { number: 1, dueDate: '2026-10-21T00:00:00.000Z', amount: 44421.83, status: 'pending' },
-                    maturityDate: '2027-09-21T00:00:00.000Z',
-                    repaymentScheduleAvailable: true
+                examples: {
+                  loan: {
+                    summary: 'Disbursed loan',
+                    value: {
+                      success: true,
+                      data: {
+                        applicationId: '6650a1b2c3d4e5f607182930',
+                        localApplicationId: 'loan-app-1001',
+                        productId: '674a1b2c3d4e5f6789012345',
+                        productType: 'LOAN',
+                        accountStatus: 'active',
+                        stage: 'disbursed',
+                        currency: 'NGN',
+                        principal: 500000,
+                        disbursedAmount: 492500,
+                        outstandingAmount: 533061.92,
+                        repaymentScheduleAvailable: true
+                      }
+                    }
+                  },
+                  commodity: {
+                    summary: 'Commodity holding',
+                    value: {
+                      success: true,
+                      data: {
+                        applicationId: '6650a1b2c3d4e5f607182931',
+                        localApplicationId: 'commodity-1001',
+                        productId: '674a1b2c3d4e5f6789012347',
+                        productType: 'COMMODITY',
+                        accountStatus: 'active',
+                        stage: 'active',
+                        currency: 'NGN',
+                        userId: 'user_7788',
+                        balance: 90000,
+                        quantity: 2,
+                        unitAmount: 45000,
+                        amount: 90000,
+                        holdingStatus: 'LOCKED',
+                        repaymentScheduleAvailable: false
+                      }
+                    }
                   }
                 }
               }
             }
           },
-          '400': { description: 'Not a LOAN or MORTGAGE application' },
           '401': { $ref: '#/components/responses/UnauthorizedKeys' },
-          '404': { description: 'No application with this id was submitted with your keys' }
+          '404': { description: 'Application not found for this merchant' }
         }
       }
     },

@@ -88,6 +88,8 @@ export const INTEGRATOR_PRODUCTS: Array<{
     type: 'COMMODITY',
     paths: [
       ...SHARED_PATHS,
+      STATUS_PATH,
+      ACCOUNT_PATH,
       '/api/v1/wallets/commodity/principal-repayment',
       '/api/v1/wallets/commodity/maturity-withdrawal-request',
       '/api/v1/wallets/commodity/maturity-payout',
@@ -100,6 +102,8 @@ export const INTEGRATOR_PRODUCTS: Array<{
     type: 'SAVINGS',
     paths: [
       ...SHARED_PATHS,
+      STATUS_PATH,
+      ACCOUNT_PATH,
       '/api/v1/wallets/savings/principal-repayment',
       '/api/v1/wallets/savings/application-activity',
       '/api/v1/wallets/savings/maturity-withdrawal-request',
@@ -113,6 +117,8 @@ export const INTEGRATOR_PRODUCTS: Array<{
     type: 'INVESTMENT',
     paths: [
       ...SHARED_PATHS,
+      STATUS_PATH,
+      ACCOUNT_PATH,
       '/api/v1/wallets/investment/principal-repayment',
       '/api/v1/wallets/investment/maturity-withdrawal-request',
       '/api/v1/wallets/investment/maturity-payout',
@@ -317,9 +323,13 @@ This guide is for **buying goods in units** (for example bags of rice). It is no
 |------|------|-----|
 | 1 | Show commodities for sale | \`GET /api/v1/products?type=COMMODITY\` |
 | 2 | Record the purchase on Plata | \`POST /api/v1/products/external-applications\` |
-| 3 | When the buyer pays | \`POST /api/v1/wallets/commodity/principal-repayment\` |
-| 4 | Ask to withdraw at maturity | \`POST /api/v1/wallets/commodity/maturity-withdrawal-request\` |
-| 5 | After FI approval, pay out | \`POST /api/v1/wallets/commodity/maturity-payout\` |
+| 3 | Check status | \`GET .../external-applications/{applicationId}\` |
+| 4 | Show the commodity account | \`GET .../external-applications/{applicationId}/account\` |
+| 5 | When the buyer pays | \`POST /api/v1/wallets/commodity/principal-repayment\` |
+| 6 | Ask to withdraw at maturity | \`POST /api/v1/wallets/commodity/maturity-withdrawal-request\` |
+| 7 | After FI approval, pay out | \`POST /api/v1/wallets/commodity/maturity-payout\` |
+
+Keep either Plata’s application \`id\` or your own \`localApplicationId\` as \`{applicationId}\`.
 
 ---
 
@@ -333,7 +343,7 @@ You sell in your own app. If a sub-merchant starts or stops offering this commod
 
 ## 2. Record the purchase
 
-When someone buys units, tell Plata with \`POST /api/v1/products/external-applications\`. This records the holding — it is not a credit application.
+When someone buys units, tell Plata with \`POST /api/v1/products/external-applications\`. This records the holding — it is not a credit application. Plata also provisions the customer user + wallet under the product creator.
 
 | What to send | Why it matters |
 |--------------|----------------|
@@ -347,7 +357,18 @@ Omit \`loanWorkflowCallbackUrl\`. Do not send a loan \`principal\`.
 
 Optional: \`POST /api/v1/products/external-accounts\` if the buyer needs a Plata NUBAN first.
 
-## 3. When the buyer pays
+## 3. Get commodity status
+
+Poll \`GET /api/v1/products/external-applications/{applicationId}\` anytime.
+
+- **\`stage\`** — \`enrolled\` → \`active\` → \`withdrawal_pending\` → \`withdrawn\` (or cancelled)
+- **\`nextAction\`** — \`deposit\`, \`request_maturity_withdrawal\`, \`wait_for_withdrawal_approval\`, or \`none\`
+
+## 4. Get commodity account details
+
+Call \`GET .../external-applications/{applicationId}/account\` for the holding summary: \`balance\`, \`quantity\`, \`unitAmount\`, \`amount\`, \`holdingStatus\`, \`maturityAt\`, and any \`pendingWithdrawal\`. \`accountStatus\` is \`enrolled\`, \`active\`, \`withdrawal_pending\`, or \`withdrawn\`.
+
+## 5. When the buyer pays
 
 Call \`POST /api/v1/wallets/commodity/principal-repayment\` to credit the **product creator’s Repayment** wallet.
 
@@ -355,7 +376,7 @@ Send \`creatorMerchantId\`, \`creatorAppId\`, \`amount\`, and a unique \`referen
 
 (The older path \`/commodity/principal-settlement\` still works; prefer \`principal-repayment\`.)
 
-## 4. At maturity — ask, then pay out
+## 6. At maturity — ask, then pay out
 
 1. \`POST /api/v1/wallets/commodity/maturity-withdrawal-request\` — asks the FI to approve. **No money moves yet.**
 2. After approval, \`POST /api/v1/wallets/commodity/maturity-payout\` — debits the creator **Treasury**. You then credit the buyer on your own platform.
@@ -367,7 +388,7 @@ This guide covers **flex** savings and **target / lock** plans. It is not a loan
 
 **How to authenticate:** send \`PLATA_PUBLIC_KEY\` and \`PLATA_SECRET_KEY\` on every request.
 
-**Shape of the journey:** list plans → open the account on Plata at zero balance → credit each deposit → show activity → at maturity, request withdrawal and then treasury payout. No loan-workflow callback is required.
+**Shape of the journey:** list plans → open the account on Plata at zero balance → check status / account → credit each deposit → show activity → at maturity, request withdrawal and then treasury payout. No loan-workflow callback is required.
 
 ## The journey at a glance
 
@@ -375,10 +396,12 @@ This guide covers **flex** savings and **target / lock** plans. It is not a loan
 |------|------|-----|
 | 1 | Show savings products | \`GET /api/v1/products?type=SAVINGS\` |
 | 2 | Open the plan on Plata | \`POST /api/v1/products/external-applications\` |
-| 3 | Each deposit or top-up | \`POST /api/v1/wallets/savings/principal-repayment\` |
-| 4 | Activity feed | \`POST /api/v1/wallets/savings/application-activity\` |
-| 5 | Ask to withdraw at maturity | \`POST /api/v1/wallets/savings/maturity-withdrawal-request\` |
-| 6 | After FI approval, pay out | \`POST /api/v1/wallets/savings/maturity-payout\` |
+| 3 | Check status | \`GET .../external-applications/{applicationId}\` |
+| 4 | Show the savings account | \`GET .../external-applications/{applicationId}/account\` |
+| 5 | Each deposit or top-up | \`POST /api/v1/wallets/savings/principal-repayment\` |
+| 6 | Activity feed | \`POST /api/v1/wallets/savings/application-activity\` |
+| 7 | Ask to withdraw at maturity | \`POST /api/v1/wallets/savings/maturity-withdrawal-request\` |
+| 8 | After FI approval, pay out | \`POST /api/v1/wallets/savings/maturity-payout\` |
 
 ---
 
@@ -397,7 +420,7 @@ Save \`id\` (later \`productId\`) and the rules you must show the customer:
 
 ## 2. Open the plan
 
-Call \`POST /api/v1/products/external-applications\` to enroll the saver. The Plata balance starts at **zero**. This is not an approval workflow.
+Call \`POST /api/v1/products/external-applications\` to enroll the saver. The Plata balance starts at **zero**. This is not an approval workflow. Plata also provisions the customer user + wallet.
 
 | What to send | Why it matters |
 |--------------|----------------|
@@ -410,15 +433,23 @@ Call \`POST /api/v1/products/external-applications\` to enroll the saver. The Pl
 
 Do not send \`loanWorkflowCallbackUrl\` or a loan \`principal\`.
 
-## 3. Each deposit or top-up
+## 3. Get savings status
+
+Poll \`GET /api/v1/products/external-applications/{applicationId}\`. \`stage\` / \`nextAction\` tell you whether to take a deposit, wait on a withdrawal approval, or treat the plan as closed.
+
+## 4. Get savings account details
+
+Call \`GET .../external-applications/{applicationId}/account\` for \`balance\`, target fields, \`maturityAt\`, \`holdingStatus\`, and \`pendingWithdrawal\` when a withdrawal is queued.
+
+## 5. Each deposit or top-up
 
 When money comes in, call \`POST /api/v1/wallets/savings/principal-repayment\`. That credits the creator **Repayment** wallet. Use a **new** \`referenceId\` every time. Category \`SAVINGS_DEPOSIT\`.
 
-## 4. Show the activity feed
+## 6. Show the activity feed
 
 Call \`POST /api/v1/wallets/savings/application-activity\` with the application id to list deposits, top-ups, and withdrawals. This read exists on the **savings** guide only.
 
-## 5. Withdrawal at maturity
+## 7. Withdrawal at maturity
 
 1. \`POST /api/v1/wallets/savings/maturity-withdrawal-request\` — queues FI approval; no debit yet.
 2. After approval, \`POST /api/v1/wallets/savings/maturity-payout\` — debits creator **Treasury**. You credit the saver on your platform.
@@ -432,7 +463,7 @@ This guide is for **unit investments** (notes / holdings sold in units). It is n
 
 **How to authenticate:** send \`PLATA_PUBLIC_KEY\` and \`PLATA_SECRET_KEY\` on every request.
 
-**Shape of the journey:** list offerings → record the subscription on Plata → credit the creator when the investor pays → at maturity or liquidation, request FI approval, then treasury payout. No loan-workflow callback is required. There is no savings-style activity-feed route here.
+**Shape of the journey:** list offerings → record the subscription → check status / account → credit the creator when the investor pays → at maturity or liquidation, request FI approval, then treasury payout. No loan-workflow callback is required. There is no savings-style activity-feed route here.
 
 ## The journey at a glance
 
@@ -440,9 +471,11 @@ This guide is for **unit investments** (notes / holdings sold in units). It is n
 |------|------|-----|
 | 1 | Show investment products | \`GET /api/v1/products?type=INVESTMENT\` |
 | 2 | Record the subscription | \`POST /api/v1/products/external-applications\` |
-| 3 | When the investor pays | \`POST /api/v1/wallets/investment/principal-repayment\` |
-| 4 | Ask to liquidate / withdraw | \`POST /api/v1/wallets/investment/maturity-withdrawal-request\` |
-| 5 | After FI approval, pay out | \`POST /api/v1/wallets/investment/maturity-payout\` |
+| 3 | Check status | \`GET .../external-applications/{applicationId}\` |
+| 4 | Show the investment account | \`GET .../external-applications/{applicationId}/account\` |
+| 5 | When the investor pays | \`POST /api/v1/wallets/investment/principal-repayment\` |
+| 6 | Ask to liquidate / withdraw | \`POST /api/v1/wallets/investment/maturity-withdrawal-request\` |
+| 7 | After FI approval, pay out | \`POST /api/v1/wallets/investment/maturity-payout\` |
 
 ---
 
@@ -456,7 +489,7 @@ Save \`id\` (later \`productId\`), expected return (\`structure.returnsOnInvestm
 
 ## 2. Record the subscription
 
-Call \`POST /api/v1/products/external-applications\` when someone buys units.
+Call \`POST /api/v1/products/external-applications\` when someone buys units. Plata provisions the customer user + wallet under the product creator.
 
 | What to send | Why it matters |
 |--------------|----------------|
@@ -469,11 +502,19 @@ Call \`POST /api/v1/products/external-applications\` when someone buys units.
 
 Do not send loan \`principal\`, mortgage equity, or a savings target. Omit \`loanWorkflowCallbackUrl\`.
 
-## 3. When the investor pays
+## 3. Get investment status
+
+Poll \`GET /api/v1/products/external-applications/{applicationId}\` for \`stage\` and \`nextAction\` (\`deposit\`, \`request_maturity_withdrawal\`, \`wait_for_withdrawal_approval\`, …).
+
+## 4. Get investment account details
+
+Call \`GET .../external-applications/{applicationId}/account\` for \`balance\`, \`quantity\`, \`unitAmount\`, \`expectedInterest\`, \`maturityAt\`, \`holdingStatus\`, and \`pendingWithdrawal\`.
+
+## 5. When the investor pays
 
 Call \`POST /api/v1/wallets/investment/principal-repayment\` to credit the creator **Repayment** wallet. Category \`INVESTMENT_DEPOSIT\`. Required: \`creatorMerchantId\`, \`creatorAppId\`, \`amount\`, and a unique \`referenceId\`.
 
-## 4. Liquidation / maturity
+## 6. Liquidation / maturity
 
 1. \`POST /api/v1/wallets/investment/maturity-withdrawal-request\` — asks the FI to approve. **No debit yet.**
 2. After approval, \`POST /api/v1/wallets/investment/maturity-payout\` — debits creator **Treasury**. You credit the investor on your platform.
@@ -707,6 +748,44 @@ const MORTGAGE_COPY: Record<string, { summary: string; description?: string }> =
   }
 };
 
+const DEPOSIT_STATUS_ACCOUNT_COPY: Record<
+  IntegratorProductSlug,
+  Partial<Record<string, { summary: string; description?: string }>>
+> = {
+  loan: {},
+  mortgage: {},
+  commodity: {
+    [STATUS_PATH]: {
+      summary: 'Get commodity application status',
+      description: 'See stage (`enrolled` / `active` / `withdrawal_pending`) and nextAction (`deposit`, `request_maturity_withdrawal`, …).'
+    },
+    [ACCOUNT_PATH]: {
+      summary: 'Get commodity account details',
+      description: 'Holding balance, quantity, unit price, maturity, holdingStatus, and any pending withdrawal.'
+    }
+  },
+  savings: {
+    [STATUS_PATH]: {
+      summary: 'Get savings application status',
+      description: 'See whether the plan is enrolled, active, waiting on a withdrawal, or closed.'
+    },
+    [ACCOUNT_PATH]: {
+      summary: 'Get savings account details',
+      description: 'Current balance, target fields, maturity, holdingStatus, and pendingWithdrawal when queued.'
+    }
+  },
+  investment: {
+    [STATUS_PATH]: {
+      summary: 'Get investment application status',
+      description: 'See stage and nextAction for funding or maturity withdrawal.'
+    },
+    [ACCOUNT_PATH]: {
+      summary: 'Get investment account details',
+      description: 'Units held, balance, expected interest, maturity, and pending liquidation/withdrawal.'
+    }
+  }
+};
+
 function numberSummaries(paths: Record<string, PathItem>): void {
   let step = 0;
   for (const item of Object.values(paths)) {
@@ -800,6 +879,11 @@ export function buildIntegratorProductSpec(slug: string) {
         operation.summary = mortgageCopy.summary;
         if (mortgageCopy.description) operation.description = mortgageCopy.description;
       }
+      const depositCopy = DEPOSIT_STATUS_ACCOUNT_COPY[product.slug]?.[path];
+      if (depositCopy) {
+        operation.summary = depositCopy.summary;
+        if (depositCopy.description) operation.description = depositCopy.description;
+      }
     }
     paths[path] = item;
   }
@@ -809,7 +893,7 @@ export function buildIntegratorProductSpec(slug: string) {
     openapi: '3.0.0',
     info: {
       title: `Plata Merchant Integration Documentation — ${product.title}`,
-      version: '1.7.0',
+      version: '1.8.0',
       description: guide(product.slug)
     },
     servers: source.servers,
