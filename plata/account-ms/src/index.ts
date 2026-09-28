@@ -4,9 +4,13 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './config/swagger';
+import { buildIntegratorProductSpec, INTEGRATOR_PRODUCTS } from './openapi/integratorProductSpecs';
+import frontendPlataSpec from './config/frontendPlataSwagger';
 import { config } from './config/environment';
 import { setupProxies } from './middleware/proxyMiddleware';
 import { merchantGatewayAuth } from './middleware/merchantGatewayAuth';
+import { authSensitiveLimiter, generalApiLimiter } from './middleware/rateLimitMiddleware';
+import { sessionActivityTouchMiddleware } from './middleware/sessionActivityTouchMiddleware';
 import { getSpecUrls, handleSpecRequest } from './specHub';
 
 const app = express();
@@ -19,12 +23,26 @@ app.set('trust proxy', 1);
 app.use(helmet());
 app.use(cors({
   origin: config.corsOrigins,
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Public-Key', 'X-Secret-Key'],
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'PLATA_PUBLIC_KEY',
+    'PLATA_SECRET_KEY',
+    'X-Requested-With'
+  ],
+  optionsSuccessStatus: 204
 }));
 app.use(morgan(config.logLevel));
 
+app.use(authSensitiveLimiter);
+app.use(generalApiLimiter);
+
 // Merchant API key + IP policy (service-auth-ms) before upstream proxies
 app.use(merchantGatewayAuth);
+
+// Keep client-auth session idle clock in sync with real gateway API usage
+app.use(sessionActivityTouchMiddleware);
 
 // Setup Proxies (must be before body parser)
 setupProxies(app);
@@ -59,6 +77,17 @@ app.get('/', (req, res) => {
     endpoints: {
       health: '/health',
       apiDocs: '/api-docs',
+      docs: '/docs',
+      integratorGuides: {
+        loan: '/docs/loan',
+        mortgage: '/docs/mortgage',
+        commodity: '/docs/commodity',
+        savings: '/docs/savings',
+        investment: '/docs/investment'
+      },
+      frontendPlata: '/frontendplata',
+      openApiJson: '/docs/swagger.json',
+      frontendPlataOpenApiJson: '/frontendplata/openapi.json'
     },
     timestamp: new Date().toISOString()
   });
@@ -67,15 +96,102 @@ app.get('/', (req, res) => {
 // OpenAPI / Swagger documentation (hub: dropdown of all service specs)
 const specBasePath = '/api-docs/specs';
 const specUrls = getSpecUrls(specBasePath);
+
+function mountSwaggerUi(
+  mountPath: string,
+  opts: {
+    title: string;
+    openapiUrl?: string;
+    urls?: Array<{ name: string; url: string }>;
+    primaryName?: string;
+  }
+) {
+  const swaggerOptions: Record<string, unknown> = {
+    docExpansion: 'list',
+    defaultModelsExpandDepth: 1,
+    persistAuthorization: true,
+  };
+  if (opts.urls?.length) {
+    swaggerOptions.urls = opts.urls;
+    if (opts.primaryName) swaggerOptions['urls.primaryName'] = opts.primaryName;
+  } else if (opts.openapiUrl) {
+    swaggerOptions.url = opts.openapiUrl;
+  }
+  const uiOpts = {
+    customSiteTitle: opts.title,
+    swaggerOptions,
+    ...(opts.openapiUrl ? { swaggerUrl: opts.openapiUrl } : {}),
+  };
+  app.use(mountPath, swaggerUi.serveFiles(undefined, uiOpts), swaggerUi.setup(undefined, uiOpts));
+}
+
 app.get(`${specBasePath}/:serviceId`, (req, res, next) => {
   handleSpecRequest(req, res).catch(next);
 });
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
-  swaggerOptions: {
-    urls: specUrls,
-    'urls.primaryName': specUrls[0]?.name ?? 'Gateway (API Overview)',
-  },
-}));
+
+function integratorDocsIndexHtml(): string {
+  const links = INTEGRATOR_PRODUCTS.map(
+    (product) =>
+      `<li><a href="/docs/${product.slug}">${product.title}</a> — <code>/docs/${product.slug}</code></li>`
+  ).join('');
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Plata Merchant Integration Documentation</title></head>
+<body>
+  <h1>Plata Merchant Integration Documentation</h1>
+  <p>Pick one product. Each guide is its own page, with how to fetch products, make them available, and send applications back.</p>
+  <ul>${links}</ul>
+</body>
+</html>`;
+}
+
+app.get('/docs/:product/openapi.json', (req, res, next) => {
+  const spec = buildIntegratorProductSpec(req.params.product);
+  if (!spec) {
+    next();
+    return;
+  }
+  res.json(spec);
+});
+
+for (const product of INTEGRATOR_PRODUCTS) {
+  mountSwaggerUi(`/docs/${product.slug}`, {
+    title: `Plata Merchant Integration Documentation — ${product.title}`,
+    openapiUrl: `/docs/${product.slug}/openapi.json`,
+  });
+}
+
+/** Index of the five product guides. Do not mount Swagger on /docs itself — it would swallow /docs/loan. */
+app.get('/docs', (_req, res) => {
+  res.type('html').send(integratorDocsIndexHtml());
+});
+
+/** Combined spec kept for the API hub. Prefer the five product guides. */
+app.get('/docs/swagger.json', (_req, res) => {
+  res.json(swaggerSpec);
+});
+
+app.get('/api-docs.json', (_req, res) => {
+  res.json(swaggerSpec);
+});
+
+/** Plata merchant dashboard API (Treasury & Settlements) — separate from integrator /docs */
+app.get('/frontendplata/openapi.json', (_req, res) => {
+  res.json(frontendPlataSpec);
+});
+
+/** Spec Hub for all services */
+mountSwaggerUi('/api-docs', {
+  title: 'Plata API Documentation',
+  urls: specUrls,
+  primaryName: 'Plata API (Merchant & Integrator)',
+});
+
+/** Plata merchant dashboard API */
+mountSwaggerUi('/frontendplata', {
+  title: 'Plata Frontend API',
+  openapiUrl: '/frontendplata/openapi.json',
+});
 
 // Health check endpoint (no database)
 app.get('/health', (req, res) => {
