@@ -210,193 +210,258 @@ You get every instalment: due date, amount, principal vs interest, remaining bal
   mortgage: `
 # Mortgage
 
-Property finance only. This is not the loan guide. There is no principal-repayment or maturity payout here.
+This guide is for **property finance** only. Cash loans, commodity, savings, and investment each have their own page.
 
-Auth on every call: \`PLATA_PUBLIC_KEY\` and \`PLATA_SECRET_KEY\`.
+**How to authenticate:** send \`PLATA_PUBLIC_KEY\` and \`PLATA_SECRET_KEY\` on every request.
 
-## 1. Fetch mortgage products
+**What is different from cash loans:** buyers usually owe a down payment (equity) before approval can finish. There is no cash-loan offer accept/decline call here — mortgage offers, inspections, and contracts run in the lender’s mortgage workflow on Plata. There is also no principal-repayment or maturity-payout route on this guide.
 
-\`GET /api/v1/products?type=MORTGAGE\` — do not send \`appId\`.
+## The journey at a glance
 
-Read property terms, not a cash-loan amount range. Keep:
+| Step | Goal | API |
+|------|------|-----|
+| 1 | Show available mortgages | \`GET /api/v1/products?type=MORTGAGE\` · \`GET /api/v1/products/{id}\` |
+| 2 | Preview repayments *(optional)* | \`POST /api/v1/products/{id}/loan-schedule\` |
+| 3 | Submit the application | \`POST /api/v1/products/external-applications\` |
+| 4 | Check status | \`GET .../external-applications/{applicationId}\` |
+| 5 | Show the mortgage account | \`GET .../account\` |
+| 6 | Show the repayment schedule | \`GET .../repayment-schedule\` |
+
+Keep either Plata’s application \`id\` or your own \`localApplicationId\` as \`{applicationId}\`. You only see applications created with **your** keys.
+
+---
+
+## 1. Get mortgage products
+
+Load the property catalog for your storefront.
+
+Call \`GET /api/v1/products?type=MORTGAGE\`. Leave \`appId\` out.
+
+From each product, save:
 
 - \`id\` — later \`productId\`
-- \`structure.mortgageAmount\` or equivalent amount
-- \`structure.equityRequirement\` and \`structure.equityContribution\` (down payment, flat or percent)
-- tenure / repayment structure
+- Facility size (\`structure.mortgageAmount\` or equivalent)
+- Down-payment rule (\`structure.equityRequirement\` and \`structure.equityContribution\` — flat amount or percent)
+- Tenure / how repayments are structured
 
-If equity is required, the applicant must pay that down payment before the merchant can approve. Build that into what you show the buyer.
+If equity is required, tell the buyer up front: that down payment must be paid before the lender can approve. \`GET /api/v1/products/{id}\` returns one mortgage in full.
 
-## 2. Offer the mortgage to buyers
+You host the buying experience. If a sub-merchant lists or delists this mortgage, tell Plata with \`POST /api/v1/products/sub-merchant-activations\`. Skip that if you do not use sub-merchants.
 
-Store the catalog \`id\` and show the property product with the down-payment rule. When a sub-merchant lists or delists it, \`POST /api/v1/products/sub-merchant-activations\` with that \`productId\`.
+## 2. Preview repayments *(optional)*
 
-## 3. Send each mortgage application to Plata
+Show the buyer what monthly life looks like before they apply.
 
-\`POST /api/v1/products/external-applications\` is the same URL as loans, but the snapshot is a property file:
+Call \`POST /api/v1/products/{id}/loan-schedule\` with \`amount\` (facility) and \`propertyValue\`. Plata returns each instalment and the total to repay, with the down payment taken into account. Nothing is saved.
 
-| Field | Mortgage meaning |
-|-------|----------------|
-| \`productId\` | Catalog mortgage \`id\` |
-| \`application.contractSnapshot.mortgageAmount\` | Facility amount, naira |
-| \`application.contractSnapshot.propertyValue\` | Property value, naira |
+## 3. Apply for a mortgage
+
+Submit once with \`POST /api/v1/products/external-applications\` (same URL as loans, different snapshot).
+
+| What to send | Why it matters |
+|--------------|----------------|
+| \`productId\` | Which mortgage they chose |
+| \`application.contractSnapshot.mortgageAmount\` | Facility amount (naira) |
+| \`application.contractSnapshot.propertyValue\` | Property value (naira) |
 | \`application.contractSnapshot.equityContribution\` | Down payment the buyer must pay |
-| \`loanWorkflowCallbackUrl\` | Approval / status webhook |
+| \`loanWorkflowCallbackUrl\` | Where Plata POSTs approval / status updates |
 
-Do not put a cash-loan \`principal\` in place of the mortgage and equity fields.
+Do **not** send a cash-loan \`principal\` instead of these property fields.
 
-Optional: \`POST /api/v1/products/external-accounts\` for the buyer's NUBAN before you submit. Plata then POSTs workflow updates to your callback. Equity collection itself is not a gateway call on this page.
-
-Before applying you can show the buyer their repayments with \`POST /api/v1/products/{id}/loan-schedule\` (send \`amount\` and \`propertyValue\`). \`GET /api/v1/products/{id}\` returns one mortgage product in full.
+Optional first: \`POST /api/v1/products/external-accounts\` creates the buyer’s Plata NUBAN. Collecting equity itself is not a special gateway call on this page — use your payment flow (or the equity payment reference documented for lending) and then track \`downPayment\` on status.
 
 ## 4. Track the mortgage
 
-\`{applicationId}\` is the Plata id from the submit response or your own \`localApplicationId\`.
+Poll \`GET /api/v1/products/external-applications/{applicationId}\` anytime.
 
-- **Status:** \`GET /api/v1/products/external-applications/{applicationId}\`. \`downPayment\` shows how much equity is still owed. After approval, \`stage\` follows the mortgage steps (inspection, contract, down payment) and \`nextAction\` is \`continue_mortgage_workflow\` until disbursement.
-- **Mortgage account:** \`GET .../external-applications/{applicationId}/account\` — facility amount, amount disbursed, outstanding balance, next instalment, days overdue.
-- **Repayment schedule:** \`GET .../external-applications/{applicationId}/repayment-schedule\` — every instalment, available after disbursement.
+- **\`downPayment\`** — how much equity is still owed
+- **\`stage\` / \`nextAction\`** — after approval, mortgage steps (inspection, contract, down payment, and so on). Until money is disbursed you will often see \`nextAction: continue_mortgage_workflow\`
 
-The cash-loan offer accept/decline call is not on this guide. Mortgage offers, inspections, and contract signing run through the lender's mortgage workflow.
+Webhooks on \`loanWorkflowCallbackUrl\` still fire for status changes; verify \`X-Plata-Signature\` when configured.
+
+## 5. Get mortgage account details
+
+Call \`GET .../external-applications/{applicationId}/account\` for the live facility: amount approved, amount disbursed, outstanding balance, next instalment, and days overdue. Before disbursement the account shows as not yet funded.
+
+## 6. Get mortgage repayment details
+
+Call \`GET .../external-applications/{applicationId}/repayment-schedule\` after disbursement for every instalment. Before that you get **409** — the schedule is created when the mortgage is funded.
 `.trim(),
   commodity: `
 # Commodity
 
-Unit purchase (goods), not a loan and not a savings plan. No loan-workflow callback is required.
+This guide is for **buying goods in units** (for example bags of rice). It is not a loan, mortgage, savings plan, or investment note.
 
-Auth on every call: \`PLATA_PUBLIC_KEY\` and \`PLATA_SECRET_KEY\`.
+**How to authenticate:** send \`PLATA_PUBLIC_KEY\` and \`PLATA_SECRET_KEY\` on every request.
 
-## 1. Fetch commodity products
+**Shape of the journey:** list products → enroll the purchase on Plata → credit the creator when the buyer pays → at maturity, ask the FI to approve a withdrawal, then run the treasury payout. You do **not** need a \`loanWorkflowCallbackUrl\`.
 
-\`GET /api/v1/products?type=COMMODITY\` — do not send \`appId\`.
+## The journey at a glance
 
-Keep \`id\`, unit price (\`structure.unitAmount\`), min quantity, yield if any, and withdrawal flexibility. Show price per unit to the buyer. That \`id\` is \`productId\`.
+| Step | Goal | API |
+|------|------|-----|
+| 1 | Show commodities for sale | \`GET /api/v1/products?type=COMMODITY\` |
+| 2 | Record the purchase on Plata | \`POST /api/v1/products/external-applications\` |
+| 3 | When the buyer pays | \`POST /api/v1/wallets/commodity/principal-repayment\` |
+| 4 | Ask to withdraw at maturity | \`POST /api/v1/wallets/commodity/maturity-withdrawal-request\` |
+| 5 | After FI approval, pay out | \`POST /api/v1/wallets/commodity/maturity-payout\` |
 
-## 2. Put the commodity on sale
+---
 
-Store the catalog \`id\` and let users buy units in your app. When a sub-merchant starts or stops selling it, \`POST /api/v1/products/sub-merchant-activations\`.
+## 1. Get commodity products
 
-## 3. Send the purchase enrollment to Plata
+Call \`GET /api/v1/products?type=COMMODITY\`. Leave \`appId\` out.
 
-\`POST /api/v1/products/external-applications\` records the purchase, not a credit application.
+Save \`id\` (your later \`productId\`), unit price (\`structure.unitAmount\`), minimum quantity, and any yield or withdrawal rules you show the buyer. \`GET /api/v1/products/{id}\` returns one product in full.
 
-| Field | Commodity meaning |
-|-------|----------------|
-| \`productId\` | Catalog commodity \`id\` |
-| \`application.contractSnapshot.quantity\` | Units bought |
-| \`application.contractSnapshot.unitAmount\` | Price per unit, naira |
-| \`application.contractSnapshot.amount\` | quantity × unit price |
+You sell in your own app. If a sub-merchant starts or stops offering this commodity, call \`POST /api/v1/products/sub-merchant-activations\`. Skip that if you have no sub-merchants.
+
+## 2. Record the purchase
+
+When someone buys units, tell Plata with \`POST /api/v1/products/external-applications\`. This records the holding — it is not a credit application.
+
+| What to send | Why it matters |
+|--------------|----------------|
+| \`productId\` | Which commodity they bought |
+| \`application.contractSnapshot.quantity\` | How many units |
+| \`application.contractSnapshot.unitAmount\` | Price per unit (naira) |
+| \`application.contractSnapshot.amount\` | Usually quantity × unit price |
 | \`application.localApplicationId\` | Your purchase / account id |
 
-Omit \`loanWorkflowCallbackUrl\`. Do not send \`principal\` as if this were a loan.
+Omit \`loanWorkflowCallbackUrl\`. Do not send a loan \`principal\`.
 
-## 4. When the buyer pays
+Optional: \`POST /api/v1/products/external-accounts\` if the buyer needs a Plata NUBAN first.
 
-\`POST /api/v1/wallets/commodity/principal-repayment\` credits the product-creator **Repayment** wallet. Required: \`creatorMerchantId\`, \`creatorAppId\`, \`amount\`, \`referenceId\`. Category \`COMMODITY_DEPOSIT\`.
+## 3. When the buyer pays
 
-## 5. At maturity
+Call \`POST /api/v1/wallets/commodity/principal-repayment\` to credit the **product creator’s Repayment** wallet.
 
-1. \`POST /api/v1/wallets/commodity/maturity-withdrawal-request\` asks the FI to approve. No money moves.
-2. After approval, \`POST /api/v1/wallets/commodity/maturity-payout\` debits creator **Treasury**. You credit the buyer on your platform.
+Send \`creatorMerchantId\`, \`creatorAppId\`, \`amount\`, and a unique \`referenceId\`. Plata stores this as category \`COMMODITY_DEPOSIT\`.
 
-Old URL \`/commodity/principal-settlement\` still works. Prefer \`principal-repayment\`.
+(The older path \`/commodity/principal-settlement\` still works; prefer \`principal-repayment\`.)
+
+## 4. At maturity — ask, then pay out
+
+1. \`POST /api/v1/wallets/commodity/maturity-withdrawal-request\` — asks the FI to approve. **No money moves yet.**
+2. After approval, \`POST /api/v1/wallets/commodity/maturity-payout\` — debits the creator **Treasury**. You then credit the buyer on your own platform.
 `.trim(),
   savings: `
 # Savings
 
-Flex and target/lock savings. Not a loan application and not an investment unit purchase.
+This guide covers **flex** savings and **target / lock** plans. It is not a loan application and not an investment unit purchase.
 
-Auth on every call: \`PLATA_PUBLIC_KEY\` and \`PLATA_SECRET_KEY\`.
+**How to authenticate:** send \`PLATA_PUBLIC_KEY\` and \`PLATA_SECRET_KEY\` on every request.
 
-## 1. Fetch savings products
+**Shape of the journey:** list plans → open the account on Plata at zero balance → credit each deposit → show activity → at maturity, request withdrawal and then treasury payout. No loan-workflow callback is required.
 
-\`GET /api/v1/products?type=SAVINGS\` — do not send \`appId\`.
+## The journey at a glance
 
-Keep \`id\` and the plan rules you must show the customer:
+| Step | Goal | API |
+|------|------|-----|
+| 1 | Show savings products | \`GET /api/v1/products?type=SAVINGS\` |
+| 2 | Open the plan on Plata | \`POST /api/v1/products/external-applications\` |
+| 3 | Each deposit or top-up | \`POST /api/v1/wallets/savings/principal-repayment\` |
+| 4 | Activity feed | \`POST /api/v1/wallets/savings/application-activity\` |
+| 5 | Ask to withdraw at maturity | \`POST /api/v1/wallets/savings/maturity-withdrawal-request\` |
+| 6 | After FI approval, pay out | \`POST /api/v1/wallets/savings/maturity-payout\` |
 
-- \`structure.interestRate\` and interest method (often daily)
-- \`structure.withdrawalFlexibility\` — anytime (flex) or locked until maturity (target/lock)
-- target amount / savings goal and monthly contribution when the product is a target lock
-- early-withdrawal fee if the product charges one
+---
 
-That \`id\` is \`productId\`.
+## 1. Get savings products
 
-## 2. Open the plan in your app
+Call \`GET /api/v1/products?type=SAVINGS\`. Leave \`appId\` out.
 
-Store the catalog \`id\` and let a user start a flex plan or a target lock. Report sub-merchant on/off with \`POST /api/v1/products/sub-merchant-activations\`.
+Save \`id\` (later \`productId\`) and the rules you must show the customer:
 
-## 3. Enroll the saver on Plata
+- Interest rate and method (often daily)
+- \`structure.withdrawalFlexibility\` — anytime (**flex**) or locked until maturity (**target / lock**)
+- Target amount and monthly contribution when it is a target lock
+- Early-withdrawal fee if the product charges one
 
-\`POST /api/v1/products/external-applications\` opens the plan. The balance starts at zero. This is not an approval workflow.
+\`GET /api/v1/products/{id}\` returns one plan in full. Sub-merchant on/off reporting uses \`POST /api/v1/products/sub-merchant-activations\` only if you need it.
 
-| Field | Savings meaning |
-|-------|----------------|
-| \`productId\` | Catalog savings \`id\` |
+## 2. Open the plan
+
+Call \`POST /api/v1/products/external-applications\` to enroll the saver. The Plata balance starts at **zero**. This is not an approval workflow.
+
+| What to send | Why it matters |
+|--------------|----------------|
+| \`productId\` | Which savings product they chose |
 | \`application.localApplicationId\` | Your savings account id |
 | \`application.contractSnapshot.savingsBalance\` | \`0\` on first enroll |
 | \`application.contractSnapshot.currentBalance\` | \`0\` on first enroll |
-| \`application.contractSnapshot.targetAmount\` | Target lock only |
-| \`application.contractSnapshot.monthlyContribution\` | Target lock only |
+| \`application.contractSnapshot.targetAmount\` | Target-lock plans only |
+| \`application.contractSnapshot.monthlyContribution\` | Target-lock plans only |
 
-Do not send \`loanWorkflowCallbackUrl\`. Do not send a loan \`principal\`.
+Do not send \`loanWorkflowCallbackUrl\` or a loan \`principal\`.
 
-## 4. Each deposit or top-up
+## 3. Each deposit or top-up
 
-\`POST /api/v1/wallets/savings/principal-repayment\` credits creator **Repayment**. Use a new \`referenceId\` per deposit. Category \`SAVINGS_DEPOSIT\`.
+When money comes in, call \`POST /api/v1/wallets/savings/principal-repayment\`. That credits the creator **Repayment** wallet. Use a **new** \`referenceId\` every time. Category \`SAVINGS_DEPOSIT\`.
 
-## 5. Activity feed
+## 4. Show the activity feed
 
-\`POST /api/v1/wallets/savings/application-activity\` with the application id returns deposits, top-ups, and withdrawals. This read exists only on the savings guide.
+Call \`POST /api/v1/wallets/savings/application-activity\` with the application id to list deposits, top-ups, and withdrawals. This read exists on the **savings** guide only.
 
-## 6. Withdrawal at maturity
+## 5. Withdrawal at maturity
 
-1. \`POST /api/v1/wallets/savings/maturity-withdrawal-request\` — FI approval queue, no debit.
-2. After approval, \`POST /api/v1/wallets/savings/maturity-payout\` debits creator **Treasury**. You credit the saver on your platform.
+1. \`POST /api/v1/wallets/savings/maturity-withdrawal-request\` — queues FI approval; no debit yet.
+2. After approval, \`POST /api/v1/wallets/savings/maturity-payout\` — debits creator **Treasury**. You credit the saver on your platform.
 
-Locked plans stay locked until maturity unless the product allows a forceful early exit on your side. This gateway does not quote that fee.
+Locked plans stay locked until maturity unless **your** product rules allow an early exit. This gateway does not calculate that fee for you.
 `.trim(),
   investment: `
 # Investment
 
-Unit investment. Not a loan, not a mortgage down payment, and not a savings target lock.
+This guide is for **unit investments** (notes / holdings sold in units). It is not a cash loan, mortgage down payment, or savings target lock.
 
-Auth on every call: \`PLATA_PUBLIC_KEY\` and \`PLATA_SECRET_KEY\`.
+**How to authenticate:** send \`PLATA_PUBLIC_KEY\` and \`PLATA_SECRET_KEY\` on every request.
 
-## 1. Fetch investment products
+**Shape of the journey:** list offerings → record the subscription on Plata → credit the creator when the investor pays → at maturity or liquidation, request FI approval, then treasury payout. No loan-workflow callback is required. There is no savings-style activity-feed route here.
 
-\`GET /api/v1/products?type=INVESTMENT\` — do not send \`appId\`.
+## The journey at a glance
 
-Keep \`id\`, \`structure.returnsOnInvestment\` or yield, \`structure.unitAmount\`, min quantity, and lock / withdrawal flexibility. Show return and unit price, not a loan rate. That \`id\` is \`productId\`.
+| Step | Goal | API |
+|------|------|-----|
+| 1 | Show investment products | \`GET /api/v1/products?type=INVESTMENT\` |
+| 2 | Record the subscription | \`POST /api/v1/products/external-applications\` |
+| 3 | When the investor pays | \`POST /api/v1/wallets/investment/principal-repayment\` |
+| 4 | Ask to liquidate / withdraw | \`POST /api/v1/wallets/investment/maturity-withdrawal-request\` |
+| 5 | After FI approval, pay out | \`POST /api/v1/wallets/investment/maturity-payout\` |
 
-## 2. Offer units to investors
+---
 
-Store the catalog \`id\` and let users buy units in your app. When a sub-merchant enables or disables the offering, \`POST /api/v1/products/sub-merchant-activations\`.
+## 1. Get investment products
 
-## 3. Send the investment enrollment to Plata
+Call \`GET /api/v1/products?type=INVESTMENT\`. Leave \`appId\` out.
 
-\`POST /api/v1/products/external-applications\` records the holding.
+Save \`id\` (later \`productId\`), expected return (\`structure.returnsOnInvestment\` or yield), unit price (\`structure.unitAmount\`), minimum quantity, and lock / withdrawal rules. Show return and unit price — not a loan interest rate.
 
-| Field | Investment meaning |
-|-------|----------------|
-| \`productId\` | Catalog investment \`id\` |
+\`GET /api/v1/products/{id}\` returns one offering in full. Use \`POST /api/v1/products/sub-merchant-activations\` only if sub-merchants turn the offering on or off.
+
+## 2. Record the subscription
+
+Call \`POST /api/v1/products/external-applications\` when someone buys units.
+
+| What to send | Why it matters |
+|--------------|----------------|
+| \`productId\` | Which investment they chose |
 | \`application.contractSnapshot.quantity\` | Units purchased |
-| \`application.contractSnapshot.unitAmount\` | Price per unit, naira |
-| \`application.contractSnapshot.amount\` | Total subscription, naira |
-| \`application.contractSnapshot.expectedInterest\` | Projected return if you have calculated it |
+| \`application.contractSnapshot.unitAmount\` | Price per unit (naira) |
+| \`application.contractSnapshot.amount\` | Total subscription (naira) |
+| \`application.contractSnapshot.expectedInterest\` | Projected return, if you calculated it |
 | \`application.localApplicationId\` | Your investment account id |
 
-Do not send loan \`principal\`, property equity, or a savings target. Omit \`loanWorkflowCallbackUrl\`.
+Do not send loan \`principal\`, mortgage equity, or a savings target. Omit \`loanWorkflowCallbackUrl\`.
 
-## 4. When the investor pays
+## 3. When the investor pays
 
-\`POST /api/v1/wallets/investment/principal-repayment\` credits creator **Repayment**. Category \`INVESTMENT_DEPOSIT\`. Required: \`creatorMerchantId\`, \`creatorAppId\`, \`amount\`, \`referenceId\`.
+Call \`POST /api/v1/wallets/investment/principal-repayment\` to credit the creator **Repayment** wallet. Category \`INVESTMENT_DEPOSIT\`. Required: \`creatorMerchantId\`, \`creatorAppId\`, \`amount\`, and a unique \`referenceId\`.
 
-There is no savings activity-feed route on this page.
+## 4. Liquidation / maturity
 
-## 5. Liquidation / maturity
-
-1. \`POST /api/v1/wallets/investment/maturity-withdrawal-request\` queues FI approval. No debit yet.
-2. After approval, \`POST /api/v1/wallets/investment/maturity-payout\` debits creator **Treasury**. You credit the investor on your platform.
+1. \`POST /api/v1/wallets/investment/maturity-withdrawal-request\` — asks the FI to approve. **No debit yet.**
+2. After approval, \`POST /api/v1/wallets/investment/maturity-payout\` — debits creator **Treasury**. You credit the investor on your platform.
 `.trim()
 };
 
@@ -539,24 +604,24 @@ const CATALOG_COPY: Record<IntegratorProductSlug, { summary: string; description
       'Returns published cash loans only (`type=LOAN`). Save each product `id` — you will need it as `productId` when someone applies. Do not send `appId`. Ignore other product types; they have their own guides.'
   },
   mortgage: {
-    summary: 'Fetch property mortgage products',
+    summary: 'List mortgage products',
     description:
-      'type=MORTGAGE only. Read mortgage amount, equityRequirement, and equityContribution (down payment). Save id as productId. Do not treat this as a cash loan.'
+      'Returns published property mortgages only (`type=MORTGAGE`). Read facility size, equity / down-payment rules, and tenure. Save `id` as `productId`. Do not treat these rows as cash loans.'
   },
   commodity: {
-    summary: 'Fetch commodity unit products',
+    summary: 'List commodity products',
     description:
-      'type=COMMODITY only. Read unit price and minimum quantity. Save id as productId. This is a purchase catalog, not a credit product.'
+      'Returns goods sold in units (`type=COMMODITY`). Read unit price and minimum quantity. Save `id` as `productId`. This is a purchase catalog, not credit.'
   },
   savings: {
-    summary: 'Fetch flex and target-lock savings products',
+    summary: 'List savings products',
     description:
-      'type=SAVINGS only. Read interest rate, withdrawalFlexibility (anytime vs locked), and any savings goal. Save id as productId.'
+      'Returns flex and target/lock plans (`type=SAVINGS`). Read interest, withdrawal flexibility, and any savings goal. Save `id` as `productId`.'
   },
   investment: {
-    summary: 'Fetch unit investment products',
+    summary: 'List investment products',
     description:
-      'type=INVESTMENT only. Read unit price, return/yield, and minimum quantity. Save id as productId. Do not use the savings or loan catalog.'
+      'Returns unit investments (`type=INVESTMENT`). Read unit price, return/yield, and minimum quantity. Save `id` as `productId`. Do not use the savings or loan catalog here.'
   }
 };
 
@@ -567,24 +632,24 @@ const APPLICATION_COPY: Record<IntegratorProductSlug, { summary: string; descrip
       'One request per borrower. Use the loan catalog `id` as `productId`, put the amount in `application.contractSnapshot.principal`, and set `loanWorkflowCallbackUrl` so Plata can notify you when the application moves. Include `monthlyIncome` and `repaymentSource` when you have them.'
   },
   mortgage: {
-    summary: 'Send a mortgage application to Plata',
+    summary: 'Submit a mortgage application',
     description:
-      'One call per buyer. productId is the MORTGAGE catalog id. Send mortgageAmount, propertyValue, and equityContribution in contractSnapshot. Do not send a cash-loan principal instead. Set loanWorkflowCallbackUrl for approval updates.'
+      'One request per buyer. Use the mortgage catalog `id` as `productId`. Send `mortgageAmount`, `propertyValue`, and `equityContribution` in the contract snapshot — not a cash-loan principal. Set `loanWorkflowCallbackUrl` for status updates.'
   },
   commodity: {
-    summary: 'Send a commodity purchase enrollment to Plata',
+    summary: 'Record a commodity purchase',
     description:
-      'Records units bought, not a credit application. productId is the COMMODITY catalog id. Send quantity, unitAmount, and amount. Omit loanWorkflowCallbackUrl.'
+      'Records units bought, not a credit application. Send quantity, unit price, and total amount. Omit `loanWorkflowCallbackUrl`.'
   },
   savings: {
-    summary: 'Enroll a saver and open the plan on Plata',
+    summary: 'Open a savings plan',
     description:
-      'Opens the plan at zero balance. productId is the SAVINGS catalog id. Send localApplicationId plus savingsBalance 0. For a target lock, also send targetAmount and monthlyContribution. Do not send a loan principal or loanWorkflowCallbackUrl.'
+      'Opens the plan at zero balance. Send your `localApplicationId` plus savings balances of 0. For a target lock, also send target amount and monthly contribution. Do not send a loan principal or loan-workflow callback.'
   },
   investment: {
-    summary: 'Send an investment unit subscription to Plata',
+    summary: 'Record an investment subscription',
     description:
-      'Records units subscribed. productId is the INVESTMENT catalog id. Send quantity, unitAmount, amount, and expectedInterest if you calculated it. Omit loan and mortgage fields.'
+      'Records units subscribed. Send quantity, unit price, total amount, and expected return if you calculated it. Omit loan, mortgage, and savings-target fields.'
   }
 };
 
@@ -592,11 +657,21 @@ const MORTGAGE_COPY: Record<string, { summary: string; description?: string }> =
   [SCHEDULE_PREVIEW_PATH]: {
     summary: 'Preview mortgage repayments before applying',
     description:
-      'Send `amount` (facility) and `propertyValue`. Returns every instalment and the total to repay, with the down payment taken off. Nothing is saved. Public read: API keys are not required.'
+      'Send the facility `amount` and `propertyValue`. Returns each instalment and the total to repay, with the down payment taken into account. Nothing is saved. Public read — API keys are not required.'
   },
-  [STATUS_PATH]: { summary: 'Get mortgage application status' },
-  [ACCOUNT_PATH]: { summary: 'Get mortgage account details' },
-  [REPAYMENT_SCHEDULE_PATH]: { summary: 'Get mortgage repayment schedule' }
+  [STATUS_PATH]: {
+    summary: 'Get mortgage application status',
+    description:
+      'See stage, next action, and how much down payment (equity) is still owed. Use the Plata application id or your localApplicationId.'
+  },
+  [ACCOUNT_PATH]: {
+    summary: 'Get mortgage account details',
+    description: 'Facility amount, amount disbursed, outstanding balance, next instalment, and overdue info after funding.'
+  },
+  [REPAYMENT_SCHEDULE_PATH]: {
+    summary: 'Get mortgage repayment schedule',
+    description: 'Every instalment after disbursement. Returns 409 if the mortgage is not funded yet.'
+  }
 };
 
 function numberSummaries(paths: Record<string, PathItem>): void {
@@ -657,20 +732,35 @@ export function buildIntegratorProductSpec(slug: string) {
         if (json) json.example = APPLICATION_EXAMPLES[product.slug];
       }
       if (path === '/api/v1/products/sub-merchant-activations') {
-        operation.summary =
-          product.slug === 'commodity'
-            ? 'Report that a seller turned this commodity on or off'
-            : product.slug === 'mortgage'
-              ? 'Report that a sub-merchant listed or delisted this mortgage'
-              : product.slug === 'savings'
-                ? 'Report that a sub-merchant turned this savings plan on or off'
-                : product.slug === 'investment'
-                  ? 'Report that a sub-merchant turned this investment on or off'
-                  : 'Tell Plata a sub-merchant turned this loan on or off';
-        operation.description =
-          product.slug === 'loan'
-            ? 'Optional. Only needed if sellers in your network activate or deactivate a loan. Send the catalog `productId` and `status` (`active` or `deactivated`). This does not create or host the product for you.'
-            : `productId must be a ${product.type} catalog id from this guide. status is active or deactivated. This does not host the product.`;
+        const activationCopy: Record<IntegratorProductSlug, { summary: string; description: string }> = {
+          loan: {
+            summary: 'Tell Plata a sub-merchant turned this loan on or off',
+            description:
+              'Optional. Only needed if sellers in your network activate or deactivate a loan. Send the catalog `productId` and `status` (`active` or `deactivated`). This does not create or host the product for you.'
+          },
+          mortgage: {
+            summary: 'Tell Plata a sub-merchant listed or delisted this mortgage',
+            description:
+              'Optional. Use when a seller in your network lists or delists this mortgage. Send catalog `productId` and `status` (`active` or `deactivated`).'
+          },
+          commodity: {
+            summary: 'Tell Plata a sub-merchant started or stopped selling this commodity',
+            description:
+              'Optional. Use when a seller turns this commodity on or off. Send catalog `productId` and `status` (`active` or `deactivated`).'
+          },
+          savings: {
+            summary: 'Tell Plata a sub-merchant turned this savings plan on or off',
+            description:
+              'Optional. Use when a seller activates or deactivates this savings plan. Send catalog `productId` and `status` (`active` or `deactivated`).'
+          },
+          investment: {
+            summary: 'Tell Plata a sub-merchant turned this investment on or off',
+            description:
+              'Optional. Use when a seller enables or disables this investment offering. Send catalog `productId` and `status` (`active` or `deactivated`).'
+          }
+        };
+        operation.summary = activationCopy[product.slug].summary;
+        operation.description = activationCopy[product.slug].description;
       }
       const mortgageCopy = product.slug === 'mortgage' ? MORTGAGE_COPY[path] : undefined;
       if (mortgageCopy) {
@@ -686,17 +776,14 @@ export function buildIntegratorProductSpec(slug: string) {
     openapi: '3.0.0',
     info: {
       title: `Plata Merchant Integration Documentation — ${product.title}`,
-      version: '1.6.1',
+      version: '1.6.2',
       description: guide(product.slug)
     },
     servers: source.servers,
     tags: [
       {
         name: product.title,
-        description:
-          product.slug === 'loan'
-            ? 'Cash loans only — follow the numbered steps in the description above. Other products are separate guides under /docs.'
-            : `Only ${product.title}. Other products are separate guides under /docs.`
+        description: `Follow the numbered walkthrough in the description above. Other products are separate guides under /docs.`
       }
     ],
     paths,
