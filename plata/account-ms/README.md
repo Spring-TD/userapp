@@ -127,11 +127,11 @@ Loan / mortgage servicing routes (API keys; `{applicationId}` = Plata id or the 
 - `GET /api/v1/products/external-applications/{applicationId}/account` — loan account summary
 - `GET /api/v1/products/external-applications/{applicationId}/repayment-schedule` — instalments (after disbursement)
 
-Wallet reads (API keys; `{merchantId}` must match the key’s merchant; user wallets must belong to that merchant):
+Wallet reads (API keys; `{merchantId}` must match the key’s merchant; user wallets must belong to that merchant). Merchant wallets are app-scoped — **`appId` is required**:
 
-- `GET /api/v1/wallets/merchant/{merchantId}/all` — Treasury, Billing, Repayment
-- `GET /api/v1/wallets/merchant/{merchantId}/type/{walletType}` — one wallet (`TREASURY` | `BILLING` | `REPAYMENT`)
-- `GET /api/v1/wallets/treasury|billing|repayment/{merchantId}/transactions` — merchant history
+- `GET /api/v1/wallets/merchant/{merchantId}/all?appId=…` — Treasury, Billing, Repayment for that app
+- `GET /api/v1/wallets/merchant/{merchantId}/type/{walletType}?appId=…` — one wallet (`TREASURY` | `BILLING` | `REPAYMENT`)
+- `GET /api/v1/wallets/treasury|billing|repayment/{merchantId}/transactions?appId=…` — merchant history
 - `GET /api/v1/wallets/user/{userId}` — customer wallet
 - `GET /api/v1/wallets/user/{userId}/transactions` — customer history
 

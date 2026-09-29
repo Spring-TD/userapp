@@ -524,19 +524,19 @@ Call \`POST /api/v1/wallets/investment/principal-repayment\` to credit the creat
 const WALLET_READS_GUIDE = `
 ## Wallet details and history (API keys)
 
-These reads work with your merchant API keys on every product guide. \`{merchantId}\` **must** be your own merchant id (the one on the key). User wallets must belong to your merchant.
+These reads work with your merchant API keys on every product guide. \`{merchantId}\` **must** be your own merchant id (the one on the key). User wallets must belong to your merchant. Merchant wallets are **app-scoped** — always pass \`appId\`.
 
 | Goal | Call |
 |------|------|
-| Merchant wallets (Treasury, Billing, Repayment) | \`GET /api/v1/wallets/merchant/{merchantId}/all\` |
-| One merchant wallet by type | \`GET /api/v1/wallets/merchant/{merchantId}/type/{walletType}\` (\`TREASURY\`, \`BILLING\`, or \`REPAYMENT\`) |
-| Treasury history | \`GET /api/v1/wallets/treasury/{merchantId}/transactions\` |
-| Billing history | \`GET /api/v1/wallets/billing/{merchantId}/transactions\` |
-| Repayment history | \`GET /api/v1/wallets/repayment/{merchantId}/transactions\` |
+| Merchant wallets (Treasury, Billing, Repayment) | \`GET /api/v1/wallets/merchant/{merchantId}/all?appId=…\` |
+| One merchant wallet by type | \`GET /api/v1/wallets/merchant/{merchantId}/type/{walletType}?appId=…\` (\`TREASURY\`, \`BILLING\`, or \`REPAYMENT\`) |
+| Treasury history | \`GET /api/v1/wallets/treasury/{merchantId}/transactions?appId=…\` |
+| Billing history | \`GET /api/v1/wallets/billing/{merchantId}/transactions?appId=…\` |
+| Repayment history | \`GET /api/v1/wallets/repayment/{merchantId}/transactions?appId=…\` |
 | Customer wallet | \`GET /api/v1/wallets/user/{userId}\` |
 | Customer wallet history | \`GET /api/v1/wallets/user/{userId}/transactions\` |
 
-Optional query filters on history routes: \`startDate\`, \`endDate\`, \`type\`, \`limit\`, \`skip\`, and \`appId\` when wallets are app-scoped.
+Required on merchant wallet routes: \`appId\`. Optional history filters: \`startDate\`, \`endDate\`, \`type\`, \`limit\`, \`skip\`.
 `.trim();
 
 function guide(slug: IntegratorProductSlug): string {

@@ -40,26 +40,34 @@ function parseAppIdQuery(req: Request): string | undefined {
   return typeof appId === 'string' && appId.trim() ? appId.trim() : undefined;
 }
 
+/** Merchant wallets are app-scoped — `appId` is required on reads. */
+function requireAppIdQuery(req: Request, res: Response): string | null {
+  const appId = parseAppIdQuery(req);
+  if (!appId) {
+    res.status(400).json({
+      success: false,
+      error: 'appId is required',
+      message: 'Merchant wallets are app-scoped. Pass ?appId=… for the app whose wallets you want.'
+    });
+    return null;
+  }
+  return appId;
+}
+
 function parseMerchantTransactionFilters(req: Request): {
-  appId?: string;
-  filterData: {
-    startDate?: Date;
-    endDate?: Date;
-    type?: TransactionType;
-    limit?: number;
-    skip?: number;
-  };
+  startDate?: Date;
+  endDate?: Date;
+  type?: TransactionType;
+  limit?: number;
+  skip?: number;
 } {
   const { startDate, endDate, type, limit, skip } = req.query;
   return {
-    appId: parseAppIdQuery(req),
-    filterData: {
-      startDate: startDate ? new Date(startDate as string) : undefined,
-      endDate: endDate ? new Date(endDate as string) : undefined,
-      type: type as TransactionType,
-      limit: limit !== undefined ? Number(limit) : undefined,
-      skip: skip !== undefined ? Number(skip) : undefined
-    }
+    startDate: startDate ? new Date(startDate as string) : undefined,
+    endDate: endDate ? new Date(endDate as string) : undefined,
+    type: type as TransactionType,
+    limit: limit !== undefined ? Number(limit) : undefined,
+    skip: skip !== undefined ? Number(skip) : undefined
   };
 }
 
@@ -292,7 +300,8 @@ export class WalletController {
   static async getMerchantWalletByType(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { merchantId, walletType } = req.params;
-      const appId = typeof req.query.appId === 'string' ? req.query.appId : undefined;
+      const appId = requireAppIdQuery(req, res);
+      if (!appId) return;
 
       if (!req.user) {
         res.status(401).json({
@@ -349,7 +358,8 @@ export class WalletController {
   static async getAllMerchantWallets(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { merchantId } = req.params;
-      const appId = typeof req.query.appId === 'string' ? req.query.appId : undefined;
+      const appId = requireAppIdQuery(req, res);
+      if (!appId) return;
 
       if (!req.user) {
         res.status(401).json({
@@ -957,6 +967,9 @@ export class WalletController {
       }
 
       // Validate input data
+      const appId = requireAppIdQuery(req, res);
+      if (!appId) return;
+
       const { error } = validateInput<FilterTransactionData>(filterTransactionSchema, { startDate, endDate, type, limit, skip });
       if (error) {
         res.status(400).json({
@@ -967,12 +980,12 @@ export class WalletController {
         return;
       }
 
-      const { appId, filterData } = parseMerchantTransactionFilters(req);
+      const filterData = parseMerchantTransactionFilters(req);
 
       const result = await WalletService.filterTreasuryTransactions(merchantId, filterData, appId);
 
       if (!result.success) {
-        res.status(result.error?.includes('pass appId') ? 400 : 404).json({
+        res.status(404).json({
           success: false,
           error: result.error
         });
@@ -1255,6 +1268,9 @@ export class WalletController {
       }
 
       // Validate input data
+      const appId = requireAppIdQuery(req, res);
+      if (!appId) return;
+
       const { error } = validateInput<FilterTransactionData>(filterTransactionSchema, { startDate, endDate, type, limit, skip });
       if (error) {
         res.status(400).json({
@@ -1265,12 +1281,12 @@ export class WalletController {
         return;
       }
 
-      const { appId, filterData } = parseMerchantTransactionFilters(req);
+      const filterData = parseMerchantTransactionFilters(req);
 
       const result = await WalletService.filterOperationTransactions(merchantId, filterData, appId);
 
       if (!result.success) {
-        res.status(result.error?.includes('pass appId') ? 400 : 404).json({
+        res.status(404).json({
           success: false,
           error: result.error
         });
@@ -1324,6 +1340,9 @@ export class WalletController {
       }
 
       // Validate input data
+      const appId = requireAppIdQuery(req, res);
+      if (!appId) return;
+
       const { error } = validateInput<FilterTransactionData>(filterTransactionSchema, { startDate, endDate, type, limit, skip });
       if (error) {
         res.status(400).json({
@@ -1334,12 +1353,12 @@ export class WalletController {
         return;
       }
 
-      const { appId, filterData } = parseMerchantTransactionFilters(req);
+      const filterData = parseMerchantTransactionFilters(req);
 
       const result = await WalletService.filterRepaymentTransactions(merchantId, filterData, appId);
 
       if (!result.success) {
-        res.status(result.error?.includes('pass appId') ? 400 : 404).json({
+        res.status(404).json({
           success: false,
           error: result.error
         });

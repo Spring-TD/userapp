@@ -1483,7 +1483,7 @@ const merchantIntegrationSpec = {
         tags: ALL_PRODUCTS,
         summary: 'Fetch merchant wallet details',
         description:
-          'Returns this merchant’s Treasury, Billing, and Repayment wallets. `merchantId` must match your API key merchant. Optional `appId` when wallets are app-scoped.',
+          'Returns this merchant’s Treasury, Billing, and Repayment wallets for one app. `merchantId` must match your API key merchant. `appId` is required (wallets are app-scoped).',
         security: [{ plataApiKeys: [] }],
         parameters: [
           {
@@ -1496,12 +1496,14 @@ const merchantIntegrationSpec = {
           {
             in: 'query',
             name: 'appId',
-            required: false,
-            schema: { type: 'string' }
+            required: true,
+            schema: { type: 'string' },
+            description: 'App whose wallets to return'
           }
         ],
         responses: {
           '200': { description: 'Merchant wallets' },
+          '400': { description: 'appId missing' },
           '401': { $ref: '#/components/responses/UnauthorizedKeys' },
           '403': { description: 'merchantId does not match your API key' }
         }
@@ -1511,7 +1513,8 @@ const merchantIntegrationSpec = {
       get: {
         tags: ALL_PRODUCTS,
         summary: 'Fetch one merchant wallet by type',
-        description: '`walletType` is `TREASURY`, `BILLING`, or `REPAYMENT` (legacy aliases may work).',
+        description:
+          '`walletType` is `TREASURY`, `BILLING`, or `REPAYMENT` (legacy aliases may work). `appId` is required.',
         security: [{ plataApiKeys: [] }],
         parameters: [
           { in: 'path', name: 'merchantId', required: true, schema: { type: 'string' } },
@@ -1521,10 +1524,17 @@ const merchantIntegrationSpec = {
             required: true,
             schema: { type: 'string', enum: ['TREASURY', 'BILLING', 'REPAYMENT'] }
           },
-          { in: 'query', name: 'appId', required: false, schema: { type: 'string' } }
+          {
+            in: 'query',
+            name: 'appId',
+            required: true,
+            schema: { type: 'string' },
+            description: 'App whose wallet to return'
+          }
         ],
         responses: {
           '200': { description: 'Wallet' },
+          '400': { description: 'appId missing' },
           '401': { $ref: '#/components/responses/UnauthorizedKeys' },
           '403': { description: 'merchantId does not match your API key' },
           '404': { description: 'Wallet not found' }
@@ -1535,19 +1545,27 @@ const merchantIntegrationSpec = {
       get: {
         tags: ALL_PRODUCTS,
         summary: 'Fetch Treasury wallet history',
-        description: 'Transaction history for the merchant Treasury wallet. Scoped to your API key merchant.',
+        description:
+          'Transaction history for the merchant Treasury wallet for one app. `appId` is required. Scoped to your API key merchant.',
         security: [{ plataApiKeys: [] }],
         parameters: [
           { in: 'path', name: 'merchantId', required: true, schema: { type: 'string' } },
+          {
+            in: 'query',
+            name: 'appId',
+            required: true,
+            schema: { type: 'string' },
+            description: 'App whose Treasury history to return'
+          },
           { in: 'query', name: 'startDate', schema: { type: 'string', format: 'date-time' } },
           { in: 'query', name: 'endDate', schema: { type: 'string', format: 'date-time' } },
           { in: 'query', name: 'type', schema: { type: 'string' } },
-          { in: 'query', name: 'appId', schema: { type: 'string' } },
           { in: 'query', name: 'limit', schema: { type: 'integer' } },
           { in: 'query', name: 'skip', schema: { type: 'integer' } }
         ],
         responses: {
           '200': { description: 'Transactions + pagination' },
+          '400': { description: 'appId missing' },
           '401': { $ref: '#/components/responses/UnauthorizedKeys' },
           '403': { description: 'merchantId does not match your API key' }
         }
@@ -1557,19 +1575,27 @@ const merchantIntegrationSpec = {
       get: {
         tags: ALL_PRODUCTS,
         summary: 'Fetch Billing wallet history',
-        description: 'Transaction history for the merchant Billing wallet (platform fees).',
+        description:
+          'Transaction history for the merchant Billing wallet (platform fees) for one app. `appId` is required.',
         security: [{ plataApiKeys: [] }],
         parameters: [
           { in: 'path', name: 'merchantId', required: true, schema: { type: 'string' } },
+          {
+            in: 'query',
+            name: 'appId',
+            required: true,
+            schema: { type: 'string' },
+            description: 'App whose Billing history to return'
+          },
           { in: 'query', name: 'startDate', schema: { type: 'string', format: 'date-time' } },
           { in: 'query', name: 'endDate', schema: { type: 'string', format: 'date-time' } },
           { in: 'query', name: 'type', schema: { type: 'string' } },
-          { in: 'query', name: 'appId', schema: { type: 'string' } },
           { in: 'query', name: 'limit', schema: { type: 'integer' } },
           { in: 'query', name: 'skip', schema: { type: 'integer' } }
         ],
         responses: {
           '200': { description: 'Transactions + pagination' },
+          '400': { description: 'appId missing' },
           '401': { $ref: '#/components/responses/UnauthorizedKeys' },
           '403': { description: 'merchantId does not match your API key' }
         }
@@ -1579,19 +1605,27 @@ const merchantIntegrationSpec = {
       get: {
         tags: ALL_PRODUCTS,
         summary: 'Fetch Repayment wallet history',
-        description: 'Transaction history for the merchant Repayment wallet (collections, deposits).',
+        description:
+          'Transaction history for the merchant Repayment wallet (collections, deposits) for one app. `appId` is required.',
         security: [{ plataApiKeys: [] }],
         parameters: [
           { in: 'path', name: 'merchantId', required: true, schema: { type: 'string' } },
+          {
+            in: 'query',
+            name: 'appId',
+            required: true,
+            schema: { type: 'string' },
+            description: 'App whose Repayment history to return'
+          },
           { in: 'query', name: 'startDate', schema: { type: 'string', format: 'date-time' } },
           { in: 'query', name: 'endDate', schema: { type: 'string', format: 'date-time' } },
           { in: 'query', name: 'type', schema: { type: 'string' } },
-          { in: 'query', name: 'appId', schema: { type: 'string' } },
           { in: 'query', name: 'limit', schema: { type: 'integer' } },
           { in: 'query', name: 'skip', schema: { type: 'integer' } }
         ],
         responses: {
           '200': { description: 'Transactions + pagination' },
+          '400': { description: 'appId missing' },
           '401': { $ref: '#/components/responses/UnauthorizedKeys' },
           '403': { description: 'merchantId does not match your API key' }
         }
