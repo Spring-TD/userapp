@@ -6,6 +6,7 @@ declare global {
       /** Set when request is forwarded from account-ms after PLATA key verification */
       gatewayMerchant?: {
         merchantId: string;
+        merchantName?: string;
         apiKeyId?: string;
         gatewayEnvironment?: string;
       };
@@ -32,9 +33,11 @@ export function requireVerifiedGatewayMerchant(req: Request, res: Response, next
 
   const apiKeyId = (req.header('X-Api-Key-Id') || '').trim();
   const gatewayEnvironment = (req.header('X-Gateway-Environment') || '').trim();
+  const merchantName = (req.header('X-Merchant-Name') || '').trim();
 
   req.gatewayMerchant = {
     merchantId,
+    ...(merchantName ? { merchantName } : {}),
     ...(apiKeyId ? { apiKeyId } : {}),
     ...(gatewayEnvironment ? { gatewayEnvironment } : {})
   };

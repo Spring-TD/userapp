@@ -390,6 +390,18 @@ export function toProduct(doc: IProductDocument | Record<string, unknown>): Prod
     merchant:
       raw.merchant !== undefined && raw.merchant !== null && typeof raw.merchant === 'object'
         ? (raw.merchant as Product['merchant'])
+        : undefined,
+    companyName:
+      (typeof raw.companyName === 'string' ? raw.companyName : undefined) ??
+      (raw.merchant !== undefined &&
+      raw.merchant !== null &&
+      typeof raw.merchant === 'object' &&
+      typeof (raw.merchant as { companyName?: unknown }).companyName === 'string'
+        ? ((raw.merchant as { companyName: string }).companyName)
+        : undefined),
+    requireApplicantSignature:
+      typeof raw.requireApplicantSignature === 'boolean'
+        ? raw.requireApplicantSignature
         : undefined
   };
 

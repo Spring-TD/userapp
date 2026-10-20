@@ -515,6 +515,10 @@ import { SubMerchantProductActivationController } from '../controllers/subMercha
 import { SubMerchantProductActivationService } from '../services/subMerchantProductActivationService';
 import { SubMerchantProductUsageEventController } from '../controllers/subMerchantProductUsageEventController';
 import { SubMerchantProductUsageEventService } from '../services/subMerchantProductUsageEventService';
+import { ExternalProductApplicationController } from '../controllers/externalProductApplicationController';
+import { ExternalProductApplicationService } from '../services/externalProductApplicationService';
+import { ExternalApplicationServicingController } from '../controllers/externalApplicationServicingController';
+import { ExternalApplicationServicingService } from '../services/externalApplicationServicingService';
 import {
   createProductSchema,
   selectProductTypeSchema,
@@ -527,7 +531,10 @@ import {
   subMerchantProductActivationBodySchema,
   subMerchantProductUsageEventBodySchema,
   listSubMerchantMerchantDashboardQuerySchema,
-  listSubMerchantCustomersDashboardQuerySchema
+  listSubMerchantCustomersDashboardQuerySchema,
+  externalProductAccountBodySchema,
+  externalProductApplicationBodySchema,
+  externalLoanOfferResponseBodySchema
 } from '../utils/validation';
 import { getMaxTemplateUploadSizeBytes, getMaxUploadSizeBytes } from '../services/spacesService';
 import { registerConfigurationOptionsRoutes } from './registerConfigurationOptions';
@@ -558,6 +565,19 @@ const subMerchantProductActivationController = new SubMerchantProductActivationC
 const subMerchantProductUsageEventService = new SubMerchantProductUsageEventService();
 const subMerchantProductUsageEventController = new SubMerchantProductUsageEventController(
   subMerchantProductUsageEventService
+);
+const externalProductApplicationService = new ExternalProductApplicationService(
+  userProductApplicationService,
+  subMerchantProductUsageEventService
+);
+const externalProductApplicationController = new ExternalProductApplicationController(
+  externalProductApplicationService
+);
+const externalApplicationServicingService = new ExternalApplicationServicingService(
+  userProductApplicationService
+);
+const externalApplicationServicingController = new ExternalApplicationServicingController(
+  externalApplicationServicingService
 );
 
 /** Dropdown options for product forms — must be before `/:id` */
@@ -624,6 +644,46 @@ router.patch(
   userProductApplicationController.patchLoanWorkflow
 );
 router.get('/applications/:applicationId', userProductApplicationController.getById);
+
+/** Merchant API-key external apply / servicing — must be before `/:id` */
+router.post(
+  '/external-accounts',
+  requireVerifiedGatewayMerchant,
+  validate(externalProductAccountBodySchema),
+  externalProductApplicationController.createAccount
+);
+router.post(
+  '/external-applications',
+  requireVerifiedGatewayMerchant,
+  validate(externalProductApplicationBodySchema),
+  externalProductApplicationController.submit
+);
+router.get(
+  '/external-applications/:applicationId',
+  requireVerifiedGatewayMerchant,
+  externalApplicationServicingController.getStatus
+);
+router.get(
+  '/external-applications/:applicationId/offer',
+  requireVerifiedGatewayMerchant,
+  externalApplicationServicingController.getOffer
+);
+router.post(
+  '/external-applications/:applicationId/offer',
+  requireVerifiedGatewayMerchant,
+  validate(externalLoanOfferResponseBodySchema),
+  externalApplicationServicingController.respondToOffer
+);
+router.get(
+  '/external-applications/:applicationId/account',
+  requireVerifiedGatewayMerchant,
+  externalApplicationServicingController.getAccount
+);
+router.get(
+  '/external-applications/:applicationId/repayment-schedule',
+  requireVerifiedGatewayMerchant,
+  externalApplicationServicingController.getRepaymentSchedule
+);
 
 router.get('/:id', productController.getProductById);
 router.put('/:id', productController.updateProduct);

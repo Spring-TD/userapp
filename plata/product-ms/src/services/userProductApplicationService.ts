@@ -52,11 +52,16 @@ export class UserProductApplicationService {
       merchantName: data.merchantName,
       offeringMerchantId: data.offeringMerchantId,
       offeringMerchantName: data.offeringMerchantName,
+      externalPlatformMerchantId: data.externalPlatformMerchantId,
+      externalPlatformMerchantName: data.externalPlatformMerchantName,
       userId: data.userId,
+      customerName: data.customerName,
       productType: data.productType,
       globalProductId: data.globalProductId,
+      productName: data.productName,
       globalProductReferenceNumber:
         data.globalProductReferenceNumber ?? product.referenceNumber,
+      localApplicationId: data.localApplicationId,
       merchantProductId: data.merchantProductId,
       status: data.status ?? 'submitted',
       ...(isLendingProductType(data.productType) ? { loanWorkflowStatus: 'requested' as const } : {}),
@@ -65,10 +70,84 @@ export class UserProductApplicationService {
       contractSnapshot: data.contractSnapshot,
       payoutSplit: data.payoutSplit ?? {},
       snapshotVersion: data.snapshotVersion ?? 1,
-      snapshotHash: data.snapshotHash
+      snapshotHash: data.snapshotHash,
+      submittedRequirements: data.submittedRequirements,
+      applicantSignatureUrl: data.applicantSignatureUrl,
+      applicantSignatureKey: data.applicantSignatureKey,
+      applicantSignatureFileName: data.applicantSignatureFileName,
+      isPoliticallyExposedPerson: data.isPoliticallyExposedPerson,
+      monthlyIncome: data.monthlyIncome,
+      repaymentSource: data.repaymentSource,
+      repaymentSourceOther: data.repaymentSourceOther,
+      maritalStatus: data.maritalStatus,
+      maritalStatusOther: data.maritalStatusOther,
+      loanReason: data.loanReason,
+      loanReasonOther: data.loanReasonOther,
+      repayingWithSpouse: data.repayingWithSpouse,
+      spouseFullName: data.spouseFullName,
+      spouseEmail: data.spouseEmail,
+      spousePhone: data.spousePhone,
+      spouseOccupation: data.spouseOccupation,
+      spouseCountry: data.spouseCountry,
+      occupation: data.occupation,
+      placeOfWork: data.placeOfWork,
+      hrName: data.hrName,
+      hrEmail: data.hrEmail,
+      applicantProfileSnapshot: data.applicantProfileSnapshot,
+      loanWorkflowCallbackUrl: data.loanWorkflowCallbackUrl,
+      guarantorKycCallbackUrl: data.guarantorKycCallbackUrl
     });
 
     return toUserProductApplication(doc as IUserProductApplicationDocument);
+  }
+
+  /** Loan workflow callback — no-op stub when webhook pipeline is not restored. */
+  async sendLoanSubmissionWebhook(
+    application: UserProductApplication
+  ): Promise<UserProductApplication> {
+    console.warn(
+      '[product-ms] sendLoanSubmissionWebhook stub — skipping webhook for',
+      application.id
+    );
+    return application;
+  }
+
+  /** OpenSanctions / screening — no-op stub for non-lending / incomplete restore. */
+  async screenApplicantOnSubmit(
+    application: UserProductApplication
+  ): Promise<UserProductApplication> {
+    console.warn(
+      '[product-ms] screenApplicantOnSubmit stub — returning application unchanged',
+      application.id
+    );
+    return application;
+  }
+
+  /** Auto-approve — no-op stub; returns application unchanged. */
+  async maybeAutoApproveLoan(
+    application: UserProductApplication
+  ): Promise<UserProductApplication> {
+    console.warn(
+      '[product-ms] maybeAutoApproveLoan stub — returning application unchanged',
+      application.id
+    );
+    return application;
+  }
+
+  async respondToLoanOffer(
+    _applicationId: string,
+    _userId: string,
+    _input: { action: 'accept' | 'decline'; acceptedTerms?: boolean }
+  ): Promise<UserProductApplication> {
+    throw new ApiError(501, 'Loan offer response is not available in this product-ms build');
+  }
+
+  async payLoanDownPaymentAndAccept(
+    _applicationId: string,
+    _userId: string,
+    _input: { amount: number; providerReference: string; acceptedTerms?: boolean }
+  ): Promise<UserProductApplication> {
+    throw new ApiError(501, 'Loan down-payment accept is not available in this product-ms build');
   }
 
   async getById(applicationId: string): Promise<UserProductApplication | null> {

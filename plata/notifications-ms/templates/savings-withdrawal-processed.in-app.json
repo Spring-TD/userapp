@@ -1,0 +1,4 @@
+{
+  "title": "Withdrawal completed",
+  "body": "{{amount}} withdrawn from {{planName}}."
+}

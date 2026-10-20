@@ -88,9 +88,21 @@ function isPostWalletPrincipalSettlement(path: string, method: string): boolean 
   );
 }
 
+function hasBearerAuth(req: Request): boolean {
+  const auth = (req.header('Authorization') || '').trim();
+  return /^Bearer\s+\S+/i.test(auth);
+}
+
 function requiresMerchantGatewayKeys(req: Request): boolean {
   const path = req.path || '';
   const method = req.method;
+
+  // Wallet details/history: dual auth — dashboard JWT or merchant API keys.
+  // Only enforce keys when there is no Bearer (integrator / springApp backends).
+  if (isWalletReadRoute(path, method)) {
+    return !hasBearerAuth(req);
+  }
+
   return (
     isGetUnscopedProductCatalog(req) ||
     isPostSubMerchantActivations(path, method) ||
@@ -98,8 +110,7 @@ function requiresMerchantGatewayKeys(req: Request): boolean {
     isPostExternalProductAccounts(path, method) ||
     isPostExternalProductApplications(path, method) ||
     isExternalApplicationServicingRoute(path, method) ||
-    isPostWalletPrincipalSettlement(path, method) ||
-    isWalletReadRoute(path, method)
+    isPostWalletPrincipalSettlement(path, method)
   );
 }
 
@@ -113,8 +124,8 @@ function requiresMerchantGatewayKeys(req: Request): boolean {
  * - GET /api/v1/products/external-applications/{id}[/offer|/account|/repayment-schedule], POST .../{id}/offer
  * - POST /api/v1/wallets/{investment|savings|commodity}/principal-{settlement|repayment}
  * - POST /api/v1/wallets/commodity/maturity-payout (Treasury debit for Spring maturity credit)
- * - GET merchant wallet details/history and user wallet details/history (scoped to key merchant)
- * Dashboard GET /api/v1/products?appId=... skips key verification (JWT session).
+ * - GET merchant/user wallet details/history when called **without** a dashboard Bearer JWT
+ * Dashboard JWT wallet reads and GET /api/v1/products?appId=... skip key verification.
  * Other product routes and configurations skip gateway key verification.
  * Exempt paths skip this middleware entirely for docs, health, and client-auth flows.
  */

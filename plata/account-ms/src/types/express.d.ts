@@ -4,6 +4,7 @@ declare global {
       /** Set by merchantGatewayAuth after service-auth-ms verification */
       gatewayMerchantAuth?: {
         merchantId: string;
+        merchantName?: string;
         apiKeyId: string;
         environment: string;
       };

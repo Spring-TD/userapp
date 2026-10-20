@@ -548,3 +548,97 @@ export const listSubMerchantCustomersDashboardQuerySchema = Joi.object({
   limit: Joi.number().integer().min(1).max(100).default(20),
   skip: Joi.number().integer().min(0).default(0)
 });
+
+const externalUserBodySchema = Joi.object({
+  id: Joi.string().trim().min(1).max(200).required(),
+  name: Joi.string().trim().min(1).max(200).required(),
+  email: Joi.string().trim().email().max(320).required(),
+  phone: Joi.string().trim().min(3).max(40).required(),
+  bvn: Joi.string().trim().min(11).max(11).optional(),
+  firstName: Joi.string().trim().max(100).optional(),
+  lastName: Joi.string().trim().max(100).optional(),
+  otherNames: Joi.string().trim().max(200).optional(),
+  gender: Joi.string().trim().max(40).optional(),
+  dateOfBirth: Joi.string().trim().max(40).optional(),
+  placeOfBirth: Joi.string().trim().max(200).optional(),
+  address: Joi.string().trim().max(500).optional(),
+  accountTier: Joi.string().trim().max(40).optional()
+});
+
+/** POST /api/v1/products/external-accounts (gateway + PLATA keys) */
+export const externalProductAccountBodySchema = Joi.object({
+  appId: Joi.string().trim().min(1).max(100).required(),
+  productId: Joi.string().trim().min(1).max(100).required(),
+  user: externalUserBodySchema.required(),
+  currency: Joi.string().trim().max(16).optional(),
+  country: Joi.string().trim().max(8).optional()
+});
+
+const externalApplicationPayloadSchema = Joi.object({
+  contractSnapshot: Joi.object().required().unknown(true),
+  payoutSplit: userProductApplicationPayoutSplitJoi,
+  localApplicationId: Joi.string().trim().max(200).optional(),
+  merchantProductId: Joi.string().trim().max(100).optional(),
+  status: userApplicationStatusJoi.optional(),
+  submittedAt: Joi.string().isoDate().optional(),
+  signedAt: Joi.string().isoDate().optional(),
+  snapshotVersion: Joi.number().integer().min(1).optional(),
+  snapshotHash: Joi.string().allow('').max(128).optional(),
+  submittedRequirements: Joi.array().items(Joi.object().unknown(true)).optional(),
+  applicantSignatureUrl: Joi.string().trim().max(2048).optional(),
+  applicantSignatureKey: Joi.string().trim().max(512).optional(),
+  applicantSignatureFileName: Joi.string().trim().max(300).optional(),
+  isPoliticallyExposedPerson: Joi.boolean().optional(),
+  monthlyIncome: Joi.number().min(0).optional(),
+  repaymentSource: Joi.string().trim().max(64).optional(),
+  repaymentSourceOther: Joi.string().trim().max(200).optional(),
+  maritalStatus: Joi.string().trim().max(64).optional(),
+  maritalStatusOther: Joi.string().trim().max(200).optional(),
+  loanReason: Joi.string().trim().max(64).optional(),
+  loanReasonOther: Joi.string().trim().max(200).optional(),
+  repayingWithSpouse: Joi.boolean().optional(),
+  spouseFullName: Joi.string().trim().max(200).optional(),
+  spouseEmail: Joi.string().trim().email().max(320).optional(),
+  spousePhone: Joi.string().trim().max(40).optional(),
+  spouseOccupation: Joi.string().trim().max(120).optional(),
+  spouseCountry: Joi.string().trim().max(8).optional(),
+  occupation: Joi.string().trim().max(120).optional(),
+  placeOfWork: Joi.string().trim().max(200).optional(),
+  hrName: Joi.string().trim().max(200).optional(),
+  hrEmail: Joi.string().trim().email().max(320).optional(),
+  applicantProfileSnapshot: Joi.object().unknown(true).optional()
+}).required();
+
+/** POST /api/v1/products/external-applications (gateway + PLATA keys) */
+export const externalProductApplicationBodySchema = Joi.object({
+  appId: Joi.string().trim().min(1).max(100).required(),
+  productId: Joi.string().trim().min(1).max(100).required(),
+  productName: Joi.string().trim().max(300).optional(),
+  merchantId: Joi.string().trim().max(200).optional(),
+  merchantName: Joi.string().trim().max(200).optional(),
+  offeringMerchantId: Joi.string().trim().min(1).max(200).required(),
+  offeringMerchantName: Joi.string().trim().max(200).optional(),
+  productCreatorMerchantName: Joi.string().trim().max(200).optional(),
+  subMerchant: Joi.object({
+    id: Joi.string().trim().min(1).max(200).required(),
+    name: Joi.string().trim().min(1).max(200).required(),
+    email: Joi.string().trim().email().max(320).optional().allow(''),
+    phone: Joi.string().trim().max(40).optional().allow('')
+  }).optional(),
+  user: externalUserBodySchema.required(),
+  application: externalApplicationPayloadSchema,
+  loanWorkflowCallbackUrl: Joi.string().uri().max(2048).optional(),
+  guarantorKycCallbackUrl: Joi.string().uri().max(2048).optional(),
+  currency: Joi.string().trim().max(16).optional(),
+  country: Joi.string().trim().max(8).optional()
+});
+
+/** POST /api/v1/products/external-applications/:applicationId/offer */
+export const externalLoanOfferResponseBodySchema = Joi.object({
+  action: Joi.string().valid('accept', 'decline').required(),
+  acceptedTerms: Joi.boolean().optional(),
+  downPayment: Joi.object({
+    amount: Joi.number().positive().required(),
+    providerReference: Joi.string().trim().min(1).max(200).required()
+  }).optional()
+});

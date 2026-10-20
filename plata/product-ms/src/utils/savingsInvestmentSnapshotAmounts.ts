@@ -157,6 +157,64 @@ export function extractInterestPaidFromContractSnapshot(
   return 0;
 }
 
+export interface PendingSnapshotRequest {
+  amount: number;
+  requestedOn: string;
+}
+
+function pendingFromRecord(
+  value: unknown,
+  statusKeys: string[] = ['pending', 'requested', 'submitted']
+): PendingSnapshotRequest | null {
+  const o = asRecord(value);
+  if (!o) {
+    return null;
+  }
+  const status = String(o.status ?? '').trim().toLowerCase();
+  if (status && !statusKeys.includes(status)) {
+    return null;
+  }
+  const amount = firstPositive(o.amount, o.requestedAmount, o.value);
+  if (!(amount > 0)) {
+    return null;
+  }
+  const requestedOn =
+    (typeof o.requestedAt === 'string' && o.requestedAt) ||
+    (typeof o.requestedOn === 'string' && o.requestedOn) ||
+    (typeof o.createdAt === 'string' && o.createdAt) ||
+    '';
+  return { amount, requestedOn };
+}
+
+/** Pending maturity / liquidation request on a savings or investment snapshot. */
+export function extractPendingLiquidationRequestFromContractSnapshot(
+  snapshot: Record<string, unknown> | undefined
+): PendingSnapshotRequest | null {
+  if (!snapshot) {
+    return null;
+  }
+  return (
+    pendingFromRecord(snapshot.liquidationRequest) ||
+    pendingFromRecord(snapshot.pendingLiquidation) ||
+    pendingFromRecord(snapshot.maturityWithdrawalRequest) ||
+    pendingFromRecord(asRecord(snapshot.effective)?.liquidationRequest)
+  );
+}
+
+/** Pending withdrawal request on a deposit-product snapshot. */
+export function extractPendingWithdrawalRequestFromContractSnapshot(
+  snapshot: Record<string, unknown> | undefined
+): PendingSnapshotRequest | null {
+  if (!snapshot) {
+    return null;
+  }
+  return (
+    pendingFromRecord(snapshot.withdrawalRequest) ||
+    pendingFromRecord(snapshot.pendingWithdrawal) ||
+    pendingFromRecord(asRecord(snapshot.effective)?.withdrawalRequest)
+  );
+}
+
 /** Cumulative withdrawals from the account. */
 export function extractWithdrawalsFromContractSnapshot(
   snapshot: Record<string, unknown> | undefined

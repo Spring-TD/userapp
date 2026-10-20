@@ -1,0 +1,4 @@
+{
+  "title": "Savings withdrawal pending approval",
+  "body": "{{customerName}} requested {{amount}} from {{productName}}. Review in Treasury & Settlements."
+}

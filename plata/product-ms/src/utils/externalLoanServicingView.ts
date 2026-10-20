@@ -253,7 +253,10 @@ export function resolveStageAndNextAction(
     case 'disbursed':
       return { stage: 'disbursed', nextAction: 'repay' };
     default:
-      return { stage: fulfillment.status, nextAction: 'continue_mortgage_workflow' };
+      return {
+        stage: fulfillment.status || 'approved',
+        nextAction: 'continue_mortgage_workflow'
+      };
   }
 }
 
@@ -521,7 +524,7 @@ export function buildExternalLoanAccountView(
       : {}),
     disbursedAt: disbursement.disbursedAt,
     disbursementAccount: {
-      walletId: disbursement.walletId,
+      walletId: disbursement.walletId || '',
       ...(disbursement.accountNumber ? { accountNumber: disbursement.accountNumber } : {}),
       ...(disbursement.bankName ? { bankName: disbursement.bankName } : {}),
       ...(disbursement.bankCode ? { bankCode: disbursement.bankCode } : {})

@@ -279,6 +279,18 @@ export interface Product {
   commodityPrices?: CommodityPriceEntry[];
   /** Derived configuration math engine output (computed at read time). */
   calculatedConfig?: ProductConfigCalculations;
+  /** Product-creator merchant projection (for catalog / settlement). */
+  merchant?: {
+    id: string;
+    name?: string | null;
+    companyName?: string | null;
+    companyLogoUrl?: string | null;
+    website?: string | null;
+  };
+  /** Convenience alias used by external application flows (`merchant.companyName`). */
+  companyName?: string | null;
+  /** When true, external submit requires applicant signature upload (non-draft). */
+  requireApplicantSignature?: boolean;
 }
 
 /** Optional: when set, product-ms sends email + in-app (notifications-ms send-dual) after create/update. */
