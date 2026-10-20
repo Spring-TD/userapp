@@ -3,7 +3,7 @@ import { logger } from '../utils/logger';
 import axios, { AxiosRequestConfig } from 'axios';
 import * as walletRepo from '../repositories/walletRepository';
 import * as transactionRepo from '../repositories/transactionRepository';
-import { provisionPayonusNubanForWallet } from './payonusNubanProvisioning';
+import { provisionVirtualNubanForWallet } from './virtualNubanProvisioning';
 
 export interface CreateMerchantWalletData {
   merchantId: string;
@@ -136,7 +136,7 @@ export class WalletService {
         }
       }
 
-      const walletWithNuban = (await provisionPayonusNubanForWallet(
+      const walletWithNuban = (await provisionVirtualNubanForWallet(
         newWallet as MerchantWallet
       )) as MerchantWallet;
 
@@ -283,7 +283,7 @@ export class WalletService {
         currency: data.currency
       }) as UserWallet;
       logger.info('User wallet created', { walletId: newWallet.id, userId: data.userId, merchantId: data.merchantId });
-      const walletWithNuban = (await provisionPayonusNubanForWallet(newWallet)) as UserWallet;
+      const walletWithNuban = (await provisionVirtualNubanForWallet(newWallet)) as UserWallet;
       return { success: true, wallet: walletWithNuban };
     } catch (error) {
       logger.error('Error creating user wallet', { error });

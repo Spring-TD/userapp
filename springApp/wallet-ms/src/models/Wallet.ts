@@ -2,6 +2,9 @@ export type VirtualNubanAccountType = 'static' | 'reserved' | 'dynamic';
 
 export type VirtualNubanProvisionStatus = 'active' | 'failed';
 
+/** Rails provider that issued the wallet's virtual NUBAN. */
+export type NubanProvider = 'payonus' | 'legerblock';
+
 export interface VirtualNubanDetails {
   accountType: VirtualNubanAccountType;
   provisionStatus: VirtualNubanProvisionStatus;
@@ -22,8 +25,14 @@ export interface BaseWallet {
   createdAt: Date;
   updatedAt: Date;
   status: WalletStatus;
-  /** Payonus (or compatible) virtual NUBAN, when provisioned */
+  /** Payonus / LegerBlock virtual NUBAN, when provisioned */
   virtualNuban?: VirtualNubanDetails;
+  /** Which provider owns this wallet's NUBAN (default/inferred: payonus). */
+  nubanProvider?: NubanProvider;
+  /** LegerBlock user_ref when provisioned via LegerBlock. */
+  legerblockUserRef?: string;
+  /** LegerBlock wallet_id when provisioned via LegerBlock. */
+  legerblockWalletId?: string;
 }
 
 // Define wallet types for merchants (one set per app at creation)

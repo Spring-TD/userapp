@@ -21,7 +21,14 @@ const PORT = config.port || 3004;
 let server: ReturnType<express.Express['listen']> | null = null;
 
 // Middleware setup
-app.use(express.json({ limit: '10mb' }));
+app.use(
+  express.json({
+    limit: '10mb',
+    verify: (req, _res, buf) => {
+      (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
+    }
+  })
+);
 app.use(express.urlencoded({ extended: true }));
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',

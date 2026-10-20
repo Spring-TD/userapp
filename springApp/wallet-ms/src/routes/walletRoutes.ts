@@ -92,11 +92,12 @@ router.post('/banks/name-enquiry', authenticate, WalletController.verifyBankAcco
 // Funding routes (public endpoints for payment provider callbacks)
 router.get('/funding/callback', FundingController.describeFundingCallback);
 router.post('/funding/callback', FundingController.handleFundingCallback);
+router.post('/funding/callback/legerblock', FundingController.handleLegerblockFundingCallback);
 router.get('/funding/status/:transactionId', FundingController.checkFundingStatus);
 
-// PayOnUs payout status webhook (public endpoint; updates payout transactions and
-// reverses the wallet debit automatically when a payout fails or is reversed)
+// PayOnUs / LegerBlock payout status webhooks (public; reverse wallet debit on failure)
 router.post('/payout/callback', FundingController.handlePayoutStatusCallback);
+router.post('/payout/callback/legerblock', FundingController.handleLegerblockPayoutCallback);
 
 // Get wallets by merchant (merchant can view all wallets associated with their business)
 router.get('/merchant/:merchantId/users', authenticate, WalletController.getUserWalletsByMerchant);

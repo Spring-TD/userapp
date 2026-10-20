@@ -1,6 +1,6 @@
 import { db } from '../db/database';
 import type { UserExternalBankAccount } from '../models/UserExternalBankAccount';
-import { nameEnquiry } from './payonusNubanClient';
+import { railsNameEnquiry } from './nubanRails';
 import { resolveBankPickerSelection } from './bankListResolver';
 import { fetchRetailUserKycIdentity } from './complianceApplicantClient';
 import { bankAccountNameMatchesKyc, bankAccountNamesCloselyMatch } from '../utils/bankAccountNameMatch';
@@ -72,7 +72,7 @@ export class UserExternalBankAccountService {
         };
       }
 
-      const verification = await nameEnquiry({ accountNumber, bankCode, currency });
+      const verification = await railsNameEnquiry({ accountNumber, bankCode, currency });
       if (!verification.ok || !verification.accountName) {
         return { success: false, error: verification.errorMessage || 'Bank account verification failed' };
       }

@@ -2,8 +2,14 @@ import { Wallet, MerchantWallet, UserWallet, WalletStatus, Transaction, Transact
 import { logger } from '../utils/logger';
 import axios, { AxiosRequestConfig } from 'axios';
 import { db } from '../db/database';
-import { provisionPayonusNubanForWallet } from './payonusNubanProvisioning';
-import { initiateBankPayout, fetchBanks, nameEnquiry, type PayonusBank } from './payonusNubanClient';
+import { provisionVirtualNubanForWallet } from './virtualNubanProvisioning';
+import {
+  railsFetchBanks,
+  railsInitiateBankPayout,
+  railsNameEnquiry,
+  type RailsBank as PayonusBank
+} from './nubanRails';
+import { inferWalletNubanProvider } from './virtualNubanProvisioning';
 import PaymentLedgerService from './paymentLedgerService';
 import { AppTransactionMirrorService } from './appTransactionMirrorService';
 import { UserExternalBankAccountService } from './userExternalBankAccountService';
@@ -391,7 +397,7 @@ export class WalletService {
         }
       }
 
-      const walletWithNuban = (await provisionPayonusNubanForWallet(newWallet)) as MerchantWallet;
+      const walletWithNuban = (await provisionVirtualNubanForWallet(newWallet)) as MerchantWallet;
 
       return {
         success: true,
@@ -605,7 +611,7 @@ export class WalletService {
           return { success: true, wallet: linked ?? linkedProductWallet, skipped: true, reusedUpstreamAccount: true };
         }
 
-        const provisioned = (await provisionPayonusNubanForWallet(linkedProductWallet)) as UserWallet;
+        const provisioned = (await provisionVirtualNubanForWallet(linkedProductWallet)) as UserWallet;
         const active = provisioned.virtualNuban?.provisionStatus === 'active' && Boolean(provisioned.virtualNuban.accountNumber);
         return active
           ? { success: true, wallet: provisioned, skipped: true, reusedUpstreamAccount: false }
@@ -665,7 +671,7 @@ export class WalletService {
         };
       }
 
-      const walletWithNuban = (await provisionPayonusNubanForWallet(linkedWallet)) as UserWallet;
+      const walletWithNuban = (await provisionVirtualNubanForWallet(linkedWallet)) as UserWallet;
       const active =
         walletWithNuban.virtualNuban?.provisionStatus === 'active' &&
         Boolean(walletWithNuban.virtualNuban?.accountNumber);
@@ -794,7 +800,7 @@ export class WalletService {
         return { success: true, wallet: existing, skipped: true };
       }
 
-      const walletWithNuban = (await provisionPayonusNubanForWallet(existing)) as UserWallet;
+      const walletWithNuban = (await provisionVirtualNubanForWallet(existing)) as UserWallet;
       const active =
         walletWithNuban.virtualNuban?.provisionStatus === 'active' &&
         Boolean(walletWithNuban.virtualNuban?.accountNumber);
@@ -1664,16 +1670,21 @@ export class WalletService {
       }
       const narration = payoutData.narration || 'User wallet bank payout';
 
-      const providerResult = await initiateBankPayout({
-        sourceAccountNumber,
-        destinationAccountNumber: savedAccount.accountNumber,
-        destinationBankCode: savedAccount.bankCode,
-        destinationAccountName: savedAccount.accountName,
-        amount: payoutData.amount,
-        currency,
-        reference: payoutReference,
-        narration
-      });
+      const railsProvider = inferWalletNubanProvider(userWallet);
+      const providerResult = await railsInitiateBankPayout(
+        {
+          sourceAccountNumber,
+          destinationAccountNumber: savedAccount.accountNumber,
+          destinationBankCode: savedAccount.bankCode,
+          destinationAccountName: savedAccount.accountName,
+          amount: payoutData.amount,
+          currency,
+          reference: payoutReference,
+          narration,
+          legerblockUserRef: userWallet.legerblockUserRef
+        },
+        { provider: railsProvider }
+      );
 
       if (!providerResult.ok) {
         return {
@@ -1810,7 +1821,7 @@ export class WalletService {
     cached?: boolean;
     error?: string;
   }> {
-    const result = await fetchBanks(options);
+    const result = await railsFetchBanks(options);
     if (!result.ok) {
       return { success: false, banks: [], error: result.errorMessage || 'Failed to fetch bank list' };
     }
@@ -1818,8 +1829,8 @@ export class WalletService {
   }
 
   /**
-   * Verify a beneficiary bank account via PayOnUs name enquiry, so the frontend can
-   * confirm the account holder's name before submitting a payout.
+   * Verify a beneficiary bank account via the active rails provider name enquiry,
+   * so the frontend can confirm the account holder's name before submitting a payout.
    */
   static async verifyBankAccount(params: { accountNumber: string; bankCode: string; currency?: string }): Promise<{
     success: boolean;
@@ -1829,7 +1840,7 @@ export class WalletService {
     bankName?: string;
     error?: string;
   }> {
-    const result = await nameEnquiry(params);
+    const result = await railsNameEnquiry(params);
     if (!result.ok || !result.accountName) {
       return { success: false, error: result.errorMessage || 'Bank account verification failed' };
     }
@@ -4243,16 +4254,21 @@ export class WalletService {
       }
 
       const narration = payoutData.narration?.trim() || 'Repayment wallet bank payout';
-      const providerResult = await initiateBankPayout({
-        sourceAccountNumber,
-        destinationAccountNumber: payoutData.accountNumber.trim(),
-        destinationBankCode: payoutData.bankCode.trim(),
-        destinationAccountName: payoutData.accountName.trim(),
-        amount,
-        currency,
-        reference: payoutReference,
-        narration
-      });
+      const railsProvider = inferWalletNubanProvider(repaymentWallet);
+      const providerResult = await railsInitiateBankPayout(
+        {
+          sourceAccountNumber,
+          destinationAccountNumber: payoutData.accountNumber.trim(),
+          destinationBankCode: payoutData.bankCode.trim(),
+          destinationAccountName: payoutData.accountName.trim(),
+          amount,
+          currency,
+          reference: payoutReference,
+          narration,
+          legerblockUserRef: repaymentWallet.legerblockUserRef
+        },
+        { provider: railsProvider }
+      );
 
       if (!providerResult.ok) {
         return {

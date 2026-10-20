@@ -1026,6 +1026,7 @@ router.post('/user/:userId/api-call', authenticate, authorizeUser, WalletControl
 
 // Funding routes (public endpoints for payment provider callbacks)
 router.post('/funding/callback', FundingController.handleFundingCallback);
+router.post('/funding/callback/legerblock', FundingController.handleLegerblockFundingCallback);
 router.get('/funding/status/:transactionId', FundingController.checkFundingStatus);
 
 // Charis / BankOne activity push webhooks (token via header or ?authToken=)

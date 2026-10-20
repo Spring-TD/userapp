@@ -250,6 +250,18 @@ Prefer **A** unless product explicitly wants B.
 
 ---
 
+## Implementation status (code)
+
+Scaffolded dual-run in both `springApp/wallet-ms` and `plata/wallet-ms`:
+
+- Config: `LEGERBLOCK_*`, `NUBAN_PROVIDER_DEFAULT` (default remains `payonus`)
+- Client: create user → wallet → static VA; bank list; name enquiry; initiate+confirm payout (springApp)
+- Router: `provisionVirtualNubanForWallet` (never overwrites active NUBAN)
+- Webhooks: `POST .../funding/callback/legerblock` (+ springApp `.../payout/callback/legerblock`)
+- Wallet fields: `nubanProvider`, `legerblockUserRef`, `legerblockWalletId` (account still on `payonusNuban*` columns for lookup)
+
+**Cutover:** set credentials, whitelist IPs, then `NUBAN_PROVIDER_DEFAULT=legerblock` + `LEGERBLOCK_NUBAN_ENABLED=true`.
+
 ## Last updated
 
-2026-10-20 — researched from LegerBlock docs; no implementation yet.
+2026-10-20 — docs researched; dual-provider scaffold implemented (default still PayOnUs).

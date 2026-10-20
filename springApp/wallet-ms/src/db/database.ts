@@ -41,6 +41,14 @@ function buildVirtualNuban(raw: Record<string, unknown>): VirtualNubanDetails | 
   };
 }
 
+function readNubanProvider(raw: Record<string, unknown>): 'payonus' | 'legerblock' | undefined {
+  const v = raw.nubanProvider;
+  if (v === 'legerblock' || v === 'payonus') return v;
+  if (raw.legerblockUserRef || raw.legerblockWalletId) return 'legerblock';
+  if (raw.payonusNubanAccountNumber || raw.payonusNubanProvisionStatus) return 'payonus';
+  return undefined;
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
@@ -91,6 +99,7 @@ function docToWallet(doc: mongoose.Document | null): Wallet | null {
     updatedAt: Date;
   };
   const virtualNuban = buildVirtualNuban(o);
+  const nubanProvider = readNubanProvider(o);
   const {
     _id,
     __v,
@@ -102,12 +111,23 @@ function docToWallet(doc: mongoose.Document | null): Wallet | null {
     payonusNubanProvisionStatus: _ps,
     payonusNubanProvisionError: _pe,
     payonusNubanProvisionedAt: _pa,
+    nubanProvider: _np,
+    legerblockUserRef: legerblockUserRefRaw,
+    legerblockWalletId: legerblockWalletIdRaw,
     ...rest
   } = o;
 
   const mainBalance = (rest.mainBalance as number) ?? 0;
   const ledgerBalance = (rest.ledgerBalance as number) ?? 0;
   const balance = (rest.balance as number) ?? mainBalance;
+  const legerblockUserRef =
+    typeof legerblockUserRefRaw === 'string' && legerblockUserRefRaw.trim()
+      ? legerblockUserRefRaw.trim()
+      : undefined;
+  const legerblockWalletId =
+    typeof legerblockWalletIdRaw === 'string' && legerblockWalletIdRaw.trim()
+      ? legerblockWalletIdRaw.trim()
+      : undefined;
 
   const baseCommon = {
     id: _id.toString(),
@@ -118,7 +138,10 @@ function docToWallet(doc: mongoose.Document | null): Wallet | null {
     status: rest.status as Wallet['status'],
     createdAt: o.createdAt,
     updatedAt: o.updatedAt,
-    ...(virtualNuban ? { virtualNuban } : {})
+    ...(virtualNuban ? { virtualNuban } : {}),
+    ...(nubanProvider ? { nubanProvider } : {}),
+    ...(legerblockUserRef ? { legerblockUserRef } : {}),
+    ...(legerblockWalletId ? { legerblockWalletId } : {})
   };
 
   if (o.walletType === 'MERCHANT') {
@@ -177,6 +200,9 @@ export type PayonusNubanPatchFields = {
   payonusNubanProvisionStatus?: 'active' | 'failed';
   payonusNubanProvisionError?: string | null;
   payonusNubanProvisionedAt?: Date | null;
+  nubanProvider?: 'payonus' | 'legerblock' | null;
+  legerblockUserRef?: string | null;
+  legerblockWalletId?: string | null;
 };
 
 function docToUserExternalBankAccount(doc: mongoose.Document | null): UserExternalBankAccount | null {

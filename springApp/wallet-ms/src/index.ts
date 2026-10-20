@@ -28,7 +28,15 @@ app.use(
     type: (req) => String(req.headers['content-type'] || '').toLowerCase().includes('text/plain')
   })
 );
-app.use(express.json({ limit: config.requestBodyLimit }));
+app.use(
+  express.json({
+    limit: config.requestBodyLimit,
+    // Preserve raw bytes for LegerBlock HMAC-SHA512 webhook verification.
+    verify: (req, _res, buf) => {
+      (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
+    }
+  })
+);
 app.use(express.urlencoded({ extended: true, limit: config.requestBodyLimit }));
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',

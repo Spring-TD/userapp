@@ -35,7 +35,10 @@ const WalletSchema = new Schema<any>(
     payonusNubanAccountType: { type: String, enum: ['static', 'reserved', 'dynamic'], required: false },
     payonusNubanProvisionStatus: { type: String, enum: ['active', 'failed'], required: false },
     payonusNubanProvisionError: { type: String, required: false },
-    payonusNubanProvisionedAt: { type: Date, required: false }
+    payonusNubanProvisionedAt: { type: Date, required: false },
+    nubanProvider: { type: String, enum: ['payonus', 'legerblock'], required: false },
+    legerblockUserRef: { type: String, required: false },
+    legerblockWalletId: { type: String, required: false }
   },
   {
     timestamps: true,
@@ -79,12 +82,29 @@ function buildVirtualNuban(raw: Record<string, unknown>): VirtualNubanDetails | 
   };
 }
 
+function readNubanProvider(raw: Record<string, unknown>): 'payonus' | 'legerblock' | undefined {
+  const v = raw.nubanProvider;
+  if (v === 'legerblock' || v === 'payonus') return v;
+  if (raw.legerblockUserRef || raw.legerblockWalletId) return 'legerblock';
+  if (raw.payonusNubanAccountNumber || raw.payonusNubanProvisionStatus) return 'payonus';
+  return undefined;
+}
+
 function toWallet(doc: IWalletDocument | Record<string, unknown>): Wallet {
   const obj = typeof (doc as IWalletDocument).toObject === 'function'
     ? (doc as IWalletDocument).toObject()
     : { ...(doc as Record<string, unknown>) };
   const raw = obj as Record<string, unknown>;
   const id = (raw._id ?? (doc as IWalletDocument)._id)?.toString?.() ?? String(raw._id);
+  const nubanProvider = readNubanProvider(raw);
+  const legerblockUserRef =
+    typeof raw.legerblockUserRef === 'string' && raw.legerblockUserRef.trim()
+      ? raw.legerblockUserRef.trim()
+      : undefined;
+  const legerblockWalletId =
+    typeof raw.legerblockWalletId === 'string' && raw.legerblockWalletId.trim()
+      ? raw.legerblockWalletId.trim()
+      : undefined;
   const base = {
     id,
     balance: (raw.mainBalance as number) ?? 0,
@@ -93,7 +113,10 @@ function toWallet(doc: IWalletDocument | Record<string, unknown>): Wallet {
     currency: raw.currency as string,
     status: (raw.status as WalletStatus) ?? 'ACTIVE',
     createdAt: raw.createdAt as Date,
-    updatedAt: raw.updatedAt as Date
+    updatedAt: raw.updatedAt as Date,
+    ...(nubanProvider ? { nubanProvider } : {}),
+    ...(legerblockUserRef ? { legerblockUserRef } : {}),
+    ...(legerblockWalletId ? { legerblockWalletId } : {})
   };
   const virtualNuban = buildVirtualNuban(raw);
   if (raw.walletType === 'MERCHANT') {

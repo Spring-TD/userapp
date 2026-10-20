@@ -1,6 +1,6 @@
 import { UserExternalBankAccountService } from '../services/userExternalBankAccountService';
 import { db } from '../db/database';
-import { nameEnquiry } from '../services/payonusNubanClient';
+import { railsNameEnquiry } from '../services/nubanRails';
 import { fetchRetailUserKycIdentity } from '../services/complianceApplicantClient';
 import { WalletService } from '../services/walletService';
 
@@ -18,10 +18,10 @@ jest.mock('../db/database', () => ({
   }
 }));
 
-jest.mock('../services/payonusNubanClient', () => ({
-  nameEnquiry: jest.fn(),
-  initiateBankPayout: jest.fn(),
-  fetchBanks: jest.fn()
+jest.mock('../services/nubanRails', () => ({
+  railsNameEnquiry: jest.fn(),
+  railsInitiateBankPayout: jest.fn(),
+  railsFetchBanks: jest.fn()
 }));
 
 jest.mock('../services/bankListResolver', () => ({
@@ -33,7 +33,7 @@ jest.mock('../services/complianceApplicantClient', () => ({
 }));
 
 const mockedDb = db as jest.Mocked<typeof db>;
-const mockedNameEnquiry = nameEnquiry as jest.MockedFunction<typeof nameEnquiry>;
+const mockedNameEnquiry = railsNameEnquiry as jest.MockedFunction<typeof railsNameEnquiry>;
 const mockedFetchKycIdentity = fetchRetailUserKycIdentity as jest.MockedFunction<typeof fetchRetailUserKycIdentity>;
 
 import { resolveBankPickerSelection } from '../services/bankListResolver';

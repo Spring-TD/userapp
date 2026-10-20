@@ -29,6 +29,9 @@ export interface IWalletDoc extends Document {
   payonusNubanProvisionStatus?: string;
   payonusNubanProvisionError?: string;
   payonusNubanProvisionedAt?: Date;
+  nubanProvider?: 'payonus' | 'legerblock';
+  legerblockUserRef?: string;
+  legerblockWalletId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -64,7 +67,10 @@ const WalletSchema = new Schema<IWalletDoc>(
     payonusNubanAccountType: { type: String, enum: ['static', 'reserved', 'dynamic'], required: false },
     payonusNubanProvisionStatus: { type: String, enum: ['active', 'failed'], required: false },
     payonusNubanProvisionError: { type: String, required: false },
-    payonusNubanProvisionedAt: { type: Date, required: false }
+    payonusNubanProvisionedAt: { type: Date, required: false },
+    nubanProvider: { type: String, enum: ['payonus', 'legerblock'], required: false },
+    legerblockUserRef: { type: String, required: false },
+    legerblockWalletId: { type: String, required: false }
   },
   { timestamps: true }
 );

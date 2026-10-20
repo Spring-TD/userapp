@@ -13,8 +13,9 @@ jest.mock('../db/database', () => ({
   }
 }));
 
-jest.mock('../services/payonusNubanProvisioning', () => ({
-  provisionPayonusNubanForWallet: jest.fn(async (wallet: unknown) => wallet)
+jest.mock('../services/virtualNubanProvisioning', () => ({
+  provisionVirtualNubanForWallet: jest.fn(async (wallet: unknown) => wallet),
+  inferWalletNubanProvider: jest.fn(() => 'payonus')
 }));
 
 const mockedDb = db as jest.Mocked<typeof db>;

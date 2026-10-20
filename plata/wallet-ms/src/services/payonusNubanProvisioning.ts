@@ -44,14 +44,16 @@ export async function provisionPayonusNubanForWallet(
         payonusNubanAccountType: accountType,
         payonusNubanProvisionStatus: 'active',
         payonusNubanProvisionError: null,
-        payonusNubanProvisionedAt: new Date()
+        payonusNubanProvisionedAt: new Date(),
+        nubanProvider: 'payonus'
       });
       logger.info('Payonus NUBAN provisioned', { walletId: wallet.id, accountType });
     } else {
       await walletRepo.patchWalletPayonusNuban(wallet.id, {
         payonusNubanAccountType: accountType,
         payonusNubanProvisionStatus: 'failed',
-        payonusNubanProvisionError: result.errorMessage || 'Payonus did not return an account number'
+        payonusNubanProvisionError: result.errorMessage || 'Payonus did not return an account number',
+        nubanProvider: 'payonus'
       });
       logger.warn('Payonus NUBAN provisioning failed', {
         walletId: wallet.id,
@@ -64,7 +66,8 @@ export async function provisionPayonusNubanForWallet(
     await walletRepo.patchWalletPayonusNuban(wallet.id, {
       payonusNubanAccountType: accountType,
       payonusNubanProvisionStatus: 'failed',
-      payonusNubanProvisionError: message
+      payonusNubanProvisionError: message,
+      nubanProvider: 'payonus'
     });
     logger.error('Payonus NUBAN provisioning threw', { walletId: wallet.id, error: message });
   }

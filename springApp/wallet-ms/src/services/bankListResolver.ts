@@ -1,4 +1,4 @@
-import { fetchBanks, type PayonusBank } from './payonusNubanClient';
+import { railsFetchBanks, type RailsBank as PayonusBank } from './nubanRails';
 
 export function normalizeBankName(name: string): string {
   return name.trim().toUpperCase().replace(/\s+/g, ' ');
@@ -37,7 +37,7 @@ export async function resolveBankPickerSelection(params: {
   }
 
   const listKey = bankListKeyForCurrency(params.currency);
-  const listResult = await fetchBanks(listKey ? { key: listKey } : undefined);
+  const listResult = await railsFetchBanks(listKey ? { key: listKey } : undefined);
   if (!listResult.ok || listResult.banks.length === 0) {
     return { success: false, error: listResult.errorMessage || 'Unable to load bank list' };
   }

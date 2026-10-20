@@ -2,6 +2,8 @@ export type VirtualNubanAccountType = 'static' | 'reserved' | 'dynamic';
 
 export type VirtualNubanProvisionStatus = 'active' | 'failed';
 
+export type NubanProvider = 'payonus' | 'legerblock';
+
 export interface VirtualNubanDetails {
   accountType: VirtualNubanAccountType;
   provisionStatus: VirtualNubanProvisionStatus;
@@ -22,8 +24,11 @@ export interface BaseWallet {
   createdAt: Date;
   updatedAt: Date;
   status: WalletStatus;
-  /** Payonus (or compatible) virtual NUBAN, when provisioned */
+  /** Payonus / LegerBlock virtual NUBAN, when provisioned */
   virtualNuban?: VirtualNubanDetails;
+  nubanProvider?: NubanProvider;
+  legerblockUserRef?: string;
+  legerblockWalletId?: string;
 }
 
 // Define wallet types for merchants

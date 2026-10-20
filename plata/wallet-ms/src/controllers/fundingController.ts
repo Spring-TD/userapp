@@ -6,6 +6,10 @@ import { WebhookEventModel } from '../models/WebhookEventModel';
 import { logger } from '../utils/logger';
 import { validateInput, fundingCallbackSchema } from '../utils/validation';
 import { MerchantWalletType } from '../models/Wallet';
+import {
+  parseLegerblockCollectionWebhook,
+  verifyLegerblockSignature
+} from '../utils/legerblockWebhook';
 
 // Define interfaces for the validated data
 interface FundingCallbackData {
@@ -575,6 +579,91 @@ export class FundingController {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       
+      next(error);
+    }
+  }
+
+  /**
+   * LegerBlock collection (funding) webhook.
+   * Configure LEGERBLOCK_COLLECTION_NOTIFICATION_URL to this path.
+   */
+  static async handleLegerblockFundingCallback(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const rawBodyBuf = (req as Request & { rawBody?: Buffer }).rawBody;
+      const rawBodyText = rawBodyBuf?.toString('utf8') || JSON.stringify(req.body ?? {});
+      const signature = readHeaderValue(req, 'x-ledgerblock-signature');
+
+      if (!verifyLegerblockSignature(rawBodyText, signature)) {
+        logger.warn('Rejected LegerBlock funding webhook: invalid signature');
+        res.status(401).json({ success: false, error: 'Invalid webhook signature' });
+        return;
+      }
+
+      const parsed = parseLegerblockCollectionWebhook(req.body);
+      const paymentStatus = mapPaymentStatus(parsed.paymentStatus);
+      const transactionId = parsed.txRef || `legerblock:${parsed.accountNumber || 'unknown'}:${Date.now()}`;
+
+      logger.info('LegerBlock funding callback received', {
+        accountNumber: parsed.accountNumber,
+        txRef: parsed.txRef,
+        amount: parsed.amount,
+        paymentStatus: parsed.paymentStatus
+      });
+
+      if (paymentStatus !== 'SUCCESS' && paymentStatus !== 'COMPLETED') {
+        res.status(200).json({ success: true, message: 'Callback received but transaction not successful' });
+        return;
+      }
+
+      if (!parsed.accountNumber || !parsed.amount || parsed.amount <= 0) {
+        res.status(400).json({ success: false, error: 'account_number and positive amount are required' });
+        return;
+      }
+
+      if (processedTransactions.has(transactionId)) {
+        res.status(200).json({ success: true, message: 'Transaction already processed', duplicate: true });
+        return;
+      }
+
+      const walletLookup = await WalletService.getWalletByPayonusAccountNumber(parsed.accountNumber);
+      if (!walletLookup.success || !walletLookup.wallet) {
+        res.status(404).json({ success: false, error: 'Wallet not found for account number' });
+        return;
+      }
+
+      const result = await WalletService.updateWalletBalance(
+        walletLookup.wallet.id,
+        parsed.amount,
+        `Funding via LegerBlock ${parsed.txRef || ''}`.trim()
+      );
+
+      if (!result.success) {
+        res.status(500).json({ success: false, error: result.error || 'Failed to credit wallet' });
+        return;
+      }
+
+      processedTransactions.add(transactionId);
+      await WebhookEventModel.updateOne(
+        { provider: 'legerblock', transactionId },
+        {
+          $set: {
+            status: 'processed',
+            payload: parsed.raw,
+            processedAt: new Date()
+          }
+        },
+        { upsert: true }
+      );
+
+      res.status(200).json({
+        success: true,
+        message: 'LegerBlock funding processed',
+        data: { walletId: walletLookup.wallet.id, amount: parsed.amount, transactionId }
+      });
+    } catch (error) {
+      logger.error('Error processing LegerBlock funding callback', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       next(error);
     }
   }

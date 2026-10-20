@@ -1,11 +1,11 @@
 import { normalizeBankName, resolveBankPickerSelection } from '../services/bankListResolver';
-import { fetchBanks } from '../services/payonusNubanClient';
+import { railsFetchBanks } from '../services/nubanRails';
 
-jest.mock('../services/payonusNubanClient', () => ({
-  fetchBanks: jest.fn()
+jest.mock('../services/nubanRails', () => ({
+  railsFetchBanks: jest.fn()
 }));
 
-const mockedFetchBanks = fetchBanks as jest.MockedFunction<typeof fetchBanks>;
+const mockedFetchBanks = railsFetchBanks as jest.MockedFunction<typeof railsFetchBanks>;
 
 describe('bankListResolver', () => {
   beforeEach(() => {

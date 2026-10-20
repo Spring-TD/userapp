@@ -111,6 +111,9 @@ export type PayonusNubanPatchFields = {
   /** Pass `null` to clear a previous error after a successful reprovision */
   payonusNubanProvisionError?: string | null;
   payonusNubanProvisionedAt?: Date | null;
+  nubanProvider?: 'payonus' | 'legerblock' | null;
+  legerblockUserRef?: string | null;
+  legerblockWalletId?: string | null;
 };
 
 export async function patchWalletPayonusNuban(
