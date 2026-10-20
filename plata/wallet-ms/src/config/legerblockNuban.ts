@@ -28,17 +28,33 @@ export function resolveDefaultNubanProvider(): NubanProviderId {
 }
 
 export const legerblockNubanConfig = {
-  enabled: truthyEnv(process.env.LEGERBLOCK_NUBAN_ENABLED),
+  enabled: truthyEnv(process.env.LEGERBLOCK_NUBAN_ENABLED || process.env.LEDGERBLOCK_NUBAN_ENABLED),
   /** Base URL (no trailing slash). Docs: https://block.fuspay.finance */
-  baseUrl: (process.env.LEGERBLOCK_BASE_URL || 'https://block.fuspay.finance').replace(/\/$/, ''),
-  apiKey: stripSurroundingQuotes(process.env.LEGERBLOCK_API_KEY || ''),
-  merchantRef: stripSurroundingQuotes(process.env.LEGERBLOCK_MERCHANT_REF || ''),
+  baseUrl: (
+    process.env.LEGERBLOCK_BASE_URL ||
+    process.env.LEDGERBLOCK_BASEURL ||
+    process.env.LEDGERBLOCK_BASE_URL ||
+    'https://block.fuspay.finance'
+  ).replace(/\/$/, ''),
+  apiKey: stripSurroundingQuotes(
+    process.env.LEGERBLOCK_API_KEY || process.env.LEDGERBLOCK_API_KEY || process.env.API_KEY || ''
+  ),
+  merchantRef: stripSurroundingQuotes(
+    process.env.LEGERBLOCK_MERCHANT_REF ||
+      process.env.LEDGERBLOCK_MERCHANT_REF ||
+      process.env.X_MERCHANT_REF ||
+      ''
+  ),
   /**
    * Optional dedicated key for bank-list (docs show a separate bearer for that endpoint).
    * Falls back to LEGERBLOCK_API_KEY when unset.
    */
   bankListApiKey: stripSurroundingQuotes(
-    process.env.LEGERBLOCK_BANK_LIST_API_KEY || process.env.LEGERBLOCK_API_KEY || ''
+    process.env.LEGERBLOCK_BANK_LIST_API_KEY ||
+      process.env.LEGERBLOCK_API_KEY ||
+      process.env.LEDGERBLOCK_API_KEY ||
+      process.env.API_KEY ||
+      ''
   ),
   timeoutMs: Math.max(1000, parseInt(process.env.LEGERBLOCK_TIMEOUT_MS || '30000', 10)),
   currencies: (process.env.LEGERBLOCK_NUBAN_CURRENCIES || 'NGN')
