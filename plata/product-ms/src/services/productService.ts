@@ -1,8 +1,24 @@
+import axios from 'axios';
 import { Product, CreateProductRequest, UpdateProductRequest, SelectProductTypeRequest, CreateProductAfterTypeRequest } from '../types/product';
 import { ProductModel, toProduct } from '../models/ProductModel';
 import type { IProductDocument } from '../models/ProductModel';
 import { deepMerge } from '../utils/deepMerge';
 import { normalizeProductType } from '../utils/productType';
+import { config } from '../config/environment';
+import { resolveMerchantOwner } from './merchantOwnerService';
+
+export type ProductCatalogListOptions = {
+  page?: number;
+  limit?: number;
+  type?: string;
+};
+
+export type ProductCatalogListResult = {
+  items: Product[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+};
+
+type ProductMerchant = NonNullable<Product['merchant']>;
 
 function generateReferenceNumber(): string {
   const timestamp = Date.now().toString().slice(-6);
@@ -98,7 +114,11 @@ export class ProductService {
 
   async getProductById(id: string): Promise<Product | null> {
     const doc = await ProductModel.findById(id).lean();
-    return doc ? toProduct(doc as IProductDocument) : null;
+    if (!doc) return null;
+    const product = toProduct(doc as IProductDocument);
+    if (product.merchant?.id) return product;
+    const [enriched] = await this.enrichProductsWithMerchantDetails([product]);
+    return enriched ?? product;
   }
 
   async updateProduct(id: string, updateData: UpdateProductRequest): Promise<Product | null> {
@@ -220,13 +240,196 @@ export class ProductService {
     return !!result;
   }
 
-  async getProductsByMerchant(merchantId: string): Promise<Product[]> {
-    const docs = await ProductModel.find({ appId: merchantId }).lean();
-    return docs.map((d) => toProduct(d as IProductDocument));
+  async getProductsByMerchant(
+    appId: string,
+    options: ProductCatalogListOptions = {}
+  ): Promise<ProductCatalogListResult> {
+    return this.getAllProducts({ ...options, appId });
   }
 
-  async getAllProducts(): Promise<Product[]> {
-    const docs = await ProductModel.find({}).lean();
-    return docs.map((d) => toProduct(d as IProductDocument));
+  async getAllProducts(
+    options: ProductCatalogListOptions & { appId?: string } = {}
+  ): Promise<ProductCatalogListResult> {
+    const page = Math.max(1, Number(options.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(options.limit) || 20));
+    const filter: Record<string, unknown> = {};
+    if (options.appId?.trim()) {
+      filter.appId = options.appId.trim();
+    }
+    if (options.type?.trim()) {
+      filter.type = normalizeProductType(options.type);
+    }
+
+    const total = await ProductModel.countDocuments(filter);
+    const docs = await ProductModel.find(filter)
+      .sort({ updatedAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean();
+    const products = docs.map((d) => toProduct(d as IProductDocument));
+    const items = await this.enrichProductsWithMerchantDetails(products);
+
+    return {
+      items,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit))
+      }
+    };
+  }
+
+  /**
+   * Attach product-creator merchant metadata for Spring turn-on / settlement.
+   * Uses create-app (merchantId) + client-auth owner + compliance business info.
+   */
+  private async enrichProductsWithMerchantDetails(products: Product[]): Promise<Product[]> {
+    if (!products.length) return products;
+
+    const appCache = new Map<string, { merchantId: string; websiteUrl?: string } | null>();
+    const merchantCache = new Map<string, ProductMerchant>();
+
+    const resolveApp = async (appId: string) => {
+      if (appCache.has(appId)) return appCache.get(appId) ?? null;
+      try {
+        const response = await axios.get<{
+          success?: boolean;
+          data?: { merchantId?: string; websiteUrl?: string; name?: string };
+        }>(`${config.createAppServiceUrl}/internal/api/v1/apps/${encodeURIComponent(appId)}`, {
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Internal-Token': config.clientAuthInternalToken
+          },
+          timeout: 8000,
+          validateStatus: () => true
+        });
+        const merchantId = response.data?.data?.merchantId?.trim();
+        const value =
+          response.status >= 200 && response.status < 300 && response.data?.success && merchantId
+            ? { merchantId, websiteUrl: response.data.data?.websiteUrl }
+            : null;
+        appCache.set(appId, value);
+        return value;
+      } catch {
+        appCache.set(appId, null);
+        return null;
+      }
+    };
+
+    const resolveMerchant = async (merchantId: string, websiteFallback?: string): Promise<ProductMerchant> => {
+      if (merchantCache.has(merchantId)) return merchantCache.get(merchantId)!;
+
+      let name: string | null = merchantId;
+      let companyName: string | null = null;
+      let companyLogoUrl: string | null = null;
+      let website: string | null = websiteFallback?.trim() || null;
+
+      // Match enrichment tests: optional contact endpoint, then owner + business-info.
+      try {
+        const contactRes = await axios.get<{
+          success?: boolean;
+          data?: { userId?: string; firstName?: string; lastName?: string; userName?: string };
+        }>(`${config.clientAuthUrl}/internal/api/v1/users/${encodeURIComponent(merchantId)}/contact`, {
+          headers: { 'X-Internal-Token': config.clientAuthInternalToken },
+          timeout: 5000,
+          validateStatus: () => true
+        });
+        const contact = contactRes.data?.data;
+        if (contactRes.status < 300 && contactRes.data?.success && contact) {
+          const personal = `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
+          if (personal) name = personal;
+          else if (contact.userName?.trim()) name = contact.userName.trim();
+        }
+      } catch {
+        // optional
+      }
+
+      const owner = await resolveMerchantOwner(merchantId);
+      if (owner) {
+        const personal = `${owner.firstName || ''} ${owner.lastName || ''}`.trim();
+        if (personal) name = personal;
+        const ownerUserId = owner.userId.trim();
+        if (ownerUserId) {
+          try {
+            const bizRes = await axios.get<{
+              success?: boolean;
+              data?: { companyName?: string; companyLogoUrl?: string; website?: string };
+            }>(
+              `${config.complianceServiceUrl}/api/v1/kyc/internal/business-info/${encodeURIComponent(ownerUserId)}`,
+              {
+                headers: { 'X-Internal-Token': config.internalServiceToken },
+                timeout: 5000,
+                validateStatus: () => true
+              }
+            );
+            const biz = bizRes.data?.data;
+            if (bizRes.status < 300 && bizRes.data?.success && biz) {
+              if (biz.companyName?.trim()) companyName = biz.companyName.trim();
+              if (biz.companyLogoUrl?.trim()) companyLogoUrl = biz.companyLogoUrl.trim();
+              if (biz.website?.trim()) website = biz.website.trim();
+            }
+          } catch {
+            // optional
+          }
+        }
+      }
+
+      // Fallback: business-info keyed by merchantId (legacy)
+      if (!companyName) {
+        try {
+          const bizRes = await axios.get<{
+            success?: boolean;
+            data?: { companyName?: string; companyLogoUrl?: string; website?: string };
+          }>(
+            `${config.complianceServiceUrl}/api/v1/kyc/internal/business-info/${encodeURIComponent(merchantId)}`,
+            {
+              headers: { 'X-Internal-Token': config.internalServiceToken },
+              timeout: 5000,
+              validateStatus: () => true
+            }
+          );
+          const biz = bizRes.data?.data;
+          if (bizRes.status < 300 && bizRes.data?.success && biz) {
+            if (biz.companyName?.trim()) companyName = biz.companyName.trim();
+            if (biz.companyLogoUrl?.trim()) companyLogoUrl = biz.companyLogoUrl.trim();
+            if (biz.website?.trim()) website = biz.website.trim();
+          }
+        } catch {
+          // optional
+        }
+      }
+
+      const merchant: ProductMerchant = {
+        id: merchantId,
+        name,
+        companyName,
+        companyLogoUrl,
+        website
+      };
+      merchantCache.set(merchantId, merchant);
+      return merchant;
+    };
+
+    const enriched: Product[] = [];
+    for (const product of products) {
+      if (product.merchant?.id) {
+        enriched.push(product);
+        continue;
+      }
+      const appId = product.appId?.trim();
+      if (!appId) {
+        enriched.push(product);
+        continue;
+      }
+      const app = await resolveApp(appId);
+      if (!app?.merchantId) {
+        enriched.push(product);
+        continue;
+      }
+      const merchant = await resolveMerchant(app.merchantId, app.websiteUrl);
+      enriched.push({ ...product, merchant });
+    }
+    return enriched;
   }
 }

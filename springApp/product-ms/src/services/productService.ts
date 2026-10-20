@@ -339,12 +339,27 @@ export class ProductService {
     }
   }
 
+  /** Plata catalog returns `{ items, pagination }` (and legacy bare arrays). */
+  private extractUpstreamCatalogProducts(payload: unknown): Product[] {
+    if (!payload || typeof payload !== 'object') {
+      return [];
+    }
+    const data = (payload as { data?: unknown }).data;
+    if (Array.isArray(data)) {
+      return data as Product[];
+    }
+    if (data && typeof data === 'object' && Array.isArray((data as { items?: unknown }).items)) {
+      return (data as { items: Product[] }).items;
+    }
+    return [];
+  }
+
   private async fetchUpstreamCatalogProductById(id: string): Promise<Product | null> {
     try {
       const response = await axios.get(`${config.plataAccountServiceUrl}/api/v1/products`, {
         headers: this.getUpstreamAuthHeaders()
       });
-      const products = Array.isArray(response.data?.data) ? (response.data.data as Product[]) : [];
+      const products = this.extractUpstreamCatalogProducts(response.data);
       return products.find((product) => product.id === id || product.referenceNumber === id) ?? null;
     } catch (error) {
       this.logUpstreamError('Error fetching upstream catalog product from server:', error);
@@ -496,7 +511,9 @@ export class ProductService {
       const response = await axios.get(`${config.plataAccountServiceUrl}/api/v1/products`, {
         headers: this.getUpstreamAuthHeaders()
       });
-      return (response.data.data || []).map((product: Product) => this.toCustomerProduct(product));
+      return this.extractUpstreamCatalogProducts(response.data).map((product: Product) =>
+        this.toCustomerProduct(product)
+      );
     } catch (error) {
       this.logUpstreamError('Error fetching products from server:', error);
       return [];
@@ -628,12 +645,10 @@ export class ProductService {
         return updated ? toProduct(updated) : null;
       }
 
-      const upstreamProduct =
-        (await this.fetchUpstreamProductById(localProduct.upstreamProductId || productId)) ||
-        (await this.fetchUpstreamProductById(productId));
-      if (!upstreamProduct) {
-        throw new ApiError(404, 'Upstream Plata product not found');
-      }
+      const upstreamProduct = await this.requireUpstreamProductWithCreatorMerchant(
+        localProduct.upstreamProductId || productId,
+        productId
+      );
 
       const refreshed = await this.applyUpstreamSnapshotToLocalClone(localProduct, upstreamProduct, {
         isActive: true,
@@ -646,13 +661,46 @@ export class ProductService {
       return null;
     }
 
-    const upstreamProduct = await this.fetchUpstreamProductById(productId);
-    if (!upstreamProduct) {
-      return null;
-    }
-
+    const upstreamProduct = await this.requireUpstreamProductWithCreatorMerchant(productId);
     const created = await ProductModel.create(this.buildLocalProductPayload(upstreamProduct, appId, true));
     return toProduct(created);
+  }
+
+  /**
+   * Turn-on must stamp creator `merchant.id` from Plata. Prefer by-id (enriched), then catalog list.
+   */
+  private async requireUpstreamProductWithCreatorMerchant(
+    primaryId: string,
+    fallbackId?: string
+  ): Promise<Product> {
+    const ids = [primaryId, fallbackId]
+      .map((id) => (id || '').trim())
+      .filter(Boolean)
+      .filter((id, index, all) => all.indexOf(id) === index);
+
+    let upstream: Product | null = null;
+    for (const id of ids) {
+      upstream = await this.fetchUpstreamProductById(id);
+      if (upstream?.merchant?.id) {
+        return upstream;
+      }
+      const fromCatalog = await this.fetchUpstreamCatalogProductById(id);
+      if (fromCatalog?.merchant?.id) {
+        return upstream ? { ...upstream, merchant: fromCatalog.merchant } : fromCatalog;
+      }
+      if (fromCatalog && !upstream) {
+        upstream = fromCatalog;
+      }
+    }
+
+    if (!upstream) {
+      throw new ApiError(404, 'Upstream Plata product not found');
+    }
+
+    throw new ApiError(
+      409,
+      'Product creator merchant not found on Plata catalog — cannot turn on until the product is listed under your PLATA API keys with merchant metadata'
+    );
   }
 
   /**
@@ -789,6 +837,8 @@ export class ProductService {
       ...localProduct,
       ...refreshed,
       id: localProduct.id,
+      // Plata catalog often omits merchant; never wipe a stamped local creator merchant.
+      merchant: refreshed.merchant?.id ? refreshed.merchant : localProduct.merchant ?? refreshed.merchant,
       isFeatured: options.preserveFeatured ? localProduct.isFeatured === true : false,
       merchantFeeAdditions: localProduct.merchantFeeAdditions,
       merchantStructureAdditions: localProduct.merchantStructureAdditions,

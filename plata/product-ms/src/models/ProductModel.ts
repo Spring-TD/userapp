@@ -303,7 +303,15 @@ const baseProductSchema = new Schema<IProductDocument>(
     },
     createdAt: { type: String, required: true },
     updatedAt: { type: String, required: true },
-    metadata: { type: Schema.Types.Mixed }
+    metadata: { type: Schema.Types.Mixed },
+    /** Product-creator merchant (for Spring turn-on / settlement). Strict schema must include this or lean() strips it. */
+    merchant: {
+      id: { type: String },
+      name: { type: String },
+      companyName: { type: String },
+      companyLogoUrl: { type: String },
+      website: { type: String }
+    }
   },
   { discriminatorKey: 'type', collection: 'products', timestamps: false }
 );
@@ -378,6 +386,10 @@ export function toProduct(doc: IProductDocument | Record<string, unknown>): Prod
     commodityPrices:
       raw.commodityPrices !== undefined && Array.isArray(raw.commodityPrices)
         ? (raw.commodityPrices as Product['commodityPrices'])
+        : undefined,
+    merchant:
+      raw.merchant !== undefined && raw.merchant !== null && typeof raw.merchant === 'object'
+        ? (raw.merchant as Product['merchant'])
         : undefined
   };
 
