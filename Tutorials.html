@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+
+    <style>
+        body {
+            background-color: #0e361a;
+            display: flex;
+            box-sizing: border-box;
+            padding: 0;
+            margin: 0;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            width: 30vw;
+            height: 85vh;
+            margin: auto;
+            justify-self: center;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 32px;
+            font-weight: 700;
+            color: #000;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+
+        }
+
+        .form-group label {
+            font-size: 16px;
+            font-weight: 600;
+            color: #000;
+        }
+
+        .form-group input {
+            width: 100%;
+            height: 30px;
+        }
+        .form {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .form-group-radio {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Survey Form</h1>
+
+        <form action="/" method="post" class="form">
+            <div class="form-group">
+                <label for="name">Name</label>
+                <input type="text" id="name" name="name" >
+            </div>
+            <div class="form-group">
+                <label for="Age">Age</label>
+                <input type="number" id="number" name="number" >
+            </div>
+
+            <div class="form-group" style="display: flex; flex-direction: column; gap: 10px; align-items: start; justify-content: start;">
+                <label for="Gender">Favorite Type of Sport</label>
+                <div class="form-group-radio">
+                    <input type="radio" id="color" name="color" >
+                    <label for="color">Indoor</label>
+                   
+                </div>
+                <div class="form-group-radio">
+                    <input type="radio" id="color" name="color" >
+                    <label for="color">Outdoor</label>
+                    
+                </div>
+                <div class="form-group-radio">
+                    <input type="radio" id="color" name="color" >
+                    <label for="color">Both</label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="Comment">Comment</label>
+                <textarea id="comment" name="comment" ></textarea>
+            </div>
+       
+        </form>
+
+    </div>
+    
+</body>
+</html>

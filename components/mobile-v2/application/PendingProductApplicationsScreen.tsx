@@ -1,0 +1,341 @@
+'use client'
+
+import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { PendingApplicationsListSkeleton } from '@/components/mobile-v2/data-skeletons'
+import { fetchUserApplications, needsFinalApplicationSubmit, canShowPendingPage, type StorefrontApplication } from '@/lib/storefrontApplicationClient'
+import {
+  buildMortgageThread,
+  mortgageStepCta,
+  resolveMortgageWorkflowStep,
+} from '@/lib/mortgageWorkflow'
+import {
+  loanNextStepLabel,
+  loanStepCta,
+  resolveLoanWorkflowStep,
+} from '@/lib/loanWorkflow'
+import { mortgageApplyHref, mortgagePendingDetailHref } from '@/lib/mortgageApplyRoutes'
+import { loanApplyHref, loanPendingDetailHref } from '@/lib/loanApplyRoutes'
+import { listPendingApprovedMortgages } from '@/lib/pendingApprovedMortgageApi'
+import { resolveWalletUserId } from '@/lib/resolveWalletUserId'
+import { isMortgageDownPaymentPending } from '@/lib/postApprovalMortgage'
+
+type PendingKind = 'loan' | 'mortgage'
+type PendingScreenKind = PendingKind | 'all'
+
+const PENDING_WORKFLOW_STATUSES = new Set([
+  'account_created',
+  'account_requested',
+  'requested',
+  'under_review',
+  'pending',
+  'offer_sent',
+  'approved',
+])
+
+function applicationPendingKind(application: StorefrontApplication): PendingKind | null {
+  const type = String(application.productType || '').toUpperCase()
+  if (type === 'LOAN') return 'loan'
+  if (type === 'MORTGAGE') return 'mortgage'
+  return null
+}
+
+function isPendingApplication(application: StorefrontApplication, kind: PendingKind) {
+  const status = String(application.status || '').toLowerCase()
+  const workflowStatus = String(application.loanWorkflowStatus || '').toLowerCase()
+
+  if (kind === 'mortgage') {
+    const step = resolveMortgageWorkflowStep(application)
+    if (step === 'declined') return false
+    if (step === 'mortgage_allocation') return false
+    if (step !== 'application_submission') return true
+  }
+
+  if (kind === 'loan') {
+    const step = resolveLoanWorkflowStep(application)
+    if (step === 'declined') return false
+    // Keep disbursed loans on My Loan so users can open the repayment schedule.
+    return true
+  }
+
+  return status === 'pending' || PENDING_WORKFLOW_STATUSES.has(workflowStatus)
+}
+
+function formatAmount(application: StorefrontApplication) {
+  const amount = application.amount
+  const currency = application.currency || 'NGN'
+  if (typeof amount !== 'number' || !Number.isFinite(amount)) return `${currency}0.00`
+  return `${currency}${amount.toLocaleString('en-NG', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
+}
+
+function formatDate(value?: string) {
+  const date = value ? new Date(value) : null
+  if (!date || Number.isNaN(date.getTime())) return ''
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+  })
+}
+
+function titleFor(application: StorefrontApplication, kind: PendingKind) {
+  return application.productName || (kind === 'loan' ? 'Loan Request' : 'Mortgage Request')
+}
+
+function mortgageNextStepLabel(application: StorefrontApplication) {
+  if (needsFinalApplicationSubmit(application)) return 'Complete application'
+  if (isMortgageDownPaymentPending(application as unknown as Record<string, unknown>)) {
+    return 'Pay down payment'
+  }
+  const step = resolveMortgageWorkflowStep(application)
+  const thread = buildMortgageThread(step)
+  const current = thread.find((item) => item.status === 'current')
+  return current?.title ?? 'In progress'
+}
+
+function mergeByApplicationId(
+  primary: StorefrontApplication[],
+  secondary: StorefrontApplication[],
+): StorefrontApplication[] {
+  const map = new Map<string, StorefrontApplication>()
+  for (const row of [...secondary, ...primary]) {
+    const id = String(row.id ?? row._id ?? '').trim()
+    if (!id) continue
+    const existing = map.get(id)
+    map.set(id, existing ? { ...existing, ...row } : row)
+  }
+  return Array.from(map.values())
+}
+
+function continueApplyHref(application: StorefrontApplication, kind: PendingKind) {
+  const productId = String(application.productId ?? '').trim()
+  const applicationId = String(application.id ?? application._id ?? '').trim()
+  if (!productId) return null
+  const base = kind === 'mortgage' ? mortgageApplyHref(productId) : loanApplyHref(productId)
+  return applicationId
+    ? `${base}&applicationId=${encodeURIComponent(applicationId)}`
+    : base
+}
+
+export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreenKind }) {
+  const [applications, setApplications] = useState<StorefrontApplication[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const backHref =
+    kind === 'loan'
+      ? '/mobile-v2/products/loan'
+      : kind === 'mortgage'
+        ? '/mobile-v2/products/mortgage'
+        : '/mobile-v2/home'
+  const title =
+    kind === 'loan' ? 'My Loan' : kind === 'mortgage' ? 'Pending Mortgage' : 'Pending applications'
+  const emptyLabel = kind === 'all' ? 'applications' : `${kind} applications`
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadApplications() {
+      setLoading(true)
+      setError(null)
+      const result = await fetchUserApplications(undefined, {
+        productType: kind === 'loan' ? 'LOAN' : kind === 'mortgage' ? 'MORTGAGE' : undefined,
+        fetchAllPages: true,
+        limit: 100,
+      })
+      if (cancelled) return
+
+      if (!result.ok) {
+        setApplications([])
+        setError(result.error)
+        setLoading(false)
+        return
+      }
+
+      let merged = result.applications
+      if (kind === 'mortgage' || kind === 'all') {
+        const userId = await resolveWalletUserId()
+        if (userId) {
+          const approved = await listPendingApprovedMortgages(userId)
+          if (approved.ok && Array.isArray(approved.data)) {
+            merged = mergeByApplicationId(merged, approved.data)
+          }
+        }
+      }
+
+      if (cancelled) return
+      setApplications(merged)
+      setLoading(false)
+    }
+
+    void loadApplications()
+
+    return () => {
+      cancelled = true
+    }
+  }, [kind])
+
+  const pendingApplications = useMemo(
+    () =>
+      applications
+        .filter((application) => {
+          const appKind = applicationPendingKind(application)
+          if (!appKind) return false
+          if (kind !== 'all' && appKind !== kind) return false
+          return isPendingApplication(application, appKind)
+        })
+        .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime()),
+    [applications, kind],
+  )
+
+  return (
+    <div className="flex h-full flex-col sf-page-bg-tint">
+      <div className="flex-1 overflow-y-auto px-4 pb-10 pt-12 no-scrollbar">
+        <div className="mb-4 grid grid-cols-3 items-center">
+          <Link href={backHref} className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-gray-900 shadow-sm">
+            <ChevronLeft className="h-5 w-5" />
+          </Link>
+          <h1 className="text-center text-base font-medium text-gray-950 whitespace-nowrap">{title}</h1>
+          <div />
+        </div>
+
+        <div className="rounded-lg bg-white px-4 pb-4 pt-4 shadow-[0_18px_45px_rgba(15,23,42,0.04)]">
+          <div className="mx-auto mb-7 h-1.5 w-12 rounded-full bg-gray-200" />
+
+          {loading ? (
+            <PendingApplicationsListSkeleton />
+          ) : error ? (
+            <div className="rounded-2xl bg-red-50 px-4 py-6 text-center text-sm text-red-600">{error}</div>
+          ) : pendingApplications.length === 0 ? (
+            <div className="rounded-2xl bg-gray-50 px-4 py-8 text-center">
+              <p className="text-sm font-semibold text-gray-900">No {emptyLabel}</p>
+              <p className="mt-1 text-xs text-gray-500">
+                {kind === 'loan'
+                  ? 'Approved and disbursed loans will appear here once you start an application.'
+                  : 'Pending applications will appear here once you start an application.'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {pendingApplications.map((application) => {
+                const applicationId = String(application.id ?? application._id ?? '')
+                const productId = String(application.productId ?? '')
+                const appKind = applicationPendingKind(application)
+                if (!appKind) return null
+                const awaitingSubmit = needsFinalApplicationSubmit(application)
+                const pendingReady = canShowPendingPage(application)
+                const resumeApplyHref = awaitingSubmit ? continueApplyHref(application, appKind) : null
+                const mortgageStep =
+                  appKind === 'mortgage' ? resolveMortgageWorkflowStep(application) : null
+                const loanStep = appKind === 'loan' ? resolveLoanWorkflowStep(application) : null
+                const mortgageCta =
+                  pendingReady && appKind === 'mortgage' && productId && applicationId && mortgageStep
+                    ? isMortgageDownPaymentPending(application as unknown as Record<string, unknown>)
+                      ? {
+                          label: 'Pay down payment',
+                          href: `${mortgagePendingDetailHref(applicationId)}?action=down_payment`,
+                          modal: 'down_payment' as const,
+                        }
+                      : mortgageStepCta(mortgageStep, productId, applicationId)
+                    : null
+                const loanCta =
+                  pendingReady && appKind === 'loan' && applicationId && loanStep
+                    ? loanStepCta(loanStep, applicationId)
+                    : null
+                const cta = awaitingSubmit
+                  ? resumeApplyHref
+                    ? { label: 'Continue application', href: resumeApplyHref }
+                    : null
+                  : appKind === 'mortgage'
+                    ? mortgageCta
+                    : loanCta
+                const detailHref = awaitingSubmit
+                  ? resumeApplyHref
+                  : pendingReady && appKind === 'loan' && applicationId && loanStep === 'loan_disbursed'
+                    ? `/mobile-v2/accounts/${encodeURIComponent(applicationId)}/product`
+                  : pendingReady && appKind === 'mortgage' && applicationId
+                    ? mortgagePendingDetailHref(applicationId)
+                    : pendingReady && appKind === 'loan' && applicationId
+                      ? loanPendingDetailHref(applicationId)
+                      : resumeApplyHref
+                const nextStepLabel = awaitingSubmit
+                  ? 'Complete application'
+                  : appKind === 'mortgage'
+                    ? mortgageNextStepLabel(application)
+                    : loanNextStepLabel(application)
+
+                return (
+                  <div
+                    key={applicationId}
+                    className="rounded-xl bg-white px-4 py-4 shadow-[0_10px_28px_rgba(15,23,42,0.06)]"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <h2 className="truncate text-sm font-medium text-gray-950">{titleFor(application, appKind)}</h2>
+                        {kind === 'all' ? (
+                          <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                            {appKind}
+                          </p>
+                        ) : null}
+                        <p
+                          className={`mt-2 text-[10px] font-semibold uppercase tracking-wide ${
+                            loanStep === 'loan_disbursed'
+                              ? 'text-emerald-700'
+                              : 'text-[var(--sf-button,#1E40AF)]'
+                          }`}
+                        >
+                          Next: {nextStepLabel}
+                        </p>
+                        {awaitingSubmit ? (
+                          <p className="mt-1 text-[10px] text-amber-700">
+                            Not synced for review yet — finish apply and submit (needs upstream application id).
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-sm font-semibold text-gray-950">{formatAmount(application)}</p>
+                        <p className="mt-2 text-[10px] text-gray-400">{formatDate(application.createdAt || application.updatedAt)}</p>
+                      </div>
+                    </div>
+
+                    {detailHref || cta ? (
+                      <div className="mt-4 flex gap-2">
+                        {detailHref && !awaitingSubmit && loanStep !== 'loan_disbursed' ? (
+                          <Link
+                            href={detailHref}
+                            className="flex flex-1 items-center justify-center gap-1 rounded-full border border-gray-200 py-2.5 text-xs font-semibold text-gray-700"
+                          >
+                            View details
+                            <ChevronRight className="h-3.5 w-3.5" />
+                          </Link>
+                        ) : null}
+                        {cta ? (
+                          <Link
+                            href={cta.href}
+                            className="flex flex-1 items-center justify-center rounded-full bg-[var(--sf-button,#1E40AF)] py-2.5 text-xs font-semibold text-white"
+                          >
+                            {cta.label}
+                          </Link>
+                        ) : detailHref && loanStep === 'loan_disbursed' ? (
+                          <Link
+                            href={detailHref}
+                            className="flex flex-1 items-center justify-center rounded-full bg-[var(--sf-button,#1E40AF)] py-2.5 text-xs font-semibold text-white"
+                          >
+                            View repayment schedule
+                          </Link>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

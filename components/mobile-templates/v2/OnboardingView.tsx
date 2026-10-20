@@ -1,0 +1,217 @@
+'use client';
+
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import type { OnboardingStep } from '../types';
+
+interface OnboardingViewProps {
+  steps: OnboardingStep[];
+  backgroundColor?: string;
+  textColor?: string;
+  secondaryTextColor?: string;
+  buttonColor?: string;
+  buttonTextColor?: string;
+  cardBackgroundColor?: string;
+  /** App logo — centered in the colored top area when a step has no illustration. */
+  logo?: string;
+  appName?: string;
+  onComplete?: () => void;
+  onSignIn?: () => void;
+  onSkip?: () => void;
+  initialStep?: number;
+  showSkipButton?: boolean;
+  showSignInButton?: boolean;
+  /** e.g. PWA install control — shown top-left opposite Skip */
+  leadingSlot?: React.ReactNode;
+}
+
+export function V2OnboardingView({
+  steps,
+  backgroundColor = '#2563EB',
+  textColor = '#1e293b',
+  secondaryTextColor = '#6b7280',
+  buttonColor = '#2563EB',
+  buttonTextColor = '#FFFFFF',
+  cardBackgroundColor = '#FFFFFF',
+  logo,
+  appName,
+  onComplete,
+  onSignIn,
+  onSkip,
+  initialStep = 0,
+  showSkipButton = true,
+  showSignInButton = true,
+  leadingSlot,
+}: OnboardingViewProps) {
+  const [currentStep, setCurrentStep] = useState(initialStep);
+
+  const handleNext = () => {
+    if (currentStep < steps.length - 1) {
+      setCurrentStep((prev) => prev + 1);
+    } else {
+      onComplete?.();
+    }
+  };
+
+  const handleSkip = () => {
+    if (onSkip) {
+      onSkip()
+    } else {
+      onComplete?.()
+    }
+  }
+
+  const handleSignIn = () => {
+    if (onSignIn) {
+      onSignIn()
+    } else {
+      onComplete?.()
+    }
+  }
+
+  const currentStepData = steps[currentStep];
+  const stepArt = currentStepData?.image?.trim();
+  const topMark = stepArt && stepArt !== logo ? stepArt : logo || stepArt;
+
+  return (
+    <motion.div
+      className="flex flex-col h-full relative overflow-hidden"
+      style={{ backgroundColor }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+    >
+      {/* Top Section: Header & Image */}
+      <div className="flex-1 flex flex-col relative z-10 w-full">
+        {/* Header */}
+        <div className="flex justify-between items-center px-6 pt-12 pb-4 w-full min-h-[44px]">
+          <div className="flex min-w-0 flex-1 items-center justify-start pr-2 relative z-[100]">
+            {leadingSlot ?? <span className="inline-block w-12 shrink-0" aria-hidden />}
+          </div>
+          {showSkipButton && (
+            <button
+              onClick={handleSkip}
+              className="px-4 py-1.5 rounded-full bg-white/10 text-white text-sm font-medium backdrop-blur-sm hover:bg-white/20 transition-colors"
+            >
+              Skip
+            </button>
+          )}
+        </div>
+
+        {/* Centered logo / step art — never a full-bleed background */}
+        <div className="flex-1 flex items-center justify-center p-6 w-full relative">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={`${currentStep}-${topMark || 'empty'}`}
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: -20, opacity: 0 }}
+              transition={{ duration: 0.4 }}
+              className="flex items-center justify-center"
+            >
+              {topMark ? (
+                <img
+                  src={topMark}
+                  alt={appName || currentStepData?.title || 'App'}
+                  className="h-28 w-28 rounded-2xl object-contain shadow-lg"
+                />
+              ) : null}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </div>
+
+      {/* Bottom Sheet Card */}
+      <div
+        className="relative rounded-t-[40px] px-8 pt-10 pb-8 w-full min-h-[380px] flex flex-col justify-between z-20 shadow-[0_-10px_40px_rgba(0,0,0,0.1)]"
+        style={{ backgroundColor: cardBackgroundColor }}
+      >
+        <div className="flex flex-col items-center text-center space-y-4">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentStep}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.3 }}
+              className="w-full"
+            >
+              <h2
+                className="text-2xl md:text-3xl font-bold leading-tight max-w-xs mx-auto"
+                style={{ color: textColor }}
+              >
+                {currentStepData?.title}
+              </h2>
+              <p
+                className="mt-4 text-base leading-relaxed max-w-xs mx-auto"
+                style={{ color: secondaryTextColor }}
+              >
+                {currentStepData?.description}
+              </p>
+            </motion.div>
+          </AnimatePresence>
+        </div>
+
+        <div className="flex flex-col items-center w-full space-y-6 mt-4">
+          {/* Pagination Indicators */}
+          <div className="flex space-x-2">
+            {steps.map((_, index) => (
+              <motion.div
+                key={index}
+                className={cn(
+                  "h-1.5 rounded-full transition-all duration-300",
+                  index === currentStep ? "w-6" : "w-1.5 bg-gray-300"
+                )}
+                style={index === currentStep ? { backgroundColor: buttonColor } : undefined}
+                layoutId="pagination"
+              />
+            ))}
+          </div>
+
+          {/* Buttons */}
+          <div className="w-full flex flex-col items-center space-y-3">
+            {currentStep === 0 && showSignInButton ? (
+              <>
+                <Button
+                  className="w-full h-14 rounded-full text-lg shadow-lg"
+                  style={{
+                    backgroundColor: buttonColor,
+                    color: buttonTextColor,
+                    boxShadow: `0 10px 15px -3px ${buttonColor}30`,
+                  }}
+                  onClick={() => onComplete?.()}
+                >
+                  Get Started
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="font-semibold text-lg hover:bg-transparent"
+                  style={{ color: buttonColor }}
+                  onClick={handleSignIn}
+                >
+                  Sign In
+                </Button>
+              </>
+            ) : (
+              <Button
+                className="w-full h-14 rounded-full text-lg shadow-lg"
+                style={{
+                  backgroundColor: buttonColor,
+                  color: buttonTextColor,
+                  boxShadow: `0 10px 15px -3px ${buttonColor}30`,
+                }}
+                onClick={handleNext}
+              >
+                {currentStep === steps.length - 1 ? 'Get Started' : 'Next'}
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+export default V2OnboardingView;

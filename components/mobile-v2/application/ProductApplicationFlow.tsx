@@ -1,0 +1,2502 @@
+'use client'
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
+import Image from 'next/image'
+import { useSearchParams } from 'next/navigation'
+import {
+  Check,
+  CheckCircle,
+  ChevronDown,
+  ChevronLeft,
+  Copy,
+  Download,
+  Filter,
+  Loader2,
+  Plus,
+  Upload,
+  X,
+} from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
+import {
+  addApplicationGuarantor,
+  canShowPendingPage,
+  fetchApplicationById,
+  initializeProductApplication,
+  needsFinalApplicationSubmit,
+  readInitializedApplication,
+  saveApplicationProgress,
+  saveInitializedApplication,
+  submitApplicationRequirements,
+  submitApplicationSpouseKyc,
+  submitInitializedApplication,
+  uploadApplicationFile,
+  type ApplicationProgress,
+  type RequirementSubmission,
+  type StorefrontApplication,
+} from '@/lib/storefrontApplicationClient'
+import { sanitizeProductId } from '@/lib/sanitizeProductId'
+import { mortgagePendingDetailHref } from '@/lib/mortgageApplyRoutes'
+import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
+import {
+  defaultApplicationAmountValue,
+  formatApplicationAmountHint,
+  parseApplicationAmount,
+  validateApplicationAmount,
+} from '@/lib/applicationAmount'
+import {
+  hasFixedMortgageFacility,
+  resolveMortgageFacilityAmount,
+} from '@/lib/mortgageWorkflow'
+import {
+  collectRequirementStepIssues,
+  validateCollateralRequirements,
+  validateFileUploadStep,
+  type EmploymentDraft,
+} from '@/lib/applicationFlowValidation'
+import {
+  DEFAULT_PLATFORM_FIELDS_DRAFT,
+  platformFieldsDraftFromApi,
+  platformFieldsDraftFromLegacyApplicantProfile,
+  platformFieldsFromDraft,
+  resolvePlatformFieldsFromApplication,
+  type PlatformFieldsDraft,
+} from '@/lib/platformApplicationFields'
+import { PlatformApplicationFieldsForm } from '@/components/mobile-v2/application/PlatformApplicationFieldsForm'
+import { usePlatformApplicationFieldCatalog } from '@/hooks/usePlatformApplicationFieldCatalog'
+import {
+  isActiveUpstreamAccount,
+  isDuplicateAccountError,
+  pendingAccountMessage,
+  resolveProductApplicationAccount,
+} from '@/lib/resolveProductApplicationAccount'
+import { resolveWalletUserId } from '@/lib/resolveWalletUserId'
+import { buildLoanApplicationDetails } from '@/lib/loanApplicationDetails'
+import { useMobileProductDetail } from '@/hooks/useMobileProductDetail'
+import { poweredBy } from '@/lib/mobileProductDetailDisplay'
+import { resolveMortgagePropertyHeroImage } from '@/lib/mortgagePropertyTour'
+import { resolveProductDisplayImage, type MobileProduct } from '@/lib/storefrontProducts'
+
+type ProductKind = 'loan' | 'mortgage'
+type StepId = 'requirement' | 'file' | 'guarantor' | 'property' | 'product'
+
+type Guarantor = {
+  name: string
+  phone: string
+  email: string
+  verificationUrl?: string
+  occupation?: string
+  country?: string
+}
+
+type ApplicationDraft = {
+  version: 1
+  activeStep: StepId
+  accepted: boolean
+  applicationAmount: string
+  requirementSubmissions: RequirementSubmission[]
+  guarantors: Guarantor[]
+  employmentDraft: EmploymentDraft
+  guarantorDraft: Guarantor
+  platformFields: PlatformFieldsDraft
+  spouse: Guarantor | null
+  spouseDraft: Guarantor
+  updatedAt: string
+}
+
+type ProgressTab = 'requirement' | 'fileUpload' | 'guarantor' | 'loan' | 'pep_and_reason'
+
+const PRIMARY = 'bg-[var(--sf-button,#1E40AF)] hover:bg-[var(--sf-button-hover,#1e3a8a)] text-white'
+const BRAND_INK = 'text-[var(--sf-ink,#1E293B)]'
+const OUTLINE = 'bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80'
+const OUTLINE_HOVER = 'bg-secondary/80 text-secondary-foreground shadow-xs hover:bg-secondary/80'
+const OUTLINE_ACTIVE = 'bg-secondary/80 text-secondary-foreground shadow-xs hover:bg-secondary/80'
+const BRAND_SOFT = 'bg-[color-mix(in_srgb,var(--sf-button,#1E40AF)_10%,white)]'
+
+const DEFAULT_GUARANTOR: Guarantor = {
+  name: 'Charles Avis',
+  phone: '+2347045271',
+  email: 'talktowithcharles@gmail.com',
+}
+
+const APPLICATION_DRAFT_PREFIX = 'mobile-v2-product-application-draft'
+
+function draftStorageKey(kind: ProductKind, productId: string, applicationId: string) {
+  const id = productId || applicationId
+  return id ? `${APPLICATION_DRAFT_PREFIX}:${kind}:${id}` : ''
+}
+
+function readApplicationDraft(key: string): ApplicationDraft | null {
+  if (!key || typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(key)
+    if (!raw) return null
+    const draft = JSON.parse(raw) as Partial<ApplicationDraft>
+    return draft.version === 1 ? (draft as ApplicationDraft) : null
+  } catch {
+    return null
+  }
+}
+
+function saveApplicationDraft(key: string, draft: Omit<ApplicationDraft, 'version' | 'updatedAt'>) {
+  if (!key || typeof window === 'undefined') return
+  window.localStorage.setItem(
+    key,
+    JSON.stringify({
+      ...draft,
+      version: 1,
+      updatedAt: new Date().toISOString(),
+    }),
+  )
+}
+
+function clearApplicationDraft(key: string) {
+  if (!key || typeof window === 'undefined') return
+  window.localStorage.removeItem(key)
+}
+
+function progressTabForStep(step: StepId): ProgressTab {
+  if (step === 'file') return 'fileUpload'
+  if (step === 'guarantor') return 'guarantor'
+  if (step === 'property' || step === 'product') return 'loan'
+  if (step === 'requirement') return 'pep_and_reason'
+  return 'requirement'
+}
+
+function stepForProgressTab(tab?: string): StepId {
+  if (tab === 'fileUpload') return 'file'
+  if (tab === 'guarantor') return 'guarantor'
+  if (tab === 'loan') return 'product'
+  if (tab === 'pep_and_reason') return 'requirement'
+  return 'requirement'
+}
+
+/** Mortgage submit body shape that Spring/Plata accept (matches successful storefront submit). */
+function buildMortgageSelectionPayload(
+  product: MobileProduct | null | undefined,
+  total: number,
+): Record<string, unknown> {
+  const property = product?.properties?.[0]
+  // Apply amount / facility is Mortgage Amount — listing price is optional metadata only.
+  const facility = resolveMortgageFacilityAmount(product) ?? total
+  const unitPrice =
+    (typeof property?.value === 'number' && Number.isFinite(property.value) && property.value > 0
+      ? property.value
+      : null) ??
+    (typeof product?.propertyValue === 'number' && product.propertyValue > 0
+      ? product.propertyValue
+      : null) ??
+    facility
+  const start = new Date()
+  const startDate = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`
+  const tenureRaw = String(product?.duration || '').trim()
+  const investmentPeriod = tenureRaw || '1 year'
+
+  return {
+    propertyName: property?.name?.trim() || product?.name?.trim() || 'Mortgage property',
+    propertyType: property?.propertyType?.trim() || 'Mortgage',
+    unitPrice,
+    quantity: 1,
+    startDate,
+    investmentPeriod,
+    total: facility,
+    ...(property?.location?.trim()
+      ? { metadata: { location: property.location.trim() } }
+      : {}),
+  }
+}
+
+function isEmploymentSubmission(submission: RequirementSubmission) {
+  return (submission.requirementType || submission.label || '').toLowerCase() === 'employment'
+}
+
+function employmentSubmissionFromDraft(employmentDraft: EmploymentDraft): RequirementSubmission {
+  return {
+    requirementType: 'Employment',
+    label: 'Employment',
+    type: 'json',
+    value: employmentDraft,
+  }
+}
+
+function employmentDraftFromSubmission(submission?: RequirementSubmission): EmploymentDraft {
+  const value = submission?.value && typeof submission.value === 'object' ? (submission.value as Partial<EmploymentDraft>) : {}
+  return {
+    occupation: typeof value.occupation === 'string' ? value.occupation : '',
+    placeOfWork: typeof value.placeOfWork === 'string' ? value.placeOfWork : '',
+    hrName: typeof value.hrName === 'string' ? value.hrName : '',
+    hrEmail: typeof value.hrEmail === 'string' ? value.hrEmail : '',
+  }
+}
+
+function prettyKind(kind: ProductKind) {
+  return kind === 'loan' ? 'Loan' : 'Mortgage'
+}
+
+function formatCurrency(amount?: number | null, currency = 'NGN') {
+  if (amount == null || Number.isNaN(amount)) return `${currency}—`
+  return `${currency}${amount.toLocaleString('en-NG', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
+}
+
+function getApplicationAccount(application?: StorefrontApplication | null) {
+  return application?.productWallet?.upstreamAccount ?? application?.account ?? null
+}
+
+function applicationProvider(
+  application: StorefrontApplication | null | undefined,
+  tenantDisplayName?: string | null,
+  tenantSubdomain?: string | null,
+) {
+  return (
+    getApplicationAccount(application)?.bankName ||
+    tenantDisplayName?.trim() ||
+    tenantSubdomain?.trim() ||
+    'Provider'
+  )
+}
+
+function InputPill({
+  placeholder,
+  right,
+  value,
+  onChange,
+  type = 'text',
+  inputMode,
+  autoComplete,
+  readOnly,
+}: {
+  placeholder: string
+  right?: React.ReactNode
+  value?: string
+  onChange?: (value: string) => void
+  type?: React.HTMLInputTypeAttribute
+  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode']
+  autoComplete?: string
+  readOnly?: boolean
+}) {
+  return (
+    <label
+      className={cn(
+        'flex h-12 items-center justify-between rounded-2xl bg-gray-100 px-4 ring-[var(--sf-button,#1E40AF)]/20 focus-within:ring-2',
+        readOnly && 'opacity-90',
+      )}
+    >
+      <input
+        type={type}
+        inputMode={inputMode}
+        autoComplete={autoComplete}
+        value={value}
+        readOnly={readOnly}
+        onChange={(e) => onChange?.(e.target.value)}
+        placeholder={placeholder}
+        className={`min-w-0 flex-1 bg-transparent text-[12px] placeholder:text-gray-400 focus:outline-none ${BRAND_INK} ${readOnly ? 'cursor-default' : ''}`}
+      />
+      {right}
+    </label>
+  )
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return <h2 className={`pt-2 text-sm font-bold ${BRAND_INK}`}>{children}</h2>
+}
+
+function StatusDot({ done }: { done?: boolean }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex h-4 w-4 items-center justify-center rounded-full text-white',
+        done ? 'bg-[var(--sf-button,#1E40AF)]' : 'bg-gray-400',
+      )}
+    >
+      {done ? <Check className="h-2.5 w-2.5" /> : null}
+    </span>
+  )
+}
+
+function FileActionRow({
+  name,
+  fileUrl,
+  userId,
+  onUploaded,
+  done,
+  submission,
+}: {
+  name: string
+  fileUrl?: string
+  userId?: string
+  onUploaded: (submission: RequirementSubmission) => void
+  done?: boolean
+  submission?: RequirementSubmission
+}) {
+  const [uploading, setUploading] = useState(false)
+  const [uploaded, setUploaded] = useState(Boolean(done))
+  const [uploadedFile, setUploadedFile] = useState<{
+    fileUrl: string
+    fileName: string
+    fileType?: string
+    fileSize?: number
+  } | null>(
+    submission?.fileUrl
+      ? {
+          fileUrl: submission.fileUrl,
+          fileName: submission.fileName || 'Uploaded file',
+          fileType: submission.fileType,
+          fileSize: submission.fileSize,
+        }
+      : null,
+  )
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const isDone = Boolean(done || submission?.fileUrl)
+    setUploaded(isDone)
+    if (submission?.fileUrl) {
+      setUploadedFile({
+        fileUrl: submission.fileUrl,
+        fileName: submission.fileName || 'Uploaded file',
+        fileType: submission.fileType,
+        fileSize: submission.fileSize,
+      })
+      return
+    }
+    if (!isDone) {
+      setUploadedFile(null)
+    }
+  }, [done, submission?.fileUrl, submission?.fileName, submission?.fileType, submission?.fileSize])
+
+  const handleUpload = async (file?: File) => {
+    if (!file) return
+    setUploading(true)
+    setError(null)
+    try {
+      const uploadedFile = await uploadApplicationFile(file, userId)
+      onUploaded({
+        requirementType: name,
+        label: name,
+        type: 'document',
+        fileUrl: uploadedFile.fileUrl,
+        fileName: uploadedFile.fileName,
+        fileType: uploadedFile.fileType,
+        fileSize: uploadedFile.fileSize,
+        metadata: {
+          source: 'documentsToDownload',
+          ...(fileUrl ? { downloadedFileUrl: fileUrl } : {}),
+        },
+      })
+      setUploadedFile({
+        fileUrl: uploadedFile.fileUrl,
+        fileName: uploadedFile.fileName,
+        fileType: uploadedFile.fileType,
+        fileSize: uploadedFile.fileSize,
+      })
+      setUploaded(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-gray-500">{name}</span>
+        <StatusDot done={uploaded || done} />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <a
+          href={fileUrl || '#'}
+          target={fileUrl ? '_blank' : undefined}
+          rel="noreferrer"
+          className={cn(
+            `flex h-9 items-center justify-center gap-2 rounded-xl text-xs font-semibold ${BRAND_SOFT} ${BRAND_INK}`,
+            !fileUrl && 'pointer-events-none opacity-50',
+          )}
+        >
+          Download File
+          <Download className="h-3 w-3" />
+        </a>
+        <label className={`flex h-9 cursor-pointer items-center justify-center gap-2 rounded-xl bg-gray-100 text-xs font-semibold ${BRAND_INK}`}>
+          <input type="file" className="hidden" onChange={(event) => void handleUpload(event.target.files?.[0])} />
+          {uploading ? 'Uploading...' : uploaded || done ? 'Uploaded' : 'Upload File'}
+          {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+        </label>
+      </div>
+      {uploadedFile ? (
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-green-50 px-3 py-2 text-[10px] text-green-800">
+          <span className="min-w-0 truncate font-medium">{uploadedFile.fileName}</span>
+          <a href={uploadedFile.fileUrl} target="_blank" rel="noreferrer" className="shrink-0 font-bold underline">
+            Open
+          </a>
+        </div>
+      ) : null}
+      {error ? <p className="text-[10px] text-red-600">{error}</p> : null}
+    </div>
+  )
+}
+
+type CollateralRequirementItem = {
+  requirementId?: string
+  id?: string
+  requirementType?: string
+  label?: string
+  contentType?: string
+  description?: string
+  templateFileUrl?: string
+  templateFileName?: string
+  fileUrl?: string
+  fileName?: string
+  uploadRequired?: boolean
+  required?: boolean
+}
+
+function isLikelyFileName(value: string): boolean {
+  return /\.(pdf|png|jpe?g|gif|webp|docx?|xlsx?|csv|txt|zip)$/i.test(value.trim())
+}
+
+function collateralDisplayDescription(requirement: CollateralRequirementItem): string {
+  const raw = String(requirement.description || '').trim()
+  if (!raw) return ''
+  // Merchant template original names (e.g. css_tutorial.pdf) often land in description — hide those.
+  if (isLikelyFileName(raw)) return ''
+  const contentType = String(requirement.contentType || '').trim().toLowerCase()
+  if (raw.toLowerCase() === contentType) return ''
+  if (raw === requirement.templateFileName || raw === requirement.fileName) return ''
+  return raw
+}
+
+function collateralRequirementKey(requirement: CollateralRequirementItem): string {
+  return String(
+    requirement.requirementId ||
+      requirement.id ||
+      requirement.requirementType ||
+      requirement.label ||
+      '',
+  )
+}
+
+function collateralNeedsUpload(requirement: CollateralRequirementItem): boolean {
+  const contentType = String(requirement.contentType || '').toLowerCase()
+  return Boolean(
+    requirement.uploadRequired ||
+      requirement.required ||
+      contentType.includes('document'),
+  )
+}
+
+function CollateralRequirementRow({
+  requirement,
+  userId,
+  onUploaded,
+  onCleared,
+  done,
+  submission,
+}: {
+  requirement: CollateralRequirementItem
+  userId?: string
+  onUploaded: (submission: RequirementSubmission) => void
+  onCleared?: (requirementKey: string) => void
+  done?: boolean
+  submission?: RequirementSubmission
+}) {
+  const [uploading, setUploading] = useState(false)
+  const [uploaded, setUploaded] = useState(Boolean(done && submission?.fileUrl))
+  const [uploadedFile, setUploadedFile] = useState<{
+    fileUrl: string
+    fileName: string
+    fileType?: string
+    fileSize?: number
+  } | null>(
+    submission?.fileUrl
+      ? {
+          fileUrl: submission.fileUrl,
+          fileName: submission.fileName || 'Uploaded file',
+          fileType: submission.fileType,
+          fileSize: submission.fileSize,
+        }
+      : null,
+  )
+  const [error, setError] = useState<string | null>(null)
+
+  const title = requirement.label || requirement.requirementType || 'Requirement'
+  const description = collateralDisplayDescription(requirement)
+  const templateUrl =
+    requirement.templateFileUrl ||
+    requirement.fileUrl ||
+    (String(requirement.description || '').startsWith('http') ? requirement.description : undefined)
+  const needsUpload = collateralNeedsUpload(requirement)
+  const requirementKey = collateralRequirementKey(requirement)
+
+  useEffect(() => {
+    // Only treat a real uploaded document as "done" — not acknowledge-only / template rows.
+    const hasUpload = Boolean(submission?.fileUrl && submission.fileUrl !== templateUrl)
+    setUploaded(hasUpload)
+    if (hasUpload && submission?.fileUrl) {
+      setUploadedFile({
+        fileUrl: submission.fileUrl,
+        fileName: submission.fileName || 'Uploaded file',
+        fileType: submission.fileType,
+        fileSize: submission.fileSize,
+      })
+      return
+    }
+    setUploadedFile(null)
+  }, [submission, submission?.fileUrl, submission?.fileName, submission?.fileType, submission?.fileSize, templateUrl])
+
+  const handleUpload = async (file?: File) => {
+    if (!file) return
+    setUploading(true)
+    setError(null)
+    try {
+      const uploadedFile = await uploadApplicationFile(file, userId)
+      const displayName = file.name || uploadedFile.fileName
+      onUploaded({
+        requirementId: requirement.requirementId || requirement.id,
+        requirementType: requirement.requirementType || title,
+        label: title,
+        type: 'document',
+        fileUrl: uploadedFile.fileUrl,
+        fileName: displayName,
+        fileType: uploadedFile.fileType || file.type,
+        fileSize: uploadedFile.fileSize ?? file.size,
+        metadata: {
+          source: 'otherRequirements',
+          contentType: requirement.contentType,
+          ...(templateUrl ? { templateFileUrl: templateUrl } : {}),
+        },
+      })
+      setUploadedFile({
+        fileUrl: uploadedFile.fileUrl,
+        fileName: displayName,
+        fileType: uploadedFile.fileType || file.type,
+        fileSize: uploadedFile.fileSize ?? file.size,
+      })
+      setUploaded(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleClearUpload = () => {
+    setUploadedFile(null)
+    setUploaded(false)
+    setError(null)
+    if (requirementKey) onCleared?.(requirementKey)
+  }
+
+  const handleAcknowledge = () => {
+    onUploaded({
+      requirementId: requirement.requirementId || requirement.id,
+      requirementType: requirement.requirementType || title,
+      label: title,
+      type: 'json',
+      value: { acknowledged: true },
+      metadata: {
+        source: 'otherRequirements',
+        contentType: requirement.contentType,
+      },
+    })
+    setUploaded(true)
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-medium text-gray-500">{title}</p>
+        <StatusDot done={uploaded || (done && Boolean(submission?.fileUrl || submission?.value))} />
+      </div>
+      {description ? <p className="text-[10px] leading-snug text-gray-500">{description}</p> : null}
+      {needsUpload ? (
+        <>
+          <div className={cn('grid gap-3', templateUrl ? 'grid-cols-2' : 'grid-cols-1')}>
+            {templateUrl ? (
+              <a
+                href={templateUrl}
+                target="_blank"
+                rel="noreferrer"
+                className={`flex h-9 items-center justify-center gap-2 rounded-xl text-xs font-semibold ${BRAND_SOFT} ${BRAND_INK}`}
+              >
+                Download
+                <Download className="h-3 w-3" />
+              </a>
+            ) : null}
+            <label
+              className={`flex h-9 cursor-pointer items-center justify-center gap-2 rounded-xl bg-gray-100 text-xs font-semibold ${BRAND_INK}`}
+            >
+              <input
+                type="file"
+                className="hidden"
+                accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                onChange={(event) => void handleUpload(event.target.files?.[0])}
+              />
+              {uploading ? 'Uploading...' : uploaded || done ? 'Replace' : 'Upload Document'}
+              {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+            </label>
+          </div>
+          {uploadedFile ? (
+            <div className="flex items-center justify-between gap-3 rounded-xl bg-green-50 px-3 py-2 text-[10px] text-green-800">
+              <span className="min-w-0 truncate font-medium">{uploadedFile.fileName}</span>
+              <div className="flex shrink-0 items-center gap-2">
+                <a
+                  href={uploadedFile.fileUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-bold underline"
+                >
+                  Open
+                </a>
+                <button
+                  type="button"
+                  onClick={handleClearUpload}
+                  className="rounded-full p-0.5 text-green-800/70 hover:bg-green-100 hover:text-green-900"
+                  aria-label="Remove uploaded file"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <button
+          type="button"
+          onClick={handleAcknowledge}
+          className={`rounded-xl bg-gray-100 px-4 py-2 text-xs font-bold ${BRAND_INK}`}
+        >
+          {uploaded || done ? 'Details added' : 'Add Details'}
+        </button>
+      )}
+      {error ? <p className="text-[10px] text-red-600">{error}</p> : null}
+    </div>
+  )
+}
+
+function ProgressTabs({
+  steps,
+  active,
+  onChange,
+  productLabel,
+}: {
+  steps: StepId[]
+  active: StepId
+  onChange: (step: StepId) => void
+  productLabel: string
+}) {
+  const labels: Record<StepId, string> = {
+    requirement: 'Questions',
+    file: 'Requirements',
+    guarantor: 'Guarantor',
+    property: 'Property',
+    product: 'Review',
+  }
+
+  return (
+    <div className="flex gap-2 overflow-x-auto no-scrollbar">
+      {steps.map((step) => (
+        <button
+          key={step}
+          type="button"
+          onClick={() => onChange(step)}
+          className={cn(
+            'shrink-0 rounded-full border px-3 py-1.5 text-[10px] font-medium',
+            active === step
+              ? 'border-[var(--sf-button,#1E40AF)] bg-white text-[var(--sf-button,#1E40AF)] shadow-sm'
+              : 'border-transparent bg-gray-100 text-gray-400',
+          )}
+        >
+          {labels[step]}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function BottomSheet({
+  children,
+  onClose,
+}: {
+  children: React.ReactNode
+  onClose: () => void
+}) {
+  return (
+    <div className="absolute inset-0 z-[70] flex items-end">
+      <button
+        type="button"
+        aria-label="Close"
+        className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
+        onClick={onClose}
+      />
+      <div className="relative z-[71] max-h-[90vh] w-full overflow-y-auto rounded-t-[28px] bg-white px-5 pb-8 pt-2 shadow-2xl no-scrollbar">
+        <div className="mx-auto mb-5 h-1.5 w-16 rounded-full bg-gray-300" />
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function ProductSummary({
+  kind,
+  application,
+  providerName,
+  catalogProduct,
+  withTerms,
+  accepted,
+  onToggleAccepted,
+  applicationAmount,
+}: {
+  kind: ProductKind
+  application?: StorefrontApplication | null
+  providerName: string
+  catalogProduct?: MobileProduct | null
+  withTerms: boolean
+  accepted: boolean
+  onToggleAccepted: () => void
+  applicationAmount?: number | null
+}) {
+  const account = getApplicationAccount(application)
+  const productName = application?.productName || `${prettyKind(kind)} application`
+  const resolvedAmount = applicationAmount ?? application?.amount
+  const amount = formatCurrency(resolvedAmount, application?.currency || 'NGN')
+
+  const loanDetails =
+    kind === 'loan' && application
+      ? buildLoanApplicationDetails(
+          { ...application, amount: resolvedAmount ?? application.amount },
+          { product: catalogProduct, providerName },
+        )
+      : null
+
+  const heroImageUrl =
+    kind === 'mortgage'
+      ? resolveMortgagePropertyHeroImage(catalogProduct, application)
+      : resolveProductDisplayImage(catalogProduct)
+
+  const summaryRows = loanDetails
+    ? [
+        ['Status', loanDetails.status],
+        ...(application?.loanWorkflowStatus &&
+        loanDetails.workflowStatus.toLowerCase() !== loanDetails.status.toLowerCase()
+          ? [['Workflow status', loanDetails.workflowStatus] as [string, string]]
+          : []),
+        ['Disbursement Date', loanDetails.disbursementDate],
+        ['Loan Amount', loanDetails.loanAmount],
+        ['Loan ID', loanDetails.loanId],
+        ['Automation', loanDetails.automation],
+        ['Interest', loanDetails.interest],
+        ['Total to be repaid', loanDetails.totalToRepay],
+        ['Bank Name', loanDetails.bankName],
+        ['Powered by', loanDetails.poweredBy],
+      ]
+    : [
+        ['Application status', application?.status || 'Initialized'],
+        ['Product type', application?.productType || prettyKind(kind).toUpperCase()],
+        ['Application amount', amount],
+        ...(account?.bankName ? [['Bank name', account.bankName]] : []),
+        ...(account?.accountNumber ? [['Account number', account.accountNumber]] : []),
+        ['Powered by:', poweredBy()],
+      ]
+
+  return (
+    <div className="space-y-5">
+      <div
+        className="h-[155px] rounded-2xl bg-gray-100 bg-cover bg-center"
+        style={
+          heroImageUrl
+            ? { backgroundImage: `url(${JSON.stringify(heroImageUrl)})` }
+            : undefined
+        }
+      />
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className={`text-sm font-medium ${BRAND_INK}`}>
+            {productName}
+          </h2>
+          <p className="mt-2 text-[11px] leading-relaxed text-gray-500">
+            Review the initialized {prettyKind(kind).toLowerCase()} application details before submitting.
+          </p>
+        </div>
+        <p className={`shrink-0 text-sm font-bold ${BRAND_INK}`}>
+          {amount}
+        </p>
+      </div>
+      <div className="space-y-5 pt-2 text-sm">
+        {summaryRows.map(([label, value]) => (
+          <div key={label} className="flex items-center justify-between gap-4">
+            <span className="text-gray-500">{label}</span>
+            <span className="text-right font-semibold text-gray-700">{value}</span>
+          </div>
+        ))}
+      </div>
+      {withTerms ? (
+        <>
+          <button
+            type="button"
+            onClick={onToggleAccepted}
+            className="flex items-center gap-2 pt-3 text-xs text-gray-600"
+          >
+            <span
+              className={cn(
+                'flex h-4 w-4 items-center justify-center rounded-full border',
+                accepted ? 'border-[var(--sf-button,#1E40AF)] bg-[var(--sf-button,#1E40AF)] text-white' : 'border-gray-300',
+              )}
+            >
+              {accepted ? <Check className="h-2.5 w-2.5" /> : null}
+            </span>
+            Accept Terms & Condition.
+          </button>
+          <p className="rounded bg-orange-50 p-3 text-[10px] leading-relaxed text-gray-500">
+            Submitting the above information increases your chances of getting your application
+            approved.
+          </p>
+        </>
+      ) : null}
+    </div>
+  )
+}
+
+export function ProductApplicationFlow({ kind, productId: productIdProp }: { kind: ProductKind; productId?: string }) {
+  const searchParams = useSearchParams()
+  const [activeStep, setActiveStep] = useState<StepId>('requirement')
+  const [accepted, setAccepted] = useState(false)
+  const [sheet, setSheet] = useState<
+    | 'create_account'
+    | 'guarantor_form'
+    | 'guarantor_generating'
+    | 'guarantor_success'
+    | 'guarantor_added'
+    | 'spouse_form'
+    | 'spouse_generating'
+    | 'spouse_success'
+    | 'success'
+    | null
+  >(null)
+  const [guarantorSubmitError, setGuarantorSubmitError] = useState<string | null>(null)
+  const [spouseSubmitError, setSpouseSubmitError] = useState<string | null>(null)
+  const [lastAddedGuarantor, setLastAddedGuarantor] = useState<Guarantor | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [stepErrors, setStepErrors] = useState<string[]>([])
+  const feedbackRef = useRef<HTMLDivElement>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [advancing, setAdvancing] = useState(false)
+  const [submittedApplicationId, setSubmittedApplicationId] = useState<string | null>(null)
+  const [creatingAccount, setCreatingAccount] = useState(false)
+  const [createAccountError, setCreateAccountError] = useState<string | null>(null)
+  const [createAccountTermsAccepted, setCreateAccountTermsAccepted] = useState(false)
+  const [createAccountPrivacyAccepted, setCreateAccountPrivacyAccepted] = useState(false)
+  const [draftHydrated, setDraftHydrated] = useState(false)
+  const [draftNotice, setDraftNotice] = useState<string | null>(null)
+  const [requirementSubmissions, setRequirementSubmissions] = useState<RequirementSubmission[]>([])
+  const [guarantors, setGuarantors] = useState<Guarantor[]>([])
+  const [employmentDraft, setEmploymentDraft] = useState<EmploymentDraft>({
+    occupation: '',
+    placeOfWork: '',
+    hrName: '',
+    hrEmail: '',
+  })
+  const [guarantorDraft, setGuarantorDraft] = useState<Guarantor>({
+    name: '',
+    phone: '',
+    email: '',
+  })
+  const [platformFields, setPlatformFields] = useState<PlatformFieldsDraft>(DEFAULT_PLATFORM_FIELDS_DRAFT)
+  const [spouse, setSpouse] = useState<Guarantor | null>(null)
+  const [spouseDraft, setSpouseDraft] = useState<Guarantor>({
+    name: '',
+    phone: '',
+    email: '',
+  })
+  const { displayName: tenantDisplayName, tenantSubdomain } = useMobileV2Tenant()
+  const [applicationAmount, setApplicationAmount] = useState('')
+  /** Once the user edits amount (or a draft restores it), never auto-repopulate. */
+  const amountTouchedRef = useRef(false)
+  const [applicationRevision, setApplicationRevision] = useState(0)
+  const productName = prettyKind(kind)
+  const initializedApplication = useMemo(() => {
+    void applicationRevision
+    return readInitializedApplication()
+  }, [applicationRevision])
+  const providerName = applicationProvider(initializedApplication, tenantDisplayName, tenantSubdomain)
+  const productId = sanitizeProductId(productIdProp || searchParams.get('productId') || initializedApplication?.productId || '')
+  const applicationId = searchParams.get('applicationId') || initializedApplication?.id || initializedApplication?._id || ''
+  const currentDraftKey = draftStorageKey(kind, productId, applicationId)
+  const userId = initializedApplication?.userId || ''
+  const requirements =
+    initializedApplication?.requirementsSnapshot ?? initializedApplication?.contractSnapshot?.requirements
+  const documentsToDownload = requirements?.documentsToDownload ?? []
+  const requirementRows = requirements?.otherRequirements ?? []
+  const requiresGuarantor = requirements?.security?.guarantor === true
+  const steps = useMemo<StepId[]>(
+    () =>
+      kind === 'loan'
+        ? ['requirement', 'file', ...(requiresGuarantor ? (['guarantor'] as StepId[]) : []), 'product']
+        : ['requirement', 'file', ...(requiresGuarantor ? (['guarantor'] as StepId[]) : []), 'property', 'product'],
+    [kind, requiresGuarantor],
+  )
+  const applicationProgress = initializedApplication?.applicationProgress
+  const applicationProgressKey = applicationProgress ? JSON.stringify(applicationProgress) : ''
+  const { product: catalogProduct } = useMobileProductDetail({
+    productId,
+    enabled: Boolean(productId),
+  })
+  const mortgageFacilityFixed = kind === 'mortgage' && hasFixedMortgageFacility(catalogProduct)
+  const mortgageFacilityAmount = resolveMortgageFacilityAmount(catalogProduct)
+  const amountBounds = useMemo(() => {
+    if (mortgageFacilityFixed && mortgageFacilityAmount != null) {
+      return { min: mortgageFacilityAmount, max: mortgageFacilityAmount }
+    }
+    return {
+      min: catalogProduct?.amountMin ?? null,
+      max: catalogProduct?.amountMax ?? null,
+    }
+  }, [
+    mortgageFacilityFixed,
+    mortgageFacilityAmount,
+    catalogProduct?.amountMin,
+    catalogProduct?.amountMax,
+  ])
+  const parsedApplicationAmount = parseApplicationAmount(applicationAmount)
+  const productType = kind === 'loan' ? 'LOAN' : 'MORTGAGE'
+  const { fields: platformFieldCatalog, optionsByPath, loading: platformFieldsLoading } =
+    usePlatformApplicationFieldCatalog(productType)
+  const triggersSpouseKyc = platformFieldCatalog.some(
+    (field) => field.key === 'repayingWithSpouse' && field.triggersSpouseKyc,
+  )
+
+  const goBackHref = kind === 'loan' ? '/mobile-v2/products/loan' : '/mobile-v2/products/mortgage'
+  const successContinueHref =
+    kind === 'mortgage' && submittedApplicationId
+      ? mortgagePendingDetailHref(submittedApplicationId)
+      : kind === 'mortgage'
+        ? '/mobile-v2/products/mortgage/pending'
+        : goBackHref
+  const activeIndex = steps.indexOf(activeStep)
+
+  const refreshApplicationSnapshot = useCallback(async () => {
+    if (!applicationId) return null
+    const result = await fetchApplicationById(applicationId)
+    if (result.ok && result.application) {
+      setApplicationRevision((value) => value + 1)
+      return result.application
+    }
+    return null
+  }, [applicationId])
+
+  const buildRequirementDrafts = (
+    employment: EmploymentDraft,
+    submissions: RequirementSubmission[],
+  ) => {
+    const drafts = submissions.filter(
+      (submission) => submission.type !== 'document' && !isEmploymentSubmission(submission),
+    )
+    return [employmentSubmissionFromDraft(employment), ...drafts]
+  }
+
+  const buildUploadedDrafts = (submissions: RequirementSubmission[]) =>
+    submissions.filter((submission) => submission.type === 'document')
+
+  const hydrateProgress = (progress: ApplicationProgress) => {
+    const requirementDrafts = Array.isArray(progress.requirementDrafts) ? progress.requirementDrafts : []
+    const uploadedDrafts = Array.isArray(progress.uploadedDrafts) ? progress.uploadedDrafts : []
+    const employmentSubmission = requirementDrafts.find(isEmploymentSubmission)
+    const savedPlatformFields = resolvePlatformFieldsFromApplication({
+      platformFields: progress.metadata?.platformFields ?? initializedApplication?.platformFields ?? undefined,
+      applicationProgress: progress,
+    })
+
+    setActiveStep(steps.includes(stepForProgressTab(progress.currentTab)) ? stepForProgressTab(progress.currentTab) : 'requirement')
+    setRequirementSubmissions([
+      ...requirementDrafts.filter((submission) => !isEmploymentSubmission(submission)),
+      ...uploadedDrafts,
+    ])
+    if (savedPlatformFields) {
+      setPlatformFields(platformFieldsDraftFromApi(savedPlatformFields))
+    }
+    if (employmentSubmission) {
+      setEmploymentDraft(employmentDraftFromSubmission(employmentSubmission))
+    }
+  }
+
+  useEffect(() => {
+    if (!applicationId) return
+    void refreshApplicationSnapshot()
+  }, [applicationId, refreshApplicationSnapshot])
+
+  useEffect(() => {
+    if (draftHydrated) return
+    if (applicationProgress) {
+      hydrateProgress(applicationProgress)
+      setDraftNotice(applicationProgress.lastSavedAt ? 'Saved progress restored.' : null)
+    } else {
+      const draft = readApplicationDraft(currentDraftKey)
+      if (draft) {
+        setActiveStep(steps.includes(draft.activeStep) ? draft.activeStep : 'requirement')
+        setAccepted(Boolean(draft.accepted))
+        setApplicationAmount(draft.applicationAmount || '')
+        amountTouchedRef.current = true
+        setRequirementSubmissions(Array.isArray(draft.requirementSubmissions) ? draft.requirementSubmissions : [])
+        setGuarantors(Array.isArray(draft.guarantors) ? draft.guarantors : [])
+        setEmploymentDraft({
+          occupation: draft.employmentDraft?.occupation || '',
+          placeOfWork: draft.employmentDraft?.placeOfWork || '',
+          hrName: draft.employmentDraft?.hrName || '',
+          hrEmail: draft.employmentDraft?.hrEmail || '',
+        })
+        setGuarantorDraft({
+          name: draft.guarantorDraft?.name || '',
+          phone: draft.guarantorDraft?.phone || '',
+          email: draft.guarantorDraft?.email || '',
+          verificationUrl: draft.guarantorDraft?.verificationUrl,
+        })
+        setPlatformFields(
+          draft.platformFields ||
+            platformFieldsDraftFromLegacyApplicantProfile(
+              (draft as { applicantProfile?: Parameters<typeof platformFieldsDraftFromLegacyApplicantProfile>[0] })
+                .applicantProfile || {},
+            ),
+        )
+        setSpouse(draft.spouse || null)
+        setSpouseDraft({
+          name: draft.spouseDraft?.name || '',
+          phone: draft.spouseDraft?.phone || '',
+          email: draft.spouseDraft?.email || '',
+          verificationUrl: draft.spouseDraft?.verificationUrl,
+        })
+        setDraftNotice('Saved progress restored.')
+      } else {
+        const savedPlatformFields = resolvePlatformFieldsFromApplication(initializedApplication)
+        if (savedPlatformFields) {
+          setPlatformFields(platformFieldsDraftFromApi(savedPlatformFields))
+        }
+        const seeded = defaultApplicationAmountValue(
+          initializedApplication?.amount,
+          amountBounds.min,
+        )
+        if (seeded) setApplicationAmount(seeded)
+      }
+    }
+    setDraftHydrated(true)
+  }, [draftHydrated, currentDraftKey, steps, applicationProgressKey, initializedApplication?.amount, amountBounds.min])
+
+  // Seed amount once when catalog/min arrives late — never while the user is editing / clearing.
+  useEffect(() => {
+    if (!draftHydrated || amountTouchedRef.current || applicationAmount.trim()) return
+    const seeded = defaultApplicationAmountValue(
+      initializedApplication?.amount ?? (mortgageFacilityFixed ? mortgageFacilityAmount : null),
+      amountBounds.min,
+    )
+    if (seeded) setApplicationAmount(seeded)
+  }, [
+    draftHydrated,
+    initializedApplication?.amount,
+    amountBounds.min,
+    applicationAmount,
+    mortgageFacilityFixed,
+    mortgageFacilityAmount,
+  ])
+
+  const scrollToFeedback = () => {
+    feedbackRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+
+  const collectCurrentStepIssues = (step: StepId): string[] => {
+    if (step === 'requirement') {
+      return collectRequirementStepIssues({
+        applicationAmount,
+        amountMin: amountBounds.min,
+        amountMax: amountBounds.max,
+        platformFields,
+        employment: employmentDraft,
+        otherRequirements: [],
+        requirementSubmissions,
+        requiresGuarantor: false,
+        guarantorsCount: guarantors.length,
+        spouseRequired: platformFields.repayingWithSpouse === true && triggersSpouseKyc,
+        spouseVerified: Boolean(spouse?.verificationUrl),
+        productKind: kind,
+      })
+    }
+    if (step === 'file') {
+      const issues: string[] = []
+      const requirementError = validateCollateralRequirements(requirementRows, requirementSubmissions)
+      if (requirementError) issues.push(requirementError)
+      const fileError = validateFileUploadStep(documentsToDownload, requirementSubmissions)
+      if (fileError) issues.push(fileError)
+      return issues
+    }
+    if (step === 'guarantor') {
+      return requiresGuarantor && guarantors.length === 0
+        ? ['Add at least one guarantor before continuing.']
+        : []
+    }
+    if (step === 'product') {
+      return accepted ? [] : ['Accept the terms and conditions before submitting.']
+    }
+    return []
+  }
+
+  const persistDraft = async (notice: string | null = 'Progress saved.'): Promise<{ synced: boolean }> => {
+    saveApplicationDraft(currentDraftKey, {
+      activeStep,
+      accepted,
+      applicationAmount,
+      requirementSubmissions,
+      guarantors,
+      employmentDraft,
+      guarantorDraft,
+      platformFields,
+      spouse,
+      spouseDraft,
+    })
+
+    if (applicationId && userId) {
+      const result = await saveApplicationProgress({
+        applicationId,
+        userId,
+        currentStep: activeStep === 'requirement' ? 'platform_fields' : 'apply',
+        currentTab: progressTabForStep(activeStep),
+        platformFields: platformFieldsFromDraft(platformFields),
+        requirementDrafts: buildRequirementDrafts(employmentDraft, requirementSubmissions),
+        uploadedDrafts: buildUploadedDrafts(requirementSubmissions),
+      })
+      if (!result.ok) {
+        if (notice) setDraftNotice('Progress saved locally. We could not sync it yet.')
+        return { synced: false }
+      }
+    }
+
+    if (notice) setDraftNotice(notice)
+    return { synced: true }
+  }
+
+  useEffect(() => {
+    if (!draftHydrated || !currentDraftKey) return
+    const timer = window.setTimeout(() => {
+      void persistDraft(null)
+    }, 800)
+    return () => window.clearTimeout(timer)
+  }, [draftHydrated, currentDraftKey, activeStep, accepted, applicationAmount, requirementSubmissions, guarantors, employmentDraft, guarantorDraft, platformFields, spouse, spouseDraft])
+
+  const handleStepChange = (step: StepId) => {
+    const targetIndex = steps.indexOf(step)
+    if (targetIndex > activeIndex) {
+      const issues = collectCurrentStepIssues(activeStep)
+      if (issues.length > 0) {
+        setStepErrors(issues)
+        setError(null)
+        scrollToFeedback()
+        return
+      }
+    }
+    setStepErrors([])
+    setError(null)
+    void persistDraft(null)
+    setActiveStep(step)
+  }
+
+  const handleSaveProgress = async () => {
+    const issues = collectCurrentStepIssues(activeStep)
+    const { synced } = await persistDraft(null)
+
+    if (issues.length > 0) {
+      setStepErrors(issues)
+      setDraftNotice('Progress saved locally. Complete the items below to continue.')
+      setError(null)
+    } else {
+      setStepErrors([])
+      setDraftNotice(synced ? 'Progress saved.' : 'Progress saved locally. We could not sync to the server yet.')
+      setError(
+        synced
+          ? null
+          : 'Progress saved on this device, but we could not sync to the server. Check your connection and try again.',
+      )
+    }
+    scrollToFeedback()
+  }
+
+  const upsertSubmission = (submission: RequirementSubmission) => {
+    const key = submission.requirementId || submission.requirementType || submission.label
+    setRequirementSubmissions((current) => {
+      const filtered = current.filter((item) => (item.requirementId || item.requirementType || item.label) !== key)
+      return [...filtered, submission]
+    })
+  }
+
+  const clearSubmission = (requirementKey: string) => {
+    if (!requirementKey) return
+    setRequirementSubmissions((current) =>
+      current.filter((item) => (item.requirementId || item.requirementType || item.label) !== requirementKey),
+    )
+  }
+
+  const syncApplicationAmount = async (): Promise<boolean> => {
+    if (!productId) {
+      setError('No product selected.')
+      toast.error('No product selected.')
+      scrollToFeedback()
+      return false
+    }
+
+    const parsed = parseApplicationAmount(applicationAmount)
+    if (!parsed) {
+      setError('Enter the amount you want to apply for.')
+      toast.error('Enter the amount you want to apply for.')
+      scrollToFeedback()
+      return false
+    }
+
+    const validationError = validateApplicationAmount(
+      parsed,
+      amountBounds.min,
+      amountBounds.max,
+    )
+    if (validationError) {
+      setError(validationError)
+      toast.error(validationError)
+      scrollToFeedback()
+      return false
+    }
+
+    // Existing application (with or without account) — never re-call /init.
+    // Re-init throws/fails for APPROVED/PENDING apps and blocks Next silently.
+    if (applicationId) {
+      await refreshApplicationSnapshot()
+      return true
+    }
+
+    // Session may have lost applicationId — resolve before creating another account.
+    const userIdForResolve = await resolveWalletUserId()
+    if (userIdForResolve) {
+      const existing = await resolveProductApplicationAccount(userIdForResolve, productId)
+      if (existing.hasAccount && existing.application) {
+        saveInitializedApplication(existing.application)
+        setApplicationRevision((value) => value + 1)
+        const existingId = String(existing.application.id ?? existing.application._id ?? '')
+        if (existingId) {
+          await fetchApplicationById(existingId)
+          setApplicationRevision((value) => value + 1)
+        }
+        return true
+      }
+    }
+
+    const result = await initializeProductApplication(productId, {
+      productType: kind === 'loan' ? 'LOAN' : 'MORTGAGE',
+      amount: parsed,
+    })
+    if (!result.ok) {
+      if (isDuplicateAccountError(result.error || '')) {
+        const userId = await resolveWalletUserId()
+        const existing = userId ? await resolveProductApplicationAccount(userId, productId) : null
+        if (existing?.application) {
+          saveInitializedApplication(existing.application)
+          setApplicationRevision((value) => value + 1)
+          const existingId = String(existing.application.id ?? existing.application._id ?? '')
+          if (existingId) {
+            await fetchApplicationById(existingId)
+            setApplicationRevision((value) => value + 1)
+          }
+        }
+        // Account already exists for this product — allow continuing with local draft
+        return true
+      }
+      setError(result.error || 'Could not save your application amount.')
+      toast.error(result.error || 'Could not save your application amount.')
+      scrollToFeedback()
+      return false
+    }
+
+    setApplicationRevision((value) => value + 1)
+    if (result.applicationId) {
+      await fetchApplicationById(result.applicationId)
+      setApplicationRevision((value) => value + 1)
+    }
+    return true
+  }
+
+  const handleFinalSubmit = async () => {
+    if (!applicationId || !userId) {
+      const message = 'Application was not initialized. Please go back and create the account again.'
+      setError(message)
+      toast.error(message)
+      scrollToFeedback()
+      return
+    }
+
+    const finishMortgageSuccess = (resolvedId: string) => {
+      setSubmittedApplicationId(resolvedId)
+      clearApplicationDraft(currentDraftKey)
+      setSheet('success')
+    }
+
+    // Only leave apply when Spring has synced to Plata (upstreamApplicationId + review workflow).
+    // Do NOT treat local status === PENDING / account_created as enough.
+    if (canShowPendingPage(initializedApplication)) {
+      setError(null)
+      setStepErrors([])
+      setDraftNotice(null)
+      toast.message('Application already submitted for review.')
+      if (kind === 'mortgage') {
+        finishMortgageSuccess(applicationId)
+      } else {
+        clearApplicationDraft(currentDraftKey)
+        setSheet('success')
+      }
+      return
+    }
+
+    // Do not block final submit on NUBAN/Active provisioning — Spring only syncs to Plata
+    // on guarantor add or POST /applications/:id/submit. Warn if still provisioning.
+    if (!isActiveUpstreamAccount(initializedApplication)) {
+      toast.message(pendingAccountMessage(kind === 'loan' ? 'loan' : 'mortgage'), {
+        description: 'Submitting now so your application can sync for review.',
+      })
+    }
+
+    const requirementIssues = collectRequirementStepIssues({
+      applicationAmount,
+      amountMin: amountBounds.min,
+      amountMax: amountBounds.max,
+      platformFields,
+      employment: employmentDraft,
+        otherRequirements: requirementRows,
+      requirementSubmissions,
+      requiresGuarantor,
+      guarantorsCount: guarantors.length,
+      spouseRequired: platformFields.repayingWithSpouse === true && triggersSpouseKyc,
+      spouseVerified: Boolean(spouse?.verificationUrl),
+      productKind: kind,
+    })
+    const fileIssues = validateFileUploadStep(documentsToDownload, requirementSubmissions)
+    const platformPayload = platformFieldsFromDraft(platformFields)
+    const mortgageSelection =
+      kind === 'mortgage' ? buildMortgageSelectionPayload(catalogProduct, parseApplicationAmount(applicationAmount) || 0) : null
+    const issues = [
+      ...requirementIssues,
+      ...(fileIssues ? [fileIssues] : []),
+      ...(accepted ? [] : ['Accept the terms and conditions before submitting.']),
+      ...(kind === 'mortgage' && !mortgageSelection?.propertyName
+        ? ['Mortgage property selection is required before submitting.']
+        : []),
+      ...(platformPayload.monthlyIncome == null
+        ? ['Complete platform application fields (income, PEP, repayment, marital status, loan reason).']
+        : []),
+    ]
+    if (issues.length > 0) {
+      setStepErrors(issues)
+      setError(null)
+      setActiveStep('requirement')
+      toast.error('Please complete the missing items before submitting.')
+      scrollToFeedback()
+      return
+    }
+
+    const parsed = parseApplicationAmount(applicationAmount)
+    if (!parsed) {
+      const message = 'Enter the amount you want to apply for.'
+      setError(message)
+      toast.error(message)
+      setActiveStep('requirement')
+      scrollToFeedback()
+      return
+    }
+
+    setSubmitting(true)
+    setError(null)
+    setStepErrors([])
+    setDraftNotice(null)
+    try {
+      const submissions: RequirementSubmission[] = [
+        ...buildRequirementDrafts(employmentDraft, requirementSubmissions),
+        ...buildUploadedDrafts(requirementSubmissions),
+      ]
+      const requirementsResult = await submitApplicationRequirements(applicationId, userId, submissions)
+      if (!requirementsResult.ok) {
+        const message = requirementsResult.error || 'Could not save your application requirements.'
+        setError(message)
+        toast.error(message)
+        scrollToFeedback()
+        return
+      }
+
+      const submitResult = await submitInitializedApplication(applicationId, {
+        userId,
+        acceptedTerms: true,
+        ...platformPayload,
+        ...(kind === 'mortgage'
+          ? { mortgageSelection: buildMortgageSelectionPayload(catalogProduct, parsed) }
+          : {}),
+      })
+
+      if (!submitResult.ok) {
+        const message = submitResult.error || 'Could not submit your application.'
+        setError(message)
+        toast.error(message)
+        scrollToFeedback()
+        return
+      }
+
+      const submittedApp = submitResult.application
+      const resolvedApplicationId = String(
+        submittedApp?.id ?? submittedApp?._id ?? applicationId,
+      )
+
+      // Backend rule: only route to pending after sync (upstreamApplicationId + review status).
+      if (kind === 'mortgage') {
+        if (!canShowPendingPage(submittedApp)) {
+          const message =
+            'Application was accepted by Spring but has not synced to review yet (missing upstream application). Stay on this form and try Submit again.'
+          setError(message)
+          toast.error(message)
+          scrollToFeedback()
+          return
+        }
+        finishMortgageSuccess(resolvedApplicationId)
+      } else {
+        if (needsFinalApplicationSubmit(submittedApp) && !canShowPendingPage(submittedApp)) {
+          const message =
+            'Application was accepted by Spring but has not synced to review yet. Please try Submit again.'
+          setError(message)
+          toast.error(message)
+          scrollToFeedback()
+          return
+        }
+        clearApplicationDraft(currentDraftKey)
+        setSheet('success')
+      }
+      toast.success('Application submitted successfully.')
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Something went wrong while submitting. Please try again.'
+      setError(message)
+      toast.error(message)
+      scrollToFeedback()
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const goNext = () => {
+    if (activeStep === 'product') {
+      void handleFinalSubmit()
+      return
+    }
+
+    const issues = collectCurrentStepIssues(activeStep)
+    if (issues.length > 0) {
+      setStepErrors(issues)
+      setError(null)
+      setDraftNotice(null)
+      toast.error(issues[0] || 'Please complete the required fields before continuing.')
+      scrollToFeedback()
+      return
+    }
+
+    if (activeStep === 'requirement') {
+      void (async () => {
+        setAdvancing(true)
+        setStepErrors([])
+        setError(null)
+        setDraftNotice(null)
+        try {
+          const synced = await syncApplicationAmount()
+          if (!synced) return
+          await persistDraft(null)
+          setActiveStep(steps[Math.min(activeIndex + 1, steps.length - 1)])
+        } catch (error: unknown) {
+          const message =
+            error instanceof Error && error.message
+              ? error.message
+              : 'Could not continue. Please try again.'
+          setError(message)
+          toast.error(message)
+          scrollToFeedback()
+        } finally {
+          setAdvancing(false)
+        }
+      })()
+      return
+    }
+
+    setStepErrors([])
+    setError(null)
+    setDraftNotice(null)
+    void persistDraft(null)
+    setActiveStep(steps[Math.min(activeIndex + 1, steps.length - 1)])
+  }
+
+  const closeCreateAccountSheet = () => {
+    setCreateAccountTermsAccepted(false)
+    setCreateAccountPrivacyAccepted(false)
+    setCreateAccountError(null)
+    setSheet(null)
+  }
+
+  const copyVerificationUrl = async (url: string | undefined, successMessage: string) => {
+    const text = String(url || '').trim()
+    if (!text) {
+      toast.error('No verification link available to copy.')
+      return
+    }
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text)
+      } else {
+        const textarea = document.createElement('textarea')
+        textarea.value = text
+        textarea.setAttribute('readonly', '')
+        textarea.style.position = 'fixed'
+        textarea.style.left = '-9999px'
+        document.body.appendChild(textarea)
+        textarea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textarea)
+      }
+      toast.success(successMessage)
+    } catch {
+      toast.error('Could not copy the link. Please try again.')
+    }
+  }
+
+  const handleGenerateGuarantorKyc = async () => {
+    if (!applicationId || !userId) {
+      setError('Application was not initialized. Please go back and create the account again.')
+      setSheet(null)
+      return
+    }
+
+    const fullName = guarantorDraft.name.trim()
+    const email = guarantorDraft.email.trim()
+    const phone = guarantorDraft.phone.trim()
+
+    if (!fullName || !email || !phone) {
+      setGuarantorSubmitError('Please enter the guarantor full name, email, and phone.')
+      return
+    }
+
+    setGuarantorSubmitError(null)
+    setSheet('guarantor_generating')
+    const generatingStartedAt = Date.now()
+
+    try {
+      const result = await addApplicationGuarantor(applicationId, {
+        userId,
+        fullName,
+        email,
+        phone,
+        occupation: 'Not specified',
+        relationship: 'Not specified',
+        country: 'NG',
+      })
+
+      if (!result.ok) {
+        setGuarantorSubmitError(result.error)
+        setSheet('guarantor_form')
+        return
+      }
+
+      const addedGuarantor: Guarantor = {
+        name: result.data?.guarantor?.fullName || fullName,
+        phone: result.data?.guarantor?.phone || phone,
+        email: result.data?.guarantor?.email || email,
+        verificationUrl: result.data?.guarantor?.kyc?.verificationUrl,
+      }
+
+      setGuarantors([addedGuarantor])
+      setLastAddedGuarantor(addedGuarantor)
+
+      const minimumGeneratingMs = 1200
+      const elapsed = Date.now() - generatingStartedAt
+      if (elapsed < minimumGeneratingMs) {
+        await new Promise((resolve) => window.setTimeout(resolve, minimumGeneratingMs - elapsed))
+      }
+
+      setSheet('guarantor_success')
+    } catch {
+      setGuarantorSubmitError('Could not generate the KYC link. Please try again.')
+      setSheet('guarantor_form')
+    }
+  }
+
+  const closeGuarantorSuccess = () => {
+    setSheet(null)
+    setGuarantorSubmitError(null)
+    setGuarantorDraft({ name: '', phone: '', email: '' })
+  }
+
+  const handleGenerateSpouseKyc = async () => {
+    if (!applicationId || !userId) {
+      setError('Application was not initialized. Please go back and create the account again.')
+      setSheet(null)
+      return
+    }
+
+    const fullName = spouseDraft.name.trim()
+    const email = spouseDraft.email.trim()
+    const phone = spouseDraft.phone.trim()
+    const occupation =
+      spouseDraft.occupation?.trim() || platformFields.spouseOccupation.trim() || undefined
+    const countryRaw = spouseDraft.country?.trim() || platformFields.spouseCountry.trim() || 'NG'
+    const country = countryRaw.slice(0, 2).toUpperCase()
+
+    if (!fullName || !email || !phone) {
+      setSpouseSubmitError('Please enter your spouse full name, email, and phone.')
+      return
+    }
+
+    setSpouseSubmitError(null)
+    setSheet('spouse_generating')
+    const generatingStartedAt = Date.now()
+
+    try {
+      const result = await submitApplicationSpouseKyc(applicationId, {
+        userId,
+        fullName,
+        email,
+        phone,
+        ...(occupation ? { occupation } : {}),
+        relationship: 'spouse',
+        country,
+      })
+
+      if (!result.ok) {
+        setSpouseSubmitError(result.error)
+        setSheet('spouse_form')
+        return
+      }
+
+      const addedSpouse: Guarantor = {
+        name: result.spouse?.fullName || fullName,
+        phone: result.spouse?.phone || phone,
+        email: result.spouse?.email || email,
+        occupation: result.spouse?.occupation || occupation,
+        country: result.spouse?.country || country,
+        verificationUrl: result.verificationUrl || result.spouse?.verificationUrl,
+      }
+
+      setSpouse(addedSpouse)
+      setPlatformFields((current) => ({
+        ...current,
+        repayingWithSpouse: true,
+        spouseFullName: addedSpouse.name,
+        spouseEmail: addedSpouse.email,
+        spousePhone: addedSpouse.phone,
+        spouseOccupation: addedSpouse.occupation || current.spouseOccupation,
+        spouseCountry: addedSpouse.country || current.spouseCountry,
+      }))
+
+      if (result.application) {
+        saveInitializedApplication(result.application)
+      }
+
+      const minimumGeneratingMs = 1200
+      const elapsed = Date.now() - generatingStartedAt
+      if (elapsed < minimumGeneratingMs) {
+        await new Promise((resolve) => window.setTimeout(resolve, minimumGeneratingMs - elapsed))
+      }
+
+      setSheet('spouse_success')
+    } catch {
+      setSpouseSubmitError('Could not generate the spouse KYC link. Please try again.')
+      setSheet('spouse_form')
+    }
+  }
+
+  const closeSpouseSuccess = () => {
+    setSheet(null)
+    setSpouseSubmitError(null)
+    setSpouseDraft({ name: '', phone: '', email: '' })
+  }
+
+  const handleCreateAccount = async () => {
+    if (!productId) {
+      const msg = `No ${productName.toLowerCase()} product selected.`
+      setCreateAccountError(msg)
+      toast.error(msg)
+      return
+    }
+
+    if (!createAccountTermsAccepted || !createAccountPrivacyAccepted) {
+      const msg = 'Please accept the terms and privacy policy to continue.'
+      setCreateAccountError(msg)
+      toast.error(msg)
+      return
+    }
+
+    const parsed = parseApplicationAmount(applicationAmount)
+    if (!parsed) {
+      const msg = 'Enter the amount you want to apply for.'
+      setCreateAccountError(msg)
+      toast.error(msg)
+      return
+    }
+
+    const validationError = validateApplicationAmount(
+      parsed,
+      amountBounds.min,
+      amountBounds.max,
+    )
+    if (validationError) {
+      setCreateAccountError(validationError)
+      toast.error(validationError)
+      return
+    }
+
+    setCreatingAccount(true)
+    setCreateAccountError(null)
+    try {
+      // Skip create if this product already has an account/application.
+      const userIdForResolve = await resolveWalletUserId()
+      if (userIdForResolve) {
+        const existing = await resolveProductApplicationAccount(userIdForResolve, productId)
+        if (existing.hasAccount && existing.application) {
+          saveInitializedApplication(existing.application)
+          const existingId = String(existing.application.id ?? existing.application._id ?? '')
+          if (existingId) {
+            await fetchApplicationById(existingId)
+          }
+          toast.success(`${productName} account already exists. Continue your application.`)
+          setApplicationRevision((value) => value + 1)
+          setActiveStep('requirement')
+          setSheet(null)
+          return
+        }
+      }
+
+      const result = await initializeProductApplication(productId, {
+        productType: kind === 'loan' ? 'LOAN' : 'MORTGAGE',
+        amount: parsed,
+      })
+      if (!result.ok) {
+        if (isDuplicateAccountError(result.error || '')) {
+          const resolved = userIdForResolve
+            ? await resolveProductApplicationAccount(userIdForResolve, productId)
+            : null
+          if (resolved?.application) {
+            saveInitializedApplication(resolved.application)
+            const resolvedId = String(resolved.application.id ?? resolved.application._id ?? '')
+            if (resolvedId) {
+              await fetchApplicationById(resolvedId)
+            }
+            toast.success(`${productName} account already exists. Continue your application.`)
+            setApplicationRevision((value) => value + 1)
+            setActiveStep('requirement')
+            setSheet(null)
+            return
+          }
+        }
+        const msg = result.error || `Could not create your ${productName.toLowerCase()} account.`
+        setCreateAccountError(msg)
+        toast.error(msg)
+        return
+      }
+      toast.success(`${productName} account created successfully.`)
+      if (result.applicationId) {
+        await fetchApplicationById(result.applicationId)
+      }
+      setApplicationRevision((value) => value + 1)
+      setActiveStep('requirement')
+      setSheet(null)
+    } catch (error: unknown) {
+      const msg =
+        error instanceof Error && error.message
+          ? error.message
+          : `Could not create your ${productName.toLowerCase()} account.`
+      setCreateAccountError(msg)
+      toast.error(msg)
+    } finally {
+      setCreatingAccount(false)
+    }
+  }
+
+  return (
+    <div className="relative flex h-full flex-col bg-white">
+      <div className="flex-1 overflow-y-auto px-5 pb-28 pt-12 no-scrollbar">
+        <div className="mb-8 flex items-center justify-between">
+          <Link
+            href={goBackHref}
+            onClick={() => void persistDraft(null)}
+            className="flex h-9 w-9 items-center justify-center rounded-full"
+          >
+            <ChevronLeft className="h-5 w-5 text-gray-700" />
+          </Link>
+          <h1 className={`text-base font-bold ${BRAND_INK}`}>Apply</h1>
+          <Filter className="h-4 w-4 text-gray-700" />
+        </div>
+
+        <ProgressTabs
+          steps={steps}
+          active={activeStep}
+          onChange={handleStepChange}
+          productLabel={productName}
+        />
+
+        <div className="pt-8">
+          {activeStep === 'requirement' && (
+            <div className="space-y-6">
+              <SectionTitle>{kind === 'loan' ? 'Loan amount' : 'Mortgage amount'}</SectionTitle>
+              <div className="space-y-2">
+                <InputPill
+                  placeholder={
+                    kind === 'loan'
+                      ? 'Amount to borrow'
+                      : mortgageFacilityFixed
+                        ? 'Mortgage Amount (fixed)'
+                        : 'Amount to apply for'
+                  }
+                  value={applicationAmount}
+                  onChange={(value) => {
+                    if (mortgageFacilityFixed) return
+                    amountTouchedRef.current = true
+                    setApplicationAmount(value)
+                    setError(null)
+                    setCreateAccountError(null)
+                  }}
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  readOnly={mortgageFacilityFixed}
+                />
+                <p className="text-[11px] text-gray-500">
+                  {mortgageFacilityFixed
+                    ? 'Facility amount is fixed for this mortgage product.'
+                    : formatApplicationAmountHint(amountBounds.min, amountBounds.max)}
+                </p>
+              </div>
+
+              <PlatformApplicationFieldsForm
+                fields={platformFieldCatalog}
+                optionsByPath={optionsByPath}
+                draft={platformFields}
+                onChange={(next) => {
+                  setPlatformFields(next)
+                  if (next.repayingWithSpouse === false) setSpouse(null)
+                }}
+                loading={platformFieldsLoading}
+                productKind={kind}
+              />
+
+              {platformFields.repayingWithSpouse === true && triggersSpouseKyc ? (
+                <div className="space-y-3">
+                  <SectionTitle>Spouse KYC</SectionTitle>
+                  {spouse?.verificationUrl ? (
+                    <div className="relative rounded-2xl bg-gray-100 p-4 pr-10">
+                      <p className={`text-sm font-bold ${BRAND_INK}`}>{spouse.name}</p>
+                      <p className="mt-1 text-[10px] text-gray-500">
+                        {spouse.phone} | {spouse.email}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => void copyVerificationUrl(spouse.verificationUrl, 'Spouse KYC link copied.')}
+                        className={`mt-3 inline-flex items-center gap-1 text-xs font-bold ${BRAND_INK}`}
+                      >
+                        <Copy className="h-3 w-3" />
+                        Copy spouse KYC URL
+                      </button>
+                      <span className="absolute right-4 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-[var(--sf-button,#1E40AF)] text-white">
+                        <Check className="h-3 w-3" />
+                      </span>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSpouseSubmitError(null)
+                        setSpouseDraft({
+                          name: platformFields.spouseFullName,
+                          email: platformFields.spouseEmail,
+                          phone: platformFields.spousePhone,
+                          occupation: platformFields.spouseOccupation,
+                          country: platformFields.spouseCountry || 'NG',
+                        })
+                        setSheet('spouse_form')
+                      }}
+                      className={`inline-flex items-center gap-1 rounded-xl bg-gray-100 px-3 py-2 text-sm font-bold ${BRAND_INK}`}
+                    >
+                      <Plus className="h-3 w-3" /> Add spouse for KYC
+                    </button>
+                  )}
+                </div>
+              ) : null}
+
+            </div>
+          )}
+
+          {activeStep === 'file' && (
+            <div className="space-y-7">
+              <SectionTitle>Product requirements</SectionTitle>
+              {requirementRows.length > 0 ? (
+                requirementRows.map((requirement, index) => {
+                    const requirementKey = collateralRequirementKey(requirement)
+                    const submission = requirementSubmissions.find(
+                      (item) =>
+                        (item.requirementId || item.requirementType || item.label) === requirementKey,
+                    )
+                    const isDone = collateralNeedsUpload(requirement)
+                      ? Boolean(submission?.fileUrl)
+                      : Boolean(submission)
+                  return (
+                    <CollateralRequirementRow
+                      key={requirementKey || index}
+                      requirement={requirement}
+                      userId={userId}
+                      onUploaded={upsertSubmission}
+                      onCleared={clearSubmission}
+                      done={isDone}
+                      submission={submission}
+                    />
+                  )
+                })
+              ) : (
+                <p className="rounded-2xl bg-gray-50 p-4 text-xs text-gray-500">
+                  No product-specific upload requirements were configured for this application.
+                </p>
+              )}
+
+              <SectionTitle>Bank Form to fill & Submit</SectionTitle>
+              {documentsToDownload.length > 0 ? (
+                documentsToDownload.map((document, index) => {
+                  const documentName = document.name || `Document ${index + 1}`
+                  const submission = requirementSubmissions.find(
+                    (item) => (item.requirementType || item.label) === documentName,
+                  )
+                  return (
+                    <FileActionRow
+                      key={document.name || index}
+                      name={documentName}
+                      fileUrl={document.fileUrl}
+                      userId={userId}
+                      onUploaded={upsertSubmission}
+                      done={Boolean(submission)}
+                      submission={submission}
+                    />
+                  )
+                })
+              ) : (
+                <p className="rounded-2xl bg-gray-50 p-4 text-xs text-gray-500">
+                  No downloadable forms configured for this product.
+                </p>
+              )}
+            </div>
+          )}
+
+          {activeStep === 'guarantor' && requiresGuarantor ? (
+            <div className="space-y-3">
+              <SectionTitle>Guarantor</SectionTitle>
+              {guarantors.length > 0 ? (
+                <div className="relative rounded-2xl bg-gray-100 p-4 pr-10">
+                  <p className={`text-sm font-bold ${BRAND_INK}`}>{guarantors[0].name}</p>
+                  <p className="mt-1 text-[10px] text-gray-500">
+                    {guarantors[0].phone} | {guarantors[0].email}
+                  </p>
+                  {guarantors[0].verificationUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => void copyVerificationUrl(guarantors[0].verificationUrl, 'Guarantor KYC link copied.')}
+                      className={`mt-3 inline-flex items-center gap-1 text-xs font-bold ${BRAND_INK}`}
+                    >
+                      <Copy className="h-3 w-3" />
+                      Copy KYC URL
+                    </button>
+                  ) : null}
+                  <span className="absolute right-4 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-[var(--sf-button,#1E40AF)] text-white">
+                    <Check className="h-3 w-3" />
+                  </span>
+                </div>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => {
+                  setGuarantorSubmitError(null)
+                  setSheet(guarantors.length > 0 ? 'guarantor_added' : 'guarantor_form')
+                }}
+                className={`inline-flex items-center gap-1 rounded-xl bg-gray-100 px-3 py-2 text-sm font-bold ${BRAND_INK}`}
+              >
+                <Plus className="h-3 w-3" /> Add a Guarantor
+              </button>
+            </div>
+          ) : null}
+
+          {activeStep === 'property' && (
+            <ProductSummary
+              kind={kind}
+              application={initializedApplication}
+              providerName={providerName}
+              catalogProduct={catalogProduct}
+              withTerms={false}
+              accepted={accepted}
+              onToggleAccepted={() => setAccepted((v) => !v)}
+              applicationAmount={parsedApplicationAmount}
+            />
+          )}
+
+          {activeStep === 'product' && (
+            <ProductSummary
+              kind={kind}
+              application={initializedApplication}
+              providerName={providerName}
+              catalogProduct={catalogProduct}
+              withTerms
+              accepted={accepted}
+              onToggleAccepted={() => setAccepted((v) => !v)}
+              applicationAmount={parsedApplicationAmount}
+            />
+          )}
+        </div>
+      </div>
+
+      <div
+        ref={feedbackRef}
+        className="absolute bottom-6 left-5 right-5 z-20 bg-white pt-2 items-center"
+      >
+        {stepErrors.length > 0 ? (
+          <div className="relative mb-3 rounded-xl bg-red-50 px-3 py-2 pr-9 text-xs text-red-600">
+            <button
+              type="button"
+              aria-label="Dismiss validation errors"
+              className="absolute right-2 top-2 rounded-full p-1 text-red-500 hover:bg-red-100 hover:text-red-700"
+              onClick={() => setStepErrors([])}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+            <p className="font-semibold">Please complete the following before continuing:</p>
+            <ul className="mt-1 list-disc space-y-1 pl-4">
+              {stepErrors.map((issue) => (
+                <li key={issue}>{issue}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {error ? (
+          <div className="relative mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 pr-9 text-xs text-red-700">
+            <button
+              type="button"
+              aria-label="Dismiss error"
+              className="absolute right-2 top-2 rounded-full p-1 text-red-500 hover:bg-red-100 hover:text-red-700"
+              onClick={() => setError(null)}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+            <p className="font-semibold">Submission failed</p>
+            <p className="mt-1 leading-relaxed">{error}</p>
+          </div>
+        ) : null}
+        {draftNotice ? (
+          <div
+            className={cn(
+              'relative mb-3 rounded-xl px-3 py-2 pr-9 text-xs',
+              stepErrors.length > 0 ? 'bg-amber-50 text-amber-800' : 'bg-green-50 text-green-700',
+            )}
+          >
+            <button
+              type="button"
+              aria-label="Dismiss notice"
+              className="absolute right-2 top-2 rounded-full p-1 opacity-70 hover:bg-black/5 hover:opacity-100"
+              onClick={() => setDraftNotice(null)}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+            <p>{draftNotice}</p>
+          </div>
+        ) : null}
+        <div className="flex flex-row justify-between gap-3 w-full items-center align-middle">
+        <Button
+          type="button"
+          className={cn(` h-10 w-1/2 rounded-full border border-[var(--sf-button,#1E40AF)] text-xs font-bold `, OUTLINE)}
+          onClick={() => void handleSaveProgress()}
+        >
+          Save progress
+        </Button>
+        <Button
+          type="button"
+          disabled={(activeStep === 'product' && !accepted) || submitting || advancing}
+          className={cn('h-10 rounded-full w-1/2 text-sm font-semibold disabled:opacity-50', PRIMARY)}
+          onClick={goNext}
+        >
+          {submitting || advancing ? (
+            <span className="inline-flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {submitting ? 'Submitting...' : 'Please wait...'}
+            </span>
+          ) : activeStep === 'product' ? (
+            canShowPendingPage(initializedApplication) ? (
+              'Continue'
+            ) : (
+              'Submit application'
+            )
+          ) : (
+            'Next'
+          )}
+        </Button>
+        </div>
+      </div>
+
+      {sheet === 'create_account' && (
+        <BottomSheet onClose={closeCreateAccountSheet}>
+          <div className="text-center">
+            <h2 className={`text-xl font-bold ${BRAND_INK}`}>Create a {productName} Account</h2>
+            <p className="mx-auto mt-4 max-w-xs text-xs leading-relaxed text-gray-500">
+              Before you can proceed with <strong>{initializedApplication?.productName || productName}</strong> offered by{' '}
+              <strong>{providerName}</strong>, you are required to open a Bank Account with{' '}
+              <strong>{providerName}</strong>.
+            </p>
+            <div className={`mt-5 flex items-center gap-3 rounded p-3 text-left text-xs ${BRAND_SOFT} ${BRAND_INK}`}>
+              <Image
+                src="/images/mobile/cbn.png"
+                alt="Central Bank of Nigeria"
+                width={28}
+                height={28}
+                className="h-7 w-7 shrink-0 object-contain"
+              />
+              <span>
+                <strong>{providerName}</strong> is a licensed Financial Institution by the Central
+                Bank of Nigeria
+              </span>
+            </div>
+            <div className="mt-5 space-y-3 text-left text-xs text-gray-700">
+              {[
+                {
+                  checked: createAccountTermsAccepted,
+                  onClick: () => setCreateAccountTermsAccepted((value) => !value),
+                  label: `Accept Terms & Condition, Data Sharing with ${providerName}`,
+                },
+                {
+                  checked: createAccountPrivacyAccepted,
+                  onClick: () => setCreateAccountPrivacyAccepted((value) => !value),
+                  label: 'Accept Data Privacy & Use of Data',
+                },
+              ].map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={item.onClick}
+                  className="flex items-center gap-2"
+                >
+                  <span
+                    className={cn(
+                      'flex h-4 w-4 items-center justify-center rounded-full border',
+                      item.checked
+                        ? 'border-[var(--sf-button,#1E40AF)] bg-[var(--sf-button,#1E40AF)] text-white'
+                        : 'border-gray-400 bg-white',
+                    )}
+                  >
+                    {item.checked ? <Check className="h-3 w-3" /> : null}
+                  </span>
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
+            {createAccountError ? (
+              <p className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-center text-xs text-red-600">
+                {createAccountError}
+              </p>
+            ) : null}
+            <Button
+              type="button"
+              disabled={creatingAccount}
+              className={cn('mt-8 h-12 w-full rounded-full font-semibold disabled:opacity-50', PRIMARY)}
+              onClick={() => void handleCreateAccount()}
+            >
+              {creatingAccount ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating account...
+                </span>
+              ) : (
+                'Go ahead, Create Bank account'
+              )}
+            </Button>
+            <button type="button" className={`mt-5 text-sm font-medium ${BRAND_INK}`} onClick={closeCreateAccountSheet}>
+              No. Go back
+            </button>
+          </div>
+        </BottomSheet>
+      )}
+
+      {sheet === 'guarantor_form' && (
+        <BottomSheet onClose={() => setSheet(null)}>
+          <h2 className={`mb-7 text-center text-xl font-bold ${BRAND_INK}`}>Add Guarantor 1</h2>
+          <div className="space-y-3">
+            <InputPill
+              placeholder="Full Name"
+              value={guarantorDraft.name}
+              onChange={(name) => setGuarantorDraft((g) => ({ ...g, name }))}
+            />
+            <InputPill
+              placeholder="Email"
+              type="email"
+              value={guarantorDraft.email}
+              onChange={(email) => setGuarantorDraft((g) => ({ ...g, email }))}
+            />
+            <InputPill
+              placeholder="Phone"
+              type="tel"
+              value={guarantorDraft.phone}
+              onChange={(phone) => setGuarantorDraft((g) => ({ ...g, phone }))}
+            />
+            <InputPill placeholder="Occupation" />
+            <InputPill placeholder="Relationship with Guarantor" right={<ChevronDown className="h-4 w-4 text-gray-400" />} />
+          </div>
+          {guarantorSubmitError ? (
+            <p className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-center text-xs text-red-600">{guarantorSubmitError}</p>
+          ) : null}
+          <Button
+            type="button"
+            className={cn('mt-6 h-12 w-full rounded-full font-semibold', PRIMARY)}
+            onClick={() => void handleGenerateGuarantorKyc()}
+          >
+            Generate KYC link for Guarantor 1
+          </Button>
+          <button type="button" className={`mt-5 w-full text-center text-sm font-medium ${BRAND_INK}`} onClick={() => setSheet(null)}>
+            No. Go back
+          </button>
+        </BottomSheet>
+      )}
+
+      {sheet === 'guarantor_generating' && (
+        <BottomSheet onClose={() => undefined}>
+          <div className="flex flex-col items-center py-6 text-center">
+            <div className={`mb-6 flex h-20 w-20 items-center justify-center rounded-full ${BRAND_SOFT}`}>
+              <Loader2 className="h-10 w-10 animate-spin text-[var(--sf-button,#1E40AF)]" />
+            </div>
+            <h2 className={`text-xl font-bold ${BRAND_INK}`}>Generating KYC link</h2>
+            <p className="mx-auto mt-3 max-w-xs text-sm leading-relaxed text-gray-500">
+              Please wait while we generate a secure KYC verification link for your guarantor.
+            </p>
+          </div>
+        </BottomSheet>
+      )}
+
+      {sheet === 'guarantor_success' && (
+        <BottomSheet onClose={closeGuarantorSuccess}>
+          <div className="flex flex-col items-center py-4 text-center">
+            <div className={`mb-6 flex h-20 w-20 items-center justify-center rounded-full ${BRAND_SOFT}`}>
+              <CheckCircle className="h-10 w-10 text-[var(--sf-button,#1E40AF)]" />
+            </div>
+            <h2 className={`text-xl font-bold ${BRAND_INK}`}>KYC link generated</h2>
+            <p className="mx-auto mt-3 max-w-xs text-sm leading-relaxed text-gray-500">
+              The KYC verification link for{' '}
+              <strong>{lastAddedGuarantor?.name || 'your guarantor'}</strong> has been generated successfully.
+            </p>
+            <p className={`mx-auto mt-4 max-w-xs rounded-xl p-4 text-xs leading-relaxed ${BRAND_SOFT} ${BRAND_INK}`}>
+              An email has been sent to <strong>{lastAddedGuarantor?.email || 'the guarantor'}</strong> with
+              instructions to complete their KYC verification.
+            </p>
+            {lastAddedGuarantor?.verificationUrl ? (
+              <button
+                type="button"
+                onClick={() => void copyVerificationUrl(lastAddedGuarantor.verificationUrl, 'Guarantor KYC link copied.')}
+                className={`mt-5 inline-flex items-center gap-1 text-xs font-bold ${BRAND_INK}`}
+              >
+                <Copy className="h-3 w-3" />
+                Copy KYC URL
+              </button>
+            ) : null}
+            <Button
+              type="button"
+              className={cn('mt-8 h-12 w-full rounded-full font-semibold', PRIMARY)}
+              onClick={closeGuarantorSuccess}
+            >
+              Back to application
+            </Button>
+          </div>
+        </BottomSheet>
+      )}
+
+      {sheet === 'guarantor_added' && (
+        <BottomSheet onClose={() => setSheet(null)}>
+          <h2 className={`mb-4 text-center text-xl font-bold ${BRAND_INK}`}>Add Guarantor 1</h2>
+          <p className={`mb-5 rounded p-3 text-[11px] leading-relaxed ${BRAND_SOFT} ${BRAND_INK}`}>
+            Share the KYC URL with each of your Guarantor(s) to complete their KYC before you can
+            submit your application
+          </p>
+          <p className="mb-3 text-sm font-semibold text-gray-700">1 of 2 Guarantor Added</p>
+          <div className="relative rounded-2xl bg-gray-100 p-4 pr-10">
+            <p className={`text-sm font-bold ${BRAND_INK}`}>
+              {(guarantors[0] ?? DEFAULT_GUARANTOR).name}
+            </p>
+            <p className="mt-1 text-[10px] text-gray-500">
+              {(guarantors[0] ?? DEFAULT_GUARANTOR).phone} | {(guarantors[0] ?? DEFAULT_GUARANTOR).email}
+            </p>
+            {(guarantors[0] ?? DEFAULT_GUARANTOR).verificationUrl ? (
+              <button
+                type="button"
+                onClick={() =>
+                  void copyVerificationUrl(
+                    (guarantors[0] ?? DEFAULT_GUARANTOR).verificationUrl,
+                    'Guarantor KYC link copied.',
+                  )
+                }
+                className={`mt-4 inline-flex items-center gap-1 text-xs font-bold ${BRAND_INK}`}
+              >
+                <Copy className="h-3 w-3" />
+                Copy KYC URL
+              </button>
+            ) : null}
+            <span className="absolute right-4 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-[var(--sf-button,#1E40AF)] text-white">
+              <Check className="h-3 w-3" />
+            </span>
+          </div>
+          <button
+            type="button"
+            className={`mt-5 text-sm font-bold ${BRAND_INK}`}
+            onClick={() => {
+              setGuarantorSubmitError(null)
+              setGuarantorDraft({ name: '', phone: '', email: '' })
+              setSheet('guarantor_form')
+            }}
+          >
+            + Add Another Guarantor
+          </button>
+          <Button
+            type="button"
+            className={cn('mt-8 h-12 w-full rounded-full font-semibold', PRIMARY)}
+            onClick={() => setSheet(null)}
+          >
+            Save & Continue
+          </Button>
+          <button type="button" className={`mt-5 w-full text-center text-sm font-medium ${BRAND_INK}`} onClick={() => setSheet(null)}>
+            No. Go back
+          </button>
+        </BottomSheet>
+      )}
+
+      {sheet === 'spouse_form' && (
+        <BottomSheet onClose={() => setSheet(null)}>
+          <h2 className={`mb-7 text-center text-xl font-bold ${BRAND_INK}`}>Spouse KYC</h2>
+          <div className="space-y-3">
+            <InputPill
+              placeholder="Spouse full name"
+              value={spouseDraft.name}
+              onChange={(name) => {
+                setSpouseDraft((g) => ({ ...g, name }))
+                setPlatformFields((current) => ({ ...current, spouseFullName: name }))
+              }}
+            />
+            <InputPill
+              placeholder="Spouse email"
+              type="email"
+              value={spouseDraft.email}
+              onChange={(email) => {
+                setSpouseDraft((g) => ({ ...g, email }))
+                setPlatformFields((current) => ({ ...current, spouseEmail: email }))
+              }}
+            />
+            <InputPill
+              placeholder="Spouse phone"
+              type="tel"
+              value={spouseDraft.phone}
+              onChange={(phone) => {
+                setSpouseDraft((g) => ({ ...g, phone }))
+                setPlatformFields((current) => ({ ...current, spousePhone: phone }))
+              }}
+            />
+            <InputPill
+              placeholder="Spouse occupation (optional)"
+              value={spouseDraft.occupation || ''}
+              onChange={(occupation) => {
+                setSpouseDraft((g) => ({ ...g, occupation }))
+                setPlatformFields((current) => ({ ...current, spouseOccupation: occupation }))
+              }}
+            />
+            <InputPill
+              placeholder="Country code (e.g. NG)"
+              value={spouseDraft.country || ''}
+              onChange={(country) => {
+                const next = country.slice(0, 2).toUpperCase()
+                setSpouseDraft((g) => ({ ...g, country: next }))
+                setPlatformFields((current) => ({ ...current, spouseCountry: next }))
+              }}
+            />
+          </div>
+          {spouseSubmitError ? (
+            <p className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-center text-xs text-red-600">{spouseSubmitError}</p>
+          ) : null}
+          <Button
+            type="button"
+            className={cn('mt-6 h-12 w-full rounded-full font-semibold', PRIMARY)}
+            onClick={() => void handleGenerateSpouseKyc()}
+          >
+            Generate KYC link for spouse
+          </Button>
+          <button type="button" className={`mt-5 w-full text-center text-sm font-medium ${BRAND_INK}`} onClick={() => setSheet(null)}>
+            No. Go back
+          </button>
+        </BottomSheet>
+      )}
+
+      {sheet === 'spouse_generating' && (
+        <BottomSheet onClose={() => undefined}>
+          <div className="flex flex-col items-center py-6 text-center">
+            <div className={`mb-6 flex h-20 w-20 items-center justify-center rounded-full ${BRAND_SOFT}`}>
+              <Loader2 className="h-10 w-10 animate-spin text-[var(--sf-button,#1E40AF)]" />
+            </div>
+            <h2 className={`text-xl font-bold ${BRAND_INK}`}>Generating spouse KYC link</h2>
+            <p className="mx-auto mt-3 max-w-xs text-sm leading-relaxed text-gray-500">
+              Please wait while we generate a secure KYC verification link for your spouse.
+            </p>
+          </div>
+        </BottomSheet>
+      )}
+
+      {sheet === 'spouse_success' && (
+        <BottomSheet onClose={closeSpouseSuccess}>
+          <div className="flex flex-col items-center py-4 text-center">
+            <div className={`mb-6 flex h-20 w-20 items-center justify-center rounded-full ${BRAND_SOFT}`}>
+              <CheckCircle className="h-10 w-10 text-[var(--sf-button,#1E40AF)]" />
+            </div>
+            <h2 className={`text-xl font-bold ${BRAND_INK}`}>Spouse KYC link generated</h2>
+            <p className="mx-auto mt-3 max-w-xs text-sm leading-relaxed text-gray-500">
+              Share the verification link with <strong>{spouse?.name || 'your spouse'}</strong> to complete KYC.
+            </p>
+            {spouse?.verificationUrl ? (
+              <button
+                type="button"
+                onClick={() => void copyVerificationUrl(spouse.verificationUrl, 'Spouse KYC link copied.')}
+                className={`mt-5 inline-flex items-center gap-1 text-xs font-bold ${BRAND_INK}`}
+              >
+                <Copy className="h-3 w-3" />
+                Copy spouse KYC URL
+              </button>
+            ) : null}
+            <Button
+              type="button"
+              className={cn('mt-8 h-12 w-full rounded-full font-semibold', PRIMARY)}
+              onClick={closeSpouseSuccess}
+            >
+              Back to application
+            </Button>
+          </div>
+        </BottomSheet>
+      )}
+
+      {sheet === 'success' && (
+        <BottomSheet onClose={() => setSheet(null)}>
+          <div className="flex flex-col items-center py-4 text-center">
+            <div className={`mb-6 flex h-20 w-20 items-center justify-center rounded-full ${BRAND_SOFT}`}>
+              <Check className="h-10 w-10 text-[var(--sf-button,#1E40AF)]" strokeWidth={3} />
+            </div>
+            <h2 className={`text-xl font-bold ${BRAND_INK}`}>Application Submitted</h2>
+            <p className="mt-2 text-sm text-gray-500">Your {productName.toLowerCase()} application has been submitted.</p>
+            {kind === 'mortgage' ? (
+              <p className="mt-2 text-xs text-gray-400">
+                Track progress and next steps in Pending Mortgage.
+              </p>
+            ) : null}
+            <Link href={successContinueHref} className="mt-8 w-full">
+              <Button className={cn('h-12 w-full rounded-full font-semibold', PRIMARY)}>Continue</Button>
+            </Link>
+          </div>
+        </BottomSheet>
+      )}
+    </div>
+  )
+}
