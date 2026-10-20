@@ -10,6 +10,12 @@ function forwardGatewayMerchantHeaders(proxyReq: ClientRequest, req: Request): v
     proxyReq.setHeader('X-Merchant-Id', req.gatewayMerchantAuth.merchantId);
     proxyReq.setHeader('X-Api-Key-Id', req.gatewayMerchantAuth.apiKeyId);
     proxyReq.setHeader('X-Gateway-Verified', '1');
+    if (req.gatewayMerchantAuth.merchantName) {
+      proxyReq.setHeader('X-Merchant-Name', req.gatewayMerchantAuth.merchantName);
+    }
+    if (req.gatewayMerchantAuth.environment) {
+      proxyReq.setHeader('X-Gateway-Environment', req.gatewayMerchantAuth.environment);
+    }
   }
 }
 
@@ -32,6 +38,9 @@ export const setupProxies = (app: Express) => {
   app.use(proxied(['/api/v1/compliance', '/api/v1/kyc'], config.complianceServiceUrl));
 
   app.use(proxied('/api/v1/wallets', config.walletServiceUrl));
+
+  /** Plata merchant dashboard Treasury / Withdrawals / Settlements console (wallet-ms). */
+  app.use(proxied('/api/v1/frontend-plata', config.walletServiceUrl));
 
   app.use(proxied('/api/v1/billing', config.billingServiceUrl));
 
