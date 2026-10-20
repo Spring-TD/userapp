@@ -2,7 +2,9 @@ import { Request, Response } from 'express';
 import { ApiError } from '../middleware/errorHandler';
 import savingsAccountService from '../services/savingsAccountService';
 import savingsDepositService from '../services/savingsDepositService';
+import depositMaturityWithdrawalService from '../services/depositMaturityWithdrawalService';
 import type { CreateSavingsAccountRequest, SavingsDepositRequest, SavingsDepositWebhookRequest } from '../types/savingsAccount';
+import type { DepositMaturityWithdrawRequest } from '../services/depositMaturityWithdrawalService';
 
 class SavingsAccountController {
   createSavingsAccount = async (req: Request, res: Response): Promise<void> => {
@@ -103,6 +105,32 @@ class SavingsAccountController {
       res.status(500).json({
         success: false,
         error: error instanceof Error ? error.message : 'Failed to record external savings deposit'
+      });
+    }
+  };
+
+  withdraw = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const applicationId = String(req.params.applicationId || '').trim();
+      const body = (req.validatedBody ?? req.body) as DepositMaturityWithdrawRequest;
+      const result = await depositMaturityWithdrawalService.withdraw(applicationId, body, 'SAVINGS');
+
+      res.status(result.duplicate ? 200 : 201).json({
+        success: true,
+        duplicate: result.duplicate,
+        message: result.duplicate
+          ? 'Savings withdrawal request already submitted.'
+          : 'Savings principal and interest submitted for merchant approval.',
+        data: result.withdrawal
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({ success: false, error: error.message });
+        return;
+      }
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to withdraw savings'
       });
     }
   };

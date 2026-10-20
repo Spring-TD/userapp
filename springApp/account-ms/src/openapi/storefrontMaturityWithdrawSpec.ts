@@ -234,11 +234,13 @@ const storefrontMaturityWithdrawSpec = {
     },
     '/api/v1/investment-accounts/{applicationId}/withdraw': {
       post: withdrawOperation({
-        summary: 'Withdraw matured investment',
+        summary: 'Withdraw investment (maturity or anytime)',
         description:
-          'After the investment holding period ends, pays principal + flat interest. Credits the user’s PRIMARY wallet. Uses Plata creator Treasury when the product is upstream-linked.',
+          'Pays principal + interest into the merchant approval queue, then credits the user’s PRIMARY wallet after FI approval. ' +
+          'Locked plans: available after the holding period (flat ROI). ' +
+          'Open-ended / anytime plans (`structure.withdrawalFlexibility = anytime`): withdraw anytime with interest accrued to date (ROI × days held / 365). Optional `amount` for partial principal.',
         tag: 'Investment withdrawal',
-        successMessage: 'Investment principal and interest paid out successfully.'
+        successMessage: 'Investment principal and interest submitted for merchant approval.'
       })
     },
     '/api/v1/commodity-accounts/{applicationId}/withdraw': {

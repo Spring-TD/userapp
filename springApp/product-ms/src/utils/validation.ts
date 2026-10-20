@@ -225,6 +225,12 @@ export const commodityWithdrawSchema = Joi.object({
   userId: Joi.string().trim().required()
 });
 
+/** SAVINGS / INVESTMENT maturity or anytime principal (+ interest) withdrawal. */
+export const depositMaturityWithdrawSchema = Joi.object({
+  userId: Joi.string().trim().required(),
+  amount: Joi.number().positive().optional()
+});
+
 export const createProductApplicationSchema = Joi.object({
   userId: Joi.string().trim().required(),
   productId: Joi.string().trim().required(),

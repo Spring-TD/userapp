@@ -241,6 +241,107 @@ export async function collectSavingsPrincipalViaPlataGateway(
   };
 }
 
+export type MaturityWithdrawalGatewayRequest = {
+  creatorMerchantId: string;
+  creatorAppId: string;
+  amount: number;
+  principalAmount?: number;
+  interestAmount?: number;
+  referenceId: string;
+  currency?: string;
+  description?: string;
+  productId?: string;
+  productType?: 'SAVINGS' | 'INVESTMENT' | 'COMMODITY' | string;
+  applicationId?: string;
+  offeringMerchantId?: string;
+  offeringAppId?: string;
+  userId?: string;
+  customerName?: string;
+  customerEmail?: string;
+  productName?: string;
+  maturityAt?: string;
+  springLocalApplicationId?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export async function enqueueMaturityWithdrawalRequestViaPlataGateway(
+  request: MaturityWithdrawalGatewayRequest
+): Promise<SettlementCollectResult> {
+  if (!isPlataGatewayConfigured()) {
+    return {
+      success: false,
+      skipped: true,
+      error: 'PLATA gateway keys not configured'
+    };
+  }
+  if (!request.amount || request.amount <= 0) {
+    return { success: false, error: 'amount must be a positive number' };
+  }
+  if (!request.creatorMerchantId?.trim() || !request.creatorAppId?.trim() || !request.referenceId?.trim()) {
+    return {
+      success: false,
+      error: 'creatorMerchantId, creatorAppId, and referenceId are required'
+    };
+  }
+
+  const productType = String(request.productType || 'INVESTMENT').trim().toUpperCase() || 'INVESTMENT';
+  const pathSegment =
+    productType === 'SAVINGS'
+      ? 'savings'
+      : productType === 'COMMODITY'
+        ? 'commodity'
+        : 'investment';
+
+  const response = await axios.post<{
+    success?: boolean;
+    duplicate?: boolean;
+    error?: string;
+    data?: { transaction?: { id?: string } };
+  }>(
+    `${config.plataAccountServiceUrl}/api/v1/wallets/${pathSegment}/maturity-withdrawal-request`,
+    {
+      creatorMerchantId: request.creatorMerchantId.trim(),
+      creatorAppId: request.creatorAppId.trim(),
+      amount: request.amount,
+      principalAmount: request.principalAmount,
+      interestAmount: request.interestAmount,
+      currency: request.currency || 'NGN',
+      referenceId: request.referenceId.trim(),
+      description: request.description,
+      productId: request.productId,
+      productType,
+      applicationId: request.applicationId,
+      offeringMerchantId: request.offeringMerchantId,
+      offeringAppId: request.offeringAppId,
+      userId: request.userId,
+      customerName: request.customerName,
+      customerEmail: request.customerEmail,
+      productName: request.productName,
+      maturityAt: request.maturityAt,
+      springLocalApplicationId: request.springLocalApplicationId,
+      metadata: request.metadata
+    },
+    {
+      headers: { ...getPlataAuthHeaders(), 'Content-Type': 'application/json' },
+      timeout: httpTimeoutMs(),
+      validateStatus: () => true
+    }
+  );
+
+  if (response.status >= 200 && response.status < 300 && response.data?.success) {
+    return {
+      success: true,
+      duplicate: response.data.duplicate === true,
+      transactionId: response.data.data?.transaction?.id
+    };
+  }
+
+  return {
+    success: false,
+    error: response.data?.error || `Plata maturity withdrawal request failed (${response.status})`
+  };
+}
+
 export type CommodityPrincipalGatewayRequest = InvestmentPrincipalGatewayRequest;
 
 export async function collectCommodityPrincipalViaPlataGateway(

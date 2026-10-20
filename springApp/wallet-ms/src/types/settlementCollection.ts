@@ -48,6 +48,9 @@ export const COMMODITY_PURCHASE_SOURCE = 'commodity-purchase';
 /** Source for commodity maturity payout (creator SETTLEMENT debit → user PRIMARY credit). */
 export const COMMODITY_MATURITY_PAYOUT_SOURCE = 'commodity-maturity-payout';
 
+/** Source for savings/investment maturity credit after Plata Treasury approval. */
+export const MATURITY_PAYOUT_SOURCE = 'maturity-payout';
+
 export interface CommodityPurchaseCollectInput {
   userId: string;
   /** Storefront merchant hosting the buyer's PRIMARY wallet. */

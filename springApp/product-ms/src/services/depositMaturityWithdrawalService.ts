@@ -2,12 +2,20 @@ import { ProductApplicationModel, type IProductApplicationDocument } from '../mo
 import { ProductModel, toProduct } from '../models/ProductModel';
 import { ApiError } from '../middleware/errorHandler';
 import {
+  calculateAccruedInterestToDate,
   calculateFlatMaturityInterest,
   isMoratoriumEnded,
+  isOpenEndedProduct,
   resolveAccountMaturityAt
 } from '../utils/commodityPricing';
 import { extractDepositBalanceFromSnapshot } from '../utils/moneySnapshotAmounts';
-import { appendDepositActivity, isFlexibleSavingsProduct, roundMoney } from '../utils/savingsInterest';
+import {
+  appendDepositActivity,
+  isAnytimeDepositProduct,
+  isFlexibleSavingsProduct,
+  roundMoney,
+  shouldAccrueDailyInterest
+} from '../utils/savingsInterest';
 import {
   enqueueMaturityWithdrawalRequestViaPlataGateway,
   isPlataGatewayConfigured
@@ -20,7 +28,7 @@ export type DepositProductType = 'SAVINGS' | 'INVESTMENT';
 
 export type DepositMaturityWithdrawRequest = {
   userId: string;
-  /** Partial amount — only for flexible/anytime SAVINGS. */
+  /** Partial amount — flexible/anytime SAVINGS or anytime INVESTMENT. */
   amount?: number;
 };
 
@@ -103,12 +111,14 @@ class DepositMaturityWithdrawalService {
       throw new ApiError(409, `${productType} withdrawal request is already pending merchant approval`);
     }
 
+    const anytime = isAnytimeDepositProduct(product) || isOpenEndedProduct(product);
     const maturityAt = resolveAccountMaturityAt({
       product,
       snapshot,
       createdAt: application.createdAt
     });
-    if (!isMoratoriumEnded(maturityAt)) {
+    // Anytime / open-ended products may withdraw before any scheduled maturity.
+    if (!anytime && !isMoratoriumEnded(maturityAt)) {
       throw new ApiError(403, 'Withdrawal is blocked until the holding period ends');
     }
 
@@ -118,6 +128,7 @@ class DepositMaturityWithdrawalService {
     }
 
     const isFlexSavings = productType === 'SAVINGS' && isFlexibleSavingsProduct(product);
+    const allowsPartial = anytime;
     const requestedAmount =
       input.amount != null && Number.isFinite(Number(input.amount)) ? Number(input.amount) : undefined;
 
@@ -125,8 +136,11 @@ class DepositMaturityWithdrawalService {
       if (requestedAmount <= 0) {
         throw new ApiError(400, 'Withdrawal amount must be positive');
       }
-      if (!isFlexSavings) {
-        throw new ApiError(400, 'Partial withdrawals are only supported for flexible savings plans');
+      if (!allowsPartial) {
+        throw new ApiError(
+          400,
+          'Partial withdrawals are only supported for anytime / open-ended plans'
+        );
       }
       if (requestedAmount > available) {
         throw new ApiError(400, 'Withdrawal amount exceeds available balance');
@@ -134,10 +148,24 @@ class DepositMaturityWithdrawalService {
     }
 
     const principal = roundMoney(requestedAmount != null ? requestedAmount : available);
-    // Flex plans accrue interest into balance daily — do not add flat maturity interest again.
-    const interest = isFlexSavings ? 0 : calculateFlatMaturityInterest(principal, product);
+    // Savings flex with daily accrual already compounds into balance — don't double-count.
+    // Anytime / open-ended INVESTMENT: pay principal + interest accrued to date.
+    // Locked plans at maturity: flat full-period interest.
+    let interest = 0;
+    if (isFlexSavings && shouldAccrueDailyInterest(product)) {
+      interest = 0;
+    } else if (anytime) {
+      const fundedAt =
+        (typeof snapshot.fundedAt === 'string' && snapshot.fundedAt) ||
+        (typeof snapshot.firstDepositAt === 'string' && snapshot.firstDepositAt) ||
+        (typeof snapshot.enrolledAt === 'string' && snapshot.enrolledAt) ||
+        application.createdAt;
+      interest = calculateAccruedInterestToDate(principal, product, fundedAt);
+    } else {
+      interest = calculateFlatMaturityInterest(principal, product);
+    }
     const totalPayout = roundMoney(principal + interest);
-    const isPartial = isFlexSavings && principal < available;
+    const isPartial = allowsPartial && principal < available;
     const referenceId = isPartial
       ? `${productType.toLowerCase()}-withdrawal:${application._id.toString()}:${principal}:${Date.now()}`
       : `${productType.toLowerCase()}-withdrawal:${application._id.toString()}`;

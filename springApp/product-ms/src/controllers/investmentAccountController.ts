@@ -2,10 +2,12 @@ import { Request, Response } from 'express';
 import { ApiError } from '../middleware/errorHandler';
 import investmentAccountService from '../services/investmentAccountService';
 import investmentDepositService from '../services/investmentDepositService';
+import depositMaturityWithdrawalService from '../services/depositMaturityWithdrawalService';
 import type {
   CreateInvestmentAccountRequest,
   InvestmentDepositRequest
 } from '../types/investmentAccount';
+import type { DepositMaturityWithdrawRequest } from '../services/depositMaturityWithdrawalService';
 
 class InvestmentAccountController {
   createInvestmentAccount = async (req: Request, res: Response): Promise<void> => {
@@ -102,6 +104,37 @@ class InvestmentAccountController {
       res.status(500).json({
         success: false,
         error: error instanceof Error ? error.message : 'Failed to fund investment'
+      });
+    }
+  };
+
+  withdraw = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const applicationId = String(req.params.applicationId || '').trim();
+      const body = (req.validatedBody ?? req.body) as DepositMaturityWithdrawRequest;
+      const result = await depositMaturityWithdrawalService.withdraw(applicationId, body, 'INVESTMENT');
+
+      res.status(result.duplicate ? 200 : 201).json({
+        success: true,
+        duplicate: result.duplicate,
+        message: result.duplicate
+          ? 'Investment withdrawal request already submitted.'
+          : 'Investment principal and interest submitted for merchant approval.',
+        data: result.withdrawal
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+        return;
+      }
+
+      console.error('Error withdrawing investment account:', error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to withdraw investment'
       });
     }
   };

@@ -8,6 +8,7 @@ import swaggerSpec from './config/swagger';
 import { corsMiddleware } from './middleware';
 import { errorHandler, notFoundHandler } from './middleware';
 import { productRoutes, configurationRoutes, productApplicationRoutes, applicationRoutes, savingsAccountRoutes, investmentAccountRoutes, commodityAccountRoutes } from './routes';
+import { maturityWithdrawalInternalRoutes } from './routes/maturityWithdrawalInternalRoutes';
 import productCatalogSyncScheduler from './services/productCatalogSyncScheduler';
 
 const app = express();
@@ -89,6 +90,7 @@ app.use('/api/v1/product-applications', productApplicationRoutes);
 app.use('/api/v1/savings-accounts', savingsAccountRoutes);
 app.use('/api/v1/investment-accounts', investmentAccountRoutes);
 app.use('/api/v1/commodity-accounts', commodityAccountRoutes);
+app.use('/api/v1/internal/maturity-withdrawals', maturityWithdrawalInternalRoutes);
 
 // Error handling middleware
 app.use(notFoundHandler);

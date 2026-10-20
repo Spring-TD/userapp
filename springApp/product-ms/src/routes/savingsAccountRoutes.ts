@@ -5,7 +5,8 @@ import { requireWalletInternalToken } from '../middleware/walletInternalAuth';
 import {
   createSavingsAccountSchema,
   savingsDepositSchema,
-  savingsDepositWebhookSchema
+  savingsDepositWebhookSchema,
+  depositMaturityWithdrawSchema
 } from '../utils/validation';
 
 const router = Router();
@@ -16,6 +17,11 @@ router.post(
   '/:applicationId/deposits',
   validate(savingsDepositSchema),
   savingsAccountController.deposit
+);
+router.post(
+  '/:applicationId/withdraw',
+  validate(depositMaturityWithdrawSchema),
+  savingsAccountController.withdraw
 );
 router.post(
   '/internal/deposit-webhook',

@@ -3,7 +3,8 @@ import investmentAccountController from '../controllers/investmentAccountControl
 import { validate } from '../middleware/validation';
 import {
   createInvestmentAccountSchema,
-  investmentDepositSchema
+  investmentDepositSchema,
+  depositMaturityWithdrawSchema
 } from '../utils/validation';
 
 const router = Router();
@@ -14,6 +15,11 @@ router.post(
   '/:applicationId/deposits',
   validate(investmentDepositSchema),
   investmentAccountController.deposit
+);
+router.post(
+  '/:applicationId/withdraw',
+  validate(depositMaturityWithdrawSchema),
+  investmentAccountController.withdraw
 );
 
 export { router as investmentAccountRoutes };

@@ -73,14 +73,26 @@ function bumpInvestmentSnapshot(
     Number.isFinite(previousDeposits) && previousDeposits >= 0 ? previousDeposits + amount : amount;
   const nextBalance = previousBalance + amount;
 
+  const nowIso = new Date().toISOString();
+  const firstDepositAt =
+    typeof base.firstDepositAt === 'string' && base.firstDepositAt.trim()
+      ? base.firstDepositAt
+      : typeof base.fundedAt === 'string' && base.fundedAt.trim()
+        ? base.fundedAt
+        : nowIso;
+
   return {
     ...base,
     currency: currency.trim().toUpperCase(),
     investmentBalance: nextBalance,
     currentBalance: nextBalance,
     totalDeposits,
-    lastDepositAt: new Date().toISOString(),
-    lastDepositAmount: amount
+    fundedAt: typeof base.fundedAt === 'string' && base.fundedAt.trim() ? base.fundedAt : firstDepositAt,
+    firstDepositAt,
+    lastDepositAt: nowIso,
+    lastDepositAmount: amount,
+    holdingStatus: base.holdingStatus || 'ACTIVE',
+    accountHoldingStatus: base.accountHoldingStatus || 'ACTIVE'
   };
 }
 

@@ -23,6 +23,7 @@ import {
   REPAYMENT_COLLECTION_SOURCE,
   COMMODITY_PURCHASE_SOURCE,
   COMMODITY_MATURITY_PAYOUT_SOURCE,
+  MATURITY_PAYOUT_SOURCE,
   INVESTMENT_PURCHASE_SOURCE,
   SAVINGS_PURCHASE_SOURCE,
   type SettlementCollectInput,
@@ -3562,6 +3563,182 @@ export class WalletService {
     } catch (error) {
       logger.error('Error paying commodity maturity', { error, referenceId: data.referenceId });
       return { success: false, error: 'Failed to pay commodity maturity payout' };
+    }
+  }
+
+  /**
+   * Credit user PRIMARY for savings/investment maturity (or anytime liquidation).
+   * When treasuryFundedExternally is true, Plata already debited creator Treasury — only credit the user.
+   */
+  static async payoutMaturity(data: {
+    userId: string;
+    offeringMerchantId: string;
+    creatorMerchantId: string;
+    creatorAppId: string;
+    principalAmount: number;
+    interestAmount: number;
+    referenceId: string;
+    applicationId: string;
+    currency?: string;
+    productType?: string;
+    treasuryFundedExternally?: boolean;
+    metadata?: Record<string, unknown>;
+  }): Promise<{
+    success: boolean;
+    duplicate?: boolean;
+    totalPayout?: number;
+    userWallet?: UserWallet;
+    error?: string;
+  }> {
+    try {
+      const userId = data.userId.trim();
+      const offeringMerchantId = data.offeringMerchantId.trim();
+      const referenceId = data.referenceId.trim();
+      const principalAmount = Number(data.principalAmount);
+      const interestAmount = Number(data.interestAmount);
+      const currency = data.currency?.trim().toUpperCase() || 'NGN';
+      const productType = String(data.productType || 'INVESTMENT').trim().toUpperCase() || 'INVESTMENT';
+      const source = MATURITY_PAYOUT_SOURCE;
+      const category =
+        productType === 'SAVINGS'
+          ? 'SAVINGS_MATURITY_PAYOUT'
+          : productType === 'COMMODITY'
+            ? 'COMMODITY_MATURITY_PAYOUT'
+            : 'INVESTMENT_MATURITY_PAYOUT';
+
+      if (!userId || !offeringMerchantId || !referenceId || !data.applicationId.trim()) {
+        return {
+          success: false,
+          error: 'userId, offeringMerchantId, referenceId, and applicationId are required'
+        };
+      }
+      if (!Number.isFinite(principalAmount) || principalAmount <= 0) {
+        return { success: false, error: 'principalAmount must be a positive number' };
+      }
+      if (!Number.isFinite(interestAmount) || interestAmount < 0) {
+        return { success: false, error: 'interestAmount must be zero or a positive number' };
+      }
+
+      const totalPayout = Math.round((principalAmount + interestAmount) * 100) / 100;
+      if (totalPayout <= 0) {
+        return { success: false, error: 'total payout must be positive' };
+      }
+
+      const existingTx = await db.findTransactionByExternalReferenceAndSource(referenceId, source);
+      if (existingTx) {
+        return { success: true, duplicate: true, totalPayout };
+      }
+
+      const userWallet = await db.getUserWalletForMerchant(userId, offeringMerchantId);
+      if (!userWallet) {
+        return { success: false, error: 'User wallet not found for merchant' };
+      }
+      if (userWallet.status !== WalletStatus.ACTIVE) {
+        return { success: false, error: 'User wallet is not active' };
+      }
+      if (userWallet.currency !== currency) {
+        return { success: false, error: `User wallet currency ${userWallet.currency} does not match ${currency}` };
+      }
+
+      if (!data.treasuryFundedExternally) {
+        const creatorMerchantId = data.creatorMerchantId.trim();
+        const creatorAppId = data.creatorAppId.trim();
+        if (!creatorMerchantId || !creatorAppId) {
+          return { success: false, error: 'creatorMerchantId and creatorAppId are required' };
+        }
+        const creatorSettlementResult = await this.getSettlementWallet(creatorMerchantId, creatorAppId);
+        if (!creatorSettlementResult.success || !creatorSettlementResult.wallet) {
+          return { success: false, error: creatorSettlementResult.error || 'Creator settlement wallet not found' };
+        }
+        const creatorSettlement = creatorSettlementResult.wallet;
+        if (creatorSettlement.status !== WalletStatus.ACTIVE) {
+          return { success: false, error: 'Creator settlement wallet is not active' };
+        }
+        if (creatorSettlement.currency !== currency) {
+          return {
+            success: false,
+            error: `Creator settlement currency ${creatorSettlement.currency} does not match ${currency}`
+          };
+        }
+        if (creatorSettlement.mainBalance < totalPayout) {
+          return { success: false, error: 'Insufficient creator settlement balance for maturity payout' };
+        }
+
+        const creatorBalanceBefore = creatorSettlement.mainBalance;
+        const creatorBalanceAfter = creatorBalanceBefore - totalPayout;
+        await db.updateWalletBalance(creatorSettlement.id, {
+          mainBalance: creatorBalanceAfter,
+          ledgerBalance: creatorSettlement.ledgerBalance - totalPayout
+        });
+        await db.createTransaction({
+          walletId: creatorSettlement.id,
+          amount: -totalPayout,
+          type: TransactionType.DEBIT,
+          status: TransactionStatus.COMPLETED,
+          description: `${productType} maturity payout (${totalPayout} ${currency})`,
+          referenceId: `${referenceId}:creator-debit`,
+          balanceBefore: creatorBalanceBefore,
+          balanceAfter: creatorBalanceAfter,
+          category,
+          source,
+          externalReference: referenceId,
+          metadata: {
+            userId,
+            applicationId: data.applicationId,
+            principalAmount,
+            interestAmount,
+            totalPayout,
+            currency,
+            productType,
+            ...(data.metadata ?? {})
+          },
+          tags: ['maturity-payout', 'creator-settlement-debit', productType.toLowerCase()]
+        });
+      }
+
+      const userBalanceBefore = userWallet.mainBalance;
+      const userBalanceAfter = userBalanceBefore + totalPayout;
+      await db.updateWalletBalance(userWallet.id, {
+        mainBalance: userBalanceAfter,
+        ledgerBalance: userWallet.ledgerBalance + totalPayout
+      });
+
+      await db.createTransaction({
+        walletId: userWallet.id,
+        amount: totalPayout,
+        type: TransactionType.CREDIT,
+        status: TransactionStatus.COMPLETED,
+        description: `${productType} principal + interest payout (${totalPayout} ${currency})`,
+        referenceId,
+        balanceBefore: userBalanceBefore,
+        balanceAfter: userBalanceAfter,
+        category,
+        source,
+        externalReference: referenceId,
+        metadata: {
+          applicationId: data.applicationId,
+          principalAmount,
+          interestAmount,
+          totalPayout,
+          currency,
+          productType,
+          treasuryFundedExternally: data.treasuryFundedExternally === true,
+          ...(data.metadata ?? {})
+        },
+        tags: ['maturity-payout', 'user-wallet-credit', productType.toLowerCase()]
+      });
+
+      const updatedUser = await db.getWalletById(userWallet.id);
+      logger.info('Maturity payout completed', { userId, referenceId, totalPayout, productType });
+      return {
+        success: true,
+        duplicate: false,
+        totalPayout,
+        userWallet: updatedUser as UserWallet
+      };
+    } catch (error) {
+      logger.error('Error paying maturity payout', { error, referenceId: data.referenceId });
+      return { success: false, error: 'Failed to pay maturity payout' };
     }
   }
 

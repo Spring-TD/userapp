@@ -127,6 +127,28 @@ export function resolveOfferYieldPercent(product: Product): { enabled: boolean; 
   };
 }
 
+/**
+ * Annual percent rate for savings/investment maturity or accrued interest.
+ * Prefer returnsOnInvestment / interestRate; fall back to offerYield when enabled.
+ */
+export function resolveDepositInterestRatePercent(product: Product): number {
+  const structure = product.structure;
+  const candidates = [
+    structure?.returnsOnInvestment,
+    structure?.interestRate,
+    (product as { returnsOnInvestment?: unknown }).returnsOnInvestment,
+    (product as { interestRate?: unknown }).interestRate
+  ];
+  for (const raw of candidates) {
+    const rate = parseFiniteAmount(raw);
+    if (rate !== undefined && rate > 0) {
+      return rate;
+    }
+  }
+  const offer = resolveOfferYieldPercent(product);
+  return offer.enabled && offer.ratePercent > 0 ? offer.ratePercent : 0;
+}
+
 /** Simple flat interest for the full holding period (percent of principal). */
 export function calculateCommodityFlatInterest(principal: number, product: Product): number {
   const { enabled, ratePercent } = resolveOfferYieldPercent(product);
@@ -134,6 +156,109 @@ export function calculateCommodityFlatInterest(principal: number, product: Produ
     return 0;
   }
   return roundMoney(principal * (ratePercent / 100));
+}
+
+/** Flat maturity interest for locked SAVINGS / INVESTMENT (full-period ROI %). */
+export function calculateFlatMaturityInterest(principal: number, product: Product): number {
+  if (!Number.isFinite(principal) || principal <= 0) return 0;
+  const ratePercent = resolveDepositInterestRatePercent(product);
+  if (ratePercent <= 0) return 0;
+  return roundMoney(principal * (ratePercent / 100));
+}
+
+/**
+ * Accrued interest for open-ended / anytime plans: principal × annualRate% × daysHeld/365.
+ * `fundedAt` should be first fund / last accrual anchor when available.
+ */
+export function calculateAccruedInterestToDate(
+  principal: number,
+  product: Product,
+  fundedAt: Date | string | undefined,
+  now = new Date()
+): number {
+  if (!Number.isFinite(principal) || principal <= 0) return 0;
+  const ratePercent = resolveDepositInterestRatePercent(product);
+  if (ratePercent <= 0) return 0;
+
+  const start = fundedAt instanceof Date ? fundedAt : fundedAt ? new Date(fundedAt) : undefined;
+  if (!start || Number.isNaN(start.getTime())) return 0;
+
+  const ms = Math.max(0, now.getTime() - start.getTime());
+  const daysHeld = Math.max(0, Math.floor(ms / (24 * 60 * 60 * 1000)));
+  if (daysHeld <= 0) return 0;
+
+  return roundMoney(principal * (ratePercent / 100) * (daysHeld / 365));
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== undefined && value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/** True when catalog tenure/duration is open-ended (no fixed holding period). */
+export function isOpenEndedProduct(product: Product): boolean {
+  const about = asRecord(product.about as unknown);
+  const structure = asRecord(product.structure as unknown);
+  const candidates = [
+    about?.duration,
+    about?.investmentTenure,
+    about?.savingsTenure,
+    about?.tenure,
+    structure?.duration,
+    structure?.investmentTenure,
+    structure?.savingsTenure,
+    structure?.tenure
+  ];
+  for (const raw of candidates) {
+    if (raw === 'open_ended' || raw === 'open') return true;
+    const rec = asRecord(raw);
+    if (!rec) continue;
+    const unit = String(rec.unit || '').trim().toLowerCase();
+    const value = rec.value;
+    if (unit === 'open' || value === 'open_ended' || value === 'open') return true;
+  }
+  return !parseMoratorium(product.structure);
+}
+
+/**
+ * Resolve account maturity timestamp for withdrawal gating.
+ * Open-ended / anytime products return undefined (no lock).
+ */
+export function resolveAccountMaturityAt(input: {
+  product: Product;
+  snapshot: Record<string, unknown>;
+  createdAt?: Date | string;
+}): string | undefined {
+  const snapMaturity = input.snapshot.maturityAt;
+  if (typeof snapMaturity === 'string' && snapMaturity.trim()) {
+    return snapMaturity.trim();
+  }
+  if (snapMaturity instanceof Date && !Number.isNaN(snapMaturity.getTime())) {
+    return snapMaturity.toISOString();
+  }
+
+  if (isOpenEndedProduct(input.product)) {
+    return undefined;
+  }
+
+  const fundedRaw =
+    input.snapshot.fundedAt ||
+    input.snapshot.firstDepositAt ||
+    input.snapshot.enrolledAt ||
+    input.createdAt;
+  const fundedAt =
+    fundedRaw instanceof Date
+      ? fundedRaw
+      : typeof fundedRaw === 'string' && fundedRaw.trim()
+        ? new Date(fundedRaw)
+        : undefined;
+  if (!fundedAt || Number.isNaN(fundedAt.getTime())) {
+    return undefined;
+  }
+
+  const maturity = computeMaturityDate(fundedAt, input.product);
+  return maturity.toISOString();
 }
 
 export function isMoratoriumEnded(maturityAt: string | Date | undefined, now = new Date()): boolean {

@@ -650,6 +650,63 @@ export class InternalWalletController {
     }
   }
 
+  /** POST /api/v1/internal/wallets/maturity-payout — savings/investment (Plata treasury-funded credit). */
+  static async payoutMaturity(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = req.body as {
+        userId?: string;
+        offeringMerchantId?: string;
+        creatorMerchantId?: string;
+        creatorAppId?: string;
+        principalAmount?: number;
+        interestAmount?: number;
+        referenceId?: string;
+        applicationId?: string;
+        currency?: string;
+        productType?: string;
+        treasuryFundedExternally?: boolean;
+        metadata?: Record<string, unknown>;
+      };
+
+      const result = await WalletService.payoutMaturity({
+        userId: (body.userId || '').trim(),
+        offeringMerchantId: (body.offeringMerchantId || '').trim(),
+        creatorMerchantId: (body.creatorMerchantId || '').trim(),
+        creatorAppId: (body.creatorAppId || '').trim(),
+        principalAmount: Number(body.principalAmount),
+        interestAmount: Number(body.interestAmount ?? 0),
+        referenceId: (body.referenceId || '').trim(),
+        applicationId: (body.applicationId || '').trim(),
+        currency: body.currency?.trim().toUpperCase(),
+        productType: body.productType,
+        treasuryFundedExternally: body.treasuryFundedExternally === true,
+        metadata: body.metadata
+      });
+
+      if (!result.success) {
+        const status = result.error?.includes('not found')
+          ? 404
+          : result.error?.includes('Insufficient')
+            ? 402
+            : 400;
+        res.status(status).json({ success: false, error: result.error || 'Failed to pay maturity payout' });
+        return;
+      }
+
+      res.status(result.duplicate ? 200 : 201).json({
+        success: true,
+        duplicate: result.duplicate === true,
+        data: {
+          totalPayout: result.totalPayout,
+          userWallet: result.userWallet
+        }
+      });
+    } catch (error) {
+      logger.error('Internal API: maturity payout failed', { error });
+      next(error);
+    }
+  }
+
   /** POST /api/v1/internal/wallets/investment/purchase */
   static async collectInvestmentPurchase(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {

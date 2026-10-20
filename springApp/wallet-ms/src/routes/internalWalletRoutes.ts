@@ -62,6 +62,11 @@ router.post(
   InternalWalletController.payoutCommodityMaturity
 );
 router.post(
+  '/maturity-payout',
+  requireWalletInternalToken,
+  InternalWalletController.payoutMaturity
+);
+router.post(
   '/investment/purchase',
   requireWalletInternalToken,
   InternalWalletController.collectInvestmentPurchase

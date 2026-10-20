@@ -446,3 +446,58 @@ export async function payoutCommodityMaturityOnSpringWallet(
     error: body.error || `Commodity maturity payout failed (${response.status})`
   };
 }
+
+export type MaturityPayoutRequest = CommodityMaturityPayoutRequest & {
+  offeringAppId?: string;
+  treasuryFundedExternally?: boolean;
+  productType?: string;
+};
+
+/**
+ * Credit storefront user PRIMARY after Plata Treasury approval (savings / investment).
+ * When treasuryFundedExternally is true, Plata already debited creator Treasury — Spring only credits the user.
+ */
+export async function payoutMaturityOnSpringWallet(
+  request: MaturityPayoutRequest
+): Promise<SettlementCollectResult & { totalPayout?: number }> {
+  const walletBase = normalizeWalletBase(process.env.WALLET_SERVICE_URL || 'http://localhost:4004');
+  const token = settlementInternalToken();
+  if (!token) {
+    return { success: false, error: 'Settlement wallet not configured (JWT_SECRET)' };
+  }
+
+  const productType = String(request.productType || 'INVESTMENT').trim().toUpperCase() || 'INVESTMENT';
+  const url = `${walletBase}/api/v1/internal/wallets/maturity-payout`;
+  const response = await axios.post(
+    url,
+    {
+      ...request,
+      productType
+    },
+    {
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Token': token },
+      timeout: parseInt(process.env.WALLET_SERVICE_HTTP_TIMEOUT_MS || '30000', 10),
+      validateStatus: () => true
+    }
+  );
+
+  const body = response.data as {
+    success?: boolean;
+    duplicate?: boolean;
+    error?: string;
+    data?: { totalPayout?: number };
+  };
+
+  if (response.status >= 200 && response.status < 300 && body.success) {
+    return {
+      success: true,
+      duplicate: body.duplicate === true,
+      totalPayout: body.data?.totalPayout
+    };
+  }
+
+  return {
+    success: false,
+    error: body.error || `Maturity payout failed (${response.status})`
+  };
+}
