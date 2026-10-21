@@ -5,6 +5,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Keep tracing inside this app when a parent monorepo lockfile is present.
+  outputFileTracingRoot: path.join(__dirname),
   // Resolve react-redux (and Redux) from this app's node_modules only (avoids parent-repo resolution)
   webpack: (config, { isServer }) => {
     config.resolve.alias = {
