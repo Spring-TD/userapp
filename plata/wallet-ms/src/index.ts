@@ -10,6 +10,7 @@ import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './config/swagger';
 import { walletRoutes } from './routes/walletRoutes';
 import { transactionRoutes } from './routes/transactionRoutes';
+import { internalWalletRoutes } from './routes/internalWalletRoutes';
 import { errorHandler } from './middleware/errorHandler';
 
 // Load environment variables
@@ -82,6 +83,7 @@ app.get('/api-docs.json', (_req, res) => res.json(swaggerSpec));
 // API routes
 app.use('/api/v1/wallets', walletRoutes);
 app.use('/api/v1/transactions', transactionRoutes);
+app.use('/api/v1/internal', internalWalletRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

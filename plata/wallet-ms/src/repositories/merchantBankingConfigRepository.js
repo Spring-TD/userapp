@@ -9,7 +9,10 @@ exports.isBankOneEnabledForMerchant = isBankOneEnabledForMerchant;
 const MerchantBankingConfigModel_1 = require("../models/MerchantBankingConfigModel");
 const bankingConfigCrypto_1 = require("../utils/bankingConfigCrypto");
 async function getByMerchantId(merchantId) {
-    const doc = await MerchantBankingConfigModel_1.MerchantBankingConfigModel.findOne({ merchantId: merchantId.trim() }).lean();
+    const id = typeof merchantId === 'string' ? merchantId.trim() : '';
+    if (!id)
+        return null;
+    const doc = await MerchantBankingConfigModel_1.MerchantBankingConfigModel.findOne({ merchantId: id }).lean();
     if (!doc)
         return null;
     return (0, MerchantBankingConfigModel_1.toMerchantBankingConfig)(doc);

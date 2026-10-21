@@ -46,6 +46,7 @@ const transactionRepo = __importStar(require("../repositories/transactionReposit
 const TransactionModel_1 = require("../models/TransactionModel");
 const payonusNubanProvisioning_1 = require("./payonusNubanProvisioning");
 const provisionUserNuban_1 = require("./nuban/provisionUserNuban");
+const virtualNubanProvisioning_1 = require("./virtualNubanProvisioning");
 const payonusNubanClient_1 = require("./payonusNubanClient");
 const merchantWalletType_1 = require("../utils/merchantWalletType");
 const authProfileClient_1 = require("./authProfileClient");
@@ -211,7 +212,7 @@ class WalletService {
                     }
                 }
             }
-            const walletWithNuban = (await (0, payonusNubanProvisioning_1.provisionPayonusNubanForWallet)(newWallet));
+            const walletWithNuban = (await (0, virtualNubanProvisioning_1.provisionVirtualNubanForWallet)(newWallet));
             return {
                 success: true,
                 wallet: walletWithNuban
