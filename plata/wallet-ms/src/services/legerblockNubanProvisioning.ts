@@ -40,7 +40,7 @@ export async function provisionLegerblockNubanForWallet(
         : await createUserLegerblockNuban(wallet as UserWallet);
 
     if (result.ok && result.details.accountNumber) {
-      await walletRepo.patchWalletVirtualNuban(wallet.id, {
+      await walletRepo.patchWalletPayonusNuban(wallet.id, {
         payonusNubanAccountNumber: result.details.accountNumber,
         payonusNubanBankName: result.details.bankName ?? undefined,
         payonusNubanBankCode: result.details.bankCode ?? undefined,
@@ -55,7 +55,7 @@ export async function provisionLegerblockNubanForWallet(
       });
       logger.info('LegerBlock NUBAN provisioned', { walletId: wallet.id, accountType });
     } else {
-      await walletRepo.patchWalletVirtualNuban(wallet.id, {
+      await walletRepo.patchWalletPayonusNuban(wallet.id, {
         payonusNubanAccountType: accountType,
         payonusNubanProvisionStatus: 'failed',
         payonusNubanProvisionError: result.errorMessage || 'LegerBlock did not return an account number',
@@ -69,7 +69,7 @@ export async function provisionLegerblockNubanForWallet(
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    await walletRepo.patchWalletVirtualNuban(wallet.id, {
+    await walletRepo.patchWalletPayonusNuban(wallet.id, {
       payonusNubanAccountType: accountType,
       payonusNubanProvisionStatus: 'failed',
       payonusNubanProvisionError: message,

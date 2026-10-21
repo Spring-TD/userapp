@@ -1124,6 +1124,12 @@ router.post(
   collectSavingsPrincipalSettlement
 );
 
+router.post(
+  '/savings/application-activity',
+  requireVerifiedGatewayMerchant,
+  InternalWalletController.savingsApplicationActivity
+);
+
 // Get wallets by merchant (merchant can view all wallets associated with their business)
 router.get(
   '/merchant/:merchantId/users',
