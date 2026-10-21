@@ -4,7 +4,6 @@ import {
   isLegerblockPayoutReady,
   legerblockNubanConfig
 } from '../config/legerblockNuban';
-import { legerblockWebhookConfig } from '../config/legerblockWebhook';
 import { logger } from '../utils/logger';
 import type { MerchantWallet, UserWallet } from '../models/Wallet';
 
@@ -709,51 +708,5 @@ export async function initiateLegerblockBankPayout(
   } catch (err) {
     const ax = err as AxiosError;
     return { ok: false, errorMessage: ax.message || 'LegerBlock payout failed', httpStatus: ax.response?.status };
-  }
-}
-
-/**
- * Register the merchant-level collection notification URL with LegerBlock.
- * Static VA deposits only notify this URL — without it, NUBAN credits never reach wallet-ms.
- * @see https://docs.legerblock.com/docs/update-webhooks-or-notification-url
- */
-export async function syncLegerblockMerchantNotificationUrl(): Promise<{
-  ok: boolean;
-  skipped?: boolean;
-  errorMessage?: string;
-}> {
-  if (!isLegerblockNubanReady()) {
-    return { ok: true, skipped: true };
-  }
-
-  const notificationUrl = legerblockNubanConfig.collectionNotificationUrl.trim();
-  if (!notificationUrl) {
-    logger.warn(
-      'LEGERBLOCK_COLLECTION_NOTIFICATION_URL is unset — static NUBAN deposits will not credit app wallets'
-    );
-    return { ok: false, errorMessage: 'LEGERBLOCK_COLLECTION_NOTIFICATION_URL is unset' };
-  }
-
-  const webhookSecret = legerblockWebhookConfig.secret.trim() || 'unset';
-  try {
-    const res = await putJson('/api/v1/merchant/notificationurl', {
-      notification_url: notificationUrl,
-      webhook_secret: webhookSecret
-    });
-    if (res.status >= 200 && res.status < 300) {
-      logger.info('LegerBlock merchant notification URL synced', { notificationUrl });
-      return { ok: true };
-    }
-    const errorMessage = readErrorMessage(res.data, res.status);
-    logger.warn('Failed to sync LegerBlock merchant notification URL', {
-      status: res.status,
-      errorMessage
-    });
-    return { ok: false, errorMessage };
-  } catch (err) {
-    const ax = err as AxiosError;
-    const errorMessage = ax.message || 'LegerBlock notification URL sync failed';
-    logger.warn('Failed to sync LegerBlock merchant notification URL', { errorMessage });
-    return { ok: false, errorMessage };
   }
 }

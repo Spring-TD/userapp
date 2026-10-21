@@ -13,7 +13,6 @@ import { transactionRoutes } from './routes/transactionRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { ensureWalletIndexes } from './db/database';
 import { registerTransactionReceiptHandler } from './services/transactionReceiptService';
-import { syncLegerblockMerchantNotificationUrl } from './services/legerblockNubanClient';
 
 dotenv.config();
 
@@ -120,8 +119,6 @@ mongoose.connect(config.mongoUri)
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Wallet service running on port ${PORT}`);
   console.log(`Environment: ${config.nodeEnv}`);
-  // Static VA deposits notify the merchant-level URL only; keep it registered.
-  void syncLegerblockMerchantNotificationUrl();
 });
 
 process.on('SIGTERM', () => {
