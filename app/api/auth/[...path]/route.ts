@@ -320,16 +320,9 @@ export class Auth {
         code: body.code ?? body.otp,
         ...(body.purpose != null && { purpose: body.purpose }),
       };
-      // Must forward storefront tenant headers / X-Forwarded-Host — OTPs are app-scoped.
-      // Without this, verify looks in the no-app bucket and returns valid:false for a fresh code.
-      const headers = mergeStorefrontHeaders(
-        request,
-        authHeader ? { Authorization: authHeader } : undefined,
-      );
-      const res = await axios.post(buildUrl(BACKEND.otp.verify), backendBody, {
-        ...axiosConfig,
-        headers,
-      });
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (authHeader) headers['Authorization'] = authHeader;
+      const res = await axios.post(buildUrl(BACKEND.otp.verify), backendBody, { ...axiosConfig, headers });
       return NextResponse.json(res.data, { status: res.status });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'OTP verification failed';
@@ -360,10 +353,7 @@ export class Auth {
         payload.purpose = body.purpose;
       }
 
-      const res = await axios.post(buildUrl(BACKEND.otp.resend), payload, {
-        ...axiosConfig,
-        headers: mergeStorefrontHeaders(request),
-      });
+      const res = await axios.post(buildUrl(BACKEND.otp.resend), payload, axiosConfig);
       return NextResponse.json(res.data, { status: res.status });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to resend OTP';
@@ -375,10 +365,7 @@ export class Auth {
   static async otpGenerate(request: NextRequest) {
     try {
       const body = await request.json();
-      const res = await axios.post(buildUrl(BACKEND.otp.generate), body, {
-        ...axiosConfig,
-        headers: mergeStorefrontHeaders(request),
-      });
+      const res = await axios.post(buildUrl(BACKEND.otp.generate), body, axiosConfig);
       return NextResponse.json(res.data, { status: res.status });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to generate OTP';
