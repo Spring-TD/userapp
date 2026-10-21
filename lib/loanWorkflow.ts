@@ -1,6 +1,6 @@
 import type { StorefrontApplication } from '@/lib/storefrontApplicationClient'
 
-/** 5-step loan workflow after application submission. */
+/** 5-step loan workflow after application submission — resolved from backend only. */
 export type LoanWorkflowStep =
   | 'pending_approval'
   | 'approved'
@@ -9,133 +9,192 @@ export type LoanWorkflowStep =
   | 'loan_disbursed'
   | 'declined'
 
-export type LoanWorkflowLocalState = {
-  applicationId: string
-  productId: string
-  approvalAcknowledged?: boolean
-  offerAccepted?: boolean
-  offerDeclined?: boolean
-  disbursementSeen?: boolean
-  updatedAt: string
+function normalize(value?: string | null): string {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_')
 }
 
-const STORAGE_KEY = 'mobile_v2_loan_workflow_v1'
+function pickString(...vals: unknown[]): string | undefined {
+  for (const v of vals) {
+    if (typeof v === 'string' && v.trim()) return v.trim()
+  }
+  return undefined
+}
 
-function readAll(): Record<string, LoanWorkflowLocalState> {
-  if (typeof window === 'undefined') return {}
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') as Record<string, LoanWorkflowLocalState>
-  } catch {
-    return {}
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
+}
+
+function fulfillment(application: StorefrontApplication): Record<string, unknown> {
+  const raw = application as unknown as Record<string, unknown>
+  const top = asRecord(application.postApprovalFulfillment)
+  if (top) return top
+  const approval = asRecord(raw.approval)
+  const fromApproval = asRecord(approval?.postApprovalFulfillment)
+  if (fromApproval) return fromApproval
+  const snapshot = asRecord(raw.contractSnapshot)
+  const snapApproval = asRecord(snapshot?.approval)
+  return asRecord(snapApproval?.postApprovalFulfillment) ?? {}
+}
+
+function loanProgress(application: StorefrontApplication) {
+  const raw = application as unknown as Record<string, unknown>
+  const paf = fulfillment(application)
+  const offer = asRecord(paf.offer)
+  const disbursement = asRecord(raw.loanDisbursement) ?? asRecord(paf.disbursement) ?? {}
+  const nested = asRecord(disbursement.loanWorkflow) ?? disbursement
+  const snapshot = asRecord(raw.contractSnapshot) ?? {}
+  const schedule = asRecord(raw.amortizationSchedule) ?? asRecord(application.amortizationSchedule)
+  return {
+    offerAcceptedAt: pickString(
+      nested.offerAcceptedAt,
+      snapshot.offerAcceptedAt,
+      offer?.acceptedAt,
+      paf.offerAcceptedAt,
+    ),
+    offerDeclinedAt: pickString(nested.offerDeclinedAt, snapshot.offerDeclinedAt, offer?.declinedAt),
+    disbursedAt: pickString(
+      nested.disbursedAt,
+      disbursement.disbursedAt,
+      snapshot.disbursedAt,
+      paf.disbursedAt,
+    ),
+    pafStatus: normalize(typeof paf.status === 'string' ? paf.status : ''),
+    stepId: normalize(typeof paf.currentWorkflowStepId === 'string' ? paf.currentWorkflowStepId : ''),
+    scheduleSource: normalize(typeof schedule?.source === 'string' ? schedule.source : ''),
+    disbursementDeferred:
+      paf.disbursementDeferred === true ||
+      raw.disbursementDeferred === true ||
+      asRecord(raw.approval)?.disbursementDeferred === true,
   }
 }
 
-function writeAll(data: Record<string, LoanWorkflowLocalState>) {
-  if (typeof window === 'undefined') return
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-}
-
-export function readLoanWorkflow(applicationId: string): LoanWorkflowLocalState | null {
-  if (!applicationId) return null
-  return readAll()[applicationId] ?? null
-}
-
-export function saveLoanWorkflow(state: LoanWorkflowLocalState) {
-  if (!state.applicationId) return
-  const all = readAll()
-  all[state.applicationId] = { ...state, updatedAt: new Date().toISOString() }
-  writeAll(all)
-}
-
-export function patchLoanWorkflow(
-  applicationId: string,
-  patch: Partial<LoanWorkflowLocalState>,
-): LoanWorkflowLocalState | null {
-  const existing = readLoanWorkflow(applicationId)
-  if (!existing) return null
-  const next = { ...existing, ...patch, applicationId, updatedAt: new Date().toISOString() }
-  saveLoanWorkflow(next)
-  return next
-}
-
-export function initLoanWorkflowSubmitted(applicationId: string, productId: string) {
-  saveLoanWorkflow({
-    applicationId,
-    productId,
-    updatedAt: new Date().toISOString(),
-  })
-}
-
-function normalize(value?: string | null): string {
-  return String(value || '').trim().toLowerCase()
-}
-
-function isDeclined(application: StorefrontApplication, local: LoanWorkflowLocalState | null): boolean {
-  if (local?.offerDeclined) return true
+function isDeclined(application: StorefrontApplication): boolean {
   const status = normalize(application.status)
   const workflow = normalize(application.loanWorkflowStatus)
-  return ['declined', 'rejected', 'cancelled', 'canceled'].some(
-    (token) => status.includes(token) || workflow.includes(token),
+  const progress = loanProgress(application)
+  return (
+    Boolean(progress.offerDeclinedAt) ||
+    progress.pafStatus === 'offer_declined' ||
+    ['declined', 'rejected', 'cancelled', 'canceled', 'blacklisted'].some(
+      (token) => status === token || workflow === token,
+    )
   )
 }
 
 function isDisbursed(application: StorefrontApplication): boolean {
+  const progress = loanProgress(application)
+  if (progress.scheduleSource === 'confirmed') return true
+  if (progress.disbursedAt) return true
+  if (progress.pafStatus === 'disbursed' || progress.pafStatus === 'loan_disbursed') return true
+  if (progress.pafStatus.includes('disbursed') && !progress.pafStatus.includes('awaiting')) return true
+  if (progress.stepId === 'loan_disbursed' || progress.stepId === 'disbursed') return true
+  const completed = fulfillment(application).completedWorkflowSteps
+  if (
+    Array.isArray(completed) &&
+    completed.some((step) => {
+      const token = normalize(String(step))
+      return token === 'loan_disbursed' || token === 'disbursed'
+    })
+  ) {
+    return true
+  }
+
   const status = normalize(application.status)
   const workflow = normalize(application.loanWorkflowStatus)
-  return ['disbursed', 'active', 'completed', 'successful'].some(
-    (token) => status.includes(token) || workflow.includes(token),
+  if (status.includes('disbursed') && !status.includes('awaiting')) return true
+  if (workflow.includes('disbursed') && !workflow.includes('awaiting')) return true
+
+  // Deferred approvals stay on awaiting-disbursement even if a wallet row exists.
+  if (progress.disbursementDeferred) return false
+
+  if (isOfferAccepted(application)) {
+    if (['active', 'completed', 'successful'].includes(status)) return true
+    if (['active', 'completed', 'successful'].includes(workflow)) return true
+  }
+
+  const walletBalance = Number(
+    application.productWallet?.mainBalance ??
+      application.productWallet?.balance ??
+      application.productWallet?.upstreamAccount?.mainBalance ??
+      application.productWallet?.upstreamAccount?.balance ??
+      application.account?.balance ??
+      NaN,
+  )
+  return (
+    Number.isFinite(walletBalance) &&
+    walletBalance > 0 &&
+    isOfferAccepted(application) &&
+    progress.pafStatus !== 'offer_accepted' &&
+    progress.pafStatus !== 'offer_pending'
+  )
+}
+
+function isOfferAccepted(application: StorefrontApplication): boolean {
+  const progress = loanProgress(application)
+  if (progress.offerAcceptedAt) return true
+  if (progress.pafStatus === 'offer_accepted') return true
+  if (progress.pafStatus.includes('disburs') && progress.pafStatus !== 'offer_declined') return true
+
+  const workflow = normalize(application.loanWorkflowStatus)
+  return (
+    workflow === 'awaiting_disbursement' ||
+    workflow === 'offer_accepted' ||
+    workflow.includes('awaiting_disburs')
   )
 }
 
 function isMerchantApproved(application: StorefrontApplication): boolean {
   const status = normalize(application.status)
   const workflow = normalize(application.loanWorkflowStatus)
+  const pafStatus = loanProgress(application).pafStatus
   return (
     workflow === 'approved' ||
     workflow === 'offer_sent' ||
+    workflow === 'awaiting_acceptance' ||
     workflow === 'awaiting_disbursement' ||
+    workflow.includes('offer') ||
     workflow.includes('disburs') ||
     status === 'approved' ||
     status === 'active' ||
     status === 'completed' ||
-    status === 'disbursed'
+    status === 'disbursed' ||
+    pafStatus === 'offer_pending' ||
+    pafStatus === 'offer_sent' ||
+    pafStatus === 'offer_accepted' ||
+    pafStatus.includes('disburs')
   )
 }
 
-function hasOfferReady(application: StorefrontApplication): boolean {
-  const workflow = normalize(application.loanWorkflowStatus)
-  return (
-    workflow === 'offer_sent' ||
-    workflow === 'awaiting_acceptance' ||
-    workflow.includes('offer') ||
-    isMerchantApproved(application)
-  )
+export function preferLoanWorkflowStatus(
+  ...vals: Array<string | null | undefined>
+): string | undefined {
+  const rank = (value?: string | null) => {
+    const n = normalize(value)
+    if (!n) return -1
+    if (['declined', 'rejected', 'cancelled', 'canceled', 'blacklisted'].includes(n)) return 0
+    if (n === 'loan_disbursed' || n === 'disbursed' || n === 'completed') return 60
+    if (n === 'active') return 55
+    if (n.includes('awaiting_disburs') || n === 'offer_accepted') return 40
+    if (n.includes('offer')) return 30
+    if (n === 'approved') return 20
+    if (n === 'under_review' || n === 'guarantor_kyc_requested') return 10
+    return 5
+  }
+  return vals.reduce<string | undefined>((best, current) => {
+    if (!current?.trim()) return best
+    if (!best) return current
+    return rank(current) >= rank(best) ? current : best
+  }, undefined)
 }
 
-export function resolveLoanWorkflowStep(
-  application: StorefrontApplication,
-  local: LoanWorkflowLocalState | null,
-): LoanWorkflowStep {
-  if (isDeclined(application, local)) return 'declined'
-
-  if (isDisbursed(application) || local?.disbursementSeen) return 'loan_disbursed'
-
-  // Only advance past accept after the user explicitly accepts locally.
-  if (local?.offerAccepted) return 'awaiting_disbursement'
-
-  const workflow = normalize(application.loanWorkflowStatus)
-  if (
-    (workflow === 'awaiting_disbursement' || workflow.includes('awaiting_disburs')) &&
-    local?.offerAccepted
-  ) {
-    return 'awaiting_disbursement'
-  }
-
-  if (hasOfferReady(application)) {
-    if (!local?.approvalAcknowledged) return 'approved'
-    return 'accept_offer'
-  }
-
+export function resolveLoanWorkflowStep(application: StorefrontApplication): LoanWorkflowStep {
+  if (isDeclined(application)) return 'declined'
+  if (isDisbursed(application)) return 'loan_disbursed'
+  if (isOfferAccepted(application)) return 'awaiting_disbursement'
+  if (isMerchantApproved(application)) return 'accept_offer'
   return 'pending_approval'
 }
 
@@ -180,16 +239,13 @@ const STEP_META: Record<
     description: 'Your offer was accepted. Funds will be disbursed to your loan wallet shortly.',
   },
   loan_disbursed: {
-    title: 'Loan disbursed',
-    description: 'Your loan has been disbursed. Check your loan wallet for the credited funds.',
-    actionLabel: 'Check loan wallet',
+    title: 'Disbursed',
+    description: 'Your loan has been disbursed. Open product details to view your amortization schedule.',
+    actionLabel: 'View repayment schedule',
   },
 }
 
-export function buildLoanThread(
-  current: LoanWorkflowStep,
-  options?: { workflowComplete?: boolean },
-): LoanThreadItem[] {
+export function buildLoanThread(current: LoanWorkflowStep): LoanThreadItem[] {
   if (current === 'declined') {
     return [
       {
@@ -202,9 +258,9 @@ export function buildLoanThread(
     ]
   }
 
-  const currentIndex = options?.workflowComplete
-    ? THREAD_ORDER.length
-    : Math.max(0, THREAD_ORDER.indexOf(current))
+  // "Approved" is a backend status on the way to accept-offer, not a locally acknowledged step.
+  const displayCurrent: LoanWorkflowStep = current === 'accept_offer' ? 'accept_offer' : current
+  const currentIndex = Math.max(0, THREAD_ORDER.indexOf(displayCurrent))
 
   return THREAD_ORDER.map((step, index) => ({
     step,
@@ -235,11 +291,6 @@ export function loanStepCta(
 
   switch (step) {
     case 'approved':
-      return {
-        label: STEP_META.approved.actionLabel ?? 'View approval',
-        href: `${pendingHref}?action=approved`,
-        modal: 'approved',
-      }
     case 'accept_offer':
       return {
         label: STEP_META.accept_offer.actionLabel ?? 'Accept offer',
@@ -248,8 +299,8 @@ export function loanStepCta(
       }
     case 'loan_disbursed':
       return {
-        label: STEP_META.loan_disbursed.actionLabel ?? 'Check loan wallet',
-        href: '/mobile-v2/accounts',
+        label: 'View repayment schedule',
+        href: `/mobile-v2/accounts/${encodeURIComponent(applicationId)}/product`,
       }
     default:
       return null
@@ -257,9 +308,13 @@ export function loanStepCta(
 }
 
 export function loanNextStepLabel(application: StorefrontApplication): string {
-  const applicationId = String(application.id ?? application._id ?? '')
-  const local = readLoanWorkflow(applicationId)
-  const step = resolveLoanWorkflowStep(application, local)
+  const step = resolveLoanWorkflowStep(application)
+  if (step === 'loan_disbursed') return 'Disbursed'
   const thread = buildLoanThread(step)
   return thread.find((item) => item.status === 'current')?.title ?? 'In progress'
+}
+
+/** True when backend PAF / confirmed schedule shows the loan is disbursed. */
+export function isLoanApplicationDisbursed(application: StorefrontApplication): boolean {
+  return isDisbursed(application)
 }

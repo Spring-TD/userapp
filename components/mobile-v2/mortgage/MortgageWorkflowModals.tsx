@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { CopyableDetailRow } from '@/components/mobile-v2/CopyableDetailRow'
 import { MortgageSheet, MORTGAGE_PRIMARY } from '@/components/mobile-v2/mortgage/MortgageSheet'
-import { patchMortgageWorkflowAsync, readMortgageWorkflow, type MortgageWorkflowModal } from '@/lib/mortgageWorkflow'
+import { type MortgageWorkflowModal, resolveMortgageEquityRequired } from '@/lib/mortgageWorkflow'
 import { extractOfferLetterFromRecord } from '@/lib/offerLetter'
 import type { InsufficientCentralWalletBalance } from '@/lib/pendingApprovedLoanApi'
 import {
@@ -39,7 +39,9 @@ type MortgageWorkflowModalsProps = {
   applicationId: string
   productId: string
   product: MobileProduct | null
+  /** @deprecated Equity fallback uses product helpers; ignored for math. */
   propertyValue?: number | null
+  /** @deprecated Prefer product.equityContribution + product.equityRequirement */
   downPaymentPercent?: number
   onStepAdvanced: () => void
 }
@@ -98,8 +100,8 @@ export function MortgageWorkflowModals({
   applicationId,
   productId,
   product,
-  propertyValue,
-  downPaymentPercent = 10,
+  propertyValue: _propertyValue,
+  downPaymentPercent: _downPaymentPercent,
   onStepAdvanced,
 }: MortgageWorkflowModalsProps) {
   const { wallet, formattedBalance, loading: walletLoading, refetch: refetchWallet } = useUserWallet()
@@ -122,10 +124,10 @@ export function MortgageWorkflowModals({
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [slotsError, setSlotsError] = useState<string | null>(null)
 
-  const computedFallbackAmount = useMemo(() => {
-    if (!propertyValue || Number.isNaN(propertyValue)) return null
-    return Math.round(propertyValue * (downPaymentPercent / 100))
-  }, [downPaymentPercent, propertyValue])
+  const computedFallbackAmount = useMemo(
+    () => resolveMortgageEquityRequired(product),
+    [product],
+  )
 
   const downPaymentAmount = useMemo(() => {
     const fromApi = mortgageDownPaymentDue(detail)
@@ -223,20 +225,8 @@ export function MortgageWorkflowModals({
     setSelectedSlot(null)
   }, [active])
 
-  const patch = async (data: Parameters<typeof patchMortgageWorkflowAsync>[1]) => {
-    const result = await patchMortgageWorkflowAsync(applicationId, data)
-    if (!result) {
-      toast.error('Could not save workflow progress.')
-      return false
-    }
-    if (!result.synced) {
-      toast.error(result.syncError || 'Workflow sync failed', {
-        description: 'Server did not accept the workflow update.',
-      })
-      return false
-    }
+  const advance = () => {
     onStepAdvanced()
-    return true
   }
 
   const handleDownloadOffer = async () => {
@@ -279,20 +269,18 @@ export function MortgageWorkflowModals({
     }
 
     triggerDownload(name, url)
-    const ok = await patch({ offerLetterDownloaded: true })
-    if (!ok) return
     toast.success('Offer letter downloaded')
     onClose()
   }
 
-  const localWorkflow = readMortgageWorkflow(applicationId)
   const fulfillmentStep = normalizeWorkflowStepId(detail?.postApprovalFulfillment?.currentWorkflowStepId)
   const inspectionAlreadyBooked = Boolean(
-    localWorkflow?.inspectionScheduled ||
       fulfillmentStatus === 'appointment_scheduled' ||
       fulfillmentStatus === 'inspection_in_progress' ||
       fulfillmentStep === 'inspection_outcome' ||
-      fulfillmentStep === 'physical_inspection',
+      fulfillmentStep === 'physical_inspection' ||
+      detail?.postApprovalFulfillment?.appointment?.scheduledFor ||
+      detail?.postApprovalFulfillment?.appointment?.scheduledAt,
   )
 
   const handleBookInspection = async () => {
@@ -324,7 +312,7 @@ export function MortgageWorkflowModals({
         toast.error(res.error || 'Could not book inspection. Please try again.')
         return
       }
-      await patch({ inspectionScheduled: true })
+      advance()
       toast.success(res.ok ? 'Inspection booked' : 'Inspection already booked')
       onClose()
     } finally {
@@ -353,16 +341,11 @@ export function MortgageWorkflowModals({
         return
       }
       if (outcome === 'declined') {
-        await patch({
-          inspectionCompleted: true,
-          offerDeclined: true,
-          offerAccepted: false,
-        })
         toast.message('Inspection declined')
       } else {
-        await patch({ inspectionCompleted: true })
         toast.success('Inspection confirmed')
       }
+      advance()
       onClose()
     } finally {
       setBusy(false)
@@ -381,11 +364,7 @@ export function MortgageWorkflowModals({
         toast.error(apiRes.error || 'Could not accept offer. Please try again.')
         return
       }
-      const ok = await patch({
-        offerAccepted: true,
-        offerDeclined: false,
-      })
-      if (!ok) return
+      advance()
       toast.success('Mortgage offer accepted')
       onClose()
     } finally {
@@ -405,11 +384,7 @@ export function MortgageWorkflowModals({
         toast.error(apiRes.error || 'Could not decline offer. Please try again.')
         return
       }
-      const ok = await patch({
-        offerAccepted: false,
-        offerDeclined: true,
-      })
-      if (!ok) return
+      advance()
       toast.message('Mortgage offer declined')
       onClose()
     } finally {
@@ -430,8 +405,7 @@ export function MortgageWorkflowModals({
         toast.error(res.error || 'Could not sign contract. Please try again.')
         return
       }
-      const ok = await patch({ contractAccepted: true })
-      if (!ok) return
+      advance()
       toast.success('Signed contract uploaded')
       onClose()
     } finally {
@@ -512,10 +486,8 @@ export function MortgageWorkflowModals({
     toast.message('Contract downloaded')
   }
 
-  const handleDownloadAllocation = async () => {
+  const handleDownloadAllocation = () => {
     triggerDownload('mortgage-allocation.pdf', allocationDocUrl)
-    const ok = await patch({ allocationDownloaded: true })
-    if (!ok) return
     toast.success('Allocation document downloaded')
     onClose()
   }
@@ -999,7 +971,7 @@ export function MortgageWorkflowModals({
           </div>
           <Button
             className={cn('mt-8 h-12 w-full rounded-full text-sm font-semibold', MORTGAGE_PRIMARY)}
-            onClick={() => void handleDownloadAllocation()}
+            onClick={handleDownloadAllocation}
           >
             Download allocation
           </Button>

@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { CopyableDetailRow } from '@/components/mobile-v2/CopyableDetailRow'
 import { MortgageSheet, MORTGAGE_PRIMARY } from '@/components/mobile-v2/mortgage/MortgageSheet'
 import { mortgagePendingDetailHref } from '@/lib/mortgageApplyRoutes'
-import { patchMortgageWorkflowAsync } from '@/lib/mortgageWorkflow'
+import { computeDownPaymentAmount, resolveMortgageEquityRequired } from '@/lib/mortgageWorkflow'
 import type { InsufficientCentralWalletBalance } from '@/lib/pendingApprovedLoanApi'
 import { pendingApprovedMortgageApi } from '@/lib/pendingApprovedMortgageApi'
 import {
@@ -23,6 +23,7 @@ import { useUserWallet } from '@/hooks/useUserWallet'
 import { formatNaira, formatNgn } from '@/lib/mobileProductDetailDisplay'
 import { formatWalletBalance, isVirtualNubanActive } from '@/lib/userWallet'
 import { cn } from '@/lib/utils'
+import type { MobileProduct } from '@/lib/storefrontProducts'
 
 export type MortgageOfferFlowStep =
   | 'schedule_inspection'
@@ -35,8 +36,12 @@ type MortgageOfferFlowProps = {
   applicationId?: string
   productName: string
   provider: string
-  propertyValue?: number | null
+  /** Catalog product for facility/equity fallback when API requiredAmount is missing. */
+  product?: MobileProduct | null
+  /** @deprecated Prefer product + resolveMortgageEquityRequired; kept for callers. */
+  mortgageFacilityAmount?: number | null
   downPaymentPercent?: number | null
+  equityRequirement?: string | null
   backHref: string
   initialStep?: MortgageOfferFlowStep
 }
@@ -91,8 +96,10 @@ export function MortgageOfferFlow({
   applicationId,
   productName,
   provider: _provider,
-  propertyValue,
+  product,
+  mortgageFacilityAmount,
   downPaymentPercent,
+  equityRequirement,
   backHref,
   initialStep = 'schedule_inspection',
 }: MortgageOfferFlowProps) {
@@ -108,11 +115,15 @@ export function MortgageOfferFlow({
   const [detail, setDetail] = useState<PendingApprovedMortgageDetail | null>(null)
   const [insufficient, setInsufficient] = useState<InsufficientCentralWalletBalance | null>(null)
 
-  const percent = downPaymentPercent ?? 10
   const computedFallbackAmount = useMemo(() => {
-    if (!propertyValue || Number.isNaN(propertyValue)) return null
-    return Math.round(propertyValue * (percent / 100))
-  }, [percent, propertyValue])
+    const fromProduct = resolveMortgageEquityRequired(product)
+    if (fromProduct != null) return fromProduct
+    return computeDownPaymentAmount(
+      mortgageFacilityAmount,
+      downPaymentPercent ?? null,
+      equityRequirement ?? null,
+    )
+  }, [product, mortgageFacilityAmount, downPaymentPercent, equityRequirement])
 
   const downPaymentAmount = useMemo(() => {
     const fromApi = mortgageDownPaymentDue(detail)
@@ -120,7 +131,10 @@ export function MortgageOfferFlow({
     return computedFallbackAmount
   }, [computedFallbackAmount, detail])
 
-  const displayAmount = downPaymentAmount != null ? formatNaira(downPaymentAmount) : formatNgn(propertyValue)
+  const displayAmount =
+    downPaymentAmount != null
+      ? formatNaira(downPaymentAmount)
+      : formatNgn(mortgageFacilityAmount)
   const bankDetails = mortgageEquityBankDetails(detail)
   const alreadyPaid = isMortgageDownPaymentPaidOrLater(mortgageFulfillmentStatus(detail))
   const nuban = wallet?.virtualNuban
@@ -142,22 +156,6 @@ export function MortgageOfferFlow({
       cancelled = true
     }
   }, [applicationId, step, userId])
-
-  const patch = async (data: Parameters<typeof patchMortgageWorkflowAsync>[1]) => {
-    if (!applicationId) return false
-    const result = await patchMortgageWorkflowAsync(applicationId, data)
-    if (!result) {
-      toast.error('Could not save workflow progress.')
-      return false
-    }
-    if (!result.synced) {
-      toast.error(result.syncError || 'Workflow sync failed', {
-        description: 'Server did not accept the workflow update.',
-      })
-      return false
-    }
-    return true
-  }
 
   const finishToPending = () => {
     router.replace(pendingHref)
@@ -186,8 +184,6 @@ export function MortgageOfferFlow({
       })
       return
     }
-    const ok = await patch({ inspectionScheduled: true })
-    if (!ok) return
     setStep('inspection')
     toast.success('Inspection appointment noted.')
   }
@@ -210,11 +206,6 @@ export function MortgageOfferFlow({
       toast.error(res.error || 'Could not update inspection. Please try again.')
       return
     }
-    const ok = await patch({
-      inspectionCompleted: true,
-      ...(inspectionChoice === 'declined' ? { offerDeclined: true, offerAccepted: false } : {}),
-    })
-    if (!ok) return
     if (inspectionChoice === 'declined') {
       toast.message('Inspection declined')
       finishToPending()
@@ -306,8 +297,6 @@ export function MortgageOfferFlow({
       toast.error(res.error || 'Could not sign contract. Please try again.')
       return
     }
-    const ok = await patch({ contractAccepted: true })
-    if (!ok) return
     toast.success('Contract signed')
     finishToPending()
   }

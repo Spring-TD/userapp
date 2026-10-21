@@ -33,6 +33,26 @@ export interface ProductApplication {
   loanWorkflowStatus?: string
   requirementsSnapshot?: Record<string, unknown>
   productWallet?: ProductApplicationWallet
+  /** Live amortization schedule overlay from Plata (post-disburse). */
+  amortizationSchedule?: Record<string, unknown>
+  postApprovalFulfillment?: {
+    status?: string
+    disbursedAt?: string
+  }
+  disbursementDeferred?: boolean
+  approval?: {
+    wallet?: {
+      balance?: number
+      mainBalance?: number
+      ledgerBalance?: number
+      currency?: string
+    }
+    disbursementDeferred?: boolean
+    postApprovalFulfillment?: {
+      status?: string
+      disbursedAt?: string
+    }
+  }
   createdAt?: string
   updatedAt?: string
 }

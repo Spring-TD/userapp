@@ -1,21 +1,30 @@
 'use client'
 
-import { Suspense, useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 
+import { AmortizationScheduleSection } from '@/components/mobile-v2/AmortizationScheduleSection'
 import { LoanPendingThreadScreen } from '@/components/mobile-v2/loan/LoanPendingThreadScreen'
 import { MortgagePendingThreadScreen } from '@/components/mobile-v2/mortgage/MortgagePendingThreadScreen'
 import { MobileFlowShell } from '@/components/mobile-v2/MobileFlowShell'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useUserWallet } from '@/hooks/useUserWallet'
-import { fetchMobileProductById } from '@/lib/fetchMobileProductById'
-import { initLoanWorkflowSubmitted, readLoanWorkflow } from '@/lib/loanWorkflow'
 import {
-  initMortgageWorkflowSubmitted,
-  readMortgageWorkflow,
-} from '@/lib/mortgageWorkflow'
+  fetchAmortizationSchedule,
+  isLoanDisbursedForSchedule,
+  isScheduleConfirmed,
+  normalizeAmortizationSchedule,
+  resolveScheduleInterestRateLabel,
+  shouldShowAmortizationSchedule,
+  type AmortizationSchedule,
+} from '@/lib/amortizationSchedule'
+import { fetchMobileProductById } from '@/lib/fetchMobileProductById'
+import { humanizeLabel, rateLabel } from '@/lib/mobileProductDetailDisplay'
 import { resolveUserProductApplication } from '@/lib/services/productApplicationApi'
-import type { StorefrontApplication } from '@/lib/storefrontApplicationClient'
+import {
+  fetchApplicationById,
+  type StorefrontApplication,
+} from '@/lib/storefrontApplicationClient'
 import type { MobileProduct } from '@/lib/storefrontProducts'
 import { formatWalletBalance } from '@/lib/userWallet'
 import type { ProductApplication } from '@/types/productApplication'
@@ -24,20 +33,42 @@ function formatAmount(value: number | undefined, currency: string): string | nul
   return value == null ? null : formatWalletBalance(value, currency)
 }
 
-function productFacts(product: MobileProduct, currency: string): Array<[string, string]> {
+function productFacts(
+  product: MobileProduct,
+  currency: string,
+  schedule?: AmortizationSchedule | null,
+): Array<[string, string]> {
+  const isMortgage = String(product.type || '').toLowerCase() === 'mortgage'
+  const facility =
+    product.mortgageAmount != null
+      ? formatAmount(product.mortgageAmount, currency)
+      : product.amountMin != null &&
+          product.amountMax != null &&
+          product.amountMin === product.amountMax
+        ? formatAmount(product.amountMin, currency)
+        : null
   const amountRange =
-    product.amountMin != null || product.amountMax != null
+    facility ||
+    (product.amountMin != null || product.amountMax != null
       ? [formatAmount(product.amountMin, currency), formatAmount(product.amountMax, currency)]
           .filter(Boolean)
           .join(' – ')
-      : null
+      : null)
+
+  const interestRate =
+    resolveScheduleInterestRateLabel(schedule, product.interestRate) ||
+    rateLabel(product) ||
+    product.interestRate ||
+    ''
+
+  const interestMethod = schedule?.interestMethod || product.interestMethod || ''
 
   return [
     ['Product type', product.type],
     ['Product category', product.subType || ''],
-    ['Amount range', amountRange || ''],
-    ['Interest rate', product.interestRate || ''],
-    ['Interest method', product.interestMethod || ''],
+    [isMortgage ? 'Mortgage Amount' : 'Amount range', amountRange || ''],
+    ['Interest rate', interestRate],
+    ['Interest method', interestMethod],
     ['Duration', product.duration || ''],
     ['Repayment frequency', product.repaymentFrequency || ''],
     ['Withdrawal flexibility', product.withdrawalFlexibility || ''],
@@ -55,9 +86,11 @@ function normalizeType(value?: string | null): string {
 function isPendingApplication(status?: string | null): boolean {
   const normalized = String(status || '').trim().toLowerCase()
   if (!normalized) return true
-  if (['completed', 'disbursed', 'active', 'allocated', 'rejected', 'declined', 'cancelled', 'canceled'].some((token) =>
-    normalized.includes(token),
-  )) {
+  if (
+    ['completed', 'disbursed', 'active', 'allocated', 'rejected', 'declined', 'cancelled', 'canceled'].some(
+      (token) => normalized.includes(token),
+    )
+  ) {
     return false
   }
   return (
@@ -74,7 +107,10 @@ function isPendingApplication(status?: string | null): boolean {
   )
 }
 
-function toStorefrontApplication(application: ProductApplication): StorefrontApplication {
+function toStorefrontApplication(
+  application: ProductApplication,
+  extras?: Partial<StorefrontApplication>,
+): StorefrontApplication {
   return {
     id: application.id,
     _id: application.id,
@@ -90,6 +126,7 @@ function toStorefrontApplication(application: ProductApplication): StorefrontApp
     updatedAt: application.updatedAt,
     amount: (application as { amount?: number }).amount,
     currency: (application as { currency?: string }).currency,
+    ...extras,
   }
 }
 
@@ -109,8 +146,12 @@ export default function AppliedProductDetailPage() {
   const applicationId = decodeURIComponent(String(params.applicationId || ''))
   const { wallet, loading: walletLoading } = useUserWallet()
   const [application, setApplication] = useState<ProductApplication | null>(null)
+  const [detailApplication, setDetailApplication] = useState<StorefrontApplication | null>(null)
+  const [schedule, setSchedule] = useState<AmortizationSchedule | null>(null)
   const [product, setProduct] = useState<MobileProduct | null>(null)
   const [loading, setLoading] = useState(true)
+  const [scheduleLoading, setScheduleLoading] = useState(false)
+  const [scheduleRefreshing, setScheduleRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -130,7 +171,10 @@ export default function AppliedProductDetailPage() {
       setLoading(true)
       setError(null)
 
-      const resolved = await resolveUserProductApplication(userId, applicationId)
+      const [resolved, byId] = await Promise.all([
+        resolveUserProductApplication(userId, applicationId),
+        fetchApplicationById(applicationId),
+      ])
       if (cancelled) return
 
       const matchedApplication = resolved.application
@@ -141,6 +185,38 @@ export default function AppliedProductDetailPage() {
       }
 
       setApplication(matchedApplication)
+
+      const live = byId.ok ? byId.application : null
+      const liveSchedule = normalizeAmortizationSchedule(
+        (live as { amortizationSchedule?: unknown } | null)?.amortizationSchedule ??
+          (matchedApplication as { amortizationSchedule?: unknown }).amortizationSchedule,
+      )
+      console.log('[amortizationSchedule] GET application', {
+        applicationId,
+        raw:
+          (live as { amortizationSchedule?: unknown } | null)?.amortizationSchedule ??
+          (matchedApplication as { amortizationSchedule?: unknown }).amortizationSchedule,
+        normalized: liveSchedule,
+      })
+      setSchedule(liveSchedule)
+      const storefrontForSchedule = live
+        ? { ...toStorefrontApplication(matchedApplication), ...live }
+        : toStorefrontApplication(matchedApplication)
+      if (
+        normalizeType(matchedApplication.productType) === 'LOAN' &&
+        isLoanDisbursedForSchedule({
+          status: storefrontForSchedule.status,
+          loanWorkflowStatus: storefrontForSchedule.loanWorkflowStatus,
+          postApprovalFulfillment: storefrontForSchedule.postApprovalFulfillment,
+          amortizationSchedule: liveSchedule,
+        }) &&
+        (!liveSchedule || !isScheduleConfirmed(liveSchedule))
+      ) {
+        setScheduleLoading(true)
+      } else {
+        setScheduleLoading(false)
+      }
+      setDetailApplication(storefrontForSchedule)
 
       try {
         const matchedProduct = await fetchMobileProductById(matchedApplication.productId)
@@ -163,26 +239,169 @@ export default function AppliedProductDetailPage() {
   const productType = normalizeType(application?.productType || product?.type)
   const isLoan = productType === 'LOAN'
   const isMortgage = productType === 'MORTGAGE'
-  const showWorkflow =
-    Boolean(application) && (isLoan || isMortgage) && isPendingApplication(application?.status)
+  const scheduleApplication = detailApplication || (application ? toStorefrontApplication(application) : null)
+  const disbursementDeferred = Boolean(
+    (scheduleApplication as { disbursementDeferred?: boolean } | null)?.disbursementDeferred ||
+      (detailApplication as { disbursementDeferred?: boolean } | null)?.disbursementDeferred ||
+      (application as { disbursementDeferred?: boolean } | null)?.disbursementDeferred,
+  )
+  const isDisbursed = Boolean(
+    isLoan &&
+      scheduleApplication &&
+      isLoanDisbursedForSchedule({
+        status: scheduleApplication.status,
+        loanWorkflowStatus: scheduleApplication.loanWorkflowStatus,
+        postApprovalFulfillment: scheduleApplication.postApprovalFulfillment,
+        amortizationSchedule: schedule,
+        disbursementDeferred,
+      }),
+  )
+  const showAmortization = shouldShowAmortizationSchedule({
+    isLoan,
+    schedule,
+    application: scheduleApplication
+      ? { ...scheduleApplication, disbursementDeferred }
+      : null,
+  })
 
+  // After disburse, billing plan may backfill — poll application + schedule endpoint until confirmed.
   useEffect(() => {
-    if (!application || !showWorkflow) return
-    if (isLoan && !readLoanWorkflow(application.id)) {
-      initLoanWorkflowSubmitted(application.id, application.productId)
+    if (!isDisbursed || !applicationId) return
+    if (schedule && isScheduleConfirmed(schedule)) {
+      setScheduleLoading(false)
+      return
     }
-    if (isMortgage && !readMortgageWorkflow(application.id)) {
-      initMortgageWorkflowSubmitted(application.id, application.productId, 'equity_contribution')
+
+    const userId = wallet?.userId
+    let cancelled = false
+    let attempts = 0
+    const maxAttempts = 20
+
+    setScheduleLoading(true)
+
+    const poll = async () => {
+      while (!cancelled && attempts < maxAttempts) {
+        attempts += 1
+
+        const [byId, dedicated] = await Promise.all([
+          fetchApplicationById(applicationId),
+          userId
+            ? fetchAmortizationSchedule(applicationId, userId)
+            : Promise.resolve({ ok: false as const, error: 'missing user' }),
+        ])
+        if (cancelled) return
+
+        const fromApp = byId.ok
+          ? normalizeAmortizationSchedule(byId.application?.amortizationSchedule)
+          : null
+        const fromDedicated = dedicated.ok ? dedicated.schedule : null
+        const liveSchedule = fromDedicated || fromApp
+
+        if (byId.ok && byId.application) {
+          setDetailApplication((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  ...byId.application,
+                  amortizationSchedule: byId.application?.amortizationSchedule,
+                }
+              : prev,
+          )
+        }
+
+        if (liveSchedule) {
+          console.log('[amortizationSchedule] poll refresh', {
+            applicationId,
+            fromDedicated: dedicated.ok,
+            fromApplication: Boolean(fromApp),
+            schedule: liveSchedule,
+          })
+          setSchedule(liveSchedule)
+          if (isScheduleConfirmed(liveSchedule)) {
+            setScheduleLoading(false)
+            return
+          }
+        }
+
+        if (attempts < maxAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, 3000))
+        }
+      }
+
+      if (!cancelled) setScheduleLoading(false)
     }
-  }, [application, isLoan, isMortgage, showWorkflow])
+
+    void poll()
+
+    return () => {
+      cancelled = true
+    }
+  }, [applicationId, isDisbursed, schedule?.source, wallet?.userId])
+
+  const refreshSchedule = useCallback(async () => {
+    const userId = wallet?.userId
+    if (!userId || !applicationId || scheduleRefreshing) return
+    setScheduleRefreshing(true)
+    try {
+      const [dedicated, byId] = await Promise.all([
+        fetchAmortizationSchedule(applicationId, userId),
+        fetchApplicationById(applicationId),
+      ])
+      if (dedicated.ok) {
+        console.log('[amortizationSchedule] dedicated GET refresh', {
+          applicationId,
+          schedule: dedicated.schedule,
+        })
+        setSchedule(dedicated.schedule)
+      } else if (byId.ok) {
+        const liveSchedule = normalizeAmortizationSchedule(byId.application?.amortizationSchedule)
+        if (liveSchedule) {
+          console.log('[amortizationSchedule] application GET refresh fallback', {
+            applicationId,
+            schedule: liveSchedule,
+          })
+          setSchedule(liveSchedule)
+        }
+      }
+      if (byId.ok && byId.application) {
+        setDetailApplication((prev) =>
+          prev
+            ? {
+                ...prev,
+                ...byId.application,
+                amortizationSchedule: byId.application?.amortizationSchedule,
+              }
+            : prev,
+        )
+      }
+    } finally {
+      setScheduleRefreshing(false)
+    }
+  }, [applicationId, scheduleRefreshing, wallet?.userId])
+
+  // Keep workflow until disbursed so indicative previews can sit alongside pending steps.
+  const showWorkflow =
+    Boolean(application) &&
+    (isLoan || isMortgage) &&
+    isPendingApplication(application?.status) &&
+    !isDisbursed
 
   const storefrontApplication = useMemo(
-    () => (application ? toStorefrontApplication(application) : null),
-    [application],
+    () => detailApplication || (application ? toStorefrontApplication(application) : null),
+    [application, detailApplication],
   )
 
-  const currency = wallet?.currency || 'NGN'
-  const facts = product ? productFacts(product, currency) : []
+  const currency = application?.currency || wallet?.currency || schedule?.currency || 'NGN'
+  const facts = product ? productFacts(product, currency, schedule) : []
+  const subtitle =
+    scheduleApplication?.customerName ||
+    scheduleApplication?.applicantName ||
+    product?.description ||
+    ''
+  // Backend keeps top-level status as APPROVED after disburse; prefer live fulfillment/schedule.
+  const displayStatus = isDisbursed
+    ? 'DISBURSED'
+    : String(application?.status || scheduleApplication?.status || '—')
 
   return (
     <MobileFlowShell title="Product details">
@@ -202,9 +421,7 @@ export default function AppliedProductDetailPage() {
           <section className="sf-bg-button rounded-2xl px-5 py-5 text-white">
             <p className="text-xs uppercase tracking-wide text-white/70">{product.type}</p>
             <h1 className="mt-2 text-xl font-bold">{product.name}</h1>
-            {product.description ? (
-              <p className="mt-3 text-sm leading-6 text-white/80">{product.description}</p>
-            ) : null}
+            {subtitle ? <p className="mt-3 text-sm leading-6 text-white/80">{subtitle}</p> : null}
           </section>
 
           <section className="rounded-2xl border sf-border-subtle px-4 py-4">
@@ -213,8 +430,8 @@ export default function AppliedProductDetailPage() {
                 <p className="text-xs text-gray-500">Application reference</p>
                 <p className="mt-1 break-all text-sm font-semibold sf-text-ink">{application.id}</p>
               </div>
-              <span className="sf-accent-soft shrink-0 rounded-full px-3 py-1 text-[10px] font-semibold sf-text-ink">
-                {application.status}
+              <span className="sf-accent-soft shrink-0 rounded-full px-3 py-1 text-[10px] font-semibold uppercase sf-text-ink">
+                {displayStatus}
               </span>
             </div>
           </section>
@@ -229,11 +446,56 @@ export default function AppliedProductDetailPage() {
                     className="flex items-start justify-between gap-4 border-b border-gray-100 py-3 last:border-0"
                   >
                     <dt className="text-xs text-gray-500">{label}</dt>
-                    <dd className="max-w-[58%] text-right text-xs font-semibold sf-text-ink">{value}</dd>
+                    <dd className="max-w-[58%] text-right text-xs font-semibold sf-text-ink">
+                      {label === 'Interest method' ? humanizeLabel(value) : value}
+                    </dd>
                   </div>
                 ))}
               </dl>
             </section>
+          ) : null}
+
+          {showAmortization ? (
+            scheduleLoading && isDisbursed && !schedule ? (
+              <section className="rounded-2xl border sf-border-subtle px-4 py-5">
+                <p className="text-sm font-semibold sf-text-ink">Preparing your repayment schedule</p>
+                <p className="mt-1 text-xs leading-relaxed text-gray-500">
+                  Your confirmed amortization schedule is being generated. This usually takes a moment
+                  after disbursement.
+                </p>
+                <div className="mt-4 space-y-2">
+                  <Skeleton className="h-16 w-full rounded-2xl bg-gray-200/90" />
+                  <Skeleton className="h-16 w-full rounded-2xl bg-gray-200/90" />
+                  <Skeleton className="h-24 w-full rounded-2xl bg-gray-200/90" />
+                </div>
+              </section>
+            ) : schedule ? (
+              <AmortizationScheduleSection
+                schedule={schedule}
+                interestRateLabel={resolveScheduleInterestRateLabel(schedule, rateLabel(product))}
+                interestMethod={schedule.interestMethod || product.interestMethod}
+                onRefresh={wallet?.userId ? refreshSchedule : undefined}
+                refreshing={scheduleRefreshing || (scheduleLoading && isDisbursed && !isScheduleConfirmed(schedule))}
+              />
+            ) : isDisbursed ? (
+              <section className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900">
+                <p className="font-semibold">Repayment schedule unavailable</p>
+                <p className="mt-1 text-xs text-amber-800">
+                  Your loan is disbursed, but the amortization schedule was not returned yet. Try
+                  refreshing in a moment.
+                </p>
+                {wallet?.userId ? (
+                  <button
+                    type="button"
+                    onClick={() => void refreshSchedule()}
+                    disabled={scheduleRefreshing}
+                    className="mt-3 text-xs font-semibold underline underline-offset-2 disabled:opacity-60"
+                  >
+                    {scheduleRefreshing ? 'Refreshing…' : 'Try refresh now'}
+                  </button>
+                ) : null}
+              </section>
+            ) : null
           ) : null}
 
           {showWorkflow && storefrontApplication ? (
@@ -249,7 +511,7 @@ export default function AppliedProductDetailPage() {
                 )}
               </Suspense>
             </section>
-          ) : product.requirements?.length ? (
+          ) : !showAmortization && !showWorkflow && product.requirements?.length ? (
             <section>
               <h2 className="mb-3 text-sm font-bold sf-text-ink">Requirements</h2>
               <div className="space-y-2">

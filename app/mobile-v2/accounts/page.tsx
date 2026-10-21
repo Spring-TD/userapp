@@ -15,6 +15,7 @@ import { TransferToPrimaryDrawer } from '@/components/mobile-v2/TransferToPrimar
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { useUserWallet } from '@/hooks/useUserWallet';
+import { useMobileProducts } from '@/hooks/useMobileProducts';
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
 import {
     fetchApprovedAmountSummary,
@@ -28,6 +29,19 @@ import {
     canWithdrawCommodity,
     withdrawCommodity,
 } from '@/lib/commodityApi';
+import {
+    canTransferProductWalletToPrimary,
+    isApplicationDisbursedForWallet,
+    mergeDisbursementSignals,
+    productWalletAvailableBalance,
+    shouldShowTransferredToPrimary,
+    withZeroProductWallet,
+} from '@/lib/productWalletTransfer';
+import { fetchApplicationById } from '@/lib/storefrontApplicationClient';
+import {
+    availableStorefrontProductTypes,
+    type StorefrontProductType,
+} from '@/lib/storefrontProducts';
 import { formatWalletBalance } from '@/lib/userWallet';
 import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
 import { MobileV2NotificationBell } from '@/components/mobile-v2/MobileV2NotificationBell';
@@ -43,8 +57,7 @@ type CommodityContractSnapshot = {
     fundedAt?: string;
 };
 
-const ACCOUNT_FILTERS = ['Mortgage', 'Loan', 'Savings', 'Invest', 'Commodity'] as const;
-type AccountFilter = typeof ACCOUNT_FILTERS[number];
+type AccountFilter = StorefrontProductType;
 const ACCOUNT_TOTAL_LABELS: Record<AccountFilter, string> = {
     Mortgage: 'Total Mortgage',
     Loan: 'Total Loan',
@@ -138,17 +151,17 @@ function provisionStatusTone(status?: string | null): string {
         return 'bg-emerald-600 text-white'
     }
 
-    // Merchant-approved application (not the same stage as Active)
-    if (normalized.includes('approved')) {
-        return 'bg-[var(--sf-button,#1E40AF)] text-white'
-    }
-
     if (
         normalized.includes('disbursed') ||
         normalized.includes('successful') ||
         normalized.includes('completed')
     ) {
         return 'bg-teal-600 text-white'
+    }
+
+    // Merchant-approved application (not the same stage as Active)
+    if (normalized.includes('approved')) {
+        return 'bg-[var(--sf-button,#1E40AF)] text-white'
     }
 
     if (normalized.includes('reject') || normalized.includes('cancel') || normalized.includes('withdraw')) {
@@ -228,42 +241,12 @@ function formatApprovedTotal(amount: number, currency: string): string {
  * Never pair an "Approved" badge with a "Pending provisioning" subtitle.
  */
 /** Spendable balance sitting on the product application wallet (not PRIMARY). */
-function productWalletAvailableBalance(application: ProductApplication): number {
-    const wallet = application.productWallet
-    const upstream = wallet?.upstreamAccount
-    const candidates = [
-        wallet?.mainBalance,
-        wallet?.balance,
-        upstream?.mainBalance,
-        upstream?.balance,
-        application.amount,
-    ]
-    for (const value of candidates) {
-        if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value
-    }
-    return 0
-}
-
 function canTransferProductToPrimary(
     application: ProductApplication,
     activeFilter: AccountFilter,
 ): boolean {
     if (activeFilter === 'Commodity') return false
-    if (!application.id) return false
-    const statusLabel = getProductAccountDisplayStatus(application).toLowerCase()
-    if (statusLabel.includes('pending') || statusLabel === 'rejected' || statusLabel === 'cancelled') {
-        return false
-    }
-    // Loan / mortgage disbursements are the primary use-case; also allow savings/invest when funded.
-    if (activeFilter === 'Loan' || activeFilter === 'Mortgage') {
-        return (
-            statusLabel === 'approved' ||
-            statusLabel === 'disbursed' ||
-            statusLabel === 'active' ||
-            productWalletAvailableBalance(application) > 0
-        )
-    }
-    return productWalletAvailableBalance(application) > 0
+    return canTransferProductWalletToPrimary(application)
 }
 
 function getProductAccountDisplayStatus(application: ProductApplication): string {
@@ -277,7 +260,10 @@ function getProductAccountDisplayStatus(application: ProductApplication): string
 
     if (appStatus.includes('reject') || appStatus.includes('declin')) return 'Rejected'
     if (appStatus.includes('cancel')) return 'Cancelled'
-    if (appStatus.includes('disburs')) return 'Disbursed'
+    // Backend keeps top-level status APPROVED after disburse; check PAF / confirmed schedule.
+    if (isApplicationDisbursedForWallet(application)) {
+        return 'Disbursed'
+    }
     if (holding.includes('withdraw')) return 'Withdrawn'
 
     const provisionLive =
@@ -316,12 +302,14 @@ function ProductAccountCard({
     userId,
     currency,
     onWithdrawComplete,
+    onTransferSuccess,
 }: {
     application: ProductApplication;
     activeFilter: AccountFilter;
     userId?: string;
     currency?: string;
     onWithdrawComplete?: () => void;
+    onTransferSuccess?: (applicationId: string) => void;
 }) {
     const [withdrawing, setWithdrawing] = useState(false);
     const [withdrawError, setWithdrawError] = useState<string | null>(null);
@@ -360,8 +348,8 @@ function ProductAccountCard({
         onWithdrawComplete?.();
     };
 
-    const content = (
-        <div className="w-full rounded-[24px] border sf-border-brand sf-accent-soft p-5 shadow-sm">
+    const cardInner = (
+        <>
             <div className="mb-4 flex items-start justify-between gap-3">
                 <div className="min-w-0">
                     <p className="text-xs font-semibold uppercase tracking-wide text-[var(--sf-primary,#2563EB)]">
@@ -380,7 +368,9 @@ function ProductAccountCard({
                                 : account?.bankName || application.productName || 'Product account'}
                     </p>
                 </div>
-                <span className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold uppercase ${provisionStatusTone(statusLabel)}`}>
+                <span
+                    className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold uppercase ${provisionStatusTone(statusLabel)}`}
+                >
                     {statusLabel}
                 </span>
             </div>
@@ -422,7 +412,7 @@ function ProductAccountCard({
                         )}
                     </Button>
                     {withdrawError ? (
-                        <p className="mt-2 text-center text-xs text-red-600">{withdrawError}</p>
+                        <p className="mt-2 text-center text-xs text-red-200">{withdrawError}</p>
                     ) : null}
                 </div>
             ) : null}
@@ -439,8 +429,30 @@ function ProductAccountCard({
                     >
                         Transfer to primary wallet
                     </Button>
+                    {productBalance > 0 ? (
+                        <p className="mt-2 text-center text-[11px] text-gray-500">
+                            Available: {formatWalletBalance(productBalance, application.currency || currency)}
+                        </p>
+                    ) : null}
+                </div>
+            ) : (activeFilter === 'Loan' || activeFilter === 'Mortgage') &&
+              shouldShowTransferredToPrimary(application) ? (
+                <div className="mt-4" onClick={(event) => event.preventDefault()}>
+                    <Button
+                        type="button"
+                        disabled
+                        className="h-10 w-full cursor-not-allowed rounded-full bg-gray-100 text-sm font-semibold text-gray-400"
+                    >
+                        Transferred to primary wallet
+                    </Button>
                 </div>
             ) : null}
+        </>
+    );
+
+    const content = (
+        <div className="w-full rounded-[24px] border sf-border-brand sf-accent-soft p-5 shadow-sm">
+            {cardInner}
         </div>
     );
 
@@ -459,7 +471,7 @@ function ProductAccountCard({
                     productType={application.productType || activeFilter}
                     availableBalance={productBalance}
                     currency={application.currency || currency || 'NGN'}
-                    onSuccess={onWithdrawComplete}
+                    onSuccess={() => onTransferSuccess?.(application.id)}
                 />
             ) : null}
         </div>
@@ -479,8 +491,19 @@ function ProductAccountCard({
 export default function AccountsPage() {
     const [profile, setProfile] = useState<AuthUserProfile | null>(null);
     const [profileLoading, setProfileLoading] = useState(true);
-    const [activeFilter, setActiveFilter] = useState<AccountFilter>('Mortgage');
-    const { appId } = useMobileV2Tenant();
+    const [activeFilter, setActiveFilter] = useState<AccountFilter | null>(null);
+    const { appId, ready: tenantReady } = useMobileV2Tenant();
+    const {
+        products: appProducts,
+        loading: productsLoading,
+    } = useMobileProducts({
+        springAppId: appId ?? undefined,
+        tenantReady,
+    });
+    const enabledFilters = useMemo(
+        () => availableStorefrontProductTypes(appProducts),
+        [appProducts],
+    );
     const { wallet, loading: walletLoading, error: walletError, refetch: refetchWallet } = useUserWallet();
     const [approvedSummary, setApprovedSummary] = useState<ApprovedAmountSummary | null>(null);
     const [applications, setApplications] = useState<ProductApplication[]>([]);
@@ -488,16 +511,32 @@ export default function AccountsPage() {
     const [summaryError, setSummaryError] = useState<string | null>(null);
     const [applicationsLoading, setApplicationsLoading] = useState(false);
     const [applicationsError, setApplicationsError] = useState<string | null>(null);
-    const activeProductType = ACCOUNT_FILTER_TO_PRODUCT_TYPE[activeFilter] as ApprovedProductType;
+
+    // Only show filters for product types the merchant turned on (same gate as Products tabs).
+    useEffect(() => {
+        if (productsLoading) return;
+        if (enabledFilters.length === 0) {
+            setActiveFilter(null);
+            return;
+        }
+        setActiveFilter((current) =>
+            current && enabledFilters.includes(current) ? current : enabledFilters[0],
+        );
+    }, [enabledFilters, productsLoading]);
+
+    const activeProductType = activeFilter
+        ? (ACCOUNT_FILTER_TO_PRODUCT_TYPE[activeFilter] as ApprovedProductType)
+        : null;
 
     const approvedListParams = useMemo(
-        () => ({
-            productType: activeProductType,
-            appId: appId || undefined,
-            status: 'APPROVED',
-            page: 1,
-            limit: 20,
-        }),
+        () =>
+            activeProductType
+                ? {
+                      productType: activeProductType,
+                      appId: appId || undefined,
+                      status: 'APPROVED',
+                  }
+                : null,
         [activeProductType, appId],
     );
 
@@ -540,8 +579,9 @@ export default function AccountsPage() {
 
     useEffect(() => {
         const userId = wallet?.userId;
-        if (!userId || !appId) {
+        if (!userId || !appId || !approvedListParams) {
             setApplications([]);
+            setApplicationsLoading(false);
             return;
         }
 
@@ -550,11 +590,33 @@ export default function AccountsPage() {
         setApplicationsLoading(true);
         setApplicationsError(null);
 
-        void fetchUserProductApplications(userId, approvedListParams).then((result) => {
+        void fetchUserProductApplications(userId, approvedListParams).then(async (result) => {
             if (cancelled) return;
             setApplications(result.applications);
             setApplicationsError(result.error);
             setApplicationsLoading(false);
+
+            // List rows often keep status APPROVED; hydrate PAF/schedule for loan/mortgage badges.
+            const needsEnrichment = result.applications.filter((app) => {
+                const type = String(app.productType || '').toUpperCase();
+                if (type !== 'LOAN' && type !== 'MORTGAGE') return false;
+                return !isApplicationDisbursedForWallet(app);
+            });
+            if (needsEnrichment.length === 0) return;
+
+            const enriched = await Promise.all(
+                needsEnrichment.map(async (app) => {
+                    const byId = await fetchApplicationById(app.id);
+                    if (!byId.ok || !byId.application) return app;
+                    return mergeDisbursementSignals(app, byId.application);
+                }),
+            );
+            if (cancelled) return;
+
+            const byEnrichedId = new Map(enriched.map((app) => [app.id, app]));
+            setApplications((prev) =>
+                prev.map((app) => byEnrichedId.get(app.id) ?? app),
+            );
         });
 
         return () => {
@@ -564,10 +626,29 @@ export default function AccountsPage() {
 
     const reloadApplications = useCallback(() => {
         const userId = wallet?.userId;
-        if (!userId || !appId) return;
-        void fetchUserProductApplications(userId, approvedListParams).then((result) => {
+        if (!userId || !appId || !approvedListParams) return;
+        void fetchUserProductApplications(userId, approvedListParams).then(async (result) => {
             setApplications(result.applications);
             setApplicationsError(result.error);
+
+            const needsEnrichment = result.applications.filter((app) => {
+                const type = String(app.productType || '').toUpperCase();
+                if (type !== 'LOAN' && type !== 'MORTGAGE') return false;
+                return !isApplicationDisbursedForWallet(app);
+            });
+            if (needsEnrichment.length === 0) return;
+
+            const enriched = await Promise.all(
+                needsEnrichment.map(async (app) => {
+                    const byId = await fetchApplicationById(app.id);
+                    if (!byId.ok || !byId.application) return app;
+                    return mergeDisbursementSignals(app, byId.application);
+                }),
+            );
+            const byEnrichedId = new Map(enriched.map((app) => [app.id, app]));
+            setApplications((prev) =>
+                prev.map((app) => byEnrichedId.get(app.id) ?? app),
+            );
         });
         void fetchApprovedAmountSummary(userId, appId).then((result) => {
             setApprovedSummary(result.summary);
@@ -576,14 +657,37 @@ export default function AccountsPage() {
         void refetchWallet();
     }, [wallet?.userId, appId, approvedListParams, refetchWallet]);
 
-    const displayName = useMemo(() => displayNameFromProfile(profile), [profile]);
-    const totalLabel = ACCOUNT_TOTAL_LABELS[activeFilter];
-    const activeBucket: ApprovedAmountBucket =
-        approvedSummary?.summary?.[activeProductType] ??
-        emptyAmountBucket(wallet?.currency || 'NGN');
-    const activeApplications = applications.filter(
-        (application) => String(application.productType || '').toUpperCase() === activeProductType,
+    const handleTransferSuccess = useCallback(
+        (transferredApplicationId: string) => {
+            setApplications((prev) =>
+                prev.map((app) => withZeroProductWallet(app, transferredApplicationId)),
+            );
+            void fetchApplicationById(transferredApplicationId).then((byId) => {
+                if (!byId.ok || !byId.application?.productWallet) return;
+                setApplications((prev) =>
+                    prev.map((app) =>
+                        app.id === transferredApplicationId
+                            ? { ...app, productWallet: byId.application!.productWallet }
+                            : app,
+                    ),
+                );
+            });
+            reloadApplications();
+        },
+        [reloadApplications],
     );
+
+    const displayName = useMemo(() => displayNameFromProfile(profile), [profile]);
+    const totalLabel = activeFilter ? ACCOUNT_TOTAL_LABELS[activeFilter] : 'Total';
+    const activeBucket: ApprovedAmountBucket =
+        (activeProductType && approvedSummary?.summary?.[activeProductType]) ||
+        emptyAmountBucket(wallet?.currency || 'NGN');
+    const activeApplications = activeProductType
+        ? applications.filter(
+              (application) =>
+                  String(application.productType || '').toUpperCase() === activeProductType,
+          )
+        : [];
     const displayedApplications = selectDisplayableProductAccounts(activeApplications);
     const displayedAccountCount = Number(activeBucket.applicationCount) || 0;
     const activeTotalAmount = Number(activeBucket.totalAmount) || 0;
@@ -591,7 +695,9 @@ export default function AccountsPage() {
         activeTotalAmount,
         activeBucket.currency || wallet?.currency || 'NGN',
     );
-    const isSummaryBusy = walletLoading || summaryLoading || applicationsLoading;
+    const isSummaryBusy = walletLoading || summaryLoading || applicationsLoading || productsLoading;
+    const filtersReady = tenantReady && !productsLoading;
+    const hasEnabledProducts = enabledFilters.length > 0;
 
     return (
         <div className="relative flex h-full min-h-0 flex-col sf-page-bg">
@@ -618,24 +724,44 @@ export default function AccountsPage() {
                 </div>
 
                 <div className="px-6 mb-6">
-                    <div className="w-full bg-[#F3F4F6] p-1.5 rounded-full flex items-center justify-between overflow-x-auto no-scrollbar">
-                        {ACCOUNT_FILTERS.map((filter) => (
-                            <button
-                                key={filter}
-                                type="button"
-                                onClick={() => setActiveFilter(filter)}
-                                className={`flex-1 text-center py-2.5 px-4 rounded-full text-xs font-semibold transition-all whitespace-nowrap ${
-                                    filter === activeFilter
-                                        ? 'bg-white text-[var(--sf-button,#1E40AF)] shadow-sm'
-                                        : 'text-gray-400 hover:text-gray-600 bg-transparent'
-                                }`}
-                            >
-                                {filter}
-                            </button>
-                        ))}
-                    </div>
+                    {!filtersReady ? (
+                        <div className="h-11 w-full animate-pulse rounded-full bg-[#F3F4F6]" />
+                    ) : hasEnabledProducts ? (
+                        <div className="w-full bg-[#F3F4F6] p-1.5 rounded-full flex items-center justify-between overflow-x-auto no-scrollbar">
+                            {enabledFilters.map((filter) => (
+                                <button
+                                    key={filter}
+                                    type="button"
+                                    onClick={() => setActiveFilter(filter)}
+                                    className={`flex-1 text-center py-2.5 px-4 rounded-full text-xs font-semibold transition-all whitespace-nowrap ${
+                                        filter === activeFilter
+                                            ? 'bg-white text-[var(--sf-button,#1E40AF)] shadow-sm'
+                                            : 'text-gray-400 hover:text-gray-600 bg-transparent'
+                                    }`}
+                                >
+                                    {filter}
+                                </button>
+                            ))}
+                        </div>
+                    ) : null}
                 </div>
 
+                {!filtersReady ? null : !hasEnabledProducts || !activeFilter ? (
+                    <div className="px-6">
+                        <div className="rounded-[28px] border border-dashed sf-border-brand bg-white px-5 py-8 text-center shadow-sm">
+                            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full sf-icon-tile-bg">
+                                <Wallet className="h-7 w-7" />
+                            </div>
+                            <h3 className="text-base font-bold text-[var(--sf-ink,#1E1B4B)]">
+                                No products available
+                            </h3>
+                            <p className="mx-auto mt-2 max-w-[260px] text-sm leading-6 text-gray-500">
+                                This storefront has no active products yet, so account types are hidden until the merchant turns them on.
+                            </p>
+                        </div>
+                    </div>
+                ) : (
+                    <>
                 <div className="px-6 mb-8">
                     {isSummaryBusy && !approvedSummary ? (
                         <WalletBalanceCardSkeleton />
@@ -687,6 +813,7 @@ export default function AccountsPage() {
                                 userId={wallet?.userId}
                                 currency={wallet?.currency}
                                 onWithdrawComplete={reloadApplications}
+                                onTransferSuccess={handleTransferSuccess}
                             />
                         ))
                     ) : (
@@ -700,6 +827,8 @@ export default function AccountsPage() {
                     )}
 
                 </div>
+                    </>
+                )}
             </div>
 
             <MobileV2BottomNav active="account" />

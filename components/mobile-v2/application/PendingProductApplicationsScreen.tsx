@@ -8,13 +8,11 @@ import { fetchUserApplications, needsFinalApplicationSubmit, canShowPendingPage,
 import {
   buildMortgageThread,
   mortgageStepCta,
-  readMortgageWorkflow,
   resolveMortgageWorkflowStep,
 } from '@/lib/mortgageWorkflow'
 import {
   loanNextStepLabel,
   loanStepCta,
-  readLoanWorkflow,
   resolveLoanWorkflowStep,
 } from '@/lib/loanWorkflow'
 import { mortgageApplyHref, mortgagePendingDetailHref } from '@/lib/mortgageApplyRoutes'
@@ -46,21 +44,19 @@ function applicationPendingKind(application: StorefrontApplication): PendingKind
 function isPendingApplication(application: StorefrontApplication, kind: PendingKind) {
   const status = String(application.status || '').toLowerCase()
   const workflowStatus = String(application.loanWorkflowStatus || '').toLowerCase()
-  const applicationId = String(application.id ?? application._id ?? '')
 
   if (kind === 'mortgage') {
-    const local = readMortgageWorkflow(applicationId)
-    const step = resolveMortgageWorkflowStep(application, local)
-    if (local?.allocationDownloaded) return false
-    if (step !== 'mortgage_allocation' && step !== 'declined') return true
+    const step = resolveMortgageWorkflowStep(application)
+    if (step === 'declined') return false
+    if (step === 'mortgage_allocation') return false
+    if (step !== 'application_submission') return true
   }
 
   if (kind === 'loan') {
-    const local = readLoanWorkflow(applicationId)
-    const step = resolveLoanWorkflowStep(application, local)
-    if (local?.offerDeclined) return false
-    if (step === 'loan_disbursed' && local?.disbursementSeen) return false
-    if (step !== 'declined') return true
+    const step = resolveLoanWorkflowStep(application)
+    if (step === 'declined') return false
+    // Keep disbursed loans on My Loan so users can open the repayment schedule.
+    return true
   }
 
   return status === 'pending' || PENDING_WORKFLOW_STATUSES.has(workflowStatus)
@@ -95,9 +91,7 @@ function mortgageNextStepLabel(application: StorefrontApplication) {
   if (isMortgageDownPaymentPending(application as unknown as Record<string, unknown>)) {
     return 'Pay down payment'
   }
-  const applicationId = String(application.id ?? application._id ?? '')
-  const local = readMortgageWorkflow(applicationId)
-  const step = resolveMortgageWorkflowStep(application, local)
+  const step = resolveMortgageWorkflowStep(application)
   const thread = buildMortgageThread(step)
   const current = thread.find((item) => item.status === 'current')
   return current?.title ?? 'In progress'
@@ -217,8 +211,12 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreen
             <div className="rounded-2xl bg-red-50 px-4 py-6 text-center text-sm text-red-600">{error}</div>
           ) : pendingApplications.length === 0 ? (
             <div className="rounded-2xl bg-gray-50 px-4 py-8 text-center">
-              <p className="text-sm font-semibold text-gray-900">No pending {emptyLabel}</p>
-              <p className="mt-1 text-xs text-gray-500">Pending applications will appear here once you start an application.</p>
+              <p className="text-sm font-semibold text-gray-900">No {emptyLabel}</p>
+              <p className="mt-1 text-xs text-gray-500">
+                {kind === 'loan'
+                  ? 'Approved and disbursed loans will appear here once you start an application.'
+                  : 'Pending applications will appear here once you start an application.'}
+              </p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -230,11 +228,9 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreen
                 const awaitingSubmit = needsFinalApplicationSubmit(application)
                 const pendingReady = canShowPendingPage(application)
                 const resumeApplyHref = awaitingSubmit ? continueApplyHref(application, appKind) : null
-                const mortgageLocal = readMortgageWorkflow(applicationId)
-                const loanLocal = readLoanWorkflow(applicationId)
                 const mortgageStep =
-                  appKind === 'mortgage' ? resolveMortgageWorkflowStep(application, mortgageLocal) : null
-                const loanStep = appKind === 'loan' ? resolveLoanWorkflowStep(application, loanLocal) : null
+                  appKind === 'mortgage' ? resolveMortgageWorkflowStep(application) : null
+                const loanStep = appKind === 'loan' ? resolveLoanWorkflowStep(application) : null
                 const mortgageCta =
                   pendingReady && appKind === 'mortgage' && productId && applicationId && mortgageStep
                     ? isMortgageDownPaymentPending(application as unknown as Record<string, unknown>)
@@ -258,6 +254,8 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreen
                     : loanCta
                 const detailHref = awaitingSubmit
                   ? resumeApplyHref
+                  : pendingReady && appKind === 'loan' && applicationId && loanStep === 'loan_disbursed'
+                    ? `/mobile-v2/accounts/${encodeURIComponent(applicationId)}/product`
                   : pendingReady && appKind === 'mortgage' && applicationId
                     ? mortgagePendingDetailHref(applicationId)
                     : pendingReady && appKind === 'loan' && applicationId
@@ -282,7 +280,13 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreen
                             {appKind}
                           </p>
                         ) : null}
-                        <p className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--sf-button,#1E40AF)]">
+                        <p
+                          className={`mt-2 text-[10px] font-semibold uppercase tracking-wide ${
+                            loanStep === 'loan_disbursed'
+                              ? 'text-emerald-700'
+                              : 'text-[var(--sf-button,#1E40AF)]'
+                          }`}
+                        >
                           Next: {nextStepLabel}
                         </p>
                         {awaitingSubmit ? (
@@ -299,7 +303,7 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreen
 
                     {detailHref || cta ? (
                       <div className="mt-4 flex gap-2">
-                        {detailHref && !awaitingSubmit ? (
+                        {detailHref && !awaitingSubmit && loanStep !== 'loan_disbursed' ? (
                           <Link
                             href={detailHref}
                             className="flex flex-1 items-center justify-center gap-1 rounded-full border border-gray-200 py-2.5 text-xs font-semibold text-gray-700"
@@ -314,6 +318,13 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreen
                             className="flex flex-1 items-center justify-center rounded-full bg-[var(--sf-button,#1E40AF)] py-2.5 text-xs font-semibold text-white"
                           >
                             {cta.label}
+                          </Link>
+                        ) : detailHref && loanStep === 'loan_disbursed' ? (
+                          <Link
+                            href={detailHref}
+                            className="flex flex-1 items-center justify-center rounded-full bg-[var(--sf-button,#1E40AF)] py-2.5 text-xs font-semibold text-white"
+                          >
+                            View repayment schedule
                           </Link>
                         ) : null}
                       </div>

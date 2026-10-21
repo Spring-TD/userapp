@@ -13,6 +13,7 @@ import { MortgageDetailSkeleton } from '@/components/mobile-v2/data-skeletons'
 import { mortgagePendingDetailHref } from '@/lib/mortgageApplyRoutes'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
 import { poweredBy } from '@/lib/mobileProductDetailDisplay'
+import { resolveMortgageFacilityAmount } from '@/lib/mortgageWorkflow'
 
 function parseInitialStep(value: string | null): MortgageOfferFlowStep {
   switch (value) {
@@ -68,8 +69,10 @@ function OfferPageContent() {
       applicationId={applicationId}
       productName={product?.name || property?.name || 'Mortgage property'}
       provider={provider}
-      propertyValue={property?.value ?? product?.propertyValue ?? product?.amountMax ?? null}
-      downPaymentPercent={product?.equityContribution ?? 10}
+      product={product}
+      mortgageFacilityAmount={resolveMortgageFacilityAmount(product)}
+      downPaymentPercent={product?.equityContribution ?? null}
+      equityRequirement={product?.equityRequirement ?? null}
       backHref={backHref}
       initialStep={initialStep}
     />

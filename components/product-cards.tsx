@@ -5,7 +5,7 @@ import Image from "next/image"
 import { Switch } from "@/components/ui/switch"
 import { Clock, Globe, Loader2 } from "lucide-react"
 import { ProductDetailModal } from "@/components/product-detail-modal"
-import { springProductService } from "@/lib/services/springProductService"
+import { productApi } from "@/lib/services/product-api"
 import { toast } from "sonner"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -79,15 +79,25 @@ function parseRowIsActive(row: Record<string, unknown>): boolean {
 }
 
 /** Map catalog product id → isActive for this app from GET /api/v1/products/app/:appId (uses each row's isActive). */
+function extractProductRows(payload: unknown): unknown[] {
+  if (Array.isArray(payload)) return payload
+  if (!payload || typeof payload !== "object") return []
+  const row = payload as Record<string, unknown>
+  if (Array.isArray(row.items)) return row.items
+  if (Array.isArray(row.products)) return row.products
+  const nested = row.data
+  if (Array.isArray(nested)) return nested
+  if (nested && typeof nested === "object") {
+    const inner = nested as Record<string, unknown>
+    if (Array.isArray(inner.items)) return inner.items
+    if (Array.isArray(inner.products)) return inner.products
+  }
+  return []
+}
+
 function buildAppProductActivationMap(activePayload: unknown): Map<string, boolean> {
   const out = new Map<string, boolean>()
-  const rows: unknown[] = Array.isArray(activePayload)
-    ? activePayload
-    : activePayload &&
-        typeof activePayload === "object" &&
-        Array.isArray((activePayload as { products?: unknown }).products)
-      ? ((activePayload as { products: unknown[] }).products ?? [])
-      : []
+  const rows = extractProductRows(activePayload)
   for (const row of rows) {
     if (row == null || typeof row !== "object") continue
     const r = row as Record<string, unknown>
@@ -127,9 +137,8 @@ export default function ProductCards({ category = "Mortgage", appId }: ProductCa
   const [modalOpen, setModalOpen] = useState(false)
 
   /**
-   * Merchant grid: full catalog from GET /api/v1/products.
-   * With `appActivation`, switch + label follow each row's `isActive` from GET /api/v1/products/app/:appId.
-   * Without app context, catalog `isActive` drives display.
+   * Storefront grid: GET /api/v1/products/app/:appId (`data.items`).
+   * Do not list the mixed merchant catalog.
    */
   const mapRows = (rows: any[], appActivation?: Map<string, boolean>): Product[] =>
     rows
@@ -160,33 +169,17 @@ export default function ProductCards({ category = "Mortgage", appId }: ProductCa
   const fetchProducts = useCallback(async () => {
     setLoading(true)
     try {
-      const catalogRes = await springProductService.getAllProducts()
-      const catalogRaw = (catalogRes as { success?: boolean; data?: unknown }).data
-      const catalogRows = Array.isArray(catalogRaw) ? catalogRaw : []
-
-      if ((catalogRes as { success?: boolean }).success === false) {
+      if (!appId) {
         setProducts([])
         return
       }
 
-      if (!appId) {
-        setProducts(mapRows(catalogRows))
-        return
-      }
-
-      let appActivation = new Map<string, boolean>()
-      try {
-        const activeRes = await springProductService.getProductsForApp(appId)
-        const body = activeRes as { data?: unknown; success?: boolean }
-        const activeRaw = body.data
-        appActivation = buildAppProductActivationMap(activeRaw)
-      } catch (err) {
-        console.warn("[ProductCards] active products for app failed; toggles may be wrong until retry", err)
-      }
-
+      const catalogRes = await productApi.getProductsByAppId(appId, { page: 1, limit: 100 })
+      const catalogRows = extractProductRows(catalogRes)
+      const appActivation = buildAppProductActivationMap(catalogRes)
       setProducts(mapRows(catalogRows, appActivation))
     } catch (error) {
-      console.error("Failed to fetch Spring products:", error)
+      console.error("Failed to fetch storefront products:", error)
       setProducts([])
     } finally {
       setLoading(false)
@@ -209,7 +202,7 @@ export default function ProductCards({ category = "Mortgage", appId }: ProductCa
     const newIsActive = !product.isActive
 
     try {
-      const json = (await springProductService.toggleProductActivation(appId, id, newIsActive)) as {
+      const json = (await productApi.toggleProductStatus(appId, id, newIsActive)) as {
         data?: { isActive?: boolean }
       }
       const serverOn =

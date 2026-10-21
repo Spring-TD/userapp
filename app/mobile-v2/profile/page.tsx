@@ -29,6 +29,7 @@ import { logoutThunk } from '@/store/authSlice';
 import { toast } from 'sonner';
 import { MobileV2BottomNav } from '@/components/mobile-v2/MobileV2BottomNav';
 import { useAuthUserProfile } from '@/hooks/useAuthUserProfile';
+import { useTransactionPinStatus } from '@/hooks/useTransactionPinStatus';
 import type { AuthUserProfile } from '@/lib/userProfileClient';
 
 function fullName(user: AuthUserProfile | null) {
@@ -57,6 +58,18 @@ export default function ProfilePage() {
     const router = useRouter();
     const dispatch = useAppDispatch();
     const { user, loading, error, kycApproved, kycStatus } = useAuthUserProfile();
+    const {
+        hasPin,
+        locked: pinLocked,
+        loading: pinStatusLoading,
+    } = useTransactionPinStatus();
+    const pinStatusLabel = pinStatusLoading
+        ? undefined
+        : pinLocked
+          ? 'Locked'
+          : hasPin
+            ? 'Active'
+            : 'Not set — tap to create';
     const [showLogoutModal, setShowLogoutModal] = useState(false);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const name = useMemo(() => fullName(user), [user]);
@@ -180,8 +193,14 @@ export default function ProfilePage() {
                             <Link href="/mobile-v2/bank-accounts">
                                 <SettingItem icon={<Landmark className="w-5 h-5" />} label="Bank accounts" />
                             </Link>
-                            <Link href="/mobile-v2/transaction-pin">
-                                <SettingItem icon={<KeyRound className="w-5 h-5" />} label="Transaction PIN" last />
+                            <Link href={hasPin ? '/mobile-v2/transaction-pin' : '/mobile-v2/transaction-pin?setup=1'}>
+                                <SettingItem
+                                    icon={<KeyRound className="w-5 h-5" />}
+                                    label={hasPin ? 'Change transaction PIN' : 'Create transaction PIN'}
+                                    value={pinStatusLabel}
+                                    loading={pinStatusLoading}
+                                    last
+                                />
                             </Link>
                         </div>
                     </div>

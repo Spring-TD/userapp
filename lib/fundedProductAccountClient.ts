@@ -4,6 +4,7 @@ import { buildProductApplyBody } from '@/lib/productApplyPayload'
 import type { PlatformFields } from '@/lib/platformApplicationFields'
 import { attachPlatformFieldsToApplyBody } from '@/lib/platformApplicationFields'
 import { resolveWalletUserId } from '@/lib/resolveWalletUserId'
+import { invalidateStorefrontApplications, invalidateStorefrontWallet } from '@/lib/storefrontSessionData'
 
 type ApiEnvelope<T> = {
   success?: boolean
@@ -170,6 +171,8 @@ export async function createFundedProductAccount(
     return { ok: false, error: parseApiError(res.data, res.status) }
   }
 
+  invalidateStorefrontApplications(userId)
+
   const parsed = parseCreateResponse(res.data)
   if (!parsed.applicationId) {
     return {
@@ -220,6 +223,9 @@ export async function depositFundedProductAccount(
   if (res.data?.success === false || res.status >= 400) {
     return { ok: false, error: parseApiError(res.data, res.status), status: res.status }
   }
+
+  invalidateStorefrontWallet(userId)
+  invalidateStorefrontApplications(userId)
 
   return {
     ok: true,

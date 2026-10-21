@@ -1,4 +1,10 @@
 import api from '@/lib/api'
+import { queryCache, seedQuery } from '@/lib/sessionQueryCache'
+import {
+  STOREFRONT_TTL,
+  invalidateStorefrontProfile,
+  storefrontProfileKey,
+} from '@/lib/storefrontSessionData'
 
 /**
  * Authenticated user as returned by GET /api/v1/user/profile (proxied to client-auth-ms).
@@ -109,7 +115,13 @@ export function normalizeAuthUserProfile(raw: unknown): AuthUserProfile | null {
  * Loads the current user via Next BFF `GET /api/v1/user/profile`.
  * Response may include sibling fields `kycStatus` and `kycCompleted` next to `user`.
  */
-export async function fetchAuthUserProfile(): Promise<AuthUserProfilePayload> {
+export async function fetchAuthUserProfile(options?: { force?: boolean }): Promise<AuthUserProfilePayload> {
+  return queryCache(storefrontProfileKey(), fetchAuthUserProfileUncached, STOREFRONT_TTL.profile, {
+    force: options?.force,
+  })
+}
+
+async function fetchAuthUserProfileUncached(): Promise<AuthUserProfilePayload> {
   try {
     const { data } = await api.get<ProfileApiResponse>('/v1/user/profile')
     const inner = data?.data
@@ -165,6 +177,11 @@ export async function updateAuthUserProfile(input: UpdateAuthUserProfileInput): 
           : null
     const user = rawUser ? normalizeAuthUserProfile(rawUser) : null
     if (data?.success !== false) {
+      if (user) {
+        seedQuery(storefrontProfileKey(), { user, error: null }, STOREFRONT_TTL.profile)
+      } else {
+        invalidateStorefrontProfile()
+      }
       return { user, error: null }
     }
     return { user: null, error: data?.error || data?.message || 'Unable to update profile' }

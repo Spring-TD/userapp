@@ -8,7 +8,7 @@ const BASE_URL = (process.env.NEXT_PUBLIC_API_URL || "https://account-ms.fly.dev
   .replace(/\/api$/i, "")
   .replace(/\/+$/, "")
 
-// GET /api/v1/products/applications/:applicationId
+/** GET /api/v1/products/applications/:applicationId → documented GET /api/v1/applications/:id */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ applicationId: string }> },
@@ -21,7 +21,7 @@ export async function GET(
       return NextResponse.json({ success: false, error: "Authorization required" }, { status: 401 })
     }
 
-    const response = await fetch(`${BASE_URL}/api/v1/products/applications/${encodeURIComponent(applicationId)}`, {
+    const response = await fetch(`${BASE_URL}/api/v1/applications/${encodeURIComponent(applicationId)}`, {
       headers: {
         "Content-Type": "application/json",
         Authorization: authHeader,
@@ -45,4 +45,3 @@ export async function GET(
     )
   }
 }
-

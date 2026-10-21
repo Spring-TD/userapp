@@ -7,12 +7,12 @@ import { PendingApplicationThreadSkeleton } from '@/components/mobile-v2/data-sk
 import { LoanPendingThreadScreen } from '@/components/mobile-v2/loan/LoanPendingThreadScreen'
 import {
   canShowPendingPage,
+  fetchApplicationById,
   fetchUserApplications,
   needsFinalApplicationSubmit,
   type StorefrontApplication,
 } from '@/lib/storefrontApplicationClient'
 import { loanApplyHref } from '@/lib/loanApplyRoutes'
-import { initLoanWorkflowSubmitted, readLoanWorkflow } from '@/lib/loanWorkflow'
 
 function PendingLoanDetailContent() {
   const router = useRouter()
@@ -24,7 +24,14 @@ function PendingLoanDetailContent() {
 
   useEffect(() => {
     let cancelled = false
-    void fetchUserApplications().then((result) => {
+    void fetchApplicationById(applicationId).then(async (byId) => {
+      if (cancelled) return
+      if (byId.ok && byId.application && String(byId.application.id ?? byId.application._id ?? '') === applicationId) {
+        setApplication(byId.application)
+        setLoading(false)
+        return
+      }
+      const result = await fetchUserApplications()
       if (cancelled) return
       if (!result.ok) {
         setError(result.error)
@@ -35,7 +42,7 @@ function PendingLoanDetailContent() {
         (item) => String(item.id ?? item._id ?? '') === applicationId,
       )
       setApplication(match ?? null)
-      if (!match) setError('Application not found.')
+      if (!match) setError(byId.ok ? 'Application not found.' : byId.error || 'Application not found.')
       setLoading(false)
     })
     return () => {
@@ -54,8 +61,6 @@ function PendingLoanDetailContent() {
       }
       return
     }
-    if (readLoanWorkflow(applicationId)) return
-    initLoanWorkflowSubmitted(applicationId, String(application.productId ?? ''))
   }, [application, applicationId, router])
 
   if (loading) {

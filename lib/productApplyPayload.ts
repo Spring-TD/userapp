@@ -1,6 +1,7 @@
 import api from '@/lib/api'
 import { fetchMobileProductById } from '@/lib/fetchMobileProductById'
 import { sanitizeProductId } from '@/lib/sanitizeProductId'
+import { isStorefrontPurchasableProduct } from '@/lib/storefrontProducts'
 import { fetchAuthUserProfile, type AuthUserProfile } from '@/lib/userProfileClient'
 import { isUserKycApprovedFromProfile } from '@/lib/kycApproval'
 import { resolveWalletUserId } from '@/lib/resolveWalletUserId'
@@ -39,12 +40,14 @@ function parsePositiveAmount(value: unknown): number | null {
 export async function resolveDefaultApplyAmount(productId: string): Promise<number> {
   try {
     const product = await fetchMobileProductById(productId)
+    const fromMortgage = parsePositiveAmount(product?.mortgageAmount)
+    if (fromMortgage != null) return fromMortgage
     const fromMin = parsePositiveAmount(product?.amountMin)
     if (fromMin != null) return fromMin
+    const fromMax = parsePositiveAmount(product?.amountMax)
+    if (fromMax != null) return fromMax
     const fromPrice = parsePositiveAmount(product?.price)
     if (fromPrice != null) return fromPrice
-    const fromProperty = parsePositiveAmount(product?.propertyValue)
-    if (fromProperty != null) return fromProperty
   } catch {
     /* use fallback */
   }
@@ -114,13 +117,28 @@ export async function buildProductApplyBody(
     return { ok: false, error: 'No product selected.' }
   }
 
+  const storefrontProduct = await fetchMobileProductById(trimmedProductId)
+  if (!storefrontProduct || !isStorefrontPurchasableProduct(storefrontProduct)) {
+    return {
+      ok: false,
+      error: 'This product is not turned on for this app. Ask the merchant to activate it first.',
+    }
+  }
+  const localProductId = storefrontProduct.id
+
   const userId = await resolveWalletUserId()
   if (!userId) {
     return { ok: false, error: 'Sign in to continue.' }
   }
 
   const explicitAmount = parsePositiveAmount(options?.amount)
-  const amount = explicitAmount ?? (await resolveDefaultApplyAmount(trimmedProductId))
+  const amount =
+    explicitAmount ??
+    parsePositiveAmount(storefrontProduct.mortgageAmount) ??
+    parsePositiveAmount(storefrontProduct.amountMin) ??
+    parsePositiveAmount(storefrontProduct.amountMax) ??
+    parsePositiveAmount(storefrontProduct.price) ??
+    1
 
   const { user, kycStatus, kycCompleted } = await fetchAuthUserProfile()
   const sessionMerchantId =
@@ -131,7 +149,14 @@ export async function buildProductApplyBody(
     typeof window !== 'undefined'
       ? sessionStorage.getItem(TENANT_APP_ID_STORAGE_KEY)?.trim() || undefined
       : undefined
-  const merchantId = resolveMerchantId(sessionMerchantId, user)
+  const merchantId =
+    storefrontProduct.merchantId?.trim() || resolveMerchantId(sessionMerchantId, user)
+  if (!merchantId) {
+    return {
+      ok: false,
+      error: 'This product has no merchant id. Ask the merchant to turn it off and on again.',
+    }
+  }
   const applicantName = [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim()
   const email = user?.email?.trim() || ''
   const phone = user?.phone?.trim() || ''
@@ -148,7 +173,7 @@ export async function buildProductApplyBody(
     ok: true,
     body: {
       userId,
-      productId: trimmedProductId,
+      productId: localProductId,
       ...(options?.productType ? { productType: options.productType } : {}),
       amount,
       currency: options?.currency?.trim() || 'NGN',

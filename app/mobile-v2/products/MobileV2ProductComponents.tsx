@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import { MobileV2ProductListSkeleton } from '@/components/mobile-v2/data-skeletons';
 import { loanApplyStartHref, loanProductApplyDetailHref } from '@/lib/loanApplyRoutes';
 import { mortgageProductApplyDetailHref } from '@/lib/mortgageApplyRoutes';
-import { amountRange, formatNgn, poweredBy, rateLabel } from '@/lib/mobileProductDetailDisplay';
+import { amountRange, formatNgn, mortgageEquityDisplay, poweredBy, rateLabel } from '@/lib/mobileProductDetailDisplay';
 import {
     blocksAnotherApplication,
     doesApplicationMatchProduct,
@@ -26,7 +26,14 @@ import {
 } from '@/lib/storefrontProducts';
 
 // ─── Tab Bar ──────────────────────────────────────────────────────────────────
-export function MobileV2TabBar({ activeTab }: { activeTab: StorefrontProductType }) {
+export function MobileV2TabBar({
+    activeTab,
+    variant = 'capsule',
+}: {
+    activeTab: StorefrontProductType
+    /** `ink` matches the Hot Savings list design (dark active pill). */
+    variant?: 'capsule' | 'ink'
+}) {
     const { appId: tenantAppId, ready: tenantReady } = useMobileV2Tenant();
     const { products, loading } = useMobileProducts({
         springAppId: tenantAppId ?? undefined,
@@ -39,10 +46,45 @@ export function MobileV2TabBar({ activeTab }: { activeTab: StorefrontProductType
     );
 
     if (!tenantReady || loading) {
-        return <div className="h-11 w-full animate-pulse rounded-full bg-[#F3F4F6]" />;
+        return (
+            <div
+                className={cn(
+                    'h-11 w-full animate-pulse rounded-full',
+                    variant === 'ink' ? 'bg-[#171321]/10' : 'bg-[#F3F4F6]',
+                )}
+            />
+        );
     }
 
     if (tabs.length === 0) return null;
+
+    if (variant === 'ink') {
+        return (
+            <nav
+                className="flex gap-2 overflow-x-auto pb-4 no-scrollbar"
+                aria-label="Product categories"
+            >
+                {tabs.map((tab) => {
+                    const active = tab === activeTab;
+                    return (
+                        <Link
+                            key={tab}
+                            href={storefrontProductTypeRoute(tab)}
+                            aria-current={active ? 'page' : undefined}
+                            className={cn(
+                                'shrink-0 whitespace-nowrap rounded-full px-3.5 py-2 text-[13.5px] transition-colors',
+                                active
+                                    ? 'bg-[#171321] font-extrabold text-white'
+                                    : 'bg-transparent font-semibold text-[#6B6478] hover:text-[#171321]',
+                            )}
+                        >
+                            {tab}
+                        </Link>
+                    );
+                })}
+            </nav>
+        );
+    }
 
     return (
         <div className="w-full bg-[#F3F4F6] p-1.5 rounded-full flex items-center justify-between overflow-x-auto no-scrollbar">
@@ -307,6 +349,7 @@ export function FeaturedMortgageCard({ product, disabled }: { product: MobilePro
     const imageStyle = productImageBackgroundStyle(resolveProductDisplayImage(product));
     const [slide, setSlide] = React.useState(0);
     const price = amountRange(product);
+    const equityLine = mortgageEquityDisplay(product);
     const provider = poweredBy(displayName || undefined);
 
     return (
@@ -322,11 +365,15 @@ export function FeaturedMortgageCard({ product, disabled }: { product: MobilePro
             <div className="p-4">
                 <div className="mb-1 flex items-start justify-between gap-2">
                     <h3 className="line-clamp-1 text-base font-bold text-[var(--sf-ink,#1E1B4B)]">{product.name}</h3>
-                    <span className="shrink-0 text-right text-sm font-bold text-[var(--sf-ink,#1E1B4B)]">{price}</span>
+                    <div className="shrink-0 text-right">
+                        <p className="text-[9px] font-medium uppercase tracking-wide text-gray-400">Mortgage Amount</p>
+                        <span className="text-sm font-bold text-[var(--sf-ink,#1E1B4B)]">{price}</span>
+                    </div>
                 </div>
-                <p className="mb-4 line-clamp-2 text-[11px] leading-relaxed text-gray-500">
+                <p className="mb-2 line-clamp-2 text-[11px] leading-relaxed text-gray-500">
                     {product.description || 'Explore competitive rates and flexible repayment on this mortgage.'}
                 </p>
+                <p className="mb-4 text-[10px] font-semibold text-[var(--sf-button,#1E40AF)]">{equityLine}</p>
                 <div className="mb-4 flex gap-6 text-xs text-gray-700">
                     <div className="flex items-center gap-1.5">
                         <Calendar className="h-3.5 w-3.5 text-[var(--sf-primary,#2563EB)]" />
@@ -368,6 +415,7 @@ export function MortgageProductCard({ product, compact, disabled }: { product: M
     const detailHref = mortgageProductApplyDetailHref(product.id);
     const imageStyle = productImageBackgroundStyle(resolveProductDisplayImage(product));
     const imgH = compact ? 'h-[100px]' : 'h-[140px]';
+    const equityLine = mortgageEquityDisplay(product);
 
     return (
         <div className={cn('min-w-0 overflow-hidden border border-gray-100 bg-white shadow-sm', compact ? 'rounded-[18px] p-2.5' : 'rounded-[20px] p-3')}>
@@ -380,10 +428,14 @@ export function MortgageProductCard({ product, compact, disabled }: { product: M
                 {!compact && (
                     <p className="line-clamp-2 text-[10px] text-gray-500">{product.description}</p>
                 )}
-                <div className={cn('font-bold text-[var(--sf-ink,#1E1B4B)]', compact ? 'break-words text-[11px] leading-tight' : 'text-xs')}>
-                    {amountRange(product)}
+                <div>
+                    <p className="text-[9px] font-medium uppercase tracking-wide text-gray-400">Mortgage Amount</p>
+                    <div className={cn('font-bold text-[var(--sf-ink,#1E1B4B)]', compact ? 'break-words text-[11px] leading-tight' : 'text-xs')}>
+                        {amountRange(product)}
+                    </div>
                 </div>
-                <div className="text-[10px] font-semibold text-[var(--sf-button,#1E40AF)]">{rateLabel(product)}</div>
+                <div className="text-[10px] font-semibold text-[var(--sf-button,#1E40AF)]">{equityLine}</div>
+                <div className="text-[10px] font-semibold text-gray-500">{rateLabel(product)}</div>
                 <Link href={detailHref}>
                     <Button
                         className={cn(

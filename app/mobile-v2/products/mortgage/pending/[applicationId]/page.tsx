@@ -12,7 +12,6 @@ import {
   type StorefrontApplication,
 } from '@/lib/storefrontApplicationClient'
 import { mortgageApplyHref } from '@/lib/mortgageApplyRoutes'
-import { initMortgageWorkflowSubmitted, readMortgageWorkflow } from '@/lib/mortgageWorkflow'
 
 function PendingDetailContent() {
   const router = useRouter()
@@ -57,12 +56,6 @@ function PendingDetailContent() {
       }
       return
     }
-    if (readMortgageWorkflow(applicationId)) return
-    initMortgageWorkflowSubmitted(
-      applicationId,
-      String(application.productId ?? ''),
-      'equity_contribution',
-    )
   }, [application, applicationId, router])
 
   if (loading) {

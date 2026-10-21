@@ -23,11 +23,8 @@ import { resolveSpringLocalProductLookup } from '@/lib/springLocalProduct'
 import { isVirtualInspectionComplete, normalizeWorkflowStepId } from '@/lib/postApprovalMortgage'
 import {
   buildMortgageThread,
-  clearUnsyncedVirtualTourFlag,
   mortgageStepCta,
   mortgageStepToModal,
-  patchMortgageWorkflowAsync,
-  readMortgageWorkflow,
   resolveMortgageWorkflowStep,
   type MortgageThreadItem,
   type MortgageWorkflowModal,
@@ -141,17 +138,6 @@ export function MortgagePendingThreadScreen({
     setLiveApplication(application)
   }, [application])
 
-  // Clear stale local tour-complete left by failed PATCHes (UI was ahead of Plata).
-  useEffect(() => {
-    const paf = liveApplication.postApprovalFulfillment
-    const before = readMortgageWorkflow(applicationId)
-    clearUnsyncedVirtualTourFlag(applicationId, paf)
-    const after = readMortgageWorkflow(applicationId)
-    if (before?.virtualTourCompleted && !after?.virtualTourCompleted) {
-      setWorkflowVersion((v) => v + 1)
-    }
-  }, [applicationId, liveApplication.postApprovalFulfillment])
-
   // Keep approval / post-approval state fresh — pending page used to load once and miss Plata approve.
   useEffect(() => {
     const userId = wallet?.userId || String(application.userId || '').trim()
@@ -205,7 +191,7 @@ export function MortgagePendingThreadScreen({
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [applicationId, application.userId, wallet?.userId])
+  }, [applicationId, application.userId, wallet?.userId, workflowVersion])
 
   // General product fields (amounts, equity, etc.)
   const { product: catalogProduct } = useMobileProductDetail({
@@ -245,11 +231,9 @@ export function MortgagePendingThreadScreen({
 
   const product = springTourProduct ?? catalogProduct
 
-  // Re-read local workflow when version bumps after tour/step patches.
   void workflowVersion
-  const local = readMortgageWorkflow(applicationId)
-  const currentStep = resolveMortgageWorkflowStep(liveApplication, local)
-  const thread = buildMortgageThread(liveApplication, { local })
+  const currentStep = resolveMortgageWorkflowStep(liveApplication)
+  const thread = buildMortgageThread(liveApplication)
   const workflowComplete = thread.every((item) => item.status === 'done' || item.status === 'rejected')
   const cta =
     productId && applicationId && !workflowComplete
@@ -260,10 +244,6 @@ export function MortgagePendingThreadScreen({
     () => buildPropertyTourData(springTourProduct ?? product, liveApplication),
     [liveApplication, product, springTourProduct],
   )
-
-  const propertyValue =
-    product?.properties?.[0]?.value ?? product?.propertyValue ?? product?.amountMax ?? liveApplication.amount
-  const downPaymentPercent = product?.equityContribution ?? 10
 
   const openStepModal = useCallback(
     (step = currentStep) => {
@@ -357,9 +337,8 @@ export function MortgagePendingThreadScreen({
         paf = applyDetail(afterRes)
       }
 
-      await patchMortgageWorkflowAsync(applicationId, { virtualTourCompleted: true })
-      refreshWorkflow()
       toast.success(alreadyPastTour ? 'Continuing to offer letter' : 'Virtual tour completed')
+      refreshWorkflow()
     })()
   }
 
@@ -375,14 +354,6 @@ export function MortgagePendingThreadScreen({
         description: 'PATCH …/applications/:id (CANCELLED)',
       })
       return
-    }
-    const local = await patchMortgageWorkflowAsync(applicationId, {
-      cancelled: true,
-      offerDeclined: true,
-      ...(reason ? { cancelReason: reason } : {}),
-    })
-    if (local && !local.synced) {
-      toast.error(local.syncError || 'Cancelled on server, but local workflow sync failed')
     }
     toast.success('Application cancelled')
     refreshWorkflow()
@@ -431,8 +402,6 @@ export function MortgagePendingThreadScreen({
         applicationId={applicationId}
         productId={productId}
         product={product}
-        propertyValue={propertyValue}
-        downPaymentPercent={downPaymentPercent}
         onStepAdvanced={refreshWorkflow}
       />
     </>

@@ -3,7 +3,7 @@ import { buildProductApplyBody, type ProductApplyBody } from "@/lib/productApply
 import type { PlatformFields } from "@/lib/platformApplicationFields"
 import { resolveWalletUserId } from "@/lib/resolveWalletUserId"
 import { sanitizeProductId } from "@/lib/sanitizeProductId"
-import { TENANT_MERCHANT_ID_STORAGE_KEY } from "@/lib/mobileTenant/storageKeys"
+import { TENANT_APP_ID_STORAGE_KEY, TENANT_MERCHANT_ID_STORAGE_KEY } from "@/lib/mobileTenant/storageKeys"
 
 export type RequirementSubmission = {
   requirementId?: string
@@ -74,11 +74,16 @@ export type StorefrontApplication = {
       }>
     }
   }
-  /** Present on pending-approved mortgage list/detail responses. */
+  /** Present on pending-approved loan/mortgage list/detail responses. */
   postApprovalFulfillment?: {
     status?: string
     currentWorkflowStepId?: string
     completedWorkflowSteps?: string[]
+    disbursedAt?: string
+    offer?: {
+      sentAt?: string
+      acceptedAt?: string
+    }
     virtualInspection?: {
       completedAt?: string
       completedByUserId?: string
@@ -134,12 +139,18 @@ export type StorefrontApplication = {
       bankName?: string
       bankCode?: string
       balance?: number
+      mainBalance?: number
       currency?: string
       status?: string
       providerReference?: string
       provisionStatus?: string
     }
+    balance?: number
+    mainBalance?: number
   }
+  amortizationSchedule?: Record<string, unknown>
+  customerName?: string
+  applicantName?: string
 }
 
 export type ProductApplicationInitStatus = {
@@ -172,6 +183,15 @@ function readTenantMerchantId(): string {
   if (typeof window === "undefined") return ""
   try {
     return sessionStorage.getItem(TENANT_MERCHANT_ID_STORAGE_KEY) || ""
+  } catch {
+    return ""
+  }
+}
+
+function readTenantAppId(): string {
+  if (typeof window === "undefined") return ""
+  try {
+    return sessionStorage.getItem(TENANT_APP_ID_STORAGE_KEY)?.trim() || ""
   } catch {
     return ""
   }
@@ -221,7 +241,7 @@ export async function getExistingInitializedApplication(userId: string, productI
       timeout: 30_000,
       params: {
         productId: normalizedProductId,
-        limit: 50,
+        ...(readTenantAppId() ? { appId: readTenantAppId() } : {}),
       },
     },
   )

@@ -12,7 +12,7 @@ import {
   mortgageApplyStartHref,
   mortgageDetailHref,
 } from '@/lib/mortgageApplyRoutes'
-import { computeDownPaymentAmount } from '@/lib/mortgageWorkflow'
+import { resolveMortgageEquityRequired } from '@/lib/mortgageWorkflow'
 import {
   computeSavingsPlanOptions,
   formatSavingsDuration,
@@ -43,9 +43,8 @@ function PlannerContent() {
 
   const property = product?.properties?.[0]
   const propertyName =
-    property?.name || product?.name || product?.title || 'this property'
-  const propertyValue = property?.value ?? product?.propertyValue ?? product?.amountMax ?? null
-  const goalAmount = computeDownPaymentAmount(propertyValue, product?.equityContribution ?? 10) ?? 0
+    property?.name || product?.name || 'this property'
+  const goalAmount = resolveMortgageEquityRequired(product) ?? 0
 
   const plans = useMemo(() => computeSavingsPlanOptions(goalAmount), [goalAmount])
   const selected = plans.find((p) => p.months === selectedMonths) ?? plans[0]
@@ -88,7 +87,7 @@ function PlannerContent() {
     try {
       const app = submitMortgageSavingsApplication({
         productId,
-        productName: product?.name || product?.title || 'Mortgage',
+        productName: product?.name || 'Mortgage',
         propertyName: String(propertyName),
         goalAmount,
         months: selected.months,

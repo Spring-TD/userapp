@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Skeleton } from '@/components/ui/skeleton'
 import { MobileFlowShell } from '@/components/mobile-v2/MobileFlowShell'
 import { useUserWallet } from '@/hooks/useUserWallet'
+import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext'
 import { fetchUserProductApplications } from '@/lib/services/productApplicationApi'
 import { fetchUserWalletTransactions } from '@/lib/services/userWalletApi'
 import { walletTransactionToReceipt } from '@/lib/transactionReceipt'
@@ -79,6 +80,7 @@ function applicationActivityRows(applications: ProductApplication[], tab: OrderA
 export default function OrdersPage() {
   const { user: profile } = useAuthUserProfile()
   const { wallet, loading: walletLoading } = useUserWallet()
+  const { appId } = useMobileV2Tenant()
   const [activeTab, setActiveTab] = useState<OrderActivityTab>('All')
   const [transactions, setTransactions] = useState<WalletTransaction[]>([])
   const [applications, setApplications] = useState<ProductApplication[]>([])
@@ -102,7 +104,7 @@ export default function OrdersPage() {
       setLoading(true)
       const [txResult, appResult] = await Promise.all([
         fetchUserWalletTransactions(userId, { limit: 100 }),
-        fetchUserProductApplications(userId),
+        fetchUserProductApplications(userId, appId ? { appId } : undefined),
       ])
       if (cancelled) return
       setTransactions(txResult.transactions)
@@ -114,7 +116,7 @@ export default function OrdersPage() {
     return () => {
       cancelled = true
     }
-  }, [wallet?.userId, walletLoading])
+  }, [wallet?.userId, walletLoading, appId])
 
   const walletRows = useMemo(
     () =>

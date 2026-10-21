@@ -3,6 +3,9 @@
  * Gateway: GET /api/v1/kyc/merchants/{merchantId}/branding
  */
 
+import { queryCache } from "@/lib/sessionQueryCache"
+import { STOREFRONT_TTL } from "@/lib/storefrontSessionData"
+
 export type MerchantBranding = {
   merchantId?: string
   ownerUserId?: string
@@ -41,7 +44,14 @@ function pickBranding(json: unknown): MerchantBranding | null {
 export async function fetchMerchantBranding(merchantId: string): Promise<MerchantBranding | null> {
   const id = merchantId.trim()
   if (!id) return null
+  return queryCache(
+    `storefront:branding:${id}`,
+    () => fetchMerchantBrandingUncached(id),
+    STOREFRONT_TTL.branding,
+  )
+}
 
+async function fetchMerchantBrandingUncached(id: string): Promise<MerchantBranding | null> {
   const res = await fetch(`/api/v1/kyc/merchants/${encodeURIComponent(id)}/branding`, {
     method: "GET",
     headers: { Accept: "application/json" },
@@ -50,7 +60,6 @@ export async function fetchMerchantBranding(merchantId: string): Promise<Merchan
 
   if (res.status === 404) return null
   if (!res.ok) {
-    // Soft-fail: missing branding must not break the storefront shell.
     return null
   }
 

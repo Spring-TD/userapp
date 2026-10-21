@@ -11,7 +11,7 @@ import { clearAuthError, LOGIN_REQUIRES_EMAIL_VERIFICATION, loginThunk } from '@
 import { clearMobileClientAuthError, resendOtpThunk } from '@/store/mobileClientAuthSlice';
 import { AuthRouteSkeleton } from '@/components/mobile-v2/data-skeletons';
 import { showAuthError } from '@/lib/showAuthError';
-import { resolvePostLoginPath } from '@/lib/userKycRouting';
+import { resolvePostLoginPath } from '@/lib/transactionPinRouting';
 import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
 import { StorefrontMerchantLogo } from '@/components/mobile-v2/StorefrontMerchantLogo';
 import { pickManifestIconUrl } from '@/lib/webAppManifest';
