@@ -46,9 +46,6 @@ function mapLoginUser(raw: unknown): AuthUser | null {
   }
 }
 
-/** Reject payload when storefront login is blocked until signup email OTP completes. */
-export const LOGIN_REQUIRES_EMAIL_VERIFICATION = "EMAIL_NOT_VERIFIED"
-
 export const loginThunk = createAsyncThunk<
   AuthUser,
   LoginRequestDto,
@@ -56,25 +53,11 @@ export const loginThunk = createAsyncThunk<
 >("auth/login", async (payload, { rejectWithValue }) => {
   try {
     const response = await apiClient.post<LoginResponseDto>(ENDPOINTS.auth.login, payload, { includeAuth: false })
-    const responseData = response.data as LoginResponseDto & {
-      code?: string
-      requiresEmailVerification?: boolean
-      error?: string
-    }
-    if (
-      responseData?.code === LOGIN_REQUIRES_EMAIL_VERIFICATION ||
-      responseData?.requiresEmailVerification === true
-    ) {
-      return rejectWithValue(LOGIN_REQUIRES_EMAIL_VERIFICATION)
-    }
     const loginFailure = clientAuthErrorFromResponse(response.data, response.status)
     if (loginFailure) {
-      const msg = loginFailure.message
-      if (/email not verified/i.test(msg) || /verify your email/i.test(msg)) {
-        return rejectWithValue(LOGIN_REQUIRES_EMAIL_VERIFICATION)
-      }
-      return rejectWithValue(msg)
+      return rejectWithValue(loginFailure.message)
     }
+    const responseData = response.data
 
     let userData: AuthUser | undefined
     let accessToken: string | undefined
@@ -108,14 +91,6 @@ export const loginThunk = createAsyncThunk<
     cacheAuthUserId(mapped.id)
     return mapped
   } catch (error: unknown) {
-    const data = (error as { response?: { data?: Record<string, unknown> } })?.response?.data
-    if (
-      data?.code === LOGIN_REQUIRES_EMAIL_VERIFICATION ||
-      data?.requiresEmailVerification === true ||
-      (typeof data?.error === 'string' && /email not verified/i.test(data.error))
-    ) {
-      return rejectWithValue(LOGIN_REQUIRES_EMAIL_VERIFICATION)
-    }
     return rejectWithValue(normalizeClientAuthError(error))
   }
 })

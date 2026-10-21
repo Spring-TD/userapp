@@ -7,7 +7,7 @@ import { Eye, EyeOff, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { clearAuthError, LOGIN_REQUIRES_EMAIL_VERIFICATION, loginThunk } from '@/store/authSlice';
+import { clearAuthError, loginThunk } from '@/store/authSlice';
 import { clearMobileClientAuthError } from '@/store/mobileClientAuthSlice';
 import { AuthRouteSkeleton } from '@/components/mobile-v2/data-skeletons';
 import { showAuthError } from '@/lib/showAuthError';
@@ -88,19 +88,8 @@ function LoginPageInner() {
         : {}),
     }));
     if (loginThunk.rejected.match(res)) {
-      const payload = typeof res.payload === 'string' ? res.payload : '';
-      if (payload === LOGIN_REQUIRES_EMAIL_VERIFICATION) {
-        const normalizedEmail = email.trim().toLowerCase();
-        toast.message('Verify your email to continue', {
-          description: 'We sent a one-time code to your email. Enter it to activate your account.',
-        });
-        router.push(
-          `/mobile-v2/auth/verify-otp?email=${encodeURIComponent(normalizedEmail)}&from=login`,
-        );
-        return;
-      }
       const status = (res.error as { message?: string })?.message;
-      setSubmitError(showAuthError(payload || status || 'Sign in failed.'));
+      setSubmitError(showAuthError(res.payload ?? status ?? 'Sign in failed.'));
       return;
     }
 
