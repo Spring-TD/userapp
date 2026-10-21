@@ -262,6 +262,14 @@ Scaffolded dual-run in both `springApp/wallet-ms` and `plata/wallet-ms`:
 
 **Cutover:** set credentials, whitelist IPs, then `NUBAN_PROVIDER_DEFAULT=legerblock` + `LEGERBLOCK_NUBAN_ENABLED=true`.
 
+### Live API notes (2026-10-21)
+
+- Persistent NGN VA is **`PUT /api/v1/user/subwallet-fund-source`** (not `POST /api/v1/static/account`, which can return `null`).
+- `user_kyc.name` (not `user_name`) is required on that map endpoint.
+- Test BVN `00000000000` collides across customers → use unique BVNs when `LEGERBLOCK_VA_USE_TEST_PLACEHOLDERS=true`.
+- Dynamic VA (`POST /api/v1/collection/subwallet`) works for one-off collections.
+- springApp user wallets provision NUBAN via `POST /api/v1/internal/wallets/user/:userId/provision-nuban` (post-KYC), not at wallet create.
+
 ## Last updated
 
-2026-10-20 — docs researched; dual-provider scaffold implemented (default still PayOnUs).
+2026-10-21 — live NUBAN create verified on Spring wallet-ms + both LegerBlock merchant keys; static map endpoint corrected.

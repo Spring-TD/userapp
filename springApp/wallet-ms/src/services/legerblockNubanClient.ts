@@ -120,6 +120,16 @@ async function postJson(path: string, body: Record<string, unknown>): Promise<{ 
   return { status: res.status, data: res.data };
 }
 
+async function putJson(path: string, body: Record<string, unknown>): Promise<{ status: number; data: unknown }> {
+  const url = joinUrl(legerblockNubanConfig.baseUrl, path);
+  const res = await axios.put<unknown>(url, body, {
+    headers: authHeaders(),
+    timeout: legerblockNubanConfig.timeoutMs,
+    validateStatus: () => true
+  });
+  return { status: res.status, data: res.data };
+}
+
 async function getJson(
   path: string,
   apiKey = legerblockNubanConfig.apiKey
@@ -222,7 +232,12 @@ async function resolveBvn(wallet: MerchantWallet | UserWallet): Promise<string> 
     const digitsOnly = configured.replace(/\D/g, '');
     return digitsOnly.length === 11 ? digitsOnly : configured;
   }
-  if (legerblockNubanConfig.vaUseTestPlaceholders) return '00000000000';
+  if (legerblockNubanConfig.vaUseTestPlaceholders) {
+    // Provider rejects duplicate BVNs across customers; derive a unique 11-digit stub.
+    const digits = wallet.id.replace(/\D/g, '');
+    const padded = (digits + Date.now().toString()).replace(/\D/g, '').padStart(11, '1');
+    return padded.slice(0, 11);
+  }
   return '';
 }
 
@@ -308,7 +323,9 @@ export async function assignStaticVirtualAccount(params: {
     return { ok: false, details: {}, errorMessage: 'LegerBlock is not configured' };
   }
   try {
-    const res = await postJson('/api/v1/static/account', {
+    // Persistent NGN VA: PUT /api/v1/user/subwallet-fund-source (map account to wallet).
+    // Docs: https://docs.legerblock.com/docs/map-account-or-address-to-wallet-ngn-eusd-gbp-usd-eur-usdt-usdc
+    const res = await putJson('/api/v1/user/subwallet-fund-source', {
       user_ref: params.userRef,
       wallet_id: params.walletId,
       fund_type: 'STATIC_VIRTUAL_ACCOUNT',
@@ -316,7 +333,7 @@ export async function assignStaticVirtualAccount(params: {
       currency: params.currency.toUpperCase(),
       account_reference: params.accountReference,
       user_kyc: {
-        user_name: params.userName,
+        name: params.userName,
         email: params.email,
         address: params.address || legerblockNubanConfig.vaAddress,
         phone: params.phone,
