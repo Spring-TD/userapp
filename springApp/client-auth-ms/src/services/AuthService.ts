@@ -31,6 +31,10 @@ export interface LoginResponse {
   refreshToken?: string;
   sessionId?: string;
   error?: string;
+  /** Machine-readable login failure (e.g. EMAIL_NOT_VERIFIED for storefront OTP gate). */
+  code?: string;
+  /** When true, client should send the user to the signup email OTP screen. */
+  requiresEmailVerification?: boolean;
   emailVerified?: boolean;
   /** Retail storefront users only: current Fuspay/compliance KYC status (e.g. pending, approved). */
   kycStatus?: string;
@@ -989,8 +993,39 @@ export class AuthService {
         };
       }
 
-      // Allow login for ACTIVE or PENDING (unverified email); block SUSPENDED and other states
-      if (user.status !== AccountStatus.ACTIVE && user.status !== AccountStatus.PENDING) {
+      // Storefront retail users must finish signup email OTP before login (ACTIVE + email_verified).
+      if (user.user_type === UserType.USER) {
+        const emailVerified = user.email_verified === true;
+        const isActive = user.status === AccountStatus.ACTIVE;
+        if (!emailVerified || user.status === AccountStatus.PENDING || !isActive) {
+          if (!emailVerified || user.status === AccountStatus.PENDING) {
+            const signupAppId = 'app_id' in user ? user.app_id?.trim() || undefined : undefined;
+            try {
+              await AuthService.sendVerificationOtpEmail(
+                user.email,
+                `${user.first_name} ${user.last_name}`.trim() || 'User',
+                meta?.tenant?.appName,
+                signupAppId
+              );
+            } catch (otpErr) {
+              console.error('Failed to resend verification OTP on blocked login:', otpErr);
+            }
+            return {
+              success: false,
+              error:
+                'Email not verified. Complete the one-time code sent to your email before signing in.',
+              code: 'EMAIL_NOT_VERIFIED',
+              requiresEmailVerification: true,
+              emailVerified: false
+            };
+          }
+          return {
+            success: false,
+            error: 'Account is not active'
+          };
+        }
+      } else if (user.status !== AccountStatus.ACTIVE && user.status !== AccountStatus.PENDING) {
+        // Merchants/admins: keep prior PENDING allowance until their own verify flows catch up.
         return {
           success: false,
           error: 'Account is not active'

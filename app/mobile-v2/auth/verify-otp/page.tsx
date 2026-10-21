@@ -15,17 +15,21 @@ function VerifyOtpContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const email = searchParams.get('email')?.trim() ?? '';
+  const fromLogin = searchParams.get('from') === 'login';
   const dispatch = useAppDispatch();
   const { loading, error } = useAppSelector((s) => s.mobileClientAuth);
   const [code, setCode] = useState('');
   const [seconds, setSeconds] = useState(56);
+  const backHref = fromLogin
+    ? `/mobile-v2/auth/login?email=${encodeURIComponent(email)}`
+    : '/mobile-v2/auth/signup';
 
   useEffect(() => {
     if (!email) {
-      toast.error('Missing email. Start again from sign up.');
-      router.replace('/mobile-v2/auth/signup');
+      toast.error(fromLogin ? 'Missing email. Start again from login.' : 'Missing email. Start again from sign up.');
+      router.replace(fromLogin ? '/mobile-v2/auth/login' : '/mobile-v2/auth/signup');
     }
-  }, [email, router]);
+  }, [email, fromLogin, router]);
 
   useEffect(() => {
     if (seconds <= 0) return;
@@ -93,7 +97,7 @@ function VerifyOtpContent() {
   return (
     <div className="flex h-full flex-col sf-page-bg p-6 pt-12 text-[#1E293B]">
       <div className="mb-8 flex items-center justify-between">
-        <Link href="/mobile-v2/auth/signup" className="-ml-2 rounded-full p-2 transition-colors hover:bg-black/5">
+        <Link href={backHref} className="-ml-2 rounded-full p-2 transition-colors hover:bg-black/5">
           <ChevronLeft className="h-6 w-6" />
         </Link>
         <h1 className="absolute left-1/2 -translate-x-1/2 text-lg font-semibold">Verify email</h1>
