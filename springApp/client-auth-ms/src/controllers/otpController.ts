@@ -1,6 +1,23 @@
 import { Request, Response } from 'express';
 import { AuthService } from '../services/AuthService';
-import { resolveBrandingAppName, tenantAppIdFromRequest } from '../utils/tenantHostResolver';
+import {
+  resolveBrandingAppName,
+  resolveTenantFromRequest,
+  tenantAppIdFromRequest
+} from '../utils/tenantHostResolver';
+
+/**
+ * Prefer gateway `x-tenant-app-id`, then host/subdomain resolution.
+ * Signup stores OTPs under the storefront app id; verify/resend must use the same scope.
+ */
+async function resolveOtpAppId(req: Request): Promise<string | undefined> {
+  const fromHeader = tenantAppIdFromRequest(req);
+  if (fromHeader) {
+    return fromHeader;
+  }
+  const resolved = await resolveTenantFromRequest(req);
+  return resolved?.appId?.trim() || undefined;
+}
 
 export class OTPController {
   static async generate(req: Request, res: Response): Promise<void> {
@@ -15,7 +32,7 @@ export class OTPController {
         return;
       }
 
-      const appId = tenantAppIdFromRequest(req);
+      const appId = await resolveOtpAppId(req);
       const appName = await resolveBrandingAppName(req, appId);
       const result = await AuthService.generateOTP({ identifier, channel, purpose, appId, appName });
       res.status(result.success ? 200 : 400).json(result);
@@ -43,7 +60,7 @@ export class OTPController {
         return;
       }
 
-      const appId = tenantAppIdFromRequest(req);
+      const appId = await resolveOtpAppId(req);
       const result = await AuthService.verifyOTP({
         identifier: String(identifier).trim(),
         code: String(code).trim(),
@@ -87,7 +104,7 @@ export class OTPController {
         return;
       }
 
-      const appId = tenantAppIdFromRequest(req);
+      const appId = await resolveOtpAppId(req);
       const appName = await resolveBrandingAppName(req, appId);
       const result = await AuthService.resendOTP({
         identifier: String(identifier).trim(),
