@@ -22,7 +22,6 @@ function LoginPageInner() {
   const dispatch = useAppDispatch();
   const { loading, error } = useAppSelector((s) => s.auth);
   const mobileErr = useAppSelector((s) => s.mobileClientAuth.error);
-  const otpLoading = useAppSelector((s) => s.mobileClientAuth.loading);
   const tenant = useMobileV2Tenant();
   const manifestIconUrl = pickManifestIconUrl(tenant.pwaManifest);
 
@@ -181,20 +180,28 @@ function LoginPageInner() {
           </p>
         ) : null}
         {needsEmailVerification ? (
-          <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900" role="alert">
+          <div className="relative z-10 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900" role="alert">
             Email not verified, click{' '}
-            <button
-              type="button"
-              className="font-semibold text-[var(--sf-primary,#2563EB)] underline underline-offset-2 disabled:opacity-60"
-              disabled={resendingOtp || otpLoading || !email.trim()}
-              onClick={() => void goToVerifyOtpAndResend()}
+            <a
+              href={
+                email.trim()
+                  ? `/mobile-v2/auth/verify-otp?email=${encodeURIComponent(email.trim().toLowerCase())}&from=login`
+                  : '/mobile-v2/auth/verify-otp?from=login'
+              }
+              className="inline font-semibold text-[var(--sf-primary,#2563EB)] underline underline-offset-2 pointer-events-auto"
+              onClick={(e) => {
+                e.preventDefault();
+                if (resendingOtp) return;
+                void goToVerifyOtpAndResend();
+              }}
             >
               Here
-            </button>{' '}
+            </a>{' '}
             and complete the one-time code sent to your email before signing in.
-          </p>
+            {resendingOtp ? <span className="ml-1 text-red-700/80">(sending…)</span> : null}
+          </div>
         ) : null}
-        {submitError ? (
+        {!needsEmailVerification && submitError ? (
           <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900" role="alert">
             {submitError}
           </p>
