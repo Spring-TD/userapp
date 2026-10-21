@@ -1,4 +1,0 @@
-{
-  "title": "Withdrawal failed",
-  "body": "{{amount}} withdrawal failed — ref {{reference}}. Your wallet will be refunded if debited."
-}

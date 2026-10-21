@@ -1,4 +1,0 @@
-{
-  "title": "Inspection today",
-  "body": "{{applicantName}} — {{propertyAddress}} today at {{scheduledFor}} ({{location}})."
-}

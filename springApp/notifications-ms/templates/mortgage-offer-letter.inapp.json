@@ -1,4 +1,0 @@
-{
-  "title": "Mortgage offer ready",
-  "body": "{{productName}}: your offer for {{approvedAmount}} is ready. Down payment: {{downPaymentAmount}}. {{detail}}"
-}

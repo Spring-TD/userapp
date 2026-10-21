@@ -1,4 +1,0 @@
-{
-  "title": "Withdrawal request rejected",
-  "body": "Your {{productType}} withdrawal from {{productName}} was rejected. {{reason}}"
-}

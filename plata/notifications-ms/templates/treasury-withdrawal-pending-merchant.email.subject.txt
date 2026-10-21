@@ -1,1 +1,0 @@
-Action required: savings withdrawal pending — {{customerName}}

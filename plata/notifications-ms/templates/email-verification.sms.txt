@@ -1,2 +1,0 @@
-Hello {{userName}}! Please verify your email by visiting: {{verificationUrl}} - Plata
-

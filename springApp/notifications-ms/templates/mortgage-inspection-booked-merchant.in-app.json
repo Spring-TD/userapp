@@ -1,4 +1,0 @@
-{
-  "title": "Inspection booked",
-  "body": "{{applicantName}} booked {{propertyAddress}} for {{scheduledFor}} ({{location}})."
-}

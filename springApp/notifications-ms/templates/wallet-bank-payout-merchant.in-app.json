@@ -1,4 +1,0 @@
-{
-  "title": "Customer withdrawal",
-  "body": "{{customerName}} withdrew {{amount}} ({{status}}) — ref {{reference}}"
-}

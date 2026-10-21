@@ -1,4 +1,0 @@
-{
-  "title": "{{direction}} {{status}} — {{amount}}",
-  "body": "{{description}} · Ref {{reference}}"
-}

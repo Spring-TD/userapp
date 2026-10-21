@@ -1,4 +1,0 @@
-{
-  "title": "Repayment due soon",
-  "body": "{{amount}} due on {{dueDate}} for {{productName}}."
-}

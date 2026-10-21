@@ -1,4 +1,0 @@
-{
-  "title": "Insufficient Treasury for disbursement",
-  "body": "{{productTypeLabel}} disbursement needs {{requiredAmount}}. Balance {{currentBalance}} (short {{shortfall}}). Top up Treasury & retry."
-}

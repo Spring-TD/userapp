@@ -1,4 +1,0 @@
-{
-  "title": "Commodity payout received",
-  "body": "Payout of {{currency}} {{totalPayout}} for {{productName}}."
-}

@@ -1,4 +1,0 @@
-{
-  "title": "Withdrawal approved",
-  "body": "Your {{productType}} withdrawal from {{productName}} was successful. {{amount}} has been credited to your account."
-}

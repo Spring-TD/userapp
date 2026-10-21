@@ -1,1 +1,0 @@
-Treasury balance low — {{currentBalance}} remaining

@@ -1,4 +1,0 @@
-{
-  "title": "Treasury balance is low",
-  "body": "Treasury balance is {{currentBalance}} (below {{threshold}}). Top up to keep disbursements flowing."
-}
