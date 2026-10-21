@@ -32,6 +32,7 @@ Related remember files:
 | Login before email OTP | Fixed: retail `USER` cannot login until `email_verified` + `ACTIVE`; FE redirects to verify-otp |
 | Forgot-password mobile UI | Partial: forgot + sent work; `new-password` page does **not** yet call `POST /password/reset` with OTP |
 | Test tx audit | Scripted pull since 2026-10-19; report `.tmp_test_tx_report.json` (gitignored if applicable) |
+| LegerBlock static NUBAN funding webhook | Merchant notification URL registered; Uche ₦1000 reconciled to PRIMARY wallet |
 
 ---
 
@@ -45,6 +46,7 @@ Related remember files:
 6. **PRIMARY wallet** is created at signup regardless of email verify; **NUBAN** is provisioned after Fuspay KYC webhook (not gated on email OTP).
 7. **origin/main** is the working branch for this repo; commit + push when checking in (never commit `login.md` or secrets).
 8. Wallet ledger has **no** `isTest` flag — find test activity by known users / `e2e-*` refs / date range.
+9. **LegerBlock static VA funding** requires merchant `notification_url` → `…/funding/callback/legerblock` plus `LEGERBLOCK_COLLECTION_NOTIFICATION_URL` on wallet-ms (boot syncs it). Money can sit on LegerBlock with app balance 0 if this is missing.
 
 ---
 
@@ -66,6 +68,14 @@ Related remember files:
 ---
 
 ## Changelog
+
+### 2026-10-21 — Uche NUBAN ₦1000 not reflecting (LegerBlock webhook)
+
+- **Why:** ₦1000 hit LegerBlock static VA `6011907559` (SAFE HAVEN MFB) at ~11:12Z; app wallet stayed 0 because merchant collection `notification_url` was never set (`LEGERBLOCK_COLLECTION_NOTIFICATION_URL` missing on Fly).
+- **What:** Registered merchant webhook → `https://wallet-ms.fly.dev/api/v1/wallets/funding/callback/legerblock`; set Fly secrets; replayed collection webhook (`ONUS-FNUB-7508288347889-21102026-121210`); credited PRIMARY wallet to ₦1000. Boot now calls `syncLegerblockMerchantNotificationUrl`.
+- **Where:** `springApp/wallet-ms` (`legerblockNubanClient.ts`, `index.ts`, `.env.example`); Fly `wallet-ms` secrets
+- **IDs:** user `6ad88fa633377d2b0ab8e02d` · wallet `6ad88fa78c0dcccfc2c8efd9` · LB wallet `LBWNGN57BF265CB8844143953D83E830AA978700848`
+- **Verify:** app main balance ₦1000; LegerBlock available_balance 1000; future deposits should auto-credit via webhook
 
 ### 2026-10-21 — Retail login blocked until email OTP
 
@@ -105,6 +115,7 @@ Related remember files:
 - [ ] Optionally sync Fuspay KYC email/phone success → client-auth `email_verified` / `phone_verified` (product decision; today they are separate).
 - [ ] Confirm storefront (Vercel/userapp) deploy includes OTP BFF + login-gate FE commits.
 - [ ] Continue LegerBlock cutover per `legerblock-payonus-replacement.md` as needed.
+- [ ] Optionally add LegerBlock→wallet reconcile job for missed webhooks (poll collection-query).
 
 ---
 
