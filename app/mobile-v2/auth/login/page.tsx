@@ -39,11 +39,20 @@ function LoginPageInner() {
     if (emailParam) setEmail(emailParam);
   }, [searchParams]);
 
+  const clearVerifiedQueryParam = () => {
+    if (searchParams.get('verified') !== '1') return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('verified');
+    const qs = params.toString();
+    router.replace(qs ? `/mobile-v2/auth/login?${qs}` : '/mobile-v2/auth/login');
+  };
+
   useEffect(() => {
     if (error) {
       if (error === LOGIN_REQUIRES_EMAIL_VERIFICATION || /email not verified/i.test(error)) {
         setNeedsEmailVerification(true);
         setSubmitError(null);
+        clearVerifiedQueryParam();
         dispatch(clearAuthError());
         return;
       }
@@ -55,6 +64,7 @@ function LoginPageInner() {
       setSubmitError(showAuthError(mobileErr));
       dispatch(clearMobileClientAuthError());
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to auth errors
   }, [error, mobileErr, dispatch]);
 
   const validate = () => {
@@ -130,6 +140,7 @@ function LoginPageInner() {
         /email not verified/i.test(payload)
       ) {
         setNeedsEmailVerification(true);
+        clearVerifiedQueryParam();
         dispatch(clearAuthError());
         return;
       }
@@ -167,14 +178,14 @@ function LoginPageInner() {
         </div>
         <h2 className="mb-2 text-[28px] font-bold tracking-tight text-[var(--sf-ink,#1E1B4B)]">Welcome back</h2>
         <p className="px-4 text-[15px] leading-normal text-gray-500">
-          {verifiedEmail
+          {verifiedEmail && !needsEmailVerification
             ? 'Your email is verified. Sign in to complete identity verification with FusPay.'
             : 'Sign in with your email and password'}
         </p>
       </div>
 
       <div className="min-h-0 flex-1 space-y-6">
-        {verifiedEmail ? (
+        {verifiedEmail && !needsEmailVerification ? (
           <p className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-900">
             Email verified successfully. Use the password you created during signup.
           </p>
