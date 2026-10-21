@@ -39,11 +39,10 @@ exports.provisionMerchantWalletNuban = provisionMerchantWalletNuban;
 const bankingConfigRepo = __importStar(require("../../repositories/merchantBankingConfigRepository"));
 const payonusNubanProvisioning_1 = require("../payonusNubanProvisioning");
 const bankoneNubanAdapter_1 = require("./bankoneNubanAdapter");
-const virtualNubanProvisioning_1 = require("../virtualNubanProvisioning");
 const logger_1 = require("../../utils/logger");
 /**
  * Opt-in BankOne for user wallets when MerchantBankingConfig is enabled;
- * otherwise route via provisionVirtualNubanForWallet (LegerBlock / PayOnUs from NUBAN_PROVIDER_DEFAULT).
+ * otherwise (and for merchant wallets) use PayOnUs.
  */
 async function provisionUserWalletNuban(wallet, options = {}) {
     const config = await bankingConfigRepo.getDecryptedBankOneConfig(wallet.merchantId);
@@ -53,16 +52,20 @@ async function provisionUserWalletNuban(wallet, options = {}) {
             return bankoneWallet;
         }
         if (config.fallbackToPayonus !== false) {
-            logger_1.logger.warn('BankOne provision failed; falling back to virtual NUBAN provider', {
+            logger_1.logger.warn('BankOne provision failed; falling back to PayOnUs', {
                 walletId: wallet.id,
                 merchantId: wallet.merchantId,
                 error: bankoneWallet.virtualNuban?.provisionError
             });
-            return (await (0, virtualNubanProvisioning_1.provisionVirtualNubanForWallet)(bankoneWallet));
+            return (await (0, payonusNubanProvisioning_1.provisionPayonusNubanForWallet)(bankoneWallet, {
+                bvn: options.bvn || options.applicantProfile?.bvn
+            }));
         }
         return bankoneWallet;
     }
-    return (await (0, virtualNubanProvisioning_1.provisionVirtualNubanForWallet)(wallet));
+    return (await (0, payonusNubanProvisioning_1.provisionPayonusNubanForWallet)(wallet, {
+        bvn: options.bvn || options.applicantProfile?.bvn
+    }));
 }
 async function reprovisionUserWalletNuban(wallet, options = {}) {
     if (wallet.virtualNuban?.provisionStatus === 'active' && wallet.virtualNuban.accountNumber) {
@@ -70,8 +73,8 @@ async function reprovisionUserWalletNuban(wallet, options = {}) {
     }
     return provisionUserWalletNuban(wallet, options);
 }
-/** Merchant wallets use NUBAN_PROVIDER_DEFAULT (LegerBlock / PayOnUs). BankOne is applicant/user only. */
+/** Merchant wallets always use PayOnUs (BankOne is applicant/user only). */
 async function provisionMerchantWalletNuban(wallet) {
-    return (await (0, virtualNubanProvisioning_1.provisionVirtualNubanForWallet)(wallet));
+    return (await (0, payonusNubanProvisioning_1.provisionPayonusNubanForWallet)(wallet));
 }
 //# sourceMappingURL=provisionUserNuban.js.map

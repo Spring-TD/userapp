@@ -24,11 +24,8 @@ const money_1 = require("../utils/money");
 async function normalizeWalletDoc(doc) {
     if (!doc)
         return null;
-    // Mongoose documents do not spread field values via `{ ...doc }`.
-    const raw = typeof doc.toObject === 'function'
-        ? doc.toObject()
-        : { ...doc };
-    const id = raw._id?.toString?.() ?? (typeof raw.id === 'string' ? raw.id : undefined);
+    const raw = { ...doc };
+    const id = raw._id?.toString?.();
     if (raw.balanceUnit !== 'kobo') {
         const main = (0, money_1.nairaToKobo)(Number(raw.mainBalance ?? 0));
         const ledger = (0, money_1.nairaToKobo)(Number(raw.ledgerBalance ?? 0));

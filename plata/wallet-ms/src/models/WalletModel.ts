@@ -21,11 +21,7 @@ const WalletSchema = new Schema<any>(
     appId: { type: String, required: false },
     appName: { type: String, required: false },
     payonusSubaccountCode: { type: String, required: false },
-    merchantWalletType: {
-      type: String,
-      enum: ['TREASURY', 'BILLING', 'REPAYMENT', 'OPERATION', 'KYC', 'SETTLEMENT'],
-      required: false
-    },
+    merchantWalletType: { type: String, enum: ['TREASURY', 'OPERATION', 'KYC'], required: false },
     userId: { type: String, required: false },
     name: { type: String, required: true },
     mainBalance: { type: Number, required: true, default: 0 },
