@@ -270,7 +270,7 @@ Scaffolded dual-run in both `springApp/wallet-ms` and `plata/wallet-ms`:
 - Dynamic VA (`POST /api/v1/collection/subwallet`) works for one-off collections.
 - springApp user wallets provision NUBAN via `POST /api/v1/internal/wallets/user/:userId/provision-nuban` (post-KYC), not at wallet create.
 - **Static VA deposits do not use per-VA `notification_url`.** Configure merchant webhook via `PUT /api/v1/merchant/notificationurl` (wallet-ms boot syncs `LEGERBLOCK_COLLECTION_NOTIFICATION_URL`). Without it, LegerBlock credits the LB subwallet but springApp balance stays 0.
-- Prefer notifying `https://wallet-ms.fly.dev/.../funding/callback/legerblock` directly (account-ms may be stopped / auto-stop).
+- Prefer notifying `https://wallet-ms.fly.dev/.../funding/callback/legerblock` (Spring) and `https://wallet-ms-plata.fly.dev/.../funding/callback/legerblock` (Plata) directly (account gateways may be stopped / auto-stop). Each merchant key needs its own `PUT /api/v1/merchant/notificationurl`.
 
 ## Last updated
 

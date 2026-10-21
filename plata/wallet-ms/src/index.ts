@@ -12,6 +12,7 @@ import { walletRoutes } from './routes/walletRoutes';
 import { transactionRoutes } from './routes/transactionRoutes';
 import { internalWalletRoutes } from './routes/internalWalletRoutes';
 import { errorHandler } from './middleware/errorHandler';
+import { syncLegerblockMerchantNotificationUrl } from './services/legerblockNubanClient';
 
 // Load environment variables
 dotenv.config();
@@ -132,6 +133,8 @@ if (process.env.NODE_ENV !== 'test') {
         console.log(`Wallet service running on port ${PORT}`);
         console.log(`Environment: ${config.nodeEnv}`);
         console.log('Database: MongoDB connected');
+        // Static VA deposits notify the merchant-level URL only; keep it registered.
+        void syncLegerblockMerchantNotificationUrl();
       });
     })
     .catch((err) => {
