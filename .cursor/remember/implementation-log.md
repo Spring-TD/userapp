@@ -69,13 +69,6 @@ Related remember files:
 
 ## Changelog
 
-### 2026-10-21 — Login unverified-email banner links to OTP
-
-- **Why:** Users saw a static “email not verified” banner with no clear path to finish OTP.
-- **What:** Banner copy includes a **Here** control that resends the verification OTP and navigates to `/mobile-v2/auth/verify-otp?from=login`. Stopped auto-redirect so the link is usable.
-- **Where:** `app/mobile-v2/auth/login/page.tsx`, `AuthService.ts` (message string)
-- **Verify:** Login as unverified user → banner → click Here → OTP email + verify screen
-
 ### 2026-10-21 — Plata LegerBlock merchant notification URL
 
 - **Why:** Same static-VA funding gap as Spring — plata `wallet-ms-plata` lacked `LEGERBLOCK_COLLECTION_NOTIFICATION_URL` / boot sync.

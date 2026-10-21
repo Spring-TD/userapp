@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { clearAuthError, LOGIN_REQUIRES_EMAIL_VERIFICATION, loginThunk } from '@/store/authSlice';
-import { clearMobileClientAuthError, resendOtpThunk } from '@/store/mobileClientAuthSlice';
+import { clearMobileClientAuthError } from '@/store/mobileClientAuthSlice';
 import { AuthRouteSkeleton } from '@/components/mobile-v2/data-skeletons';
 import { showAuthError } from '@/lib/showAuthError';
 import { resolvePostLoginPath } from '@/lib/transactionPinRouting';
@@ -16,13 +16,14 @@ import { useMobileV2Tenant } from '@/contexts/MobileV2TenantContext';
 import { StorefrontMerchantLogo } from '@/components/mobile-v2/StorefrontMerchantLogo';
 import { pickManifestIconUrl } from '@/lib/webAppManifest';
 
+const DEFAULT_POST_LOGIN = '/mobile-v2/home';
+
 function LoginPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const dispatch = useAppDispatch();
   const { loading, error } = useAppSelector((s) => s.auth);
   const mobileErr = useAppSelector((s) => s.mobileClientAuth.error);
-  const otpLoading = useAppSelector((s) => s.mobileClientAuth.loading);
   const tenant = useMobileV2Tenant();
   const manifestIconUrl = pickManifestIconUrl(tenant.pwaManifest);
 
@@ -31,8 +32,6 @@ function LoginPageInner() {
   const [password, setPassword] = useState('');
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [needsEmailVerification, setNeedsEmailVerification] = useState(false);
-  const [resendingOtp, setResendingOtp] = useState(false);
   const verifiedEmail = searchParams.get('verified') === '1';
 
   useEffect(() => {
@@ -42,13 +41,6 @@ function LoginPageInner() {
 
   useEffect(() => {
     if (error) {
-      if (error === LOGIN_REQUIRES_EMAIL_VERIFICATION || /email not verified/i.test(error)) {
-        setNeedsEmailVerification(true);
-        setSubmitError(null);
-        dispatch(clearAuthError());
-        return;
-      }
-      setNeedsEmailVerification(false);
       setSubmitError(showAuthError(error));
       dispatch(clearAuthError());
     }
@@ -66,37 +58,8 @@ function LoginPageInner() {
     return { ok: Object.keys(next).length === 0, errors: next };
   };
 
-  const goToVerifyOtpAndResend = async () => {
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail) {
-      setSubmitError(showAuthError('Enter your email address first.'));
-      return;
-    }
-    setResendingOtp(true);
-    try {
-      const res = await dispatch(
-        resendOtpThunk({
-          identifier: normalizedEmail,
-          channel: 'email',
-          purpose: 'verification',
-        }),
-      );
-      if (resendOtpThunk.rejected.match(res)) {
-        toast.error(typeof res.payload === 'string' ? res.payload : 'Could not send verification code.');
-      } else {
-        toast.success('A one-time code has been sent to your email.');
-      }
-      router.push(
-        `/mobile-v2/auth/verify-otp?email=${encodeURIComponent(normalizedEmail)}&from=login`,
-      );
-    } finally {
-      setResendingOtp(false);
-    }
-  };
-
   const handleLogin = async () => {
     setSubmitError(null);
-    setNeedsEmailVerification(false);
     if (!tenant.ready) {
       setSubmitError(showAuthError('Storefront is still loading. Please try again in a moment.'));
       return;
@@ -126,12 +89,14 @@ function LoginPageInner() {
     }));
     if (loginThunk.rejected.match(res)) {
       const payload = typeof res.payload === 'string' ? res.payload : '';
-      if (
-        payload === LOGIN_REQUIRES_EMAIL_VERIFICATION ||
-        /email not verified/i.test(payload)
-      ) {
-        setNeedsEmailVerification(true);
-        dispatch(clearAuthError());
+      if (payload === LOGIN_REQUIRES_EMAIL_VERIFICATION) {
+        const normalizedEmail = email.trim().toLowerCase();
+        toast.message('Verify your email to continue', {
+          description: 'We sent a one-time code to your email. Enter it to activate your account.',
+        });
+        router.push(
+          `/mobile-v2/auth/verify-otp?email=${encodeURIComponent(normalizedEmail)}&from=login`,
+        );
         return;
       }
       const status = (res.error as { message?: string })?.message;
@@ -178,20 +143,6 @@ function LoginPageInner() {
         {verifiedEmail ? (
           <p className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-900">
             Email verified successfully. Use the password you created during signup.
-          </p>
-        ) : null}
-        {needsEmailVerification ? (
-          <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900" role="alert">
-            Email not verified, click{' '}
-            <button
-              type="button"
-              className="font-semibold text-[var(--sf-primary,#2563EB)] underline underline-offset-2 disabled:opacity-60"
-              disabled={resendingOtp || otpLoading || !email.trim()}
-              onClick={() => void goToVerifyOtpAndResend()}
-            >
-              Here
-            </button>{' '}
-            and complete the one-time code sent to your email before signing in.
           </p>
         ) : null}
         {submitError ? (

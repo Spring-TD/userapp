@@ -1013,7 +1013,7 @@ export class AuthService {
             return {
               success: false,
               error:
-                'Email not verified, click "Here" and complete the one-time code sent to your email before signing in.',
+                'Email not verified. Complete the one-time code sent to your email before signing in.',
               code: 'EMAIL_NOT_VERIFIED',
               requiresEmailVerification: true,
               emailVerified: false
