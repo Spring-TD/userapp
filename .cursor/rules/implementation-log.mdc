@@ -1,0 +1,19 @@
+---
+description: Read and update the living implementation log before/after shipping work
+alwaysApply: true
+---
+
+# Implementation log
+
+Before implementing the next feature, fix, or E2E in this repo:
+
+1. Read `.cursor/remember/implementation-log.md` (and any linked remember files for the area).
+2. Respect **Invariants** and avoid regressing items in **Changelog**.
+
+When you finish a meaningful change (feature, bugfix, deploy, E2E with lasting IDs):
+
+1. Append a dated entry under **Changelog** in that file.
+2. Refresh **Current state** / **Open next** / **Known IDs** if they changed.
+3. Do not store secrets in the remember file.
+
+Other remember context: `.cursor/remember/model.md`, `.cursor/remember/legerblock-payonus-replacement.md`.
