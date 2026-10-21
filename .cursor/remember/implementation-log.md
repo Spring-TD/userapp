@@ -32,7 +32,7 @@ Related remember files:
 | Login before email OTP | Fixed: retail `USER` cannot login until `email_verified` + `ACTIVE`; FE redirects to verify-otp |
 | Forgot-password mobile UI | Partial: forgot + sent work; `new-password` page does **not** yet call `POST /password/reset` with OTP |
 | Test tx audit | Scripted pull since 2026-10-19; report `.tmp_test_tx_report.json` (gitignored if applicable) |
-| LegerBlock static NUBAN funding webhook | Spring + Plata merchant notification URLs registered; Uche ₦1000 reconciled on Spring |
+| LegerBlock static NUBAN funding webhook | Merchant notification URL registered; Uche ₦1000 reconciled to PRIMARY wallet |
 
 ---
 
@@ -68,13 +68,6 @@ Related remember files:
 ---
 
 ## Changelog
-
-### 2026-10-21 — Plata LegerBlock merchant notification URL
-
-- **Why:** Same static-VA funding gap as Spring — plata `wallet-ms-plata` lacked `LEGERBLOCK_COLLECTION_NOTIFICATION_URL` / boot sync.
-- **What:** Ported `syncLegerblockMerchantNotificationUrl`; registered merchant webhook → `https://wallet-ms-plata.fly.dev/api/v1/wallets/funding/callback/legerblock`; set Fly secrets.
-- **Where:** `plata/wallet-ms` (`legerblockNubanClient.ts`, `index.ts`, `.env.example`); Fly `wallet-ms-plata`
-- **Verify:** LegerBlock merchant `notificationurl` points at plata funding callback; new static deposits credit plata wallets
 
 ### 2026-10-21 — Uche NUBAN ₦1000 not reflecting (LegerBlock webhook)
 
