@@ -636,47 +636,66 @@ export async function fetchUserApplications(
   const fetchAllPages = options?.fetchAllPages !== false
   const maxPages = 10
   const collected: StorefrontApplication[] = []
+  const listParams = {
+    limit: pageLimit,
+    ...(options?.productType ? { productType: String(options.productType).toUpperCase() } : {}),
+    ...(options?.status ? { status: options.status } : {}),
+  }
 
-  try {
-    for (let page = 1; page <= maxPages; page += 1) {
-      const res = await apiClient.get<
-        ApiEnvelope<StorefrontApplication[]> & {
-          pagination?: {
-            page?: number
-            limit?: number
-            total?: number
-            totalPages?: number
-            hasNextPage?: boolean
-          }
-        }
-      >(`/v1/applications/user/${encodeURIComponent(resolvedUserId)}`, {
-        includeAuth: true,
-        timeout: 30_000,
-        params: {
-          page,
-          limit: pageLimit,
-          ...(options?.productType ? { productType: String(options.productType).toUpperCase() } : {}),
-          ...(options?.status ? { status: options.status } : {}),
-        },
-      })
-
-      if (res.data?.success === false || res.status >= 400) {
-        return {
-          ok: false as const,
-          error: parseApiError(res.data, res.status),
-          applications: [] as StorefrontApplication[],
+  const fetchPage = (page: number) =>
+    apiClient.get<
+      ApiEnvelope<StorefrontApplication[]> & {
+        pagination?: {
+          page?: number
+          limit?: number
+          total?: number
+          totalPages?: number
+          hasNextPage?: boolean
         }
       }
+    >(`/v1/applications/user/${encodeURIComponent(resolvedUserId)}`, {
+      includeAuth: true,
+      timeout: 30_000,
+      params: { page, ...listParams },
+    })
 
-      const pageRows = Array.isArray(res.data?.data) ? res.data.data : []
-      collected.push(...pageRows)
+  try {
+    const first = await fetchPage(1)
+    if (first.data?.success === false || first.status >= 400) {
+      return {
+        ok: false as const,
+        error: parseApiError(first.data, first.status),
+        applications: [] as StorefrontApplication[],
+      }
+    }
 
-      const pagination = res.data?.pagination
-      const hasNext =
-        Boolean(pagination?.hasNextPage) ||
-        (typeof pagination?.totalPages === "number" && page < pagination.totalPages)
+    const firstRows = Array.isArray(first.data?.data) ? first.data.data : []
+    collected.push(...firstRows)
 
-      if (!fetchAllPages || !hasNext || pageRows.length === 0) break
+    const pagination = first.data?.pagination
+    const totalPages =
+      typeof pagination?.totalPages === "number" && pagination.totalPages > 0
+        ? Math.min(pagination.totalPages, maxPages)
+        : 1
+    const hasNext =
+      Boolean(pagination?.hasNextPage) ||
+      (typeof pagination?.totalPages === "number" && 1 < pagination.totalPages)
+
+    if (fetchAllPages && hasNext && firstRows.length > 0 && totalPages > 1) {
+      const rest = await Promise.all(
+        Array.from({ length: totalPages - 1 }, (_, i) => fetchPage(i + 2)),
+      )
+      for (const res of rest) {
+        if (res.data?.success === false || res.status >= 400) {
+          return {
+            ok: false as const,
+            error: parseApiError(res.data, res.status),
+            applications: [] as StorefrontApplication[],
+          }
+        }
+        const pageRows = Array.isArray(res.data?.data) ? res.data.data : []
+        collected.push(...pageRows)
+      }
     }
 
     // Client-side safety net if upstream ignores productType

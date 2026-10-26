@@ -253,13 +253,27 @@ export async function resolveUserProductApplication(
     return { application: null, applications: [], error: "Missing application id" }
   }
 
-  const byId = await fetchProductApplicationById(targetId)
+  // Overlap by-id + typed/untyped list so detail screens pay one gateway floor, not two.
+  const listHint = options?.productType
+  const [byId, hintedList] = await Promise.all([
+    fetchProductApplicationById(targetId),
+    fetchUserProductApplications(userId, {
+      productType: listHint,
+      appId: options?.appId,
+    }),
+  ])
+
   if (byId.application && matchProductApplicationId(byId.application, targetId)) {
     const productType = String(byId.application.productType || options?.productType || "").toUpperCase()
-    const list = await fetchUserProductApplications(userId, {
-      productType: productType || undefined,
-      appId: options?.appId,
-    })
+    const list =
+      listHint && String(listHint).toUpperCase() === productType
+        ? hintedList
+        : productType
+          ? await fetchUserProductApplications(userId, {
+              productType,
+              appId: options?.appId,
+            })
+          : hintedList
     const applications = list.applications
     const matchedFromList =
       applications.find((item) => matchProductApplicationId(item, targetId)) ?? byId.application
@@ -286,16 +300,30 @@ export async function resolveUserProductApplication(
     }
   }
 
-  const productTypes = options?.productType
-    ? [options.productType]
-    : ["MORTGAGE", "LOAN", "SAVINGS", "INVESTMENT", "COMMODITY", undefined]
+  const hintedMatch =
+    hintedList.applications.find((item) => matchProductApplicationId(item, targetId)) ?? null
+  if (hintedMatch) {
+    return { application: hintedMatch, applications: hintedList.applications, error: null }
+  }
 
-  let lastError: string | null = byId.error
-  for (const productType of productTypes) {
-    const list = await fetchUserProductApplications(userId, {
-      productType,
-      appId: options?.appId,
-    })
+  if (options?.productType) {
+    return {
+      application: null,
+      applications: [],
+      error: byId.error || hintedList.error || "Account record not found.",
+    }
+  }
+
+  // Untyped list already tried; fan out remaining type filters in parallel.
+  const productTypes = ["MORTGAGE", "LOAN", "SAVINGS", "INVESTMENT", "COMMODITY"] as const
+  const lists = await Promise.all(
+    productTypes.map((productType) =>
+      fetchUserProductApplications(userId, { productType, appId: options?.appId }),
+    ),
+  )
+
+  let lastError: string | null = byId.error || hintedList.error
+  for (const list of lists) {
     if (list.error) {
       lastError = list.error
       continue

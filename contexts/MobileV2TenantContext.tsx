@@ -333,6 +333,11 @@ export function MobileV2TenantProvider({ children }: { children: ReactNode }) {
         setPwaManifest(r.pwaManifest)
         setError(r.error)
 
+        // Catalog warm starts as soon as appId is known; don't wait on branding.
+        if (r.appId) {
+          void prefetchStorefrontSession(r.appId)
+        }
+
         if (r.merchantId) {
           const b = await fetchMerchantBranding(r.merchantId)
           if (!cancelled) setBranding(b)

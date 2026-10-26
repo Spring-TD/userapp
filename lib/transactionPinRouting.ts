@@ -38,17 +38,24 @@ export async function userNeedsTransactionPinSetup(userIdHint?: string | null): 
  */
 export async function resolvePostLoginPath(next: string | null): Promise<string> {
   let target = safeMobileReturnPath(next, DEFAULT_MOBILE_HOME)
+  const needsKycCheck = isKycOnboardingPath(target)
+  const pinPath = isTransactionPinPath(target)
 
-  if (isKycOnboardingPath(target)) {
-    const profile = await fetchAuthUserProfile()
-    if (isUserKycApprovedFromProfile(profile.kycStatus, profile.kycCompleted)) {
-      target = DEFAULT_MOBILE_HOME
-    }
+  const [profile, needsPin] = await Promise.all([
+    needsKycCheck ? fetchAuthUserProfile() : Promise.resolve(null),
+    pinPath ? Promise.resolve(false) : userNeedsTransactionPinSetup(),
+  ])
+
+  if (
+    needsKycCheck &&
+    profile &&
+    isUserKycApprovedFromProfile(profile.kycStatus, profile.kycCompleted)
+  ) {
+    target = DEFAULT_MOBILE_HOME
   }
 
   if (isTransactionPinPath(target)) return target
 
-  const needsPin = await userNeedsTransactionPinSetup()
   if (needsPin) {
     return transactionPinSetupPath(target)
   }

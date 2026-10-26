@@ -177,14 +177,24 @@ const BusinessDocument: React.FC<Props> = ({ onContinue }) => {
       }
 
       // Upload each file to compliance service to get real URLs (backend requires these)
-      const uploadResults: Array<{ key: string; file: File; url: string }> = [];
-      for (const [key, f] of fileEntries) {
-        const up = await ComplianceService.uploadDocument(f) as { success?: boolean; url?: string; error?: string };
-        if (!up?.success || !up?.url) {
-          toast.error(up?.error || `Failed to upload ${f.name}. Please try again.`);
-          return;
-        }
-        uploadResults.push({ key, file: f, url: up.url });
+      let uploadResults: Array<{ key: string; file: File; url: string }> = [];
+      try {
+        uploadResults = await Promise.all(
+          fileEntries.map(async ([key, f]) => {
+            const up = (await ComplianceService.uploadDocument(f)) as {
+              success?: boolean
+              url?: string
+              error?: string
+            }
+            if (!up?.success || !up?.url) {
+              throw new Error(up?.error || `Failed to upload ${f.name}. Please try again.`)
+            }
+            return { key, file: f, url: up.url }
+          }),
+        )
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to upload documents. Please try again.')
+        return
       }
 
       // Backend requires exactly these 7 types (and min 8 items); build in fixed order so nothing is missed

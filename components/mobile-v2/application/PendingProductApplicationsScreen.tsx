@@ -141,11 +141,20 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreen
     async function loadApplications() {
       setLoading(true)
       setError(null)
-      const result = await fetchUserApplications(undefined, {
-        productType: kind === 'loan' ? 'LOAN' : kind === 'mortgage' ? 'MORTGAGE' : undefined,
-        fetchAllPages: true,
-        limit: 100,
-      })
+      const userId = await resolveWalletUserId()
+      if (cancelled) return
+
+      const wantApproved = kind === 'mortgage' || kind === 'all'
+      const [result, approved] = await Promise.all([
+        fetchUserApplications(userId || undefined, {
+          productType: kind === 'loan' ? 'LOAN' : kind === 'mortgage' ? 'MORTGAGE' : undefined,
+          fetchAllPages: true,
+          limit: 100,
+        }),
+        wantApproved && userId
+          ? listPendingApprovedMortgages(userId)
+          : Promise.resolve(null),
+      ])
       if (cancelled) return
 
       if (!result.ok) {
@@ -156,14 +165,8 @@ export function PendingProductApplicationsScreen({ kind }: { kind: PendingScreen
       }
 
       let merged = result.applications
-      if (kind === 'mortgage' || kind === 'all') {
-        const userId = await resolveWalletUserId()
-        if (userId) {
-          const approved = await listPendingApprovedMortgages(userId)
-          if (approved.ok && Array.isArray(approved.data)) {
-            merged = mergeByApplicationId(merged, approved.data)
-          }
-        }
+      if (approved?.ok && Array.isArray(approved.data)) {
+        merged = mergeByApplicationId(merged, approved.data)
       }
 
       if (cancelled) return

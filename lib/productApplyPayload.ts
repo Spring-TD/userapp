@@ -117,7 +117,11 @@ export async function buildProductApplyBody(
     return { ok: false, error: 'No product selected.' }
   }
 
-  const storefrontProduct = await fetchMobileProductById(trimmedProductId)
+  const [storefrontProduct, userId, profile] = await Promise.all([
+    fetchMobileProductById(trimmedProductId),
+    resolveWalletUserId(),
+    fetchAuthUserProfile(),
+  ])
   if (!storefrontProduct || !isStorefrontPurchasableProduct(storefrontProduct)) {
     return {
       ok: false,
@@ -126,7 +130,6 @@ export async function buildProductApplyBody(
   }
   const localProductId = storefrontProduct.id
 
-  const userId = await resolveWalletUserId()
   if (!userId) {
     return { ok: false, error: 'Sign in to continue.' }
   }
@@ -140,7 +143,7 @@ export async function buildProductApplyBody(
     parsePositiveAmount(storefrontProduct.price) ??
     1
 
-  const { user, kycStatus, kycCompleted } = await fetchAuthUserProfile()
+  const { user, kycStatus, kycCompleted } = profile
   const sessionMerchantId =
     typeof window !== 'undefined'
       ? sessionStorage.getItem(TENANT_MERCHANT_ID_STORAGE_KEY)?.trim() || undefined
@@ -160,7 +163,8 @@ export async function buildProductApplyBody(
   const applicantName = [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim()
   const email = user?.email?.trim() || ''
   const phone = user?.phone?.trim() || ''
-  const bvn = bvnFromProfile(user) || (await bvnFromKycStatus(userId))
+  const fromProfile = bvnFromProfile(user)
+  const bvn = fromProfile || (await bvnFromKycStatus(userId))
 
   if (!bvn && !isUserKycApprovedFromProfile(kycStatus, kycCompleted)) {
     return {

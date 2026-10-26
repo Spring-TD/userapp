@@ -167,12 +167,18 @@ async function fetchStorefrontProductsUncached(appId: string): Promise<MobilePro
   const pagination = extractProductPagination(first.data)
   const totalPages = pagination?.totalPages && pagination.totalPages > 0 ? pagination.totalPages : 1
 
-  for (let page = 2; page <= totalPages; page += 1) {
-    const next = await apiClient.get<{ success?: boolean; data?: unknown }>(
-      ENDPOINTS.products.byAppId(appId, { page, limit: 100 }),
-      { includeAuth: hasToken, timeout: 60_000 },
+  if (totalPages > 1) {
+    const rest = await Promise.all(
+      Array.from({ length: totalPages - 1 }, (_, i) =>
+        apiClient.get<{ success?: boolean; data?: unknown }>(
+          ENDPOINTS.products.byAppId(appId, { page: i + 2, limit: 100 }),
+          { includeAuth: hasToken, timeout: 60_000 },
+        ),
+      ),
     )
-    if (next.data?.success) raw.push(...extractProductRows(next.data))
+    for (const next of rest) {
+      if (next.data?.success) raw.push(...extractProductRows(next.data))
+    }
   }
 
   return filterActiveAppProducts(
@@ -222,15 +228,27 @@ export async function prefetchStorefrontSession(appId: string) {
   if (!id) return
   const tasks: Promise<unknown>[] = [loadStorefrontProducts(id)]
   if (typeof window !== "undefined" && getAccessToken()) {
-    const { fetchAuthUserProfile } = await import("@/lib/userProfileClient")
-    tasks.push(
-      fetchAuthUserProfile().then(async (profile) => {
-        const userId = profile.user?.id?.trim() || profile.user?._id?.trim()
-        if (!userId) return
-        const { fetchUserWallet } = await import("@/lib/services/userWalletApi")
-        await fetchUserWallet(userId)
-      }),
-    )
+    const [{ fetchAuthUserProfile }, { fetchUserWallet }, { readCachedAuthUserId, cacheAuthUserId }] =
+      await Promise.all([
+        import("@/lib/userProfileClient"),
+        import("@/lib/services/userWalletApi"),
+        import("@/lib/userWallet"),
+      ])
+    const cachedUserId = readCachedAuthUserId()
+    if (cachedUserId) {
+      // Known userId → profile and wallet in parallel (one gateway floor, not two).
+      tasks.push(fetchAuthUserProfile())
+      tasks.push(fetchUserWallet(cachedUserId))
+    } else {
+      tasks.push(
+        fetchAuthUserProfile().then(async (profile) => {
+          const userId = profile.user?.id?.trim() || profile.user?._id?.trim()
+          if (!userId) return
+          cacheAuthUserId(userId)
+          await fetchUserWallet(userId)
+        }),
+      )
+    }
   }
   await Promise.allSettled(tasks)
 }
