@@ -323,23 +323,6 @@ function collectProductHeroImage(
   )
 }
 
-/**
- * Resolve catalog/API product card image from Plata/Spring product payloads.
- * Prefers `about.previewAssetUrl`, then top-level image fields, then property imageUrls.
- */
-export function resolveCatalogProductImageUrl(row: unknown): string | undefined {
-  if (!row || typeof row !== 'object') return undefined
-  const rec = row as Record<string, unknown>
-  const about =
-    rec.about && typeof rec.about === 'object' ? (rec.about as Record<string, unknown>) : {}
-  const properties: ProductProperty[] = Array.isArray(rec.properties)
-    ? (rec.properties as Record<string, unknown>[]).map((p) => ({
-        imageUrls: collectPropertyImageUrls(p),
-      }))
-    : []
-  return collectProductHeroImage(rec, about, properties)
-}
-
 /** Backend product/property image only — never a stock/dummy fallback. */
 export function resolveProductDisplayImage(
   product: Pick<MobileProduct, "image" | "properties"> | null | undefined,
