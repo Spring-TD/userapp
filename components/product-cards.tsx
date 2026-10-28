@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch"
 import { Clock, Globe, Loader2 } from "lucide-react"
 import { ProductDetailModal } from "@/components/product-detail-modal"
 import { productApi } from "@/lib/services/product-api"
+import { resolveCatalogProductImageUrl } from "@/lib/storefrontProducts"
 import { toast } from "sonner"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -155,10 +156,20 @@ export default function ProductCards({ category = "Mortgage", appId }: ProductCa
           name: p.name,
           title: p.name,
           description: p.description || "No description available",
-          image: p.image || DEFAULT_PRODUCT_IMAGE,
+          image: resolveCatalogProductImageUrl(p) || DEFAULT_PRODUCT_IMAGE,
           status: onForApp ? "Active" : "Inactive",
-          interestRate: p.interestRate || p.configuration?.interestRate || "N/A",
-          duration: p.duration || p.configuration?.loanTenure || "N/A",
+          interestRate:
+            p.interestRate ||
+            p.structure?.interestRate ||
+            p.calculatedConfig?.basis?.annualRatePercent ||
+            p.configuration?.interestRate ||
+            "N/A",
+          duration:
+            p.duration ||
+            (typeof p.about?.tenure === "string" ? p.about.tenure : p.about?.tenure?.label) ||
+            p.about?.duration ||
+            p.configuration?.loanTenure ||
+            "N/A",
           category: p.type,
           type: p.type,
           isActive: onForApp,
