@@ -158,25 +158,45 @@ export const verifyOtpThunk = createAsyncThunk<OtpVerifyResponse, OtpVerifyDto, 
   },
 )
 
+/**
+ * POST /api/v1/otp/resend — `{ identifier, purpose }` (account-ms contract; no `channel`).
+ * Falls back to /otp/generate only if the resend route doesn't exist upstream (404).
+ * `channel` is kept in the signature for callers but only used by that fallback.
+ */
 export const resendOtpThunk = createAsyncThunk<
   unknown,
-  { identifier: string; channel: 'email' | 'sms'; purpose: string },
+  { identifier: string; channel?: 'email' | 'sms'; purpose: string },
   { rejectValue: string }
 >('mobileClientAuth/resendOtp', async (payload, { rejectWithValue }) => {
+  const generateFallback = async () => {
+    const gen = await apiClient.post(
+      ENDPOINTS.otp.generate,
+      { identifier: payload.identifier, channel: payload.channel ?? 'email', purpose: payload.purpose },
+      { includeAuth: false },
+    )
+    const genFailure = clientAuthErrorFromResponse(gen.data, gen.status)
+    return genFailure ? rejectWithValue(genFailure.message) : gen.data
+  }
+
   try {
     const res = await apiClient.post(
       ENDPOINTS.otp.resend,
-      {
-        identifier: payload.identifier,
-        channel: payload.channel,
-        purpose: payload.purpose,
-      },
+      { identifier: payload.identifier, purpose: payload.purpose },
       { includeAuth: false },
     )
     const failure = clientAuthErrorFromResponse(res.data, res.status)
     if (failure) return rejectWithValue(failure.message)
     return res.data
   } catch (error: unknown) {
+    // apiClient throws on non-2xx; only a missing route (404) falls back to generate.
+    const status = (error as { response?: { status?: number } })?.response?.status
+    if (status === 404) {
+      try {
+        return await generateFallback()
+      } catch (genError: unknown) {
+        return rejectWithValue(normalizeClientAuthError(genError))
+      }
+    }
     return rejectWithValue(normalizeClientAuthError(error))
   }
 })

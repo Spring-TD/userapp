@@ -49,7 +49,9 @@ export async function fetchWithAuth(
   const token = typeof window !== 'undefined' && !skipAuth ? getAccessToken() : null;
   const headers = new Headers(init.headers);
   if (token && !skipAuth) headers.set('Authorization', `Bearer ${token}`);
-  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  // FormData needs the browser-generated multipart boundary, so never force JSON on it.
+  const isFormData = typeof FormData !== 'undefined' && init.body instanceof FormData;
+  if (!headers.has('Content-Type') && !isFormData) headers.set('Content-Type', 'application/json');
   attachTenantHeaders(headers);
 
   let res = await fetch(input, { ...init, headers, credentials: init.credentials ?? 'include' });

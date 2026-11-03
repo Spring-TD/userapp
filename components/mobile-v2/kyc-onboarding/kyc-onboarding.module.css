@@ -1,0 +1,50 @@
+/* Motion for the KYC onboarding flow (adapted from the "new kyc flow" prototype). */
+
+@keyframes slideIn { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes pop { 0% { transform: scale(.3); opacity: 0; } 55% { transform: scale(1.14); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+@keyframes draw { from { stroke-dashoffset: 30; } to { stroke-dashoffset: 0; } }
+@keyframes shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-8px); } 40% { transform: translateX(7px); } 60% { transform: translateX(-5px); } 80% { transform: translateX(3px); } }
+@keyframes scan { 0% { transform: translateY(-90px); } 50% { transform: translateY(90px); } 100% { transform: translateY(-90px); } }
+@keyframes caret { 50% { opacity: 0; } }
+@keyframes spinSlow { to { transform: rotate(360deg); } }
+@keyframes burst {
+  0% { transform: translate(0, 0) rotate(0) scale(.5); opacity: 1; }
+  25% { transform: translate(var(--dx1), var(--dy1)) rotate(var(--r1)) scale(1); opacity: 1; }
+  100% { transform: translate(var(--dx2), var(--dy2)) rotate(var(--r2)); opacity: 0; }
+}
+
+.slideIn { animation: slideIn .45s cubic-bezier(.32, .72, 0, 1) both; }
+.pop { animation: pop .6s cubic-bezier(.34, 1.56, .64, 1) both; }
+.rise { animation: rise .5s cubic-bezier(.32, .72, 0, 1) both; }
+.draw { stroke-dasharray: 30; animation: draw .5s ease-out .15s both; }
+.shake { animation: shake .5s ease; }
+.caret { animation: caret 1s step-end infinite; }
+.scanLine { animation: scan 2.2s ease-in-out infinite; }
+.rays { animation: spinSlow 14s linear infinite; }
+
+@keyframes pulseRing {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--sf-button, #1E40AF) 38%, transparent); }
+  50% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--sf-button, #1E40AF) 0%, transparent); }
+}
+.pulse { animation: pulseRing .9s ease-in-out infinite; }
+
+@keyframes floatUp {
+  0% { opacity: 0; transform: translateY(8px) scale(.8); }
+  20% { opacity: 1; transform: translateY(0) scale(1.06); }
+  100% { opacity: 0; transform: translateY(-44px); }
+}
+.floatUp { animation: floatUp 1.3s ease-out both; }
+
+.confetti {
+  position: absolute;
+  animation: burst 1.7s cubic-bezier(.15, .7, .35, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slideIn, .pop, .rise, .draw, .shake, .confetti, .scanLine, .rays, .pulse, .floatUp {
+    animation-duration: .01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

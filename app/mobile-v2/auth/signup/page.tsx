@@ -1,12 +1,21 @@
 'use client';
 
-import React, { Suspense, useEffect, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
-import { CountrySelect } from '@/components/ui/country-select';
+import { TermsConsentSheet, legalPageHref } from '@/components/mobile-v2/TermsConsentSheet';
+import {
+  buildLegalDocs,
+  clearSignupDraft,
+  readSignupDraft,
+  writeSignupDraft,
+  type LegalTab,
+} from '@/lib/legalContent';
+import { supportFromManifest } from '@/lib/mobileManifestContent';
+import { cn } from '@/lib/utils';
+import { CountryPickerField } from '@/components/mobile-v2/CountryPickerField';
 import { toast } from 'sonner';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import {
@@ -68,7 +77,11 @@ function SignupForm() {
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [consent, setConsent] = useState<Record<LegalTab, boolean>>({ terms: false, privacy: false });
+  const termsAccepted = consent.terms && consent.privacy;
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetTab, setSheetTab] = useState<LegalTab>('terms');
+  const [agreeShake, setAgreeShake] = useState(0);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const [firstName, setFirstName] = useState('');
@@ -80,6 +93,66 @@ function SignupForm() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const legalDocs = useMemo(
+    () =>
+      buildLegalDocs({
+        storeName: tenant.branding?.companyName ?? displayName,
+        supportEmail: supportFromManifest(tenant.pwaManifest).contactEmail,
+      }),
+    [tenant.branding?.companyName, displayName, tenant.pwaManifest],
+  );
+
+  // Restore the form (and any consent given on the full terms page) after returning from it.
+  useEffect(() => {
+    const d = readSignupDraft();
+    if (d.firstName) setFirstName(d.firstName);
+    if (d.lastName) setLastName(d.lastName);
+    if (d.email) setEmail(d.email);
+    if (d.phone) setPhone(d.phone);
+    if (d.country) setCountry(d.country);
+    if (d.consent) setConsent({ terms: d.consent.terms === true, privacy: d.consent.privacy === true });
+  }, []);
+
+  // Skip the very first run: it still holds the empty initial values and would wipe the draft before it's restored.
+  const skipFirstDraftSave = useRef(true);
+  useEffect(() => {
+    if (skipFirstDraftSave.current) {
+      skipFirstDraftSave.current = false;
+      return;
+    }
+    writeSignupDraft({ firstName, lastName, email, phone, country, consent });
+  }, [firstName, lastName, email, phone, country, consent]);
+
+  const openSheet = useCallback((tab?: LegalTab) => {
+    setSheetTab(tab ?? (consent.terms ? 'privacy' : 'terms'));
+    setSheetOpen(true);
+  }, [consent.terms]);
+  const closeSheet = useCallback(() => setSheetOpen(false), []);
+
+  const acceptDoc = (tab: LegalTab) => {
+    const next = { ...consent, [tab]: true };
+    setConsent(next);
+    setFieldErrors((prev) => {
+      const { terms: _drop, ...rest } = prev;
+      return rest;
+    });
+    // Move to the other document, or close once both are accepted.
+    if (next.terms && next.privacy) setTimeout(() => setSheetOpen(false), 650);
+    else setTimeout(() => setSheetTab(tab === 'terms' ? 'privacy' : 'terms'), 550);
+  };
+
+  const onAgreeBoxClick = () => {
+    if (termsAccepted) setConsent({ terms: false, privacy: false });
+    else openSheet();
+  };
+
+  const consentHint =
+    consent.terms && !consent.privacy
+      ? 'Terms accepted. Privacy Policy to go.'
+      : consent.privacy && !consent.terms
+        ? 'Privacy Policy accepted. Terms to go.'
+        : '';
 
   useEffect(() => {
     if (!error) return;
@@ -113,6 +186,11 @@ function SignupForm() {
   const handleRegister = async () => {
     if (isSubmitting) {
       console.log('[signup] blocked — already submitting');
+      return;
+    }
+    if (!termsAccepted) {
+      setAgreeShake((k) => k + 1);
+      openSheet();
       return;
     }
     setSubmitError(null);
@@ -214,6 +292,7 @@ function SignupForm() {
         toast.success('Check your email for the 6-digit verification code.');
       }
 
+      clearSignupDraft();
       console.log('[signup] 6 navigate to verify-otp');
       router.push(`/mobile-v2/auth/verify-otp?email=${encodeURIComponent(payload.email)}`);
     } catch (err: unknown) {
@@ -239,7 +318,14 @@ function SignupForm() {
   };
 
   return (
-    <div className="relative flex h-full flex-col sf-page-bg p-6 pt-12 text-[#1E293B]">
+    <div className="relative h-full overflow-hidden bg-[#0E0B1F]">
+    <div
+      className={cn(
+        'relative flex h-full origin-top flex-col sf-page-bg p-6 pt-12 text-[#1E293B] transition-[transform,border-radius] duration-[550ms] ease-[cubic-bezier(.32,.72,0,1)]',
+        sheetOpen && 'translate-y-2.5 scale-[0.92] overflow-hidden rounded-[30px]',
+      )}
+      aria-hidden={sheetOpen || undefined}
+    >
       <div className="mb-8 flex items-center justify-between">
         <Link href="/mobile-v2" className="-ml-2 rounded-full p-2 transition-colors hover:bg-black/5">
           <ChevronLeft className="h-6 w-6" />
@@ -323,18 +409,12 @@ function SignupForm() {
           error={fieldErrors.phone}
           autoComplete="tel"
         />
-        <div className="space-y-1">
-          <label htmlFor="country_select" className="sr-only">
-            Country
-          </label>
-          <CountrySelect
-            value={country}
-            onValueChange={setCountry}
-            placeholder="Select country"
-            triggerClassName="h-14 w-full rounded-2xl border-0 bg-white px-4 text-base shadow-[0_2px_10px_rgba(0,0,0,0.03)] focus:ring-2 focus:ring-[var(--sf-primary,#2563EB)]/20"
-          />
-          {fieldErrors.country && <p className="text-xs text-red-600">{fieldErrors.country}</p>}
-        </div>
+        <CountryPickerField
+          id="country"
+          value={country}
+          onChange={setCountry}
+          error={fieldErrors.country}
+        />
 
         <div className="relative group">
           <input
@@ -390,21 +470,70 @@ function SignupForm() {
           )}
         </div>
 
-        <div className="mt-6 flex items-start gap-3 px-1">
-          <Checkbox
-            id="terms"
-            checked={termsAccepted}
-            onCheckedChange={(v) => setTermsAccepted(v === true)}
-            className="mt-1 border-gray-400 data-[state=checked]:border-[var(--sf-primary,#2563EB)] data-[state=checked]:bg-[var(--sf-primary,#2563EB)]"
-          />
-          <label htmlFor="terms" className="text-sm leading-relaxed text-[#1E293B]">
+        <div
+          key={agreeShake}
+          className={cn('mt-6 flex items-start gap-3 px-1', agreeShake > 0 && 'animate-[signup-shake_.5s_ease]')}
+        >
+          <button
+            type="button"
+            role="checkbox"
+            aria-checked={termsAccepted}
+            aria-label="Agree to the Terms of Service and Privacy Policy"
+            onClick={onAgreeBoxClick}
+            className="-m-2.5 flex h-11 w-11 shrink-0 items-center justify-center"
+          >
+            <span
+              className={cn(
+                'flex h-6 w-6 items-center justify-center rounded-lg border-[1.8px] transition-[background-color,border-color,transform] duration-300 ease-[cubic-bezier(.34,1.56,.64,1)]',
+                termsAccepted
+                  ? 'scale-[1.08] border-[var(--sf-button,#1E40AF)] bg-[var(--sf-button,#1E40AF)]'
+                  : 'border-gray-400 bg-white',
+              )}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
+                <path
+                  d="M2.5 7.4 L5.6 10.4 L11.5 3.8"
+                  fill="none"
+                  stroke="#fff"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeDasharray="16"
+                  strokeDashoffset={termsAccepted ? 0 : 16}
+                  style={{ transition: 'stroke-dashoffset .35s ease .08s' }}
+                />
+              </svg>
+            </span>
+          </button>
+          <p className="text-[15px] leading-relaxed text-[#3F4457]">
             By signing up, you agree to the{' '}
-            <Link href="/mobile-v2/profile/terms" className="text-[var(--sf-primary,#2563EB)]">
-              Terms of Service and Privacy Policy
-            </Link>
-          </label>
+            <button
+              type="button"
+              onClick={() => openSheet('terms')}
+              className="inline font-medium text-[var(--sf-primary,#2563EB)] hover:underline"
+            >
+              Terms of Service
+            </button>{' '}
+            and{' '}
+            <button
+              type="button"
+              onClick={() => openSheet('privacy')}
+              className="inline font-medium text-[var(--sf-primary,#2563EB)] hover:underline"
+            >
+              Privacy Policy
+            </button>
+          </p>
         </div>
+        <p className="ml-9 min-h-[18px] text-[13px] leading-snug text-[var(--sf-primary,#2563EB)]" aria-live="polite">
+          {consentHint}
+        </p>
         {fieldErrors.terms && <p className="text-xs text-red-600">{fieldErrors.terms}</p>}
+        <p className="px-1 text-xs text-gray-400">
+          Prefer the full text?{' '}
+          <Link href={legalPageHref('terms', 'signup')} className="underline underline-offset-2">
+            Read the full Terms &amp; Privacy
+          </Link>
+        </p>
       </div>
 
       <div className="mb-4 mt-4 space-y-3">
@@ -418,13 +547,26 @@ function SignupForm() {
         ) : null}
         <Button
           type="button"
-          className="h-14 w-full rounded-[20px] bg-[var(--sf-button,#1E40AF)] text-base font-medium text-white shadow-lg shadow-blue-900/20 hover:opacity-95"
+          className={cn(
+            'h-14 w-full rounded-[20px] bg-[var(--sf-button,#1E40AF)] text-base font-medium text-white shadow-lg shadow-blue-900/20 transition-opacity duration-300 hover:opacity-95',
+            !termsAccepted && 'opacity-45 hover:opacity-55',
+          )}
           disabled={isSubmitting || loading || !tenantReady || (!merchantId && !resolvedSubdomain)}
           onClick={() => void handleRegister()}
         >
           {isSubmitting || loading ? 'Please wait…' : 'Register'}
         </Button>
       </div>
+    </div>
+      <TermsConsentSheet
+        open={sheetOpen}
+        tab={sheetTab}
+        onTabChange={setSheetTab}
+        docs={legalDocs}
+        consent={consent}
+        onAccept={acceptDoc}
+        onClose={closeSheet}
+      />
     </div>
   );
 }

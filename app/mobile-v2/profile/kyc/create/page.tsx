@@ -1,164 +1,368 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
-import { ChevronLeft, ExternalLink, Loader2, ScanFace, Sparkles } from 'lucide-react';
+/**
+ * Retail KYC onboarding (Level 1 → 3) — the "new kyc flow" prototype, driven by account-ms
+ * `GET /api/v1/kyc/onboarding`. Users land here right after login while KYC is incomplete:
+ * Welcome → (Start) Contacts → BVN → NIN (Level 2) → Face → Address + proof → Finalising → Done (Level 3).
+ * "I'll do this later" / "Save & exit" go into the real app; progress lives on the server.
+ */
+
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
 import { getSecureAccessTokenSync } from '@/lib/tokenManager';
-import {
-  formatKycClientError,
-  isFuspayCustomerMissingError,
-  KYC_FUSPAY_MISSING_MESSAGE,
-  KYC_TENANT_REQUIRED_MESSAGE,
-  openModularKycUrl,
-  resolveModularKycLink,
-} from '@/lib/kycModularClient';
 import { fetchAuthUserProfile } from '@/lib/userProfileClient';
-import { isUserKycApprovedFromProfile } from '@/lib/kycApproval';
+import {
+  DEFAULT_MOBILE_HOME,
+  transactionPinSetupPath,
+  userNeedsTransactionPinSetup,
+} from '@/lib/transactionPinRouting';
+import { safeMobileReturnPath } from '@/lib/userKycRouting';
+import {
+  kycOnboarding,
+  OnboardingApiError,
+  readFaceReference,
+  type OnboardingProgress,
+} from '@/lib/kycOnboardingClient';
+import {
+  AddressScreen,
+  ContactsScreen,
+  DoneScreen,
+  FaceScreen,
+  FinalisingScreen,
+  IdentityScreen,
+  WelcomeScreen,
+  type AddressSubmission,
+} from '@/components/mobile-v2/kyc-onboarding/screens';
+import { Confetti, LevelUpModal, MilestonePop, PrimaryButton, StepChrome } from '@/components/mobile-v2/kyc-onboarding/ui';
 
-function KycHero() {
-  return (
-    <div className="flex flex-col items-center px-2 text-center">
-      <div className="relative mb-6">
-        <div className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[color-mix(in_srgb,var(--sf-button,#1E40AF)_18%,white)] blur-2xl" />
-        <div className="relative flex h-[72px] w-[72px] items-center justify-center rounded-[22px] bg-gradient-to-br from-white to-[var(--sf-accent-soft,#eff6ff)] shadow-[0_8px_30px_color-mix(in_srgb,var(--sf-button,#1E40AF)_12%,transparent)] ring-1 ring-[var(--sf-border,#dbeafe)]">
-          <ScanFace className="h-9 w-9 sf-text-button" strokeWidth={1.75} />
-        </div>
-        <div className="absolute -right-1 -top-1 flex h-7 w-7 items-center justify-center rounded-full bg-[var(--sf-button,#1E40AF)] text-white shadow-md">
-          <Sparkles className="h-3.5 w-3.5" />
-        </div>
-      </div>
-      <h2 className="max-w-[280px] text-[26px] font-bold leading-tight tracking-tight text-[#1E293B]">
-        Verify your identity
-      </h2>
-      <p className="mt-3 max-w-[300px] text-sm leading-6 text-gray-500">
-        Tap Start KYC to open FusPay and complete verification with your QR scan.
-      </p>
-    </div>
-  );
-}
+type View = 'loading' | 'welcome' | 'step' | 'finalising' | 'done' | 'error';
+type StepResult = { progress: OnboardingProgress; json: Record<string, unknown> };
 
-function CreateKycContent() {
+const STEP_ORDER: OnboardingProgress['currentStep'][] = ['contacts', 'identity_bvn', 'identity_nin', 'face', 'address', 'done'];
+
+const SEGMENT_INDEX: Record<OnboardingProgress['currentStep'], number> = {
+  contacts: 0,
+  identity_bvn: 1,
+  identity_nin: 1,
+  face: 2,
+  address: 3,
+  done: 3,
+};
+
+function KycOnboardingFlow() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const fromRegistration = searchParams.get('from') === 'registration';
   const initialEmail = searchParams.get('email')?.trim().toLowerCase() || '';
+  /** Where "the real app" is for this user (login may have been heading somewhere specific). */
+  const appTarget = safeMobileReturnPath(searchParams.get('next'), DEFAULT_MOBILE_HOME);
+
+  const [view, setView] = useState<View>('loading');
+  const [progress, setProgress] = useState<OnboardingProgress | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
+  const [milestone, setMilestone] = useState<{ title: string; sub: string } | null>(null);
+  const [levelUp, setLevelUp] = useState(false);
+  const [confettiKey, setConfettiKey] = useState(0);
+  const [award, setAward] = useState<{ amount: number; key: number } | null>(null);
+  const [finalStage, setFinalStage] = useState(0);
+  const [addressError, setAddressError] = useState<string | null>(null);
+  const [contactsPhase, setContactsPhase] = useState<string>('phone');
+  const [leaving, setLeaving] = useState(false);
+  /**
+   * The step on screen. The server moves `currentStep` forward the moment a check succeeds, but the
+   * prototype keeps the result card ("BVN confirmed… Looks right, continue") until the user taps on.
+   */
+  const [shownStep, setShownStep] = useState<OnboardingProgress['currentStep'] | null>(null);
+  const [contactsKey, setContactsKey] = useState(0);
+  const [profile, setProfile] = useState<{ phone: string; email: string }>({ phone: '', email: initialEmail });
 
-  const loginRedirectPath = useMemo(() => {
-    const params = new URLSearchParams({ from: 'registration' });
-    if (initialEmail) params.set('email', initialEmail);
-    return `/mobile-v2/profile/kyc/create?${params.toString()}`;
-  }, [initialEmail]);
+  const loginUrl = useMemo(() => {
+    const self = `/mobile-v2/profile/kyc/create?${searchParams.toString()}`;
+    return `/mobile-v2/auth/login?email=${encodeURIComponent(initialEmail)}&next=${encodeURIComponent(self)}`;
+  }, [initialEmail, searchParams]);
 
-  useEffect(() => {
-    if (!fromRegistration) return;
-    if (getSecureAccessTokenSync()) return;
-    const loginUrl = `/mobile-v2/auth/login?email=${encodeURIComponent(initialEmail)}&verified=1&next=${encodeURIComponent(loginRedirectPath)}`;
-    router.replace(loginUrl);
-  }, [fromRegistration, initialEmail, loginRedirectPath, router]);
+  const celebrate = () => setConfettiKey((k) => k + 1);
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const profile = await fetchAuthUserProfile();
-      if (cancelled) return;
-      if (isUserKycApprovedFromProfile(profile.kycStatus, profile.kycCompleted)) {
-        router.replace('/mobile-v2/home');
+  /** Apply a fresh progress snapshot; float "+N pts" when the server awarded points. */
+  const applyProgress = useCallback((next: OnboardingProgress) => {
+    setProgress(next);
+    if (next.pointsAwardedJustNow > 0) {
+      setAward({ amount: next.pointsAwardedJustNow, key: Date.now() });
+      setConfettiKey((k) => k + 1);
+    }
+  }, []);
+
+  const isAuthError = useCallback(
+    (err: unknown) => {
+      if (err instanceof OnboardingApiError && err.status === 401) {
+        router.replace(loginUrl);
+        return true;
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [router]);
+      return false;
+    },
+    [loginUrl, router],
+  );
 
-  const handleStartKyc = async () => {
-    setStarting(true);
-    setError(null);
+  /** Leave onboarding for the real app — via transaction-PIN setup when the user has none yet. */
+  const goToApp = useCallback(async () => {
+    setLeaving(true);
+    let target = appTarget;
     try {
-      const result = await resolveModularKycLink();
-      openModularKycUrl(result.url);
+      if (await userNeedsTransactionPinSetup()) target = transactionPinSetupPath(appTarget);
+    } catch {
+      /* PIN status unavailable — go straight in */
+    }
+    router.replace(target);
+  }, [appTarget, router]);
+
+  const load = useCallback(async () => {
+    setView('loading');
+    setLoadError(null);
+    setShownStep(null);
+    try {
+      const { progress: p } = await kycOnboarding.get();
+      setProgress(p);
+      if (p.currentStep === 'done') setView('done');
+      // Returning from the hosted face check: resume the step directly. Otherwise always offer the welcome.
+      else if (readFaceReference() && p.currentStep === 'face') setView('step');
+      else setView('welcome');
     } catch (err) {
-      const message = formatKycClientError(err instanceof Error ? err.message : 'Could not start KYC verification');
-      if (/tenant|subdomain/i.test(message)) {
-        setError(KYC_TENANT_REQUIRED_MESSAGE);
-      } else if (isFuspayCustomerMissingError(message)) {
-        setError(KYC_FUSPAY_MISSING_MESSAGE);
-      } else if (/token|authentication|unauthorized/i.test(message)) {
-        router.replace(
-          `/mobile-v2/auth/login?email=${encodeURIComponent(initialEmail)}&verified=1&next=${encodeURIComponent(loginRedirectPath)}`,
-        );
+      if (isAuthError(err)) return;
+      if (err instanceof OnboardingApiError && err.status === 404) {
+        setView('welcome'); // no retail profile yet — `start` creates it
         return;
-      } else {
-        setError(message);
       }
-      toast.error(message);
+      setLoadError(err instanceof Error ? err.message : 'Could not load your verification progress.');
+      setView('error');
+    }
+  }, [isAuthError]);
+
+  useEffect(() => {
+    if (!getSecureAccessTokenSync() && fromRegistration) {
+      router.replace(loginUrl);
+      return;
+    }
+    void load();
+    void fetchAuthUserProfile().then(({ user }) => {
+      setProfile((prev) => ({ phone: user?.phone ?? prev.phone, email: user?.email ?? prev.email }));
+    });
+  }, [fromRegistration, load, loginUrl, router]);
+
+  const handleStart = async () => {
+    setStarting(true);
+    setStartError(null);
+    try {
+      const { progress: p } = await kycOnboarding.start();
+      setShownStep(null);
+      applyProgress(p);
+      setView(p.currentStep === 'done' ? 'done' : 'step');
+    } catch (err) {
+      if (isAuthError(err)) return;
+      setStartError(err instanceof Error ? err.message : 'Could not start verification.');
     } finally {
       setStarting(false);
     }
   };
 
+  const saveAndExit = () => {
+    toast.success('Progress saved', { description: 'Pick up anytime from Profile, KYC.' });
+    void goToApp();
+  };
+
+  /** After each step: update progress and play the prototype's celebration for that step. */
+  const handleStepDone = (step: OnboardingProgress['currentStep'], { progress: next }: StepResult) => {
+    applyProgress(next);
+    if (next.currentStep === 'done') {
+      celebrate();
+      setView('done');
+      return;
+    }
+    if (step === 'contacts') {
+      celebrate();
+      setMilestone({ title: 'Contacts verified', sub: 'Phone and email are confirmed.' });
+      setTimeout(() => setMilestone(null), 2000);
+    } else if (step === 'identity_nin' && next.level >= 2) {
+      celebrate();
+      setLevelUp(true);
+    } else if (step === 'face') {
+      celebrate();
+      setMilestone({ title: 'Face matched', sub: 'Your selfie matches your BVN photo.' });
+      setTimeout(() => setMilestone(null), 2000);
+    }
+  };
+
+  const handleAddressSubmit = async (address: AddressSubmission) => {
+    if (!progress) return;
+    setAddressError(null);
+    setFinalStage(0);
+    setView('finalising');
+    let latest = progress;
+    try {
+      if (!latest.steps.addressVerified) {
+        latest = (await kycOnboarding.saveAddress(address)).progress;
+        applyProgress(latest);
+      }
+      setFinalStage(1);
+      await new Promise((r) => setTimeout(r, 500));
+      latest = (await kycOnboarding.complete()).progress;
+      applyProgress(latest);
+      setFinalStage(2);
+      await new Promise((r) => setTimeout(r, 700));
+      setFinalStage(3);
+      await new Promise((r) => setTimeout(r, 500));
+      celebrate();
+      setView('done');
+    } catch (err) {
+      if (isAuthError(err)) return;
+      setAddressError(err instanceof Error ? err.message : 'Could not finish verification.');
+      setShownStep('address');
+      setView('step');
+    }
+  };
+
+  useEffect(() => {
+    if (view === 'step' && progress && shownStep === null) setShownStep(progress.currentStep);
+  }, [progress, shownStep, view]);
+  /**
+   * Move past a finished step. The step's own response can still report the same `currentStep`
+   * (e.g. client-auth flags not synced yet), which used to leave the user on a finished screen.
+   * So: re-read progress (GET syncs phone/email flags), and if the server still hasn't moved,
+   * go to the next step in order. Contacts with an explicitly unverified email reopens on the email code.
+   */
+  const advance = async (step: OnboardingProgress['currentStep'], r: StepResult) => {
+    let result = r;
+    if (r.progress.currentStep === step) {
+      try {
+        result = await kycOnboarding.get();
+      } catch (err) {
+        if (isAuthError(err)) return;
+      }
+    }
+    let nextStep = result.progress.currentStep;
+    if (nextStep === step) {
+      if (step === 'contacts' && result.progress.steps.emailVerified === false) {
+        applyProgress(result.progress);
+        setContactsKey((k) => k + 1);
+        return;
+      }
+      nextStep = STEP_ORDER[STEP_ORDER.indexOf(step) + 1] ?? 'done';
+      console.warn('[kyc] server still on step after completion; advancing locally', { step, progress: result.progress.raw });
+    }
+    handleStepDone(step, { ...result, progress: { ...result.progress, currentStep: nextStep } });
+    setShownStep(nextStep);
+  };
+
+  const stepProgress = progress && shownStep ? { ...progress, currentStep: shownStep } : progress;
+
   return (
-    <div className="flex h-full flex-col sf-page-bg">
-      <div className="mb-2 flex items-center px-6 pt-12">
-        <Link
-          href={fromRegistration ? '/mobile-v2/auth/login' : '/mobile-v2/profile'}
-          className="-ml-2 flex h-10 w-10 items-center justify-center rounded-full text-gray-700 transition-colors hover:bg-black/5"
-        >
-          <ChevronLeft className="h-6 w-6" />
-        </Link>
-        <h1 className="mr-8 flex-1 text-center text-lg font-bold text-[#1E293B]">KYC</h1>
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-10 no-scrollbar">
-        <div className="mx-auto w-full max-w-md pt-4">
-          <KycHero />
-
-          <div className="mt-10 space-y-4">
-            {error ? (
-              <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-center text-sm leading-6 text-red-700">
-                {error}
-              </div>
-            ) : null}
-
-            <div className="overflow-hidden rounded-[28px] border border-gray-100 bg-white px-6 py-8 text-center shadow-sm">
-              <p className="mx-auto mb-6 max-w-[280px] text-sm leading-6 text-gray-500">
-                You will be redirected to FusPay to scan and verify. When finished, you will return here automatically.
-              </p>
-
-              <Button
-                type="button"
-                className="h-12 w-full max-w-xs rounded-2xl bg-[var(--sf-button,#1E40AF)] text-sm font-semibold shadow-[0_10px_24px_rgba(30,64,175,0.22)] hover:bg-[var(--sf-button,#1E40AF)]"
-                disabled={starting}
-                onClick={() => void handleStartKyc()}
-              >
-                {starting ? (
-                  <span className="inline-flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                    Opening FusPay...
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-2">
-                    Start KYC
-                    <ExternalLink className="h-4 w-4" />
-                  </span>
-                )}
-              </Button>
-            </div>
-          </div>
+    <div className="relative flex h-full flex-col overflow-hidden bg-[#F4F6FD] text-[#1E293B]">
+      {(view === 'loading' || leaving) && (
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-[#F4F6FD] text-sm text-gray-500">
+          <Loader2 className="h-6 w-6 animate-spin text-[var(--sf-primary,#2563EB)]" />
+          {leaving ? 'Opening your account…' : 'Loading your verification…'}
         </div>
-      </div>
+      )}
+
+      {view === 'error' && (
+        <div className="flex h-full flex-col items-center justify-center gap-4 px-8 text-center">
+          <p className="text-lg font-semibold text-[var(--sf-ink,#1E1B4B)]">We couldn&apos;t load your verification</p>
+          <p className="text-sm text-gray-500">{loadError}</p>
+          <PrimaryButton className="max-w-xs" onClick={() => void load()}>
+            Try again
+          </PrimaryButton>
+          <button type="button" onClick={() => void goToApp()} className="min-h-11 text-sm font-semibold text-gray-500">
+            Skip for now
+          </button>
+        </div>
+      )}
+
+      {view === 'welcome' && (
+        <WelcomeScreen
+          justSignedUp={fromRegistration}
+          progress={progress}
+          starting={starting}
+          error={startError}
+          onStart={() => void handleStart()}
+          onLater={() => {
+            toast.message('No problem', { description: 'Finish anytime from Profile, KYC.' });
+            void goToApp();
+          }}
+        />
+      )}
+
+      {view === 'step' && stepProgress && (
+        <>
+          <StepChrome
+            progress={stepProgress}
+            activeIndex={SEGMENT_INDEX[stepProgress.currentStep]}
+            onSaveExit={saveAndExit}
+            onBack={stepProgress.currentStep === 'contacts' && contactsPhase === 'phone' ? () => setView('welcome') : undefined}
+            award={award}
+          />
+          {(() => {
+            const p = stepProgress;
+            const onProgress = (r: StepResult) => applyProgress(r.progress);
+            switch (p.currentStep) {
+              case 'contacts':
+                return (
+                  <ContactsScreen
+                    key={`contacts-${contactsKey}`}
+                    progress={p}
+                    initialPhone={profile.phone}
+                    email={profile.email}
+                    onPhase={setContactsPhase}
+                    onProgress={onProgress}
+                    onDone={(r) => void advance('contacts', r)}
+                  />
+                );
+              case 'identity_bvn':
+                return <IdentityScreen key="bvn" kind="bvn" onProgress={onProgress} onDone={(r) => void advance('identity_bvn', r)} />;
+              case 'identity_nin':
+                return <IdentityScreen key="nin" kind="nin" onProgress={onProgress} onDone={(r) => void advance('identity_nin', r)} />;
+              case 'face':
+                return <FaceScreen onDone={(r) => void advance('face', r)} />;
+              case 'address':
+                return (
+                  <AddressScreen
+                    progress={p}
+                    error={addressError}
+                    onProgress={onProgress}
+                    onSubmit={(input) => void handleAddressSubmit(input)}
+                  />
+                );
+              default:
+                return null;
+            }
+          })()}
+        </>
+      )}
+
+      {view === 'finalising' && <FinalisingScreen stage={finalStage} />}
+      {view === 'done' && <DoneScreen points={progress?.points ?? 0} onHome={() => void goToApp()} />}
+
+      {milestone && <MilestonePop title={milestone.title} sub={milestone.sub} />}
+      {levelUp && (
+        <LevelUpModal
+          level={2}
+          sub="Your identity is confirmed. You can now fund your wallet and send money."
+          onContinue={() => setLevelUp(false)}
+        />
+      )}
+      {confettiKey > 0 && <Confetti key={confettiKey} />}
     </div>
   );
 }
 
 export default function CreateKycPage() {
   return (
-    <Suspense fallback={<div className="flex h-full items-center justify-center sf-page-bg text-sm text-gray-500">Loading KYC...</div>}>
-      <CreateKycContent />
+    <Suspense
+      fallback={<div className="flex h-full items-center justify-center bg-[#F4F6FD] text-sm text-gray-500">Loading KYC…</div>}
+    >
+      <KycOnboardingFlow />
     </Suspense>
   );
 }
