@@ -320,8 +320,8 @@ export class Auth {
         code: body.code ?? body.otp,
         ...(body.purpose != null && { purpose: body.purpose }),
       };
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (authHeader) headers['Authorization'] = authHeader;
+      // Tenant headers are required: OTP verify must resolve the same storefront as signup.
+      const headers = mergeStorefrontHeaders(request, authHeader ? { Authorization: authHeader } : undefined);
       const res = await axios.post(buildUrl(BACKEND.otp.verify), backendBody, { ...axiosConfig, headers });
       return NextResponse.json(res.data, { status: res.status });
     } catch (err: unknown) {
@@ -332,28 +332,25 @@ export class Auth {
   }
 
   /** POST /api/v1/otp/resend — Public.
-   * Accepts:
-   * - { email }
-   * - { identifier }
-   * - { identifier, channel, purpose }
+   * Upstream contract (account-ms): `{ identifier, purpose? }` + tenant headers.
+   * Accepts `{ email }` as an alias for `identifier`; `channel` is not part of the resend contract and is dropped.
    */
   static async resendEmailOtp(request: NextRequest) {
     try {
       const body = (await request.json()) as Record<string, unknown>;
-      const payload: Record<string, unknown> = {};
+      const identifier = ((body.identifier as string) ?? (body.email as string) ?? '').trim();
+      if (!identifier) {
+        return NextResponse.json({ success: false, error: 'identifier is required' }, { status: 400 });
+      }
+      const payload: Record<string, unknown> = {
+        identifier,
+        ...(body.purpose ? { purpose: body.purpose } : {}),
+      };
 
-      const identifier = (body.identifier as string) ?? (body.email as string);
-      if (identifier) {
-        payload.identifier = identifier;
-      }
-      if (body.channel) {
-        payload.channel = body.channel;
-      }
-      if (body.purpose) {
-        payload.purpose = body.purpose;
-      }
-
-      const res = await axios.post(buildUrl(BACKEND.otp.resend), payload, axiosConfig);
+      const res = await axios.post(buildUrl(BACKEND.otp.resend), payload, {
+        ...axiosConfig,
+        headers: mergeStorefrontHeaders(request),
+      });
       return NextResponse.json(res.data, { status: res.status });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to resend OTP';
@@ -365,7 +362,10 @@ export class Auth {
   static async otpGenerate(request: NextRequest) {
     try {
       const body = await request.json();
-      const res = await axios.post(buildUrl(BACKEND.otp.generate), body, axiosConfig);
+      const res = await axios.post(buildUrl(BACKEND.otp.generate), body, {
+        ...axiosConfig,
+        headers: mergeStorefrontHeaders(request),
+      });
       return NextResponse.json(res.data, { status: res.status });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to generate OTP';

@@ -57,7 +57,7 @@ export interface RegisterUserResponse {
 
 export interface OtpGenerateDto {
   identifier: string
-  channel: "email" | "sms"
+  channel: "email" | "sms" | "whatsapp"
   purpose: string
 }
 
