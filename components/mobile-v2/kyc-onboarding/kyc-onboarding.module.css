@@ -1,4 +1,4 @@
-/* Motion for the KYC onboarding flow (adapted from the "new kyc flow" prototype design). */
+/* Motion for the KYC onboarding flow (adapted from the "new kyc flow" prototype design doc). */
 
 @keyframes slideIn { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
 @keyframes pop { 0% { transform: scale(.3); opacity: 0; } 55% { transform: scale(1.14); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
