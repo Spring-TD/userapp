@@ -21,6 +21,7 @@ import {
   pickNinAddress,
   pickVerifiedName,
   readFaceReference,
+  selfieToBase64,
   storeFaceReference,
   uploadProofWithProgress,
   type OnboardingProgress,
@@ -671,11 +672,13 @@ export function FaceScreen({ onDone }: { onDone: (r: StepResult) => void }) {
   const [phase, setPhase] = useState<Phase>(() => (readFaceReference() ? 'checking' : 'intro'));
   const [error, setError] = useState<string | null>(null);
 
-  const finishCheck = async (reference: string | null) => {
+  const selfieInput = useRef<HTMLInputElement>(null);
+
+  const finishCheck = async (reference: string | null, photoBase64?: string | null) => {
     setPhase('checking');
     setError(null);
     try {
-      const r = await kycOnboarding.completeFace(reference && reference !== 'pending' ? reference : null);
+      const r = await kycOnboarding.completeFace(reference && reference !== 'pending' ? reference : null, photoBase64);
       if (r.progress.steps.faceVerified || r.progress.currentStep !== 'face') {
         storeFaceReference(null);
         setPhase('ok');
@@ -697,9 +700,28 @@ export function FaceScreen({ onDone }: { onDone: (r: StepResult) => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   }, []);
 
-  const start = async () => {
+  // Open the front camera straight from the tap (browsers block it after an await).
+  const openCamera = () => {
+    setError(null);
+    storeFaceReference(null);
+    if (selfieInput.current) {
+      selfieInput.current.value = '';
+      selfieInput.current.click();
+    }
+  };
+
+  const onSelfie = async (file: File | undefined) => {
+    if (!file) return;
     setPhase('starting');
     setError(null);
+    let photoBase64: string;
+    try {
+      photoBase64 = await selfieToBase64(file);
+    } catch (err) {
+      setPhase('intro');
+      setError(errorText(err, 'Could not read that photo. Try taking it again.'));
+      return;
+    }
     try {
       const r = await kycOnboarding.startFace();
       if (r.progress.steps.faceVerified) {
@@ -712,7 +734,7 @@ export function FaceScreen({ onDone }: { onDone: (r: StepResult) => void }) {
         window.location.assign(url);
         return;
       }
-      await finishCheck(reference);
+      await finishCheck(reference, photoBase64);
     } catch (err) {
       setPhase('intro');
       setError(errorText(err, 'Could not start the face check.'));
@@ -774,24 +796,32 @@ export function FaceScreen({ onDone }: { onDone: (r: StepResult) => void }) {
         <ErrorNote>{error}</ErrorNote>
       </div>
 
+      <input
+        ref={selfieInput}
+        type="file"
+        accept="image/*"
+        capture="user"
+        className="hidden"
+        onChange={(e) => void onSelfie(e.target.files?.[0])}
+      />
+
       <div className="mt-auto flex flex-col gap-1 pt-6">
         {phase === 'failed' ? (
           <>
-            <PrimaryButton onClick={() => void finishCheck(readFaceReference())}>Check again</PrimaryButton>
-            <button
-              type="button"
-              onClick={() => {
-                storeFaceReference(null);
-                void start();
-              }}
-              className="min-h-11 text-[15px] font-semibold text-[var(--sf-primary,#2563EB)]"
-            >
-              Restart face check
-            </button>
+            <PrimaryButton onClick={openCamera}>Take a new selfie</PrimaryButton>
+            {readFaceReference() ? (
+              <button
+                type="button"
+                onClick={() => void finishCheck(readFaceReference())}
+                className="min-h-11 text-[15px] font-semibold text-[var(--sf-primary,#2563EB)]"
+              >
+                Check again
+              </button>
+            ) : null}
           </>
         ) : (
-          <PrimaryButton loading={phase === 'starting'} onClick={() => void start()}>
-            {phase === 'starting' ? 'Opening camera…' : 'Start face check'}
+          <PrimaryButton loading={phase === 'starting'} onClick={openCamera}>
+            {phase === 'starting' ? 'Sending your selfie…' : 'Take a selfie'}
           </PrimaryButton>
         )}
       </div>
