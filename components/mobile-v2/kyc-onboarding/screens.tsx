@@ -12,6 +12,8 @@ import { cn } from '@/lib/utils';
 import { useAppDispatch } from '@/store/hooks';
 import { clearMobileClientAuthError, generateOtpThunk, resendOtpThunk, verifyOtpThunk } from '@/store/mobileClientAuthSlice';
 import {
+  captureVideoFrame,
+  faceErrorMessage,
   kycOnboarding,
   NIGERIAN_STATES,
   NIN_ADDRESS_KEY,
@@ -20,8 +22,7 @@ import {
   pickFaceSession,
   pickNinAddress,
   pickVerifiedName,
-  readFaceReference,
-  selfieToBase64,
+  selfieFileToDataUrl,
   storeFaceReference,
   uploadProofWithProgress,
   type OnboardingProgress,
@@ -621,7 +622,7 @@ export function IdentityScreen({
 
 const FACE_TIPS = ['Face a window or a bright light', 'Take off glasses, cap or mask', 'Hold your phone at eye level'];
 
-function FaceRing({ phase }: { phase: 'checking' | 'ok' }) {
+function FaceRing({ phase, photo }: { phase: 'checking' | 'ok'; photo?: string | null }) {
   return (
     <div className="relative mx-auto mt-2.5 h-[264px] w-[264px]">
       <svg width="264" height="264" viewBox="0 0 264 264" aria-hidden className="absolute inset-0">
@@ -640,11 +641,16 @@ function FaceRing({ phase }: { phase: 'checking' | 'ok' }) {
         />
       </svg>
       <div className="absolute left-4 top-4 h-[232px] w-[232px] overflow-hidden rounded-full bg-[linear-gradient(180deg,#1E1B3A,var(--sf-ink,#1E1B4B))]">
-        <svg width="232" height="232" viewBox="0 0 232 232" aria-hidden className="absolute inset-0">
-          <path d="M28 232 C28 172 70 150 116 150 C162 150 204 172 204 232 Z" fill="rgba(255,255,255,.16)" />
-          <circle cx="116" cy="98" r="46" fill="rgba(255,255,255,.2)" />
-          <ellipse cx="116" cy="102" rx="62" ry="78" fill="none" stroke="rgba(255,255,255,.6)" strokeWidth="2" strokeDasharray="4 7" />
-        </svg>
+        {photo ? (
+          // eslint-disable-next-line @next/next/no-img-element -- local data URL of the captured selfie
+          <img src={photo} alt="" className="absolute inset-0 h-full w-full -scale-x-100 object-cover" />
+        ) : (
+          <svg width="232" height="232" viewBox="0 0 232 232" aria-hidden className="absolute inset-0">
+            <path d="M28 232 C28 172 70 150 116 150 C162 150 204 172 204 232 Z" fill="rgba(255,255,255,.16)" />
+            <circle cx="116" cy="98" r="46" fill="rgba(255,255,255,.2)" />
+            <ellipse cx="116" cy="102" rx="62" ry="78" fill="none" stroke="rgba(255,255,255,.6)" strokeWidth="2" strokeDasharray="4 7" />
+          </svg>
+        )}
         {phase === 'checking' ? (
           <div
             className={cn(s.scanLine, 'absolute inset-x-0 top-[114px] h-1')}
@@ -667,88 +673,171 @@ function FaceRing({ phase }: { phase: 'checking' | 'ok' }) {
   );
 }
 
+function cameraErrorMessage(err: unknown): string {
+  const name = err instanceof DOMException || err instanceof Error ? err.name : '';
+  if (name === 'NotAllowedError' || name === 'SecurityError') {
+    return 'Camera access was blocked. Allow camera access for this site in your browser settings, then try again.';
+  }
+  if (name === 'NotFoundError' || name === 'OverconstrainedError') return "We couldn't find a camera on this device.";
+  if (name === 'NotReadableError') return 'Your camera is being used by another app. Close it and try again.';
+  return 'Could not open the camera. Please try again.';
+}
+
+type FaceSessionStart = { reference: string | null; verified: StepResult | null };
+
 export function FaceScreen({ onDone }: { onDone: (r: StepResult) => void }) {
-  type Phase = 'intro' | 'starting' | 'checking' | 'ok' | 'failed';
-  const [phase, setPhase] = useState<Phase>(() => (readFaceReference() ? 'checking' : 'intro'));
+  // intro → camera (live preview in the circle) → checking → ok | failed
+  type Phase = 'intro' | 'opening' | 'camera' | 'checking' | 'ok' | 'failed';
+  const [phase, setPhase] = useState<Phase>('intro');
   const [error, setError] = useState<string | null>(null);
+  const [photo, setPhoto] = useState<string | null>(null);
 
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const selfieInput = useRef<HTMLInputElement>(null);
+  /** `face/start` runs while the user lines up the shot; awaited at capture time. */
+  const sessionRef = useRef<Promise<FaceSessionStart> | null>(null);
 
-  const finishCheck = async (reference: string | null, photoBase64?: string | null) => {
+  const stopCamera = useCallback(() => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+  }, []);
+
+  // Clear any leftover hosted-liveness reference from older builds, and release the camera on unmount.
+  useEffect(() => {
+    storeFaceReference(null);
+    return stopCamera;
+  }, [stopCamera]);
+
+  // Attach the stream once the <video> for the camera phase is mounted.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (phase === 'camera' && video && streamRef.current && video.srcObject !== streamRef.current) {
+      video.srcObject = streamRef.current;
+      void video.play().catch(() => undefined);
+    }
+  }, [phase]);
+
+  /** Opens the face step on the server (mints the QoreID session + reference). */
+  const beginSession = () => {
+    sessionRef.current = kycOnboarding.startFace().then((r) => ({
+      reference: pickFaceSession(r.json).reference,
+      verified: r.progress.steps.faceVerified ? r : null,
+    }));
+    // Avoid an unhandled rejection before capture; the error is surfaced when awaited.
+    sessionRef.current.catch(() => undefined);
+  };
+
+  const submit = async (dataUrl: string) => {
+    setPhoto(dataUrl);
     setPhase('checking');
     setError(null);
     try {
-      const r = await kycOnboarding.completeFace(reference && reference !== 'pending' ? reference : null, photoBase64);
+      if (!sessionRef.current) beginSession();
+      const session = await sessionRef.current!;
+      if (session.verified) {
+        setPhase('ok');
+        setTimeout(() => onDone(session.verified!), 1400);
+        return;
+      }
+      const r = await kycOnboarding.completeFace(session.reference, dataUrl);
       if (r.progress.steps.faceVerified || r.progress.currentStep !== 'face') {
-        storeFaceReference(null);
         setPhase('ok');
         setTimeout(() => onDone(r), 1400);
       } else {
         setPhase('failed');
-        setError("We couldn't confirm your face check yet. If you finished it, try checking again in a moment.");
+        setError("We couldn't confirm your face yet. Please take the selfie again.");
       }
     } catch (err) {
+      // A failed start shouldn't be reused on the next try.
+      sessionRef.current = null;
       setPhase('failed');
-      setError(errorText(err, 'Face check could not be confirmed.'));
+      setError(faceErrorMessage(err) ?? errorText(err, 'Face check could not be completed. Please try again.'));
     }
   };
 
-  // Back from the hosted liveness page: confirm the stored session.
-  useEffect(() => {
-    const ref = readFaceReference();
-    if (ref) void finishCheck(ref);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
-  }, []);
-
-  // Open the front camera straight from the tap (browsers block it after an await).
-  const openCamera = () => {
-    setError(null);
-    storeFaceReference(null);
+  // Native camera fallback (no getUserMedia, e.g. plain-http LAN address on a phone).
+  const openNativeCamera = () => {
     if (selfieInput.current) {
       selfieInput.current.value = '';
       selfieInput.current.click();
     }
   };
 
-  const onSelfie = async (file: File | undefined) => {
+  const onNativeSelfie = async (file: File | undefined) => {
     if (!file) return;
-    setPhase('starting');
-    setError(null);
-    let photoBase64: string;
     try {
-      photoBase64 = await selfieToBase64(file);
+      const dataUrl = await selfieFileToDataUrl(file);
+      if (!sessionRef.current) beginSession();
+      await submit(dataUrl);
     } catch (err) {
-      setPhase('intro');
+      setPhase('failed');
       setError(errorText(err, 'Could not read that photo. Try taking it again.'));
+    }
+  };
+
+  const openCamera = async () => {
+    setError(null);
+    setPhoto(null);
+    if (!navigator.mediaDevices?.getUserMedia) {
+      // Browsers hide the camera API on insecure pages (plain http on anything but localhost).
+      // Phones can still use their native selfie camera via the file input; laptops would only get a file picker.
+      const isTouch = window.matchMedia?.('(pointer: coarse)').matches;
+      if (isTouch) {
+        openNativeCamera();
+        return;
+      }
+      setPhase('failed');
+      setError(
+        window.isSecureContext
+          ? "This browser can't open the camera. Try Chrome, Edge or Safari."
+          : `The camera only works on a secure page. Open this page at https:// or http://localhost:${window.location.port || '3000'} instead of ${window.location.hostname}.`,
+      );
       return;
     }
+    setPhase('opening');
     try {
-      const r = await kycOnboarding.startFace();
-      if (r.progress.steps.faceVerified) {
-        onDone(r);
-        return;
-      }
-      const { url, reference } = pickFaceSession(r.json);
-      if (url) {
-        storeFaceReference(reference ?? 'pending');
-        window.location.assign(url);
-        return;
-      }
-      await finishCheck(reference, photoBase64);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      beginSession();
+      setPhase('camera');
     } catch (err) {
-      setPhase('intro');
-      setError(errorText(err, 'Could not start the face check.'));
+      stopCamera();
+      setPhase('failed');
+      setError(cameraErrorMessage(err));
     }
+  };
+
+  const capture = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    let dataUrl: string;
+    try {
+      dataUrl = captureVideoFrame(video);
+    } catch (err) {
+      setError(errorText(err, 'The camera is not ready yet. Try again.'));
+      return;
+    }
+    stopCamera();
+    void submit(dataUrl);
+  };
+
+  const cancelCamera = () => {
+    stopCamera();
+    setPhase('intro');
   };
 
   if (phase === 'checking' || phase === 'ok') {
     return (
       <section className={cn(s.slideIn, 'flex min-h-0 flex-1 flex-col items-center px-6 pb-10')}>
-        <FaceRing phase={phase} />
+        <FaceRing phase={phase} photo={photo} />
         <div className="mt-[22px] h-[84px] text-center" aria-live="polite">
           {phase === 'checking' ? (
             <div className={s.rise}>
-              <div className="text-2xl font-bold text-[var(--sf-ink,#1E1B4B)]">Matching your BVN photo</div>
+              <div className="text-2xl font-bold text-[var(--sf-ink,#1E1B4B)]">Matching your NIN photo</div>
               <div className="mt-1.5 text-[15px] text-gray-500">Hold still for a moment</div>
             </div>
           ) : (
@@ -766,13 +855,27 @@ export function FaceScreen({ onDone }: { onDone: (r: StepResult) => void }) {
     <section className={cn(s.slideIn, 'flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-10 pt-1.5 no-scrollbar')}>
       <h1 className="text-[26px] font-bold leading-tight tracking-[-0.4px] text-[var(--sf-ink,#1E1B4B)]">Quick face check</h1>
       <p className="mt-1.5 text-[15px] leading-snug text-gray-500">
-        A short selfie video proves it&apos;s really you. We compare it with the photo on your BVN, then delete the video.
+        A quick selfie proves it&apos;s really you. We compare it with the photo on your NIN, then delete it.
       </p>
-      <div className={cn(s.pop, 'mx-auto mt-[22px] h-[200px] w-[200px]')}>
-        <svg width="200" height="200" viewBox="0 0 200 200" aria-hidden>
-          <circle cx="100" cy="100" r="86" fill="var(--sf-tint,#E0E7FF)" />
-          <circle cx="100" cy="86" r="30" fill="color-mix(in srgb, var(--sf-primary,#2563EB) 35%, white)" />
-          <path d="M44 168 C44 128 70 116 100 116 C130 116 156 128 156 168 Z" fill="color-mix(in srgb, var(--sf-primary,#2563EB) 35%, white)" />
+      <div className={cn(s.pop, 'relative mx-auto mt-[22px] h-[200px] w-[200px]')}>
+        {phase === 'camera' ? (
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            aria-label="Camera preview"
+            className="absolute left-[14px] top-[14px] h-[172px] w-[172px] -scale-x-100 rounded-full bg-[#1E1B3A] object-cover"
+          />
+        ) : null}
+        <svg width="200" height="200" viewBox="0 0 200 200" aria-hidden className="relative">
+          {phase === 'camera' ? null : (
+            <>
+              <circle cx="100" cy="100" r="86" fill="var(--sf-tint,#E0E7FF)" />
+              <circle cx="100" cy="86" r="30" fill="color-mix(in srgb, var(--sf-primary,#2563EB) 35%, white)" />
+              <path d="M44 168 C44 128 70 116 100 116 C130 116 156 128 156 168 Z" fill="color-mix(in srgb, var(--sf-primary,#2563EB) 35%, white)" />
+            </>
+          )}
           <path
             d="M22 54 V28 Q22 22 28 22 H54 M146 22 H172 Q178 22 178 28 V54 M178 146 V172 Q178 178 172 178 H146 M54 178 H28 Q22 178 22 172 V146"
             fill="none"
@@ -783,6 +886,11 @@ export function FaceScreen({ onDone }: { onDone: (r: StepResult) => void }) {
           />
         </svg>
       </div>
+      {phase === 'camera' ? (
+        <p className="mt-3 text-center text-[15px] text-gray-500" aria-live="polite">
+          Fit your face inside the circle, then tap Capture.
+        </p>
+      ) : null}
       <ul className="mt-5 flex flex-col gap-0.5">
         {FACE_TIPS.map((tip) => (
           <li key={tip} className="flex min-h-11 items-center gap-3 text-base text-[#3F4457]">
@@ -802,26 +910,24 @@ export function FaceScreen({ onDone }: { onDone: (r: StepResult) => void }) {
         accept="image/*"
         capture="user"
         className="hidden"
-        onChange={(e) => void onSelfie(e.target.files?.[0])}
+        onChange={(e) => void onNativeSelfie(e.target.files?.[0])}
       />
 
       <div className="mt-auto flex flex-col gap-1 pt-6">
-        {phase === 'failed' ? (
+        {phase === 'camera' ? (
           <>
-            <PrimaryButton onClick={openCamera}>Take a new selfie</PrimaryButton>
-            {readFaceReference() ? (
-              <button
-                type="button"
-                onClick={() => void finishCheck(readFaceReference())}
-                className="min-h-11 text-[15px] font-semibold text-[var(--sf-primary,#2563EB)]"
-              >
-                Check again
-              </button>
-            ) : null}
+            <PrimaryButton onClick={capture}>Capture</PrimaryButton>
+            <button
+              type="button"
+              onClick={cancelCamera}
+              className="min-h-11 text-[15px] font-semibold text-[var(--sf-primary,#2563EB)]"
+            >
+              Cancel
+            </button>
           </>
         ) : (
-          <PrimaryButton loading={phase === 'starting'} onClick={openCamera}>
-            {phase === 'starting' ? 'Sending your selfie…' : 'Take a selfie'}
+          <PrimaryButton loading={phase === 'opening'} onClick={() => void openCamera()}>
+            {phase === 'opening' ? 'Opening camera…' : phase === 'failed' ? 'Try again' : 'Take a selfie'}
           </PrimaryButton>
         )}
       </div>

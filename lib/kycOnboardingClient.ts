@@ -149,7 +149,7 @@ export const kycOnboarding = {
   verifyBvn: (bvn: string) => postJson('/identity/bvn', { bvn }),
   verifyNin: (nin: string) => postJson('/identity/nin', { nin }),
   startFace: () => postJson('/face/start'),
-  /** QoreID needs the selfie as `photoBase64` (raw base64, no `data:` prefix). */
+  /** QoreID needs a still JPEG/PNG as `photoBase64` (a `data:` prefix is accepted). */
   completeFace: (providerReference?: string | null, photoBase64?: string | null) =>
     postJson('/face/complete', {
       ...(providerReference ? { providerReference } : {}),
@@ -232,11 +232,29 @@ export function pickVerifiedName(json: Record<string, unknown>): string | null {
   return [first, last].filter(Boolean).join(' ') || null
 }
 
-/**
- * Selfie file → raw base64 JPEG (no `data:` prefix), downscaled so the request stays small.
- * Phone photos are often 3–8 MB; 960px on the long side is plenty for a face match.
- */
-export async function selfieToBase64(file: File, maxSide = 960): Promise<string> {
+/** Long edge the backend asks for (`face/complete` accepts ≤ 5 MB decoded; ~720px is plenty). */
+const FACE_PHOTO_MAX_SIDE = 720
+
+/** Draws a video frame or image onto a canvas, downscaled, and returns a JPEG data URL. */
+function drawToJpeg(source: CanvasImageSource, width: number, height: number, maxSide = FACE_PHOTO_MAX_SIDE): string {
+  if (!width || !height) throw new Error('The camera is not ready yet. Try again.')
+  const scale = Math.min(1, maxSide / Math.max(width, height))
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(width * scale)
+  canvas.height = Math.round(height * scale)
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Could not process the photo.')
+  ctx.drawImage(source, 0, 0, canvas.width, canvas.height)
+  return canvas.toDataURL('image/jpeg', 0.9)
+}
+
+/** Still frame from a live `<video>` camera preview, as a JPEG data URL (un-mirrored). */
+export function captureVideoFrame(video: HTMLVideoElement): string {
+  return drawToJpeg(video, video.videoWidth, video.videoHeight)
+}
+
+/** Selfie file (native camera fallback) → downscaled JPEG data URL. */
+export async function selfieFileToDataUrl(file: File): Promise<string> {
   const url = URL.createObjectURL(file)
   try {
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -245,16 +263,25 @@ export async function selfieToBase64(file: File, maxSide = 960): Promise<string>
       el.onerror = () => reject(new Error('Could not read that photo. Try taking it again.'))
       el.src = url
     })
-    const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight))
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.round(img.naturalWidth * scale)
-    canvas.height = Math.round(img.naturalHeight * scale)
-    const ctx = canvas.getContext('2d')
-    if (!ctx) throw new Error('Could not process that photo.')
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-    return canvas.toDataURL('image/jpeg', 0.85).split(',')[1] ?? ''
+    return drawToJpeg(img, img.naturalWidth, img.naturalHeight)
   } finally {
     URL.revokeObjectURL(url)
+  }
+}
+
+/** Plain-language message for `face/complete` error codes. */
+export function faceErrorMessage(err: unknown): string | null {
+  if (!(err instanceof OnboardingApiError)) return null
+  switch (err.code) {
+    case 'FACE_NOT_MATCHED':
+      return "Your selfie didn't match the photo on your NIN. Face a bright light, look straight at the camera and try again."
+    case 'FACE_PHOTO_TOO_LARGE':
+      return 'That photo is too large. Please take the selfie again.'
+    case 'FACE_PHOTO_INVALID':
+    case 'FACE_PHOTO_REQUIRED':
+      return "We couldn't read that photo. Please take the selfie again."
+    default:
+      return null
   }
 }
 
