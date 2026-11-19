@@ -698,15 +698,24 @@ export function FaceScreen({ onDone }: { onDone: (r: StepResult) => void }) {
   /** `face/start` runs while the user lines up the shot; awaited at capture time. */
   const sessionRef = useRef<Promise<FaceSessionStart> | null>(null);
 
+  /** Bumped on every camera request and on unmount, so a late getUserMedia result is discarded. */
+  const openSeq = useRef(0);
+
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
   }, []);
 
-  // Clear any leftover hosted-liveness reference from older builds, and release the camera on unmount.
+  // Clear any leftover hosted-liveness reference from older builds, open the camera in the
+  // square right away, and release it on unmount.
   useEffect(() => {
     storeFaceReference(null);
-    return stopCamera;
+    if (typeof navigator.mediaDevices?.getUserMedia === 'function') void openCamera();
+    return () => {
+      openSeq.current += 1;
+      stopCamera();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   }, [stopCamera]);
 
   // Attach the stream once the <video> for the camera phase is mounted.
@@ -796,15 +805,23 @@ export function FaceScreen({ onDone }: { onDone: (r: StepResult) => void }) {
       return;
     }
     setPhase('opening');
+    const seq = ++openSeq.current;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false,
       });
+      if (seq !== openSeq.current) {
+        // Superseded (unmounted, or React dev double-mount): don't leave the camera light on.
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      stopCamera();
       streamRef.current = stream;
       beginSession();
       setPhase('camera');
     } catch (err) {
+      if (seq !== openSeq.current) return;
       stopCamera();
       setPhase('failed');
       setError(cameraErrorMessage(err));

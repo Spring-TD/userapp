@@ -55,8 +55,9 @@ const nextConfig = {
             value: 'strict-origin-when-cross-origin'
           },
           {
+            // camera=(self): the KYC face step opens the front camera on our own pages.
             key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=()'
+            value: 'camera=(self), microphone=(), geolocation=()'
           },
           {
             key: 'Content-Security-Policy',
