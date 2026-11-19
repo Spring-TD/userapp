@@ -149,8 +149,12 @@ export const kycOnboarding = {
   verifyBvn: (bvn: string) => postJson('/identity/bvn', { bvn }),
   verifyNin: (nin: string) => postJson('/identity/nin', { nin }),
   startFace: () => postJson('/face/start'),
-  completeFace: (providerReference?: string | null) =>
-    postJson('/face/complete', providerReference ? { providerReference } : {}),
+  /** QoreID needs the selfie as `photoBase64` (raw base64, no `data:` prefix). */
+  completeFace: (providerReference?: string | null, photoBase64?: string | null) =>
+    postJson('/face/complete', {
+      ...(providerReference ? { providerReference } : {}),
+      ...(photoBase64 ? { photoBase64 } : {}),
+    }),
   saveAddress: (input: { street: string; lga: string; state: string } | { useNinAddress: true }) =>
     postJson('/address', input),
   uploadProof: (file: File) => {
@@ -226,6 +230,32 @@ export function pickVerifiedName(json: Record<string, unknown>): string | null {
   const first = deepPickString(json, ['firstName', 'first_name', 'firstname'])
   const last = deepPickString(json, ['lastName', 'last_name', 'surname', 'lastname'])
   return [first, last].filter(Boolean).join(' ') || null
+}
+
+/**
+ * Selfie file → raw base64 JPEG (no `data:` prefix), downscaled so the request stays small.
+ * Phone photos are often 3–8 MB; 960px on the long side is plenty for a face match.
+ */
+export async function selfieToBase64(file: File, maxSide = 960): Promise<string> {
+  const url = URL.createObjectURL(file)
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image()
+      el.onload = () => resolve(el)
+      el.onerror = () => reject(new Error('Could not read that photo. Try taking it again.'))
+      el.src = url
+    })
+    const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(img.naturalWidth * scale)
+    canvas.height = Math.round(img.naturalHeight * scale)
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Could not process that photo.')
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+    return canvas.toDataURL('image/jpeg', 0.85).split(',')[1] ?? ''
+  } finally {
+    URL.revokeObjectURL(url)
+  }
 }
 
 export const FACE_REFERENCE_KEY = 'mobile-v2-kyc-face-reference'
